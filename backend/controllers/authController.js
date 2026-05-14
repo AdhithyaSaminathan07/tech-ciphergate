@@ -8,7 +8,7 @@ const Worker = require('../models/Worker');
 const crypto = require('crypto');
 const { sendPasswordResetEmail } = require('../config/email');
 
-// Generate JWT
+// Add this helper at the top
 const generateToken = (id, role) => {
   return jwt.sign({ id, role }, process.env.JWT_SECRET, {
     expiresIn: '30d'
@@ -102,16 +102,14 @@ const registerAdmin = asyncHandler(async (req, res) => {
   }
 });
 
-// @desc    Login admin
-// @route   POST /api/auth/admin
-// @access  Public
 const loginAdmin = asyncHandler(async (req, res) => {
   const { username, password } = req.body;
 
-  // Find admin and include password field
   const admin = await Admin.findOne({ username }).select('+password');
 
   if (admin && (await bcrypt.compare(password, admin.password))) {
+    const tenentId = admin._id.toString();
+    
     res.json({
       _id: admin._id,
       username: admin.username,
@@ -119,6 +117,10 @@ const loginAdmin = asyncHandler(async (req, res) => {
       role: 'admin',
       subdomain: admin.subdomain,
       organizationId: admin.organizationId,
+      // ── ADD THESE ──────────────────────────────────────────────────
+      tenentId: tenentId,
+      tenentid: tenentId,
+      // ───────────────────────────────────────────────────────────────
       token: generateToken(admin._id, 'admin')
     });
   } else {
@@ -154,9 +156,6 @@ const checkAdminInitialization = asyncHandler(async (req, res) => {
 });
 
 
-// @desc    Login worker
-// @route   POST /api/auth/worker
-// @access  Public
 const loginWorker = asyncHandler(async (req, res) => {
   const { username, password, subdomain } = req.body;
 
@@ -168,6 +167,12 @@ const loginWorker = asyncHandler(async (req, res) => {
   }
 
   if (worker && (await bcrypt.compare(password, worker.password))) {
+    // Find admin by subdomain to get the tenentId (admin's _id or subdomain itself)
+    const admin = await Admin.findOne({ subdomain });
+    
+    // Use admin._id as tenentId if found, otherwise use subdomain as fallback
+    const tenentId = admin ? admin._id.toString() : subdomain;
+
     res.json({
       _id: worker._id,
       username: worker.username,
@@ -179,6 +184,10 @@ const loginWorker = asyncHandler(async (req, res) => {
       rfid: worker.rfid ? worker.rfid : 'unassigned',
       department: worker.department ? worker.department.name : 'Unassigned',
       role: 'worker',
+      // ── ADD THESE ──────────────────────────────────────────────────
+      tenentId: tenentId,
+      tenentid: tenentId,   // lowercase variant for Instaxbot compatibility
+      // ───────────────────────────────────────────────────────────────
       token: generateToken(worker._id, 'worker')
     });
   } else {
@@ -186,6 +195,7 @@ const loginWorker = asyncHandler(async (req, res) => {
     throw new Error('Invalid credentials');
   }
 });
+
 
 // @desc    Request password reset OTP for Admin
 // @route   POST /api/auth/request-reset-otp

@@ -1,3 +1,4 @@
+const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
@@ -54,6 +55,8 @@ const startServer = async () => {
     app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
     // Routes
+    const instaxbotRoutes = require('./routes/instaxbotRoutes');
+    const { attachInstaxbotWsProxy } = require('./routes/instaxbotRoutes');
     const gowhatsRoutes = require('./routes/gowhatsRoutes');
     const authRoutes = require('./routes/authRoutes');
     const attendanceRoutes = require('./routes/attedanceRoutes');
@@ -72,7 +75,7 @@ const startServer = async () => {
     const holidayRoutes = require('./routes/holidayRoutes');
     const fineRoutes = require('./routes/fineRoutes');
     const invoiceRoutes = require('./routes/invoiceRoutes');
-    const communityFundRoutes = require('./routes/communityFundRoutes'); // ADD THIS
+    const communityFundRoutes = require('./routes/communityFundRoutes');
     const githubRoutes = require('./routes/githubRoutes');
 
     // Test App routes
@@ -104,10 +107,10 @@ const startServer = async () => {
     app.use('/api/holidays', holidayRoutes);
     app.use('/api/fines', fineRoutes);
     app.use('/api/invoices', invoiceRoutes);
-    app.use('/api/community-fund', communityFundRoutes); // ADD THIS
+    app.use('/api/community-fund', communityFundRoutes);
     app.use('/api/certificates', require('./routes/certificateRoutes'));
     app.use('/api/github', githubRoutes);
-
+    app.use('/api/instaxbot', instaxbotRoutes);
 
     // Test App routes
     app.use('/api/test/questions', testQuestionRoutes);
@@ -141,8 +144,14 @@ const startServer = async () => {
     // Error handler (should be last)
     app.use(errorHandler);
 
+    // Create HTTP server from express app (required for WebSocket proxy)
+    const server = http.createServer(app);
+
+    // Attach WebSocket proxy to the HTTP server
+    attachInstaxbotWsProxy(server);
+
     const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`🌟 Server running on port ${PORT}`);
       console.log(`📧 Email service: ${process.env.EMAIL_USER ? 'Configured' : 'Not configured'}`);
       console.log(`🗄️ Database: Connected successfully`);
@@ -164,5 +173,3 @@ const startServer = async () => {
 
 // Start the server
 startServer();
-
-// Trigger restart final
