@@ -9,7 +9,7 @@ import { getCurrentPosition, isWorkerInAllowedLocation } from '../../services/ge
 import api from '../../services/api';
 import Modal from '../common/Modal';
 
-const RFIDAttendancePopup = ({ isOpen, onClose, subdomain, user }) => {
+const RFIDAttendancePopup = ({ isOpen, onClose, subdomain, user, onAttendanceMarked }) => {
   const [rfid, setRfid] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [locationChecked, setLocationChecked] = useState(false);
@@ -136,10 +136,15 @@ const RFIDAttendancePopup = ({ isOpen, onClose, subdomain, user }) => {
       
       // Show success message
       toast.success(result.message || 'Attendance marked successfully');
-      
+
       // Set cooldown timer
       setCooldownRemaining(60); // 1 minute cooldown
       
+      // Call the callback to notify the parent component
+      if (onAttendanceMarked) {
+        onAttendanceMarked();
+      }
+
       // Reset form
       setRfid('');
       

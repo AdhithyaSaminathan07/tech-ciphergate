@@ -5,6 +5,7 @@ const Department = require('../models/Department');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
+const EmployeeHistory = require('../models/EmployeeHistory');
 // const nodemailer = require('nodemailer');
 // const QRCode = require('qrcode');
 
@@ -32,6 +33,11 @@ const createWorker = asyncHandler(async (req, res) => {
     const faceEmbeddings = req.body.faceEmbeddings ? req.body.faceEmbeddings : []; // ADDED THIS
     const employeeType = req.body.employeeType ? req.body.employeeType.trim() : 'intern';
     const classValue = req.body.class ? req.body.class.trim() : 'A';
+    const email = req.body.email ? req.body.email.trim() : '';
+    const phoneNumber = req.body.phoneNumber ? req.body.phoneNumber.trim() : '';
+    const joiningDate = req.body.joiningDate ? req.body.joiningDate : new Date();
+    const designation = req.body.designation ? req.body.designation.trim() : 'Employee';
+    const bankDetails = req.body.bankDetails || {};
     let perDaySalary = 0;
 
     if (salary <= 0) {
@@ -101,9 +107,28 @@ const createWorker = asyncHandler(async (req, res) => {
       faceEmbeddings: faceEmbeddings || [], // ADDED THIS
       employeeType,
       class: classValue,
+      email,
+      phoneNumber,
+      joiningDate,
+      designation,
       original_certificate_status: req.body.original_certificate_status || 'not_submitted', // ADDED
       certificate_notes: req.body.certificate_notes || '', // ADDED
+      bankDetails: {
+        accountHolderName: bankDetails.accountHolderName ? bankDetails.accountHolderName.trim() : '',
+        bankName: bankDetails.bankName ? bankDetails.bankName.trim() : '',
+        accountNumber: bankDetails.accountNumber ? bankDetails.accountNumber.trim() : '',
+        ifscCode: bankDetails.ifscCode ? bankDetails.ifscCode.trim() : '',
+        branchName: bankDetails.branchName ? bankDetails.branchName.trim() : '',
+        upiId: bankDetails.upiId ? bankDetails.upiId.trim() : ''
+      },
       totalPoints: 0
+    });
+
+    await EmployeeHistory.create({
+      employee: worker._id,
+      actionType: 'Created',
+      performedBy: req.user ? req.user._id : null,
+      afterData: worker.toObject()
     });
 
     res.status(201).json({
@@ -119,9 +144,15 @@ const createWorker = asyncHandler(async (req, res) => {
       photo: worker.photo,
       batch: worker.batch, // ADDED THIS
       faceEmbeddings: worker.faceEmbeddings, // ADDED THIS
+      faceEnrolled: worker.faceEnrolled,
       employeeType: worker.employeeType,
       class: worker.class,
-      status: worker.status
+      email: worker.email,
+      phoneNumber: worker.phoneNumber,
+      joiningDate: worker.joiningDate,
+      designation: worker.designation,
+      status: worker.status,
+      bankDetails: worker.bankDetails
     });
 
   } catch (error) {
@@ -177,7 +208,18 @@ const getWorkers = asyncHandler(async (req, res) => {
       ? req.body.subdomain
       : req.body;
 
-    const workers = await Worker.find({ subdomain })
+    const query = { subdomain };
+    const statusParam = req.query.status || req.body.status;
+    if (statusParam) {
+      if (statusParam !== 'all') {
+        query.status = statusParam;
+      }
+    } else {
+      // Cross-module consistency fix: Only active by default
+      query.status = 'Active';
+    }
+
+    const workers = await Worker.find(query)
       .select('-password')
       .populate('department', 'name');
 
@@ -204,8 +246,15 @@ const getPublicWorkers = asyncHandler(async (req, res) => {
       ? req.body.subdomain
       : req.body;
 
-    const workers = await Worker.find({ subdomain })
-      .select('name username subdomain department photo employeeType class')
+    const query = { subdomain };
+    if (req.query.status && req.query.status === 'all') {
+      // allow fetching all if explicitly requested
+    } else {
+      query.status = 'Active';
+    }
+
+    const workers = await Worker.find(query)
+      .select('name username subdomain department photo employeeType class status')
       .populate('department', 'name');
 
     const transformedWorkers = workers.map(worker => ({
@@ -260,86 +309,146 @@ const updateWorker = asyncHandler(async (req, res) => {
       throw new Error('Worker not found');
     }
 
-    const { name, username, salary, department, password, photo, batch, faceEmbeddings, employeeType, class: classValue } = req.body; // ADDED faceEmbeddings
+    const { name, username, salary, department, password, photo, batch, faceEmbeddings, employeeType, class: classValue, status, email, phoneNumber, joiningDate, designation, bankDetails } = req.body; // ADDED status and new fields
     const updateData = {};
 
-    // Validate department if provided
-    if (department) {
-      const departmentExists = await Department.findById(department);
-      if (!departmentExists) {
-        res.status(400);
-        throw new Error('Invalid department');
+    const isAdmin = req.user && req.user.role === 'admin';
+    const isSelf = req.user && req.user._id.toString() === req.params.id;
+
+    if (!isAdmin && !isSelf) {
+      res.status(403);
+      throw new Error('Not authorized to update this worker');
+    }
+
+    if (!isAdmin) {
+      // Workers can only update these fields
+      if (photo) updateData.photo = photo;
+      if (email !== undefined) updateData.email = email;
+      if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
+      if (password) {
+        const salt = await bcrypt.genSalt(10);
+        updateData.password = await bcrypt.hash(password, salt);
+        updateData.passwordChangedAt = Date.now() - 1000;
       }
-      updateData.department = department;
-    }
-
-    // Update name if provided
-    if (name) updateData.name = name;
-
-    // Update username if provided and ensure uniqueness
-    if (username) {
-      const usernameExists = await Worker.findOne({
-        username,
-        _id: { $ne: req.params.id }
-      });
-      if (usernameExists) {
-        res.status(400);
-        throw new Error('Username already exists');
-      }
-      updateData.username = username;
-    }
-
-    // Update photo if provided
-    if (photo) {
-      updateData.photo = photo;
-    }
-
-    // Handle password update
-    if (password) {
-      const salt = await bcrypt.genSalt(10);
-      updateData.password = await bcrypt.hash(password, salt);
-    }
-
-    // ADDED: Handle batch update
-    if (batch) {
-      updateData.batch = batch;
-    }
-
-    // ADDED: Handle face embeddings update
-    if (faceEmbeddings && faceEmbeddings.length > 0) {
-      updateData.faceEmbeddings = faceEmbeddings;
-    }
-
-    // ADDED: Handle employeeType update
-    if (employeeType) {
-      updateData.employeeType = employeeType;
-    }
-
-    // ADDED: Handle class update
-    if (classValue) {
-      updateData.class = classValue;
-    }
-
-    // ADDED: Certificate Tracking Logic
-    if (req.body.original_certificate_status) {
-      updateData.original_certificate_status = req.body.original_certificate_status;
-    }
-
-    if (req.body.certificate_notes !== undefined) {
-      updateData.certificate_notes = req.body.certificate_notes;
-    }
-
-    // Update salary-related fields if salary is provided
-    if (salary) {
-      const numericSalary = Number(salary);
-      if (isNaN(numericSalary) || numericSalary <= 0) {
-        res.status(400);
-        throw new Error('Invalid salary value');
+    } else {
+      // Admin can update everything
+      // Validate department if provided
+      if (department) {
+        const departmentExists = await Department.findById(department);
+        if (!departmentExists) {
+          res.status(400);
+          throw new Error('Invalid department');
+        }
+        updateData.department = department;
       }
 
-      updateData.salary = numericSalary;
-      updateData.finalSalary = numericSalary;
-      updateData.perDaySalary = numericSalary / 30;
+      // Update status if provided
+      if (status) {
+        updateData.status = status;
+      }
+
+      // Update name if provided
+      if (name) updateData.name = name;
+
+      // Update username if provided and ensure uniqueness
+      if (username) {
+        const usernameExists = await Worker.findOne({
+          username,
+          _id: { $ne: req.params.id }
+        });
+        if (usernameExists) {
+          res.status(400);
+          throw new Error('Username already exists');
+        }
+        updateData.username = username;
+      }
+
+      // Update photo if provided
+      if (photo) {
+        updateData.photo = photo;
+      }
+
+      // Handle password update
+      if (password) {
+        const salt = await bcrypt.genSalt(10);
+        updateData.password = await bcrypt.hash(password, salt);
+        updateData.passwordChangedAt = Date.now() - 1000;
+      }
+
+      // ADDED: Handle batch update
+      if (batch) {
+        updateData.batch = batch;
+      }
+
+      // ADDED: Handle face embeddings update
+      if (faceEmbeddings && faceEmbeddings.length > 0) {
+        updateData.faceEmbeddings = faceEmbeddings;
+      }
+
+      // ADDED: Handle employeeType update
+      if (employeeType) {
+        updateData.employeeType = employeeType;
+      }
+
+      // ADDED: Handle class update
+      if (classValue) {
+        updateData.class = classValue;
+      }
+      
+      if (email !== undefined) updateData.email = email;
+      if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
+      if (joiningDate !== undefined) updateData.joiningDate = joiningDate;
+      if (designation !== undefined) updateData.designation = designation;
+
+      // ADDED: Certificate Tracking Logic
+      if (req.body.original_certificate_status) {
+        updateData.original_certificate_status = req.body.original_certificate_status;
+      }
+
+      if (req.body.certificate_notes !== undefined) {
+        updateData.certificate_notes = req.body.certificate_notes;
+      }
+
+      if (bankDetails) {
+        updateData.bankDetails = {
+          accountHolderName: bankDetails.accountHolderName ? bankDetails.accountHolderName.trim() : '',
+          bankName: bankDetails.bankName ? bankDetails.bankName.trim() : '',
+          accountNumber: bankDetails.accountNumber ? bankDetails.accountNumber.trim() : '',
+          ifscCode: bankDetails.ifscCode ? bankDetails.ifscCode.trim() : '',
+          branchName: bankDetails.branchName ? bankDetails.branchName.trim() : '',
+          upiId: bankDetails.upiId ? bankDetails.upiId.trim() : ''
+        };
+      }
+
+      // Update salary-related fields if salary is provided
+      if (salary) {
+        const numericSalary = Number(salary);
+        if (isNaN(numericSalary) || numericSalary <= 0) {
+          res.status(400);
+          throw new Error('Invalid salary value');
+        }
+
+        updateData.salary = numericSalary;
+        updateData.finalSalary = numericSalary;
+        updateData.perDaySalary = numericSalary / 30;
+      }
+    }
+
+    const beforeData = worker.toObject();
+
+    // Determine if any change actually occurred
+    const hasStatusChanged = updateData.status && updateData.status !== worker.status;
+    const hasOtherChanges = Object.keys(updateData).some(key => {
+      // Skip status as we check it separately
+      if (key === 'status' || key === 'password') return false;
+      
+      // Basic comparison for other fields
+      return String(updateData[key]) !== String(worker[key]);
+    });
+    const passwordChanged = !!password;
+
+    if (!hasStatusChanged && !hasOtherChanges && !passwordChanged) {
+        return res.json(worker);
     }
 
     // Perform the update
@@ -349,6 +458,21 @@ const updateWorker = asyncHandler(async (req, res) => {
       { new: true, runValidators: true }
     ).populate('department', 'name');
 
+    let actionType = 'Updated';
+    if (hasStatusChanged) {
+       if (updateData.status === 'Relieved') actionType = 'Relieved';
+       else if (updateData.status === 'Active' && worker.status === 'Deleted') actionType = 'Restored';
+       else if (updateData.status === 'Active' && worker.status === 'Relieved') actionType = 'Restored';
+    }
+
+    await EmployeeHistory.create({
+      employee: updatedWorker._id,
+      actionType,
+      performedBy: req.user ? req.user._id : null,
+      beforeData,
+      afterData: updatedWorker.toObject()
+    });
+
     res.json({
       _id: updatedWorker._id,
       name: updatedWorker.name,
@@ -356,13 +480,19 @@ const updateWorker = asyncHandler(async (req, res) => {
       salary: updatedWorker.salary,
       perDaySalary: updatedWorker.perDaySalary,
       finalSalary: updatedWorker.finalSalary,
-      department: updatedWorker.department.name,
+      department: updatedWorker.department ? updatedWorker.department.name : 'N/A',
       photo: updatedWorker.photo,
       batch: updatedWorker.batch, // ADDED this to the response
       faceEmbeddings: updatedWorker.faceEmbeddings, // ADDED this to the response
+      faceEnrolled: updatedWorker.faceEnrolled,
       employeeType: updatedWorker.employeeType,
       class: updatedWorker.class,
-      status: updatedWorker.status
+      email: updatedWorker.email,
+      phoneNumber: updatedWorker.phoneNumber,
+      joiningDate: updatedWorker.joiningDate,
+      designation: updatedWorker.designation,
+      status: updatedWorker.status,
+      bankDetails: updatedWorker.bankDetails
     });
   } catch (error) {
     console.error('Update Worker Error:', error);
@@ -383,16 +513,20 @@ const deleteWorker = asyncHandler(async (req, res) => {
       throw new Error('Worker not found');
     }
 
-    // Optional: Delete worker's photo file if exists
-    if (worker.photo) {
-      const photoPath = path.join(__dirname, '../uploads', worker.photo);
-      if (fs.existsSync(photoPath)) {
-        fs.unlinkSync(photoPath);
-      }
-    }
+    const beforeWorker = worker.toObject();
 
-    await worker.deleteOne();
-    res.json({ message: 'Worker removed successfully' });
+    worker.status = 'Deleted';
+    await worker.save();
+
+    await EmployeeHistory.create({
+      employee: worker._id,
+      actionType: 'Deleted',
+      performedBy: req.user ? req.user._id : null,
+      beforeData: beforeWorker,
+      afterData: worker.toObject()
+    });
+
+    res.json({ message: 'Worker soft-deleted successfully' });
   } catch (error) {
     console.error('Delete Worker Error:', error);
     res.status(400);
@@ -452,7 +586,10 @@ const resetWorkerActivities = asyncHandler(async (req, res) => {
 // @access  Private/Admin
 const getWorkersByDepartment = asyncHandler(async (req, res) => {
   try {
-    const workers = await Worker.find({ department: req.params.departmentId })
+    const workers = await Worker.find({ 
+      department: req.params.departmentId,
+      status: { $ne: 'Relieved' }
+    })
       .select('-password')
       .populate('department', 'name');
 
@@ -494,6 +631,7 @@ const getWorkerByRfid = asyncHandler(async (req, res) => {
         subdomain: worker.subdomain,
         department: worker.department ? worker.department.name : 'N/A',
         photo: worker.photo,
+        faceEnrolled: worker.faceEnrolled,
         employeeType: worker.employeeType,
         class: worker.class
       }
@@ -502,6 +640,28 @@ const getWorkerByRfid = asyncHandler(async (req, res) => {
     console.error('Get Worker by RFID Error:', error);
     res.status(400);
     throw new Error(error.message || 'Failed to retrieve worker');
+  }
+});
+
+// @desc    Get complete employee history
+// @route   GET /api/workers/history
+// @access  Private/Admin
+const getEmployeeHistory = asyncHandler(async (req, res) => {
+  try {
+    const filters = {};
+    if (req.query.employee) filters.employee = req.query.employee;
+    if (req.query.actionType) filters.actionType = req.query.actionType;
+
+    const history = await EmployeeHistory.find(filters)
+      .populate('employee', 'name username status')
+      .populate('performedBy', 'name email')
+      .sort({ createdAt: -1 });
+
+    res.json(history);
+  } catch (error) {
+    console.error('Get Employee History Error:', error);
+    res.status(500);
+    throw new Error('Failed to retrieve employee history');
   }
 });
 
@@ -516,5 +676,6 @@ module.exports = {
   getWorkersByDepartment,
   getPublicWorkers,
   generateId,
-  getWorkerByRfid
+  getWorkerByRfid,
+  getEmployeeHistory
 };

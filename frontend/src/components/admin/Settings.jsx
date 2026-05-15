@@ -20,16 +20,18 @@ import {
     FiMapPin,
     FiActivity,
     FiUserCheck,
-    FiLayers,
-    FiInfo
+    FiInfo,
+    FiCalendar
 } from 'react-icons/fi';
+import Modal from '../common/Modal';
+import HolidayManagement from './HolidayManagement';
 import Button from '../common/Button';
 import Card from '../common/Card';
 import Spinner from '../common/Spinner';
 import appContext from '../../context/AppContext';
 import api from '../../services/api';
 import { getAuthToken } from '../../utils/authUtils';
-
+import { getCurrentPosition } from '../../services/geolocationService';
 const Settings = () => {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -37,6 +39,7 @@ const Settings = () => {
     const [currentLocation, setCurrentLocation] = useState(null); // Add this state to track current location
 
     const { subdomain } = useContext(appContext);
+    const [isHolidayModalOpen, setIsHolidayModalOpen] = useState(false);
 
     // Original settings (for comparison)
     const [originalSettings, setOriginalSettings] = useState({});
@@ -48,7 +51,6 @@ const Settings = () => {
         breakfastOpenTime: '07:00',
         breakfastCloseTime: '09:00',
         breakfastAutoSwitch: false,
-
         // Lunch (food request) settings
         foodRequestEnabled: false,
         foodRequestOpenTime: '12:00',
@@ -128,7 +130,13 @@ const Settings = () => {
                 department: { value: 80, enabled: true },
                 employee: { value: 90, enabled: true }
             },
-            monthlyLimit: 2
+            monthlyLimit: 2,
+            deductionMultiplier: 2
+        },
+        includePermission: false,
+        paidLeaveConfig: {
+            enabled: false,
+            leavesPerMonth: 1
         }
     });
 
@@ -196,7 +204,8 @@ const Settings = () => {
                         enabled: fetchedSettings.advancedLeaveDeduction?.thresholds?.employee?.enabled ?? true
                     }
                 },
-                monthlyLimit: fetchedSettings.advancedLeaveDeduction?.monthlyLimit || 2
+                monthlyLimit: fetchedSettings.advancedLeaveDeduction?.monthlyLimit || 2,
+                deductionMultiplier: fetchedSettings.advancedLeaveDeduction?.deductionMultiplier || 2
             };
 
             const finalSettings = {
@@ -212,6 +221,11 @@ const Settings = () => {
                     latitude: fetchedSettings.attendanceLocation?.latitude || 0,
                     longitude: fetchedSettings.attendanceLocation?.longitude || 0,
                     radius: fetchedSettings.attendanceLocation?.radius || 100
+                },
+                includePermission: fetchedSettings.includePermission ?? false,
+                paidLeaveConfig: {
+                    enabled: fetchedSettings.paidLeaveConfig?.enabled ?? false,
+                    leavesPerMonth: fetchedSettings.paidLeaveConfig?.leavesPerMonth || 1
                 }
             };
 
@@ -390,12 +404,22 @@ const Settings = () => {
         checkForChanges(updatedSettings);
     };
 
+    const handlePaidLeaveConfigChange = (field, value) => {
+        const updatedPaidLeave = {
+            ...settings.paidLeaveConfig,
+            [field]: value
+        };
+        const updatedSettings = {
+            ...settings,
+            paidLeaveConfig: updatedPaidLeave
+        };
+        setSettings(updatedSettings);
+        checkForChanges(updatedSettings);
+    };
+
     // Handle location capture
     const handleCaptureLocation = async () => {
         try {
-            // Import the geolocation service function
-            const { getCurrentPosition } = await import('../../services/geolocationService');
-
             const position = await getCurrentPosition();
             // Update both latitude and longitude in a single state update
             const updatedSettings = {
@@ -429,6 +453,7 @@ const Settings = () => {
         setSaving(true);
         try {
             const token = getAuthToken();
+            console.log('[Settings] Saving settings for subdomain:', subdomain, 'Payload:', settings);
             await api.put(`/settings/${subdomain}`, settings, {
                 headers: {
                     'Content-Type': 'application/json',
@@ -522,8 +547,8 @@ const Settings = () => {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {/* Header */}
                 <div className="mb-8">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                        <div className="mb-4 sm:mb-0">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between md:justify-end">
+                        <div className="mb-4 sm:mb-0 md:hidden">
                             <h1 className="text-3xl font-bold text-gray-900 flex items-center">
                                 <FiSettings className="mr-3 text-blue-600" />
                                 Application Settings
@@ -778,6 +803,35 @@ const Settings = () => {
                             </div>
                         </div>
                     </Card>
+
+                    {/* Holiday Settings */}
+                    <Card className="hover:shadow-lg transition-shadow duration-200">
+                        <div className="h-2 bg-gradient-to-r from-emerald-400 to-teal-400" />
+                        <div className="p-6">
+                            <h3 className="text-lg font-semibold mb-6 flex items-center text-gray-900">
+                                <div className="p-2 bg-emerald-100 rounded-lg mr-3">
+                                    <FiCalendar className="h-5 w-5 text-emerald-600" />
+                                </div>
+                                Holidays
+                            </h3>
+
+                            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                                <div>
+                                    <label className="text-sm font-medium text-gray-700">Manage Holidays</label>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        View and manage company holidays
+                                    </p>
+                                </div>
+                                <Button
+                                    onClick={() => setIsHolidayModalOpen(true)}
+                                    variant="primary"
+                                    size="sm"
+                                >
+                                    Open
+                                </Button>
+                            </div>
+                        </div>
+                    </Card>
                 </div>
 
                 {/* Location Settings */}
@@ -1029,9 +1083,42 @@ const Settings = () => {
                                 </div>
                                 Advanced Leave Deduction System
                             </h3>
-                            <span className="px-3 py-1 bg-red-50 text-red-700 text-xs font-bold rounded-full border border-red-100">
-                                PREMIUM FEATURE
-                            </span>
+                        </div>
+
+                        {/* Global Multiplier Setting */}
+                        <div className="mb-8 p-6 bg-red-50/30 rounded-2xl border-2 border-dashed border-red-100">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div>
+                                    <h4 className="text-lg font-bold text-gray-800 flex items-center">
+                                        <FiActivity className="mr-2 text-red-500" />
+                                        Penalty Multiplier Configuration
+                                    </h4>
+                                    <p className="text-sm text-gray-600 mt-1">
+                                        Define how many times the daily salary should be deducted when an employee violates the leave policies below.
+                                    </p>
+                                </div>
+                                <div className="flex items-center bg-white p-2 rounded-xl border border-red-200 shadow-sm self-start md:self-center">
+                                    <span className="px-3 text-sm font-bold text-gray-500 uppercase tracking-wider">Factor</span>
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            inputMode="numeric"
+                                            value={settings.advancedLeaveDeduction.deductionMultiplier}
+                                            onChange={(e) => {
+                                                const val = e.target.value.replace(/\D/g, '');
+                                                handleAdvancedSettingsChange('deductionMultiplier', val === '' ? '' : parseInt(val));
+                                            }}
+                                            onBlur={(e) => {
+                                                if (e.target.value === '' || parseInt(e.target.value) < 1) {
+                                                    handleAdvancedSettingsChange('deductionMultiplier', 1);
+                                                }
+                                            }}
+                                            className="w-24 px-4 py-2 bg-red-50 border-none rounded-lg focus:ring-2 focus:ring-red-500 font-black text-2xl text-red-700 text-center"
+                                        />
+                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xl font-black text-red-400 pointer-events-none">X</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1046,7 +1133,7 @@ const Settings = () => {
                                         />
                                     </div>
                                     <p className="text-sm text-gray-500 mb-6">
-                                        Apply 2X deduction (2 days salary for 1 day leave) if attendance falls below thresholds.
+                                        Apply {settings.advancedLeaveDeduction.deductionMultiplier}X deduction ({settings.advancedLeaveDeduction.deductionMultiplier} days salary for 1 day leave) if attendance falls below thresholds.
                                     </p>
 
                                     {settings.advancedLeaveDeduction.attendanceRuleEnabled && (
@@ -1095,11 +1182,11 @@ const Settings = () => {
                                         />
                                     </div>
                                     <p className="text-sm text-gray-500 mb-6">
-                                        Penalty of 2X deduction applies once an employee exceeds their monthly leave limit.
+                                        Penalty of {settings.advancedLeaveDeduction.deductionMultiplier}X deduction applies once an employee exceeds their monthly leave limit.
                                     </p>
 
-                                    {settings.advancedLeaveDeduction.monthlyLimitRuleEnabled && (
-                                        <div className="pt-4 border-t border-gray-200">
+                                     {settings.advancedLeaveDeduction.monthlyLimitRuleEnabled && (
+                                        <div className="pt-4 border-t border-gray-200 space-y-6">
                                             <div className="flex items-center">
                                                 <div className="flex-grow">
                                                     <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Monthly Limit (Days)</label>
@@ -1118,6 +1205,26 @@ const Settings = () => {
                                                     <FiClock className="text-red-600 h-6 w-6" />
                                                 </div>
                                             </div>
+
+                                            {/* New Permission Toggle */}
+                                            <div className="flex items-center justify-between p-3 bg-white border border-red-100 rounded-lg shadow-sm">
+                                                <div>
+                                                    <label className="text-sm font-bold text-gray-700">Include Permission in Penalty</label>
+                                                    <p className="text-xs text-gray-500 mt-1">
+                                                        Apply {settings.advancedLeaveDeduction.deductionMultiplier}X penalty to permission/late time if limit is exceeded.
+                                                    </p>
+                                                </div>
+                                                <CustomToggle
+                                                    checked={settings.includePermission}
+                                                    onChange={() => handleInputChange({
+                                                        target: {
+                                                            name: 'includePermission',
+                                                            type: 'checkbox',
+                                                            checked: !settings.includePermission
+                                                        }
+                                                    })}
+                                                />
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -1131,9 +1238,62 @@ const Settings = () => {
                                 <p className="font-bold mb-1">How Deduction Factor Works:</p>
                                 <ul className="list-disc ml-4 space-y-1">
                                     <li>When enabled, system evaluates BOTH attendance and limits.</li>
-                                    <li>If ANY condition fails (e.g. low dept attendance OR limit exceeded), <strong>2X deduction factor</strong> is recorded for that specific leave request.</li>
+                                    <li>If ANY condition fails (e.g. low dept attendance OR limit exceeded), <strong>{settings.advancedLeaveDeduction.deductionMultiplier}X deduction factor</strong> is recorded for that specific leave request.</li>
+                                    <li>If <strong>Include Permission in Penalty</strong> is on, the multiplier applies to late arrival/early departure time as well.</li>
                                 </ul>
                             </div>
+                        </div>
+                    </div>
+                </Card>
+
+                {/* Paid Leave Configuration */}
+                <Card className="mb-8 hover:shadow-lg transition-shadow duration-200">
+                    <div className="h-2 bg-gradient-to-r from-emerald-400 to-teal-400" />
+                    <div className="p-6">
+                        <h3 className="text-lg font-semibold mb-6 flex items-center text-gray-900">
+                            <div className="p-2 bg-emerald-100 rounded-lg mr-3">
+                                <FiUserCheck className="h-5 w-5 text-emerald-600" />
+                            </div>
+                            Paid Leave Configuration
+                        </h3>
+
+                        <div className="space-y-6">
+                            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                                <div>
+                                    <label className="text-sm font-medium text-gray-700">Enable Paid Leave</label>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Allow employees to apply for paid leaves
+                                    </p>
+                                </div>
+                                <CustomToggle
+                                    checked={settings.paidLeaveConfig?.enabled}
+                                    onChange={() => handlePaidLeaveConfigChange('enabled', !settings.paidLeaveConfig?.enabled)}
+                                />
+                            </div>
+
+                            {settings.paidLeaveConfig?.enabled && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm transition-all hover:border-emerald-200">
+                                        <label className="block text-xs font-black text-gray-500 mb-2 uppercase tracking-widest">
+                                            Monthly Limit
+                                        </label>
+                                        <div className="flex items-center">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="31"
+                                                value={settings.paidLeaveConfig?.leavesPerMonth}
+                                                onChange={(e) => handlePaidLeaveConfigChange('leavesPerMonth', parseInt(e.target.value) || 0)}
+                                                className="block w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm font-bold text-gray-900"
+                                            />
+                                            <span className="ml-3 text-sm text-gray-500 font-black uppercase tracking-wider">Days</span>
+                                        </div>
+                                        <p className="mt-3 text-[10px] text-gray-400 font-medium uppercase leading-tight">
+                                            Max paid leaves per employee / month
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </Card>
@@ -1390,7 +1550,7 @@ const Settings = () => {
                 </div>
 
                 {/* Settings Summary */}
-                <Card className="bg-gradient-to-br from-gray-50 to-gray-100">
+                {/* <Card className="bg-gradient-to-br from-gray-50 to-gray-100">
                     <div className="p-6">
                         <h3 className="text-lg font-semibold mb-6 text-gray-900">Configuration Summary</h3>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1524,7 +1684,18 @@ const Settings = () => {
                             </div>
                         </div>
                     </div>
-                </Card>
+                </Card> */}
+                {/* Holiday Management Modal */}
+                <Modal
+                    isOpen={isHolidayModalOpen}
+                    onClose={() => setIsHolidayModalOpen(false)}
+                    title="Holiday Management"
+                    size="xl"
+                >
+                    <div className="max-h-[80vh] overflow-y-auto">
+                        <HolidayManagement />
+                    </div>
+                </Modal>
             </div>
         </div>
     );

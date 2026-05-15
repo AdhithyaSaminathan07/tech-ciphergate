@@ -6,7 +6,80 @@ const Holiday = require('../models/Holiday');
 const Leave = require('../models/Leave');
 const Settings = require('../models/Settings');
 const DeveloperProject = require('../models/DeveloperProject');
+const SalaryProject = require('../models/SalaryProject');
 const { calculateWorkerProductivity } = require('../utils/productivityCalculator');
+const Ticket = require('../models/ticketModel');
+
+const calculateDailyAttendancePenalties = async (subdomain, fromDate, toDate, workerId, workerDeptId, thresh) => {
+  const companyPenaltyMap = {};
+  const deptPenaltyMap = {};
+
+  const companyEnabled = thresh.company?.enabled ?? true;
+  const deptEnabled = thresh.department?.enabled ?? true;
+
+  if (!companyEnabled && !deptEnabled) return { companyPenaltyMap, deptPenaltyMap };
+
+  const companyVal = thresh.company?.value ?? thresh.company ?? 80;
+  const deptVal = thresh.department?.value ?? thresh.department ?? 80;
+
+  const allCompanyWorkers = await Worker.find({ subdomain, status: { $ne: 'Relieved' } });
+  const totalCompanyWorkers = allCompanyWorkers.length;
+  const deptWorkers = allCompanyWorkers.filter(w => {
+    const wDeptId = w.department?._id?.toString() || w.department?.toString();
+    return wDeptId === workerDeptId;
+  });
+  const totalDeptWorkers = deptWorkers.length;
+
+  const allAttendancesInRange = await Attendance.find({
+    subdomain,
+    date: { $gte: fromDate, $lte: toDate },
+    presence: true
+  });
+
+  const attendanceByDate = {};
+  allAttendancesInRange.forEach(att => {
+    if (!attendanceByDate[att.date]) attendanceByDate[att.date] = { company: [], dept: [] };
+    const wId = att.worker.toString();
+    attendanceByDate[att.date].company.push(wId);
+    
+    const attWorker = allCompanyWorkers.find(w => w._id.toString() === wId);
+    if (attWorker) {
+      const attWorkerDeptId = attWorker.department?._id?.toString() || attWorker.department?.toString();
+      if (attWorkerDeptId === workerDeptId) {
+        attendanceByDate[att.date].dept.push(wId);
+      }
+    }
+  });
+
+  const workerIdStr = workerId.toString();
+  const dates = [];
+  let curDate = new Date(fromDate);
+  const endD = new Date(toDate);
+  while (curDate <= endD) {
+    dates.push(curDate.toISOString().split('T')[0]);
+    curDate.setDate(curDate.getDate() + 1);
+  }
+
+  dates.forEach(dateStr => {
+    const dayData = attendanceByDate[dateStr] || { company: [], dept: [] };
+    
+    if (companyEnabled) {
+      const otherCompanyWorkers = Math.max(1, totalCompanyWorkers - 1);
+      const presentOtherCompanyWorkers = dayData.company.filter(id => id !== workerIdStr).length;
+      const companyRate = (presentOtherCompanyWorkers / otherCompanyWorkers) * 100;
+      companyPenaltyMap[dateStr] = companyRate < companyVal;
+    }
+
+    if (deptEnabled) {
+      const otherDeptWorkers = Math.max(1, totalDeptWorkers - 1);
+      const presentOtherDeptWorkers = dayData.dept.filter(id => id !== workerIdStr).length;
+      const deptRate = (presentOtherDeptWorkers / otherDeptWorkers) * 100;
+      deptPenaltyMap[dateStr] = deptRate < deptVal;
+    }
+  });
+
+  return { companyPenaltyMap, deptPenaltyMap };
+};
 
 const giveBonus = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -176,27 +249,72 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
 
     const leaveData = await Leave.find({
       worker: id,
-      status: 'Approved'
+      $or: [
+        { status: 'Approved' },
+        { leaveType: 'Paid Leave' }
+      ]
     });
 
     const holidays = await Holiday.find({});
     const settings = await Settings.findOne({ subdomain: worker.subdomain });
     const batches = settings ? settings.batches : [];
 
+    // Calculate Company/Dept Attendance Penalties (Daily rates)
+    let companyPenaltyMap = {};
+    let deptPenaltyMap = {};
+
+    if (settings && settings.advancedLeaveDeduction && settings.advancedLeaveDeduction.attendanceRuleEnabled) {
+      const adv = settings.advancedLeaveDeduction;
+      const thresh = adv.thresholds || {};
+      const workerDeptId = worker.department?._id?.toString() || worker.department?.toString();
+
+      const penaltyMaps = await calculateDailyAttendancePenalties(worker.subdomain, fromDate, toDate, id, workerDeptId, thresh);
+      companyPenaltyMap = penaltyMaps.companyPenaltyMap;
+      deptPenaltyMap = penaltyMaps.deptPenaltyMap;
+    }
+
     // FIXED THIS LINE: Pass the worker object to the calculator function
+    // Fetch salary projects for this worker overlapping the report period
+    const salaryProjects = await SalaryProject.find({
+      subdomain: worker.subdomain,
+      developers: id,
+      $or: [{ startDate: { $lte: new Date(toDate) }, endDate: { $gte: new Date(fromDate) } }]
+    }).populate('developers', 'name rfid');
+
+    // Enrich projects with per-day value
+    const enrichedProjects = salaryProjects.map(p => {
+      const pObj = p.toObject();
+      const devCount = pObj.developers.length || 1;
+      const share = pObj.projectProfit / devCount;
+      const start = new Date(pObj.startDate);
+      const end = new Date(pObj.endDate);
+      let workingDays = 0;
+      const cur = new Date(start);
+      while (cur <= end) {
+        if (cur.getDay() !== 0) workingDays++;
+        cur.setDate(cur.getDate() + 1);
+      }
+      return { ...pObj, perDeveloperShare: share, totalWorkingDays: workingDays, perDayValue: workingDays > 0 ? share / workingDays : 0 };
+    });
+
     const report = calculateWorkerProductivity({
       worker, // ADDED: Pass the worker object
       attendanceData,
       fromDate,
       toDate,
       leaveData, // ADDED: Pass the leave data
+      projects: enrichedProjects, // HYBRID: Pass salary projects
       options: {
         batches,
         holidays,
         permissionTimeMinutes: settings ? settings.permissionTimeMinutes : 15,
         deductSalary: settings ? settings.deductSalary : true,
         intervals: settings ? settings.intervals : [],
-        advancedLeaveDeduction: settings ? settings.advancedLeaveDeduction : null
+        advancedLeaveDeduction: settings ? settings.advancedLeaveDeduction : null,
+        companyPenaltyMap,
+        deptPenaltyMap,
+        includePermission: settings?.includePermission || false,
+        paidLeaveConfig: settings ? settings.paidLeaveConfig : null
       }
     });
 
@@ -211,19 +329,9 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
     // Calculate total bonus amount for this period
     const totalBonusAmount = bonusesForPeriod.reduce((total, bonus) => total + bonus.amount, 0);
 
-    // Calculate the final salary with bonus logic applied
-    // This is the salary that would be paid to the worker based on your bonus calculation
-    let finalSalaryWithBonus = report.summary.finalSalary; // Default to actual earned salary (after deductions)
-
-    if (totalBonusAmount > 0 && bonusesForPeriod.length > 0) {
-      // Get the first bonus for calculation (assuming one bonus per period)
-      const bonus = bonusesForPeriod[0];
-
-      // Recalculate using the same logic as giveBonus
-      const baseSalary = worker.salary || 0;
-      const actualEarnedSalary = report.summary.finalSalary || 0;
-      const remainingBonus = Math.max(0, bonus.amount - baseSalary);
-      finalSalaryWithBonus = actualEarnedSalary + remainingBonus;
+    let finalSalaryWithBonus = report.summary.finalSalary || 0;
+    if (totalBonusAmount > 0) {
+      finalSalaryWithBonus = finalSalaryWithBonus + totalBonusAmount;
     }
 
     // ADD FINE CALCULATION FOR THE REPORT PERIOD
@@ -244,6 +352,80 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
     // Calculate final salary after deducting fines
     const finalSalaryWithFines = Math.max(0, finalSalaryWithBonus - totalFinesAmount);
 
+    // Fetch all tasks for this worker that were ever delayed or are currently overdue
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const allTasks = await Ticket.find({
+      $or: [
+        { assignee: id },
+        { assignees: id }
+      ],
+      subdomain: worker.subdomain
+    });
+
+    const delayedTasks = allTasks.filter(task => {
+      if (!task.endDate) return false;
+      const deadline = new Date(task.endDate);
+      deadline.setHours(0, 0, 0, 0);
+
+      if (task.status === 'Done') {
+        // Find when it was marked as Done
+        const doneEntry = task.statusHistory
+          .filter(h => h.status === 'Done')
+          .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
+        
+        if (doneEntry) {
+          const doneDate = new Date(doneEntry.changedAt);
+          doneDate.setHours(0, 0, 0, 0);
+          return doneDate > deadline;
+        }
+        return false;
+      } else {
+        // Not Done yet, check if it's past deadline
+        return today > deadline;
+      }
+    }).map(task => {
+      const doneEntry = task.statusHistory
+        .filter(h => h.status === 'Done')
+        .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
+      
+      return {
+        _id: task._id,
+        title: task.title,
+        endDate: task.endDate,
+        doneDate: doneEntry ? doneEntry.changedAt : null,
+        status: task.status
+      };
+    });
+
+    const isCurrentlyViolating = delayedTasks.some(t => t.status !== 'Done');
+    let earliestDeadline = null;
+    if (delayedTasks.length > 0) {
+      const sortedDeadlines = delayedTasks.map(t => new Date(t.endDate)).sort((a, b) => a - b);
+      earliestDeadline = sortedDeadlines[0];
+    }
+
+    // Build project breakdown summary
+    const projectBreakdown = enrichedProjects.map(p => {
+      const pid = p._id.toString();
+      const calcData = (report.summary?.projectBreakdownMap && report.summary.projectBreakdownMap[pid]) || { totalEarned: 0, totalDeduction: 0, daysCount: 0 };
+      
+      return {
+        projectId: p._id,
+        projectName: p.projectName,
+        startDate: p.startDate,
+        endDate: p.endDate,
+        totalWorkingDays: p.totalWorkingDays,
+        perDayValue: p.perDayValue,
+        perDeveloperShare: p.perDeveloperShare,
+        projectProfit: p.projectProfit,
+        totalDeduction: calcData.totalDeduction,
+        totalEarned: calcData.totalEarned,
+        daysInReport: calcData.daysCount
+      };
+    });
+
     res.status(200).json({
       message: 'Salary report generated successfully',
       report,
@@ -252,6 +434,10 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
       totalFinesAmount: totalFinesAmount, // ADD THIS
       finalSalaryWithBonus: finalSalaryWithBonus,
       finalSalaryWithFines: finalSalaryWithFines, // ADD THIS
+      isCurrentlyViolating,
+      earliestDeadline,
+      delayedTasks,
+      projectBreakdown, // HYBRID
       worker: {
         name: worker.name,
         salary: worker.salary,
@@ -263,6 +449,261 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Failed to generate salary report' });
+  }
+});
+
+const getMySalaryReport = asyncHandler(async (req, res) => {
+  const { fromDate, toDate } = req.query;
+  const id = req.user._id;
+
+  console.log('Generating salary report for worker:', id);
+
+  // Calculate current month date range if not provided
+  let start, end;
+  if (!fromDate || !toDate) {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    
+    const formatDate = (d) => {
+      let m = '' + (d.getMonth() + 1);
+      let day = '' + d.getDate();
+      const y = d.getFullYear();
+      if (m.length < 2) m = '0' + m;
+      if (day.length < 2) day = '0' + day;
+      return [y, m, day].join('-');
+    };
+    
+    start = formatDate(firstDay);
+    end = formatDate(lastDay);
+  } else {
+    start = fromDate;
+    end = toDate;
+  }
+
+  try {
+    const worker = await Worker.findById(id).populate('department').select('+fines');
+
+    if (!worker) {
+      console.log('Worker not found:', id);
+      return res.status(404).json({ message: 'Worker not found' });
+    }
+
+    const allAttendanceData = await Attendance.find({ worker: id });
+
+    const fromDateObj = new Date(start);
+    const toDateObj = new Date(end);
+
+    const attendanceData = allAttendanceData.filter(record => {
+      const recordDate = new Date(record.date);
+      return recordDate >= fromDateObj && recordDate <= toDateObj;
+    });
+
+    const leaveData = await Leave.find({
+      worker: id,
+      $or: [
+        { status: 'Approved' },
+        { leaveType: 'Paid Leave' }
+      ]
+    });
+
+    const holidays = await Holiday.find({});
+    const settings = await Settings.findOne({ subdomain: worker.subdomain });
+    const batches = settings ? settings.batches : [];
+
+    // Calculate Company/Dept Attendance Penalties (Daily rates)
+    let companyPenaltyMap = {};
+    let deptPenaltyMap = {};
+
+    if (settings && settings.advancedLeaveDeduction && settings.advancedLeaveDeduction.attendanceRuleEnabled) {
+      const adv = settings.advancedLeaveDeduction;
+      const thresh = adv.thresholds || {};
+      const workerDeptId = worker.department?._id?.toString() || worker.department?.toString();
+
+      const penaltyMaps = await calculateDailyAttendancePenalties(worker.subdomain, start, end, id, workerDeptId, thresh);
+      companyPenaltyMap = penaltyMaps.companyPenaltyMap;
+      deptPenaltyMap = penaltyMaps.deptPenaltyMap;
+    }
+
+    // Hybrid: Fetch and enrichment projects
+    const salaryProjects = await SalaryProject.find({
+      subdomain: worker.subdomain,
+      developers: id,
+      $or: [{ startDate: { $lte: new Date(end) }, endDate: { $gte: new Date(start) } }]
+    }).populate('developers', 'name');
+
+    const enrichedProjects = salaryProjects.map(p => {
+      const pObj = p.toObject();
+      const devCount = pObj.developers.length || 1;
+      const share = pObj.projectProfit / devCount;
+      const pStart = new Date(pObj.startDate);
+      const pEnd = new Date(pObj.endDate);
+      let workingDays = 0;
+      const cur = new Date(pStart);
+      while (cur <= pEnd) {
+        if (cur.getDay() !== 0) workingDays++;
+        cur.setDate(cur.getDate() + 1);
+      }
+      return { ...pObj, perDeveloperShare: share, totalWorkingDays: workingDays, perDayValue: workingDays > 0 ? share / workingDays : 0 };
+    });
+
+    const report = calculateWorkerProductivity({
+      worker,
+      attendanceData,
+      fromDate: start,
+      toDate: end,
+      leaveData,
+      projects: enrichedProjects, // Added projects
+      options: {
+        batches,
+        holidays,
+        permissionTimeMinutes: settings ? settings.permissionTimeMinutes : 15,
+        deductSalary: settings ? settings.deductSalary : true,
+        intervals: settings ? settings.intervals : [],
+        advancedLeaveDeduction: settings ? settings.advancedLeaveDeduction : null,
+        companyPenaltyMap,
+        deptPenaltyMap,
+        includePermission: settings?.includePermission || false,
+        paidLeaveConfig: settings ? settings.paidLeaveConfig : null
+      }
+    });
+
+    const bonusesForPeriod = worker.bonuses.filter(bonus => {
+      return (
+        (new Date(bonus.fromDate) <= new Date(end)) &&
+        (new Date(bonus.toDate) >= new Date(start))
+      );
+    });
+
+    const totalBonusAmount = bonusesForPeriod.reduce((total, bonus) => total + bonus.amount, 0);
+    let finalSalaryWithBonus = report.summary.finalSalary;
+
+    if (totalBonusAmount > 0 && bonusesForPeriod.length > 0) {
+      const bonus = bonusesForPeriod[0];
+      const baseSalary = worker.salary || 0;
+      const actualEarnedSalary = report.summary.finalSalary || 0;
+      const remainingBonus = Math.max(0, bonus.amount - baseSalary);
+      finalSalaryWithBonus = actualEarnedSalary + remainingBonus;
+    }
+
+    let totalFinesAmount = 0;
+    if (worker.fines && Array.isArray(worker.fines)) {
+      totalFinesAmount = worker.fines
+        .filter(fine => {
+          const fineDate = new Date(fine.date);
+          return fineDate >= fromDateObj && fineDate <= toDateObj;
+        })
+        .reduce((total, fine) => total + (fine.amount || 0), 0);
+    }
+
+    const finalSalaryWithFines = Math.max(0, finalSalaryWithBonus - totalFinesAmount);
+
+    // Fetch all tasks for this worker that were ever delayed or are currently overdue
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const allTasks = await Ticket.find({
+      $or: [
+        { assignee: id },
+        { assignees: id }
+      ],
+      subdomain: worker.subdomain
+    });
+
+    const delayedTasks = allTasks.filter(task => {
+      if (!task.endDate) return false;
+      const deadline = new Date(task.endDate);
+      deadline.setHours(0, 0, 0, 0);
+
+      if (task.status === 'Done') {
+        const doneEntry = task.statusHistory
+          .filter(h => h.status === 'Done')
+          .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
+        
+        if (doneEntry) {
+          const doneDate = new Date(doneEntry.changedAt);
+          doneDate.setHours(0, 0, 0, 0);
+          return doneDate > deadline;
+        }
+        return false;
+      } else {
+        return today > deadline;
+      }
+    }).map(task => {
+      const doneEntry = task.statusHistory
+        .filter(h => h.status === 'Done')
+        .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
+      
+      return {
+        _id: task._id,
+        title: task.title,
+        endDate: task.endDate,
+        doneDate: doneEntry ? doneEntry.changedAt : null,
+        status: task.status
+      };
+    });
+
+    const isCurrentlyViolating = delayedTasks.some(t => t.status !== 'Done');
+    let earliestDeadline = null;
+    if (delayedTasks.length > 0) {
+      const sortedDeadlines = delayedTasks.map(t => new Date(t.endDate)).sort((a, b) => a - b);
+      earliestDeadline = sortedDeadlines[0];
+    }
+
+    // Build project breakdown summary
+    const projectBreakdown = enrichedProjects.map(p => {
+      const pid = p._id.toString();
+      const calcData = (report.summary?.projectBreakdownMap && report.summary.projectBreakdownMap[pid]) || { totalEarned: 0, totalDeduction: 0, daysCount: 0 };
+      
+      return {
+        projectId: p._id,
+        projectName: p.projectName,
+        startDate: p.startDate,
+        endDate: p.endDate,
+        totalWorkingDays: p.totalWorkingDays,
+        perDayValue: p.perDayValue,
+        perDeveloperShare: p.perDeveloperShare,
+        projectProfit: p.projectProfit,
+        totalDeduction: calcData.totalDeduction,
+        totalEarned: calcData.totalEarned,
+        daysInReport: calcData.daysCount
+      };
+    });
+
+    const responseData = {
+      message: 'Salary report generated successfully',
+      baseSalary: worker.salary,
+      finalSalary: finalSalaryWithFines,
+      actualEarnedSalary: report.summary.finalSalary || 0,
+      totalDeductions: (report.summary.totalSalaryDeduction || 0) + totalFinesAmount,
+      report,
+      bonuses: bonusesForPeriod,
+      totalBonusAmount: totalBonusAmount,
+      totalFinesAmount: totalFinesAmount,
+      finalSalaryWithBonus: finalSalaryWithBonus,
+      isCurrentlyViolating,
+      earliestDeadline,
+      delayedTasks,
+      projectBreakdown, // Added breakdown
+      worker: {
+        name: worker.name,
+        salary: worker.salary,
+        finalSalary: worker.finalSalary,
+        perDaySalary: worker.perDaySalary
+      }
+    };
+
+    console.log('Salary API Response (Strict):', {
+      baseSalary: responseData.baseSalary,
+      finalSalary: responseData.finalSalary
+    });
+    res.status(200).json(responseData);
+  } catch (error) {
+    console.error('Failed to generate salary report:', error);
+    res.status(500).json({ message: 'Failed to generate salary report', error: error.message });
   }
 });
 
@@ -517,14 +958,504 @@ const getAllDeveloperProjectsSummary = asyncHandler(async (req, res) => {
   });
 });
 
+// ─── SalaryProject (Hybrid System) CRUD ───────────────────────────────────────
+
+// Create a new salary project
+const createSalaryProject = asyncHandler(async (req, res) => {
+  const { projectName, projectAmount, profitPercentage, developers, startDate, endDate, subdomain } = req.body;
+
+  if (!projectName || !projectAmount || !startDate || !endDate || !subdomain) {
+    return res.status(400).json({ message: 'projectName, projectAmount, startDate, endDate, subdomain are required' });
+  }
+
+  if (new Date(startDate) > new Date(endDate)) {
+    return res.status(400).json({ message: 'startDate must be before or equal to endDate' });
+  }
+
+  const project = new SalaryProject({
+    projectName,
+    projectAmount: parseFloat(projectAmount),
+    profitPercentage: parseFloat(profitPercentage || 60),
+    developers: developers || [],
+    startDate: new Date(startDate),
+    endDate: new Date(endDate),
+    subdomain
+  });
+
+  await project.save();
+  const populated = await SalaryProject.findById(project._id).populate('developers', 'name rfid department');
+
+  res.status(201).json({ message: 'Salary project created', project: populated });
+});
+
+// Get all salary projects for a subdomain (with optional month/year filter)
+const getSalaryProjects = asyncHandler(async (req, res) => {
+  const { subdomain, month, year } = req.query;
+
+  if (!subdomain) return res.status(400).json({ message: 'subdomain is required' });
+
+  let query = { subdomain };
+
+  if (month && year) {
+    const startOfMonth = new Date(parseInt(year), parseInt(month) - 1, 1);
+    const endOfMonth = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59);
+    // Projects that overlap with this month
+    query.$or = [
+      { startDate: { $lte: endOfMonth }, endDate: { $gte: startOfMonth } }
+    ];
+  }
+
+  const projects = await SalaryProject.find(query)
+    .populate('developers', 'name rfid department')
+    .sort({ startDate: -1 });
+
+  res.status(200).json({ projects });
+});
+
+// Get salary projects for a specific worker within a date range
+const getSalaryProjectsForWorker = asyncHandler(async (req, res) => {
+  const { workerId } = req.params;
+  const { subdomain, fromDate, toDate } = req.query;
+
+  if (!workerId || !subdomain) {
+    return res.status(400).json({ message: 'workerId and subdomain are required' });
+  }
+
+  let query = { subdomain, developers: workerId };
+
+  if (fromDate && toDate) {
+    const from = new Date(fromDate);
+    const to = new Date(toDate);
+    // Projects that overlap with the date range
+    query.$or = [
+      { startDate: { $lte: to }, endDate: { $gte: from } }
+    ];
+  }
+
+  const projects = await SalaryProject.find(query)
+    .populate('developers', 'name rfid')
+    .sort({ startDate: 1 });
+
+  // For each project, calculate per-day value for this specific worker
+  const enriched = projects.map(p => {
+    const projectObj = p.toObject();
+    const devCount = projectObj.developers.length || 1;
+    const share = projectObj.projectProfit / devCount;
+
+    // Count working days (exclude Sundays) in the project range
+    const start = new Date(projectObj.startDate);
+    const end = new Date(projectObj.endDate);
+    let workingDays = 0;
+    const cur = new Date(start);
+    while (cur <= end) {
+      if (cur.getDay() !== 0) workingDays++; // Exclude Sundays
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    const perDayValue = workingDays > 0 ? share / workingDays : 0;
+
+    return {
+      ...projectObj,
+      perDeveloperShare: share,
+      totalWorkingDays: workingDays,
+      perDayValue
+    };
+  });
+
+  res.status(200).json({ projects: enriched });
+});
+
+// Update a salary project
+const updateSalaryProject = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { projectName, projectAmount, profitPercentage, developers, startDate, endDate } = req.body;
+
+  const project = await SalaryProject.findById(id);
+  if (!project) return res.status(404).json({ message: 'Salary project not found' });
+
+  if (projectName !== undefined) project.projectName = projectName;
+  if (projectAmount !== undefined) project.projectAmount = parseFloat(projectAmount);
+  if (profitPercentage !== undefined) project.profitPercentage = parseFloat(profitPercentage);
+  if (developers !== undefined) project.developers = developers;
+  if (startDate !== undefined) project.startDate = new Date(startDate);
+  if (endDate !== undefined) project.endDate = new Date(endDate);
+
+  if (project.startDate > project.endDate) {
+    return res.status(400).json({ message: 'startDate must be before or equal to endDate' });
+  }
+
+  await project.save();
+  const populated = await SalaryProject.findById(project._id).populate('developers', 'name rfid department');
+
+  res.status(200).json({ message: 'Salary project updated', project: populated });
+});
+
+// Delete a salary project
+const deleteSalaryProject = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const project = await SalaryProject.findByIdAndDelete(id);
+  if (!project) return res.status(404).json({ message: 'Salary project not found' });
+  res.status(200).json({ message: 'Salary project deleted' });
+});
+
+// Get bulk salary report for all workers in a date range
+const getBulkSalaryReport = asyncHandler(async (req, res) => {
+  const { subdomain, fromDate, toDate } = req.query;
+
+  if (!subdomain || !fromDate || !toDate) {
+    return res.status(400).json({ message: 'Subdomain, fromDate, and toDate are required' });
+  }
+
+  try {
+    const workers = await Worker.find({ subdomain, status: { $ne: 'Relieved' } }).populate('department').select('+fines');
+    const holidays = await Holiday.find({});
+    const settings = await Settings.findOne({ subdomain });
+    const batches = settings ? settings.batches : [];
+    const fromDateObj = new Date(fromDate);
+    const toDateObj = new Date(toDate);
+    const reportYear = fromDateObj.getFullYear();
+
+    // Fetch all needed data for the subdomain once
+    const allAttendanceData = await Attendance.find({ 
+      subdomain,
+      date: { $gte: fromDate, $lte: toDate }
+    });
+    const allLeaveData = await Leave.find({
+      subdomain,
+      $or: [{ status: 'Approved' }, { leaveType: 'Paid Leave' }]
+    });
+    const allSalaryProjects = await SalaryProject.find({
+      subdomain,
+      $or: [{ startDate: { $lte: toDateObj }, endDate: { $gte: fromDateObj } }]
+    }).populate('developers', 'name');
+    const allTickets = await Ticket.find({ subdomain });
+
+    const results = workers.map(worker => {
+      const workerId = worker._id.toString();
+      
+      // Filter data for this worker
+      const workerAttendance = allAttendanceData.filter(record => {
+        const recordDate = new Date(record.date);
+        return record.worker.toString() === workerId && recordDate >= fromDateObj && recordDate <= toDateObj;
+      });
+
+      const workerLeaves = allLeaveData.filter(l => l.worker.toString() === workerId);
+      
+      const workerSalaryProjects = allSalaryProjects.filter(p => 
+        p.developers.some(dev => dev._id.toString() === workerId)
+      );
+
+      const enrichedProjects = workerSalaryProjects.map(p => {
+        const pObj = p.toObject();
+        const devCount = pObj.developers.length || 1;
+        const share = pObj.projectProfit / devCount;
+        const start = new Date(pObj.startDate);
+        const end = new Date(pObj.endDate);
+        let workingDays = 0;
+        const cur = new Date(start);
+        while (cur <= end) {
+          if (cur.getDay() !== 0) workingDays++;
+          cur.setDate(cur.getDate() + 1);
+        }
+        return { ...pObj, perDeveloperShare: share, totalWorkingDays: workingDays, perDayValue: workingDays > 0 ? share / workingDays : 0 };
+      });
+
+      // Calculate productivity
+      const report = calculateWorkerProductivity({
+        worker,
+        attendanceData: workerAttendance,
+        fromDate,
+        toDate,
+        leaveData: workerLeaves,
+        projects: enrichedProjects,
+        options: {
+          batches,
+          holidays,
+          permissionTimeMinutes: settings ? settings.permissionTimeMinutes : 15,
+          deductSalary: settings ? settings.deductSalary : true,
+          intervals: settings ? settings.intervals : [],
+          advancedLeaveDeduction: settings ? settings.advancedLeaveDeduction : null,
+          includePermission: settings?.includePermission || false,
+          paidLeaveConfig: settings ? settings.paidLeaveConfig : null
+        }
+      });
+
+      // Bonus
+      const totalBonusAmount = worker.bonuses
+        .filter(b => new Date(b.fromDate) <= toDateObj && new Date(b.toDate) >= fromDateObj)
+        .reduce((sum, b) => sum + b.amount, 0);
+
+      let finalSalaryWithBonus = (report.summary.finalSalary || 0) + totalBonusAmount;
+
+      // Fines
+      const totalFinesAmount = (worker.fines || [])
+        .filter(f => {
+          const fDate = new Date(f.date);
+          return fDate >= fromDateObj && fDate <= toDateObj;
+        })
+        .reduce((sum, f) => sum + (f.amount || 0), 0);
+
+      const finalSalaryWithFines = Math.max(0, finalSalaryWithBonus - totalFinesAmount);
+
+      // Task Penalty
+      const delayedTasks = allTickets.filter(task => {
+        if (!task.endDate) return false;
+        const isAssignee = task.assignee?.toString() === workerId || 
+                          (Array.isArray(task.assignees) && task.assignees.some(a => a.toString() === workerId));
+        if (!isAssignee) return false;
+
+        const deadline = new Date(task.endDate);
+        deadline.setHours(0, 0, 0, 0);
+
+        if (task.status === 'Done') {
+          const doneEntry = (task.statusHistory || [])
+            .filter(h => h.status === 'Done')
+            .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
+          
+          if (doneEntry) {
+            const doneDate = new Date(doneEntry.changedAt);
+            doneDate.setHours(0, 0, 0, 0);
+            return doneDate > deadline;
+          }
+          return false;
+        } else {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          return today > deadline;
+        }
+      }).map(task => {
+        const doneEntry = (task.statusHistory || [])
+          .filter(h => h.status === 'Done')
+          .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
+        return {
+          endDate: task.endDate,
+          doneDate: doneEntry ? doneEntry.changedAt : null
+        };
+      });
+
+      // Calculate penalty using the same logic as frontend
+      const parseSalary = (str) => {
+        if (!str) return 0;
+        const cleaned = String(str).replace(/[^0-9.]/g, '');
+        return parseFloat(cleaned) || 0;
+      };
+
+      const claimedDays = new Set();
+      let taskPenalty = 0;
+
+      delayedTasks.forEach(task => {
+        const start = new Date(task.endDate);
+        start.setDate(start.getDate() + 1);
+        start.setHours(0, 0, 0, 0);
+        const end = task.doneDate ? new Date(task.doneDate) : new Date();
+        end.setHours(23, 59, 59, 999);
+
+        (report.report || []).forEach(day => {
+          const dDate = new Date(`${day.date}, ${reportYear}`);
+          if (dDate >= start && dDate <= end) {
+            if (!claimedDays.has(day.date)) {
+              claimedDays.add(day.date);
+              taskPenalty += parseSalary(day.totalSalary);
+            }
+          }
+        });
+      });
+
+      return {
+        workerId,
+        name: worker.name,
+        department: worker.department?.name || 'N/A',
+        grossFinalSalary: finalSalaryWithFines,
+        taskPenalty: taskPenalty,
+        totalFinalSalary: finalSalaryWithFines
+      };
+    });
+
+    res.status(200).json({ reports: results });
+  } catch (error) {
+    console.error('Bulk salary report error:', error);
+    res.status(500).json({ message: 'Failed to generate bulk salary report' });
+  }
+});
+
+// Get top teams earnings summary (secure for public/worker view)
+const getTopTeamsEarnings = asyncHandler(async (req, res) => {
+  const { subdomain, fromDate, toDate } = req.query;
+
+  if (!subdomain || !fromDate || !toDate) {
+    return res.status(400).json({ message: 'Subdomain, fromDate, and toDate are required' });
+  }
+
+  try {
+    const workers = await Worker.find({ subdomain, status: { $ne: 'Relieved' } }).populate('department').select('+fines');
+    const holidays = await Holiday.find({});
+    const settings = await Settings.findOne({ subdomain });
+    const batches = settings ? settings.batches : [];
+    const fromDateObj = new Date(fromDate);
+    const toDateObj = new Date(toDate);
+    const reportYear = fromDateObj.getFullYear();
+
+    const allAttendanceData = await Attendance.find({ 
+      subdomain,
+      date: { $gte: fromDate, $lte: toDate }
+    });
+    const allLeaveData = await Leave.find({
+      subdomain,
+      $or: [{ status: 'Approved' }, { leaveType: 'Paid Leave' }]
+    });
+    const allSalaryProjects = await SalaryProject.find({
+      subdomain,
+      $or: [{ startDate: { $lte: toDateObj }, endDate: { $gte: fromDateObj } }]
+    }).populate('developers', 'name');
+    const allTickets = await Ticket.find({ subdomain });
+
+    const teamEarnings = {};
+
+    workers.forEach(worker => {
+      const workerId = worker._id.toString();
+      const workerAttendance = allAttendanceData.filter(record => {
+        const recordDate = new Date(record.date);
+        return record.worker.toString() === workerId && recordDate >= fromDateObj && recordDate <= toDateObj;
+      });
+      const workerLeaves = allLeaveData.filter(l => l.worker.toString() === workerId);
+      const workerSalaryProjects = allSalaryProjects.filter(p => 
+        p.developers.some(dev => dev._id.toString() === workerId)
+      );
+
+      const enrichedProjects = workerSalaryProjects.map(p => {
+        const pObj = p.toObject();
+        const devCount = pObj.developers.length || 1;
+        const share = pObj.projectProfit / devCount;
+        const start = new Date(pObj.startDate);
+        const end = new Date(pObj.endDate);
+        let workingDays = 0;
+        const cur = new Date(start);
+        while (cur <= end) {
+          if (cur.getDay() !== 0) workingDays++;
+          cur.setDate(cur.getDate() + 1);
+        }
+        return { ...pObj, perDeveloperShare: share, totalWorkingDays: workingDays, perDayValue: workingDays > 0 ? share / workingDays : 0 };
+      });
+
+      const report = calculateWorkerProductivity({
+        worker,
+        attendanceData: workerAttendance,
+        fromDate,
+        toDate,
+        leaveData: workerLeaves,
+        projects: enrichedProjects,
+        options: {
+          batches,
+          holidays,
+          permissionTimeMinutes: settings ? settings.permissionTimeMinutes : 15,
+          deductSalary: settings ? settings.deductSalary : true,
+          intervals: settings ? settings.intervals : [],
+          advancedLeaveDeduction: settings ? settings.advancedLeaveDeduction : null,
+          includePermission: settings?.includePermission || false,
+          paidLeaveConfig: settings ? settings.paidLeaveConfig : null
+        }
+      });
+
+      const totalBonusAmount = worker.bonuses
+        .filter(b => new Date(b.fromDate) <= toDateObj && new Date(b.toDate) >= fromDateObj)
+        .reduce((sum, b) => sum + b.amount, 0);
+
+      let finalSalaryWithBonus = (report.summary.finalSalary || 0) + totalBonusAmount;
+      const totalFinesAmount = (worker.fines || [])
+        .filter(f => {
+          const fDate = new Date(f.date);
+          return fDate >= fromDateObj && fDate <= toDateObj;
+        })
+        .reduce((sum, f) => sum + (f.amount || 0), 0);
+
+      const finalSalaryWithFines = Math.max(0, finalSalaryWithBonus - totalFinesAmount);
+
+      const delayedTasks = allTickets.filter(task => {
+        if (!task.endDate) return false;
+        const isAssignee = task.assignee?.toString() === workerId || 
+                          (Array.isArray(task.assignees) && task.assignees.some(a => a.toString() === workerId));
+        if (!isAssignee) return false;
+        const deadline = new Date(task.endDate);
+        deadline.setHours(0, 0, 0, 0);
+        if (task.status === 'Done') {
+          const doneEntry = (task.statusHistory || []).filter(h => h.status === 'Done').sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
+          if (doneEntry) {
+            const doneDate = new Date(doneEntry.changedAt);
+            doneDate.setHours(0, 0, 0, 0);
+            return doneDate > deadline;
+          }
+          return false;
+        } else {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          return today > deadline;
+        }
+      }).map(task => {
+        const doneEntry = (task.statusHistory || []).filter(h => h.status === 'Done').sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
+        return { endDate: task.endDate, doneDate: doneEntry ? doneEntry.changedAt : null };
+      });
+
+      const parseSalary = (str) => {
+        if (!str) return 0;
+        const cleaned = String(str).replace(/[^0-9.]/g, '');
+        return parseFloat(cleaned) || 0;
+      };
+
+      const claimedDays = new Set();
+      let taskPenalty = 0;
+      delayedTasks.forEach(task => {
+        const start = new Date(task.endDate);
+        start.setDate(start.getDate() + 1);
+        start.setHours(0, 0, 0, 0);
+        const end = task.doneDate ? new Date(task.doneDate) : new Date();
+        end.setHours(23, 59, 59, 999);
+        (report.report || []).forEach(day => {
+          const dDate = new Date(`${day.date}, ${reportYear}`);
+          if (dDate >= start && dDate <= end) {
+            if (!claimedDays.has(day.date)) {
+              claimedDays.add(day.date);
+              taskPenalty += parseSalary(day.totalSalary);
+            }
+          }
+        });
+      });
+
+      const totalFinalSalary = finalSalaryWithFines;
+      const deptName = worker.department?.name || 'N/A';
+      if (deptName !== 'N/A') {
+        teamEarnings[deptName] = (teamEarnings[deptName] || 0) + totalFinalSalary;
+      }
+    });
+
+    const sortedTeams = Object.entries(teamEarnings)
+      .map(([name, amount]) => ({ name, amount }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 3);
+
+    res.status(200).json({ topTeams: sortedTeams });
+  } catch (error) {
+    console.error('Top teams earnings error:', error);
+    res.status(500).json({ message: 'Failed to calculate top teams earnings' });
+  }
+});
+
 module.exports = {
   giveBonus,
   removeBonus,
   resetSalary,
   getWorkerSalaryReport,
+  getMySalaryReport,
   getCompensationReport,
+  getBulkSalaryReport,
+  getTopTeamsEarnings,
   addDeveloperProject,
   getDeveloperProjects,
   deleteDeveloperProject,
-  getAllDeveloperProjectsSummary
+  getAllDeveloperProjectsSummary,
+  // Hybrid salary project
+  createSalaryProject,
+  getSalaryProjects,
+  getSalaryProjectsForWorker,
+  updateSalaryProject,
+  deleteSalaryProject
 };

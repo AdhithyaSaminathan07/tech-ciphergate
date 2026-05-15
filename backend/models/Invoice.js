@@ -13,6 +13,7 @@ const invoiceItemSchema = new mongoose.Schema({
 const invoiceSchema = new mongoose.Schema({
   invoiceNo: { type: String, required: true, unique: true },
   invoiceDate: { type: String, required: true },
+  actualDate: { type: Date }, // Added for efficient filtering
   customerName: { type: String, default: '' },
   customerContact: { type: String, default: '' },
   salesPerson: { type: String, default: '' },
@@ -50,6 +51,23 @@ const invoiceSchema = new mongoose.Schema({
   adminLastViewed: {
     type: Date,
     default: null
+  },
+  paymentDetails: {
+    date: { type: Date },
+    proof: { type: String }
+  },
+  workDetails: {
+    date: { type: Date },
+    proof: { type: String }
+  },
+  closureDetails: {
+    date: { type: Date },
+    proof: { type: String }
+  },
+  status: { 
+    type: String, 
+    enum: ['Invoice', 'Payment Received', 'Work completion', 'Closure agreement'], 
+    default: 'Invoice' 
   },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }

@@ -2,6 +2,9 @@ import api from './api';
 
 // Helper function to clean invoice data before sending to backend
 const cleanInvoiceData = (invoiceData) => {
+  // If we're only updating specific fields (like status), return as is
+  if (!invoiceData.items) return invoiceData;
+
   // Remove id fields from items as they're not needed in the backend
   const cleanedData = {
     ...invoiceData,
@@ -48,9 +51,9 @@ export const getInvoices = async () => {
 };
 
 // Get all invoices (super admin only)
-export const getAllInvoices = async () => {
+export const getAllInvoices = async (params = {}) => {
   try {
-    const response = await api.get('/invoices/all');
+    const response = await api.get('/invoices/all', { params });
     return response.data;
   } catch (error) {
     throw error.response?.data || { message: 'Error fetching all invoices' };

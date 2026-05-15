@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import LiveGitHubStats from "./LiveGitHubStats"
 import LiveLeaderboard from "./LiveLeaderboard"
 import LiveRepositories from "./LiveRepositories"
+import RepoChat from "./RepoChat"
 import { Users, Trophy, Code } from "lucide-react"
 
 export default function GitHubDashboard() {
@@ -34,6 +35,9 @@ export default function GitHubDashboard() {
                         </p>
                     </div>
                 </div>
+
+                {/* AI Repo Chat */}
+                <RepoChat />
 
                 <Tabs defaultValue="overview" className="space-y-6">
                     <TabsList className="grid w-full md:w-auto grid-cols-3 bg-gray-100 rounded-lg p-1">

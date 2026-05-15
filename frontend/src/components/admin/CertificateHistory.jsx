@@ -1,18 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
+import appContext from '../../context/AppContext';
 
 const CertificateHistory = ({ type, onEdit, onView, onDelete, onDownload, refreshTrigger }) => {
     const [certificates, setCertificates] = useState([]);
     const [loading, setLoading] = useState(true);
 
     // Use the deployed backend URL or localhost if not available
+    const { subdomain } = useContext(appContext);
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
     const fetchCertificates = async () => {
         try {
             setLoading(true);
             const token = localStorage.getItem('token');
-            const response = await axios.get(`${API_URL}/certificates/${type}`, {
+            const response = await axios.get(`${API_URL}/certificates/${type}?subdomain=${subdomain}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setCertificates(response.data);

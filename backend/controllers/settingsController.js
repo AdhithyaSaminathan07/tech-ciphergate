@@ -1,6 +1,7 @@
 const Settings = require('../models/Settings');
 
 // @desc    Get settings
+
 // @route   GET /api/settings/:subdomain
 // @access  Private/Admin
 const getSettings = async (req, res) => {
@@ -105,6 +106,7 @@ const updateSettings = async (req, res) => {
   try {
     const { subdomain } = req.params;
     const updateData = req.body;
+    console.log(`[Settings] Updating settings for subdomain: ${subdomain}. Payload:`, JSON.stringify(updateData, null, 2));
 
     let settings = await Settings.findOne({ subdomain });
 

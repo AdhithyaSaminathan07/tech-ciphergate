@@ -1,4 +1,3 @@
-// backend/middleware/authMiddleware.js
 const jwt = require('jsonwebtoken');
 const asyncHandler = require('express-async-handler');
 const Worker = require('../models/Worker');
@@ -15,34 +14,50 @@ const protect = asyncHandler(async (req, res, next) => {
     token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // decoded.role is embedded in the JWT from generateToken(id, role)
-    // Use it directly instead of re-assigning on Mongoose doc
-    
-    let user = null;
-
+    // Use the role from the token to find the user in the correct collection
     if (decoded.role === 'admin') {
-      user = await Admin.findById(decoded.id).select('-password');
+      const user = await Admin.findById(decoded.id).select('-password');
       if (!user) {
         return res.status(401).json({ message: 'Admin not found' });
       }
-    } else {
-      user = await Worker.findById(decoded.id).select('-password');
+      req.user = user.toObject();
+      req.user.role = 'admin';
+    } else if (decoded.role === 'worker') {
+      const user = await Worker.findById(decoded.id).select('-password');
       if (!user) {
         return res.status(401).json({ message: 'Worker not found' });
       }
+      req.user = user.toObject();
+      req.user.role = 'worker';
+    } else {
+      // Fallback for older tokens or if role is missing in token
+      let user = await Admin.findById(decoded.id).select('-password');
+      if (user) {
+        req.user = user.toObject();
+        req.user.role = 'admin';
+      } else {
+        user = await Worker.findById(decoded.id).select('-password');
+        if (!user) {
+          return res.status(401).json({ message: 'User not found' });
+        }
+        req.user = user.toObject();
+        req.user.role = 'worker';
+      }
     }
 
-    // Convert to plain object so role assignment is safe
-    req.user = user.toObject();
-    req.user.role = decoded.role; // Use role from JWT token (reliable)
+    // Check if password was changed after token was issued
+    if (req.user.passwordChangedAt) {
+      const changedDate = new Date(req.user.passwordChangedAt);
+      const changedTimestamp = parseInt(changedDate.getTime() / 1000, 10);
+      if (decoded.iat < changedTimestamp) {
+        return res.status(401).json({ message: 'Password recently changed. Please log in again.' });
+      }
+    }
 
     next();
   } catch (error) {
     console.error('Token verification error:', error);
-    return res.status(401).json({ 
-      message: 'Not authorized, token failed', 
-      error: error.message 
-    });
+    return res.status(401).json({ message: 'Not authorized, token failed', error: error.message });
   }
 });
 
@@ -52,22 +67,16 @@ const roleCheck = (roles) => {
       return res.status(401).json({ message: 'Not authorized' });
     }
 
-    console.log(`[roleCheck] user role: ${req.user.role}, required: ${roles}`);
-
     if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ 
-        message: 'Access denied',
-        userRole: req.user.role,
-        requiredRoles: roles
-      });
+      return res.status(403).json({ message: 'Access denied' });
     }
 
     next();
   };
 };
 
-const workerOnly    = roleCheck(['worker']);
-const adminOnly     = roleCheck(['admin']);
+const workerOnly = roleCheck(['worker']);
+const adminOnly = roleCheck(['admin']);
 const adminOrWorker = roleCheck(['admin', 'worker']);
 
 module.exports = { protect, adminOnly, workerOnly, adminOrWorker };

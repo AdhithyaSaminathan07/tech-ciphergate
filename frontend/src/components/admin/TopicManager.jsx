@@ -326,7 +326,7 @@ const TopicManagement = () => {
 
   return (
     <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Topic Management</h1>
+      <h1 className="text-2xl font-bold mb-4 md:hidden">Topic Management</h1>
 
       <Card className="mb-6 p-4">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-2">

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { registerAdmin } from '../../services/authService';
 import { subdomainAvailable } from '../../services/authService';
+import { useAuth } from '../../hooks/useAuth';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaLink } from 'react-icons/fa';
 import Spinner from '../../components/common/Spinner';
@@ -20,6 +21,15 @@ const AdminRegister = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [domainAvailable, setDomainAvailable] = useState(true);
   const navigate = useNavigate();
+  const { isAuthenticated, isAdmin, isWorker, loading: authLoading } = useAuth();
+
+  // Auto-redirect if already logged in
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      if (isAdmin) navigate('/admin');
+      else if (isWorker) navigate('/worker');
+    }
+  }, [isAuthenticated, isAdmin, isWorker, authLoading, navigate]);
 
   // Form field animation variants
   const formFieldVariants = {
@@ -45,7 +55,7 @@ const AdminRegister = () => {
   };
 
   const handleSubdomainChange = async (value) => {
-    
+
     // Basic validation
     if (value.length < 3) {
       setDomainAvailable(false);
@@ -59,8 +69,8 @@ const AdminRegister = () => {
       console.error('Subdomain check error:', error);
       // If there's a network error, we'll allow the user to continue
       // but show a warning that availability couldn't be checked
-      if (error.message.includes('Failed to check subdomain availability') || 
-          error.message.includes('Network Error')) {
+      if (error.message.includes('Failed to check subdomain availability') ||
+        error.message.includes('Network Error')) {
         setDomainAvailable(true); // Allow typing but don't show error
       } else {
         setDomainAvailable(false);
@@ -70,13 +80,13 @@ const AdminRegister = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
       toast.error('Passwords do not match');
       return;
     }
-    
+
     // Validate subdomain
     if (!domainAvailable) {
       toast.error('Please choose an available company name');
@@ -126,7 +136,7 @@ const AdminRegister = () => {
         ))}
       </div>
 
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -152,7 +162,7 @@ const AdminRegister = () => {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Username Field */}
-          <motion.div 
+          <motion.div
             className="form-group"
             variants={formFieldVariants}
             initial="hidden"
@@ -178,7 +188,7 @@ const AdminRegister = () => {
           </motion.div>
 
           {/* Subdomain Field */}
-          <motion.div 
+          <motion.div
             className="form-group"
             variants={formFieldVariants}
             initial="hidden"
@@ -207,7 +217,7 @@ const AdminRegister = () => {
           </motion.div>
 
           {/* Email Field */}
-          <motion.div 
+          <motion.div
             className="form-group"
             variants={formFieldVariants}
             initial="hidden"
@@ -234,7 +244,7 @@ const AdminRegister = () => {
           </motion.div>
 
           {/* Password Field */}
-          <motion.div 
+          <motion.div
             className="form-group relative"
             variants={formFieldVariants}
             initial="hidden"
@@ -280,7 +290,7 @@ const AdminRegister = () => {
           </motion.div>
 
           {/* Confirm Password Field */}
-          <motion.div 
+          <motion.div
             className="form-group relative"
             variants={formFieldVariants}
             initial="hidden"

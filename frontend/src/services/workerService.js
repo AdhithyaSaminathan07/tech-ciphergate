@@ -59,13 +59,14 @@ export const createWorker = async (workerData) => {
     console.error('Worker creation error:', error.response?.data || error);
     throw error.response?.data || new Error('Failed to create worker');
   }
-};  
+};
 
-export const getWorkers = async (subdomain) => {
+export const getWorkers = async (subdomainParam) => {
   try {
+    const subdomain = typeof subdomainParam === 'object' ? subdomainParam.subdomain : subdomainParam;
     // Add timestamp to prevent caching
     const timestamp = new Date().getTime();
-    const response = await api.post(`/workers/all?_t=${timestamp}`, subdomain);
+    const response = await api.post(`/workers/all?_t=${timestamp}`, { subdomain, status: 'all' });
     return response.data || [];
   } catch (error) {
     console.error('Workers fetch error:', error);

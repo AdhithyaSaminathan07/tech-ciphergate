@@ -1,23 +1,75 @@
 const asyncHandler = require('express-async-handler');
 const Notification = require('../models/Notification');
+const UserNotification = require('../models/UserNotification');
+const Worker = require('../models/Worker');
 
 // @desc    Create a new notification
 // @route   POST /api/notifications
 // @access  Private/Admin
 const createNotification = asyncHandler(async (req, res) => {
-  const { messageData, subdomain, updatedBy } = req.body;
+  const { messageData, subdomain, updatedBy, targetType, targetUsers } = req.body;
 
   if (!messageData || !subdomain) {
     res.status(400);
     throw new Error('Missing required fields: messageData or subdomain');
   }
 
+  // Create the master Notification record (for history)
   const notification = await Notification.create({
     messageData,
     subdomain,
     updatedBy,
     lastUpdated: Date.now()
   });
+
+  let usersToNotify = [];
+
+  if (targetType === 'all') {
+    const workers = await Worker.find({ subdomain });
+    usersToNotify = workers.map(w => w._id);
+  } else if (targetType === 'specific' && Array.isArray(targetUsers)) {
+    usersToNotify = targetUsers;
+  } else {
+    // Default to all if not specified
+    const workers = await Worker.find({ subdomain });
+    usersToNotify = workers.map(w => w._id);
+  }
+
+  // Create UserNotification for each user
+  const userNotifications = usersToNotify.map(userId => ({
+    userId,
+    userModel: 'Worker',
+    subdomain,
+    title: 'Admin Announcement',
+    message: messageData,
+    type: 'system_alert',
+    isRead: false,
+    link: '#'
+  }));
+
+  if (userNotifications.length > 0) {
+    await UserNotification.insertMany(userNotifications);
+  }
+
+  // Broadcast via WebSockets
+  const { getIO } = require('../utils/socket');
+  const io = getIO();
+  
+  if (targetType === 'all') {
+    io.to(subdomain).emit('notification', {
+        title: 'Admin Announcement',
+        message: messageData,
+        type: 'system_alert'
+    });
+  } else {
+    usersToNotify.forEach(userId => {
+        io.to(userId.toString()).emit('notification', {
+            title: 'Admin Announcement',
+            message: messageData,
+            type: 'system_alert'
+        });
+    });
+  }
 
   res.status(201).json(notification);
 });

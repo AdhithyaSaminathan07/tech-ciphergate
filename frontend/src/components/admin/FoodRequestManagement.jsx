@@ -271,7 +271,7 @@ const FoodRequestManagement = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center md:hidden">
         <h1 className="text-2xl font-bold">Food Request Management</h1>
       </div>
 

@@ -178,8 +178,8 @@ const DepartmentManagement = () => {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Department Management</h1>
+      <div className="flex justify-between md:justify-end items-center mb-6">
+        <h1 className="text-2xl font-bold md:hidden">Department Management</h1>
         <Button 
           variant="primary" 
           onClick={() => setIsAddModalOpen(true)}

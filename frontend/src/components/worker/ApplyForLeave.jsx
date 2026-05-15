@@ -107,6 +107,13 @@ const ApplyForLeave = () => {
       return;
     }
 
+    if (formData.leaveType === 'Paid Leave') {
+      if (stats?.stats.paidLeaveUsed + formData.totalDays > stats?.stats.paidLeaveLimit) {
+        toast.error(`Paid leave limit exceeded for this month. You have ${Math.max(0, stats.stats.paidLeaveLimit - stats.stats.paidLeaveUsed)} days remaining.`);
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     const formPayload = new FormData();
     formPayload.append('leaveType', formData.leaveType);
@@ -222,6 +229,39 @@ const ApplyForLeave = () => {
             <div className="text-2xl font-black text-gray-900">{stats.stats.leavesTaken} / {stats.stats.allowedLimit}</div>
             <p className="text-[10px] text-gray-400 mt-2 font-bold uppercase">Days Used This Month</p>
           </div>
+
+          {stats.paidLeaveConfig?.enabled && (
+             <div className="bg-white p-5 rounded-2xl border border-teal-100 shadow-sm hover:shadow-md transition-all sm:col-span-2 lg:col-span-4 mt-2">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-teal-600 text-xs font-black uppercase tracking-widest flex items-center">
+                    <div className="w-2 h-2 bg-teal-500 rounded-full mr-2 animate-pulse"></div>
+                    Paid Leave Balance
+                  </span>
+                  <span className="bg-teal-50 text-teal-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border border-teal-100">
+                    Monthly Reset
+                  </span>
+                </div>
+                <div className="flex items-end justify-between">
+                  <div>
+                    <div className="text-4xl font-black text-gray-900 tracking-tighter">
+                      {stats.stats.paidLeaveUsed} <span className="text-gray-300 text-2xl">/</span> {stats.stats.paidLeaveLimit}
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1 font-bold uppercase tracking-wide">
+                      {stats.stats.paidLeaveLimit - stats.stats.paidLeaveUsed} Days remaining in {new Date().toLocaleString('default', { month: 'long' })}
+                    </p>
+                  </div>
+                  <div className="h-12 w-12 rounded-2xl bg-teal-50 flex items-center justify-center text-teal-600 border border-teal-100">
+                    <FiUserCheck size={24} />
+                  </div>
+                </div>
+                <div className="mt-4 h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-teal-400 to-emerald-500 transition-all duration-1000"
+                    style={{ width: `${Math.min(100, (stats.stats.paidLeaveUsed / stats.stats.paidLeaveLimit) * 100)}%` }}
+                  ></div>
+                </div>
+             </div>
+          )}
         </div>
       )}
 
@@ -236,10 +276,10 @@ const ApplyForLeave = () => {
               <div className="bg-red-500 p-2 rounded-xl mr-4 animate-pulse">
                 <FiAlertTriangle className="text-white h-6 w-6" />
               </div>
-              <h2 className="text-xl font-black tracking-tight">ATTENTION: 2X DEDUCTION APPLIES</h2>
+              <h2 className="text-xl font-black tracking-tight">ATTENTION: {stats?.advancedSettings?.deductionMultiplier || 2}X DEDUCTION APPLIES</h2>
             </div>
             <p className="text-gray-400 text-sm mb-6 leading-relaxed max-w-lg">
-              Based on current system rules, this leave will result in a <strong>2 days salary deduction for 1 day leave</strong> due to:
+              Based on current system rules, this leave will result in a <strong>{stats?.advancedSettings?.deductionMultiplier || 2} days salary deduction for 1 day leave</strong> due to:
             </p>
             <div className="flex flex-wrap gap-2">
               {stats.reasons.attendance && (
@@ -273,8 +313,20 @@ const ApplyForLeave = () => {
                 <option value="Annual Leave">Annual Leave</option>
                 <option value="Sick Leave">Sick Leave</option>
                 <option value="Personal Leave">Personal Leave</option>
+                {stats?.paidLeaveConfig?.enabled && <option value="Paid Leave">Paid Leave</option>}
                 <option value="Permission">Permission</option>
               </select>
+              {formData.leaveType === 'Paid Leave' && (
+                <div className="mt-2 bg-teal-50 border border-teal-100 rounded-lg p-3">
+                  <div className="flex items-center text-teal-700 text-xs font-bold mb-1">
+                    <FiInfo className="mr-1" /> INSTANT SALARY CREDIT
+                  </div>
+                  <p className="text-[10px] text-teal-600 leading-tight font-medium">
+                    Paid leave grants full daily salary immediately upon application and does not depend on admin approval status. 
+                    Rejection will only be for records.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="form-group">

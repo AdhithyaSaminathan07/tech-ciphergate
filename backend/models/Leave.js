@@ -12,9 +12,13 @@ const leaveSchema = mongoose.Schema({
   },
   leaveType: {
     type: String,
-    // Updated enum to include the new 'Permission' leave type.
-    enum: ['Annual Leave', 'Sick Leave', 'Personal Leave', 'Permission'],
+    // Updated enum to include the new 'Permission' and 'Paid Leave' leave types.
+    enum: ['Annual Leave', 'Sick Leave', 'Personal Leave', 'Permission', 'Paid Leave'],
     required: [true, 'Please add leave type']
+  },
+  isPaidLeave: {
+    type: Boolean,
+    default: false
   },
   startDate: {
     type: Date,

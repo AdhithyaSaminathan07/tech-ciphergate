@@ -182,6 +182,15 @@ const settingsSchema = mongoose.Schema({
       type: Number,
       default: 2,
       min: 0
+    },
+    deductionMultiplier: {
+      type: Number,
+      default: 2,
+      min: 1
+    },
+    includePermissionPenalty: {
+      type: Boolean,
+      default: false
     }
   },
 
@@ -287,6 +296,21 @@ const settingsSchema = mongoose.Schema({
         isBreakConsider: false
       }
     ]
+  },
+  includePermission: {
+    type: Boolean,
+    default: false
+  },
+  // Paid Leave Configuration
+  paidLeaveConfig: {
+    enabled: {
+      type: Boolean,
+      default: false
+    },
+    leavesPerMonth: {
+      type: Number,
+      default: 1
+    }
   }
 }, {
   timestamps: true

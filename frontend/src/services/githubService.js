@@ -61,6 +61,32 @@ const githubService = {
             console.error('Error clearing GitHub cache:', error);
             throw error;
         }
+    },
+
+    // Repo Chat - Send message
+    sendRepoChatMessage: async (message, repoNames = [], conversationHistory = []) => {
+        try {
+            const response = await api.post('/github/repo-chat/chat', {
+                message,
+                repoNames,
+                conversationHistory
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error sending repo chat message:', error);
+            throw error;
+        }
+    },
+
+    // Repo Chat - Get repo list for suggestions
+    getRepoChatRepos: async () => {
+        try {
+            const response = await api.get('/github/repo-chat/repos');
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching repo chat repos:', error);
+            throw error;
+        }
     }
 };
 

@@ -1,6 +1,6 @@
-// frontend/src/context/AuthContext.jsx
-import React, { createContext, useState, useEffect } from 'react';
-import axios from 'axios';
+// src/context/AuthContext.jsx
+import { createContext, useState, useEffect } from 'react';
+import { login as loginService, logout as logoutService, getCurrentUser } from '../services/authService';
 
 export const AuthContext = createContext();
 
@@ -8,54 +8,62 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Restore user from localStorage on mount
+  // On mount, check if user exists in localStorage
   useEffect(() => {
-    const stored = localStorage.getItem('user');
-    const token  = localStorage.getItem('token');
-    if (stored && token) {
+    const loadUser = () => {
       try {
-        setUser(JSON.parse(stored));
-      } catch (_) {}
-    }
-    setLoading(false);
+        const userData = getCurrentUser();
+        if (userData) {
+          setUser(userData);
+        }
+      } catch (error) {
+        console.error('Failed to load user', error);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadUser();
   }, []);
 
-  const login = async (credentials, isAdmin = false) => {
-    const endpoint = isAdmin ? '/api/auth/admin' : '/api/auth/worker';
-    const API = (import.meta.env?.VITE_API_URL || '').replace(/\/$/, '');
-    
-    const { data } = await axios.post(`${API}${endpoint}`, credentials);
-    
-    // ── Store token ───────────────────────────────────────────────
-    localStorage.setItem('token', data.token);
-    
-    // ── Store user object ─────────────────────────────────────────
-    localStorage.setItem('user', JSON.stringify(data));
-    
-    // ── Store tenentId in ALL variants ────────────────────────────
-    const tid = data.tenentId || data.tenentid || data._id;
-    if (tid) {
-      localStorage.setItem('tenentId', tid);
-      localStorage.setItem('tenentid', tid);  // Instaxbot uses lowercase
-      localStorage.setItem('tenantId', tid);
-      localStorage.setItem('tenantid', tid);
+  const login = async (credentials, userType) => {
+    setLoading(true);
+    try {
+      const userData = await loginService(credentials, userType);
+      setUser(userData);
+      return userData;
+    } catch (error) {
+      throw error;
+    } finally {
+      setLoading(false);
     }
-    
-    setUser(data);
-    return data;
   };
 
   const logout = () => {
-    // Clear all auth-related storage
-    ['token', 'user', 'tenentId', 'tenentid', 'tenantId', 'tenantid'].forEach(k => 
-      localStorage.removeItem(k)
-    );
+    logoutService();
     setUser(null);
   };
 
-  return (
-    <AuthContext.Provider value={{ user, setUser, login, logout, loading }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const updateUser = (userData) => {
+    setUser(prev => {
+      const current = prev || JSON.parse(localStorage.getItem('user')) || {};
+      const updated = { ...current, ...userData };
+      localStorage.setItem('user', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const value = {
+    user,
+    loading,
+    login,
+    logout,
+    updateUser,
+    isAuthenticated: !!user,
+    isAdmin: user?.role === 'admin',
+    isWorker: user?.role === 'worker',
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

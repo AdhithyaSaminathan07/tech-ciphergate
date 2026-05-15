@@ -31,6 +31,13 @@ const startCronJobs = () => {
     timezone: "Asia/Kolkata"
   });
 
+  // Daily Renewal Alerts at 09:00 AM IST
+  const { runRenewalAlerts } = require('../schedulers/renewalScheduler');
+  cron.schedule('0 9 * * *', runRenewalAlerts, {
+    scheduled: true,
+    timezone: "Asia/Kolkata"
+  });
+
   console.log('Cron jobs started successfully');
 };
 

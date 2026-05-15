@@ -6,12 +6,14 @@ import Webcam from "react-webcam";
 import jsQR from "jsqr";
 import appContext from '../../context/AppContext';
 import { toast } from 'react-toastify';
-import { putAttendance, getAttendance, getPaginatedAttendance } from '../../services/attendanceService';
+import { putAttendance, getAttendance, getPaginatedAttendance, getWorkerLastAttendance } from '../../services/attendanceService';
 import Table from '../common/Table';
 import Spinner from '../common/Spinner';
 import { Link } from 'react-router-dom';
 import FaceAttendance from './FaceAttendance';
 import api from '../../services/api';
+import BottomSheet from '../common/BottomSheet';
+import { Filter, Search, RotateCcw } from 'lucide-react';
 
 const AttendanceManagement = () => {
     const [worker, setWorker] = useState({ rfid: "" });
@@ -27,6 +29,8 @@ const AttendanceManagement = () => {
     const webcamRef = useRef(null);
     const inputRef = useRef(null);
     const [isPunching, setIsPunching] = useState(false);
+    const [isDetectingAction, setIsDetectingAction] = useState(false); // guard double-click on Submit
+    const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
 
     // New state variables for pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -125,8 +129,10 @@ const AttendanceManagement = () => {
         }
     }, [subdomain]);
 
-    const handleSubmit = e => {
+    const handleSubmit = async e => {
         e.preventDefault();
+        if (isDetectingAction) return; // prevent double-click
+
         if (!subdomain || subdomain === 'main') {
             toast.error('Subdomain not found, check the URL.');
             return;
@@ -136,96 +142,74 @@ const AttendanceManagement = () => {
             return;
         }
 
-        console.log("All attendance data:", attendanceData);
-        console.log("Filtering for RFID:", worker.rfid);
-
-        // Determine next punch type based on count (new logic)
-        // Odd count (1, 3, 5, ...) = IN punch
-        // Even count (0, 2, 4, 6, ...) = OUT punch
-        let next = 'Punch In';
-        const recs = attendanceData.filter(r => r.rfid === worker.rfid);
-        console.log("Filtered records:", recs);
-
-        if (recs.length) {
-            // Get today's date in the same format as stored in the database
-            const today = new Date();
-            const todayFormatted = today.toLocaleDateString('en-CA', {
+        setIsDetectingAction(true);
+        try {
+            // ✅ Always fetch the latest record live — never rely on stale paginated state
+            const todayIST = new Date().toLocaleDateString('en-CA', {
                 timeZone: 'Asia/Kolkata',
                 year: 'numeric',
                 month: '2-digit',
                 day: '2-digit'
             });
 
-            console.log("Today's date (formatted):", todayFormatted);
+            let next = 'Punch In'; // safe default
 
-            // Filter records for today only
-            const todayRecs = recs.filter(r => r.date === todayFormatted);
-            console.log("Today's records:", todayRecs);
+            try {
+                const liveData = await getWorkerLastAttendance(worker.rfid.trim(), subdomain);
+                const lastRecord = liveData.lastAttendance;
 
-            // Count today's punches
-            const todayPunchCount = todayRecs.length;
-            console.log("Today's punch count:", todayPunchCount);
+                if (!lastRecord) {
+                    // No attendance ever → first punch is IN
+                    next = 'Punch In';
+                } else if (lastRecord.date !== todayIST) {
+                    // Last punch was on a PREVIOUS day → today starts fresh with IN
+                    next = 'Punch In';
+                } else {
+                    // Last punch was TODAY:
+                    // presence=true  (IN)  → next must be OUT
+                    // presence=false (OUT) → next must be IN
+                    next = lastRecord.presence ? 'Punch Out' : 'Punch In';
+                }
 
-            // Determine next action based on count
-            // If count is even (0, 2, 4, ...), next should be IN
-            // If count is odd (1, 3, 5, ...), next should be OUT
-            next = (todayPunchCount % 2 === 0) ? 'Punch In' : 'Punch Out';
-            console.log(`Determined next action: ${next} (based on count ${todayPunchCount})`);
-        } else {
-            console.log("No previous records found, defaulting to Punch In");
+                console.log('[Attendance] Last record date:', lastRecord?.date, 'Today:', todayIST, '→ next action:', next);
+            } catch (fetchErr) {
+                // Fallback: use count parity from local data if live fetch fails
+                console.warn('[Attendance] Live fetch failed, falling back to local count:', fetchErr);
+                const recs = attendanceData.filter(r => r.rfid === worker.rfid);
+                const todayRecs = recs.filter(r => r.date === todayIST);
+                next = (todayRecs.length % 2 === 0) ? 'Punch In' : 'Punch Out';
+            }
+
+            setConfirmAction(next);
+        } finally {
+            setIsDetectingAction(false);
         }
-
-        console.log("Setting confirm action to:", next);
-        setConfirmAction(next);
     };
 
     const handleCancel = () => setConfirmAction(null);
 
-    // Modified handleConfirm to trigger real-time update
+    // handleConfirm — send the punch and refresh table immediately
     const handleConfirm = () => {
+        if (isPunching) return; // guard double-click
         setIsPunching(true);
-        console.log("Sending attendance request with RFID:", worker.rfid, "and subdomain:", subdomain);
-
-        // Determine what type of punch this will be for logging
-        const recs = attendanceData.filter(r => r.rfid === worker.rfid);
-        let punchType = 'IN';
-        if (recs.length) {
-            // Get today's date in the same format as stored in the database
-            const today = new Date();
-            const todayFormatted = today.toLocaleDateString('en-CA', {
-                timeZone: 'Asia/Kolkata',
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit'
-            });
-
-            // Filter records for today only
-            const todayRecs = recs.filter(r => r.date === todayFormatted);
-            const todayPunchCount = todayRecs.length;
-
-            // Determine punch type based on count
-            punchType = (todayPunchCount % 2 === 0) ? 'IN' : 'OUT';
-        }
-
-        console.log(`This punch will be registered as: ${punchType}`);
+        console.log('[Attendance] Confirming:', confirmAction, 'RFID:', worker.rfid);
 
         putAttendance({ rfid: worker.rfid, subdomain })
             .then(res => {
-                console.log("Attendance response:", res);
+                console.log('[Attendance] Response:', res);
                 toast.success(res.message || 'Attendance marked successfully!');
-                // Refresh the latest attendance data to show the new record
+                // Refresh table so the new record appears and next button state is correct
                 setTimeout(() => {
                     refreshLatestAttendance();
-                }, 500);
+                }, 300);
             })
             .catch(err => {
-                console.error("Attendance error:", err);
+                console.error('[Attendance] Error:', err);
                 toast.error(err.message || 'Failed to mark attendance.');
             })
             .finally(() => {
                 setIsPunching(false);
                 setConfirmAction(null);
-                // Always clear the worker RFID after attempting to punch
                 setWorker({ rfid: '' });
             });
     };
@@ -541,8 +525,8 @@ const AttendanceManagement = () => {
 
     return (
         <Fragment>
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-bold">Attendance Management</h1>
+            <div className="flex justify-between md:justify-end items-center mb-4 md:mb-6">
+                <h1 className="text-2xl font-bold admin-mobile-title md:hidden">Attendance Management</h1>
                 {/* Desktop buttons - hidden on mobile */}
                 <div className='hidden md:flex space-x-6 justify-center items-center'>
                     {accessControl.addAttendance && (
@@ -607,15 +591,20 @@ const AttendanceManagement = () => {
                 </div>
             </div>
 
-            <div className='bg-white border rounded-lg p-4'>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                    <input
-                        type="text"
-                        className="form-input"
-                        placeholder="Search by name..."
-                        value={searchName}
-                        onChange={(e) => setSearchName(e.target.value)}
-                    />
+            {/* Filter Section */}
+            <div className='bg-white border border-slate-100 rounded-[24px] p-4 shadow-sm mb-6'>
+                {/* Desktop Filters */}
+                <div className="hidden md:grid grid-cols-4 gap-4">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                            type="text"
+                            className="form-input pl-10"
+                            placeholder="Search by name..."
+                            value={searchName}
+                            onChange={(e) => setSearchName(e.target.value)}
+                        />
+                    </div>
                     <input
                         type="text"
                         className="form-input"
@@ -638,6 +627,92 @@ const AttendanceManagement = () => {
                         onChange={(e) => setFilterDate(e.target.value)}
                     />
                 </div>
+
+                {/* Mobile Filter Bar */}
+                <div className="md:hidden flex gap-3">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                            type="text"
+                            className="form-input pl-10 h-12 text-sm"
+                            placeholder="Search name..."
+                            value={searchName}
+                            onChange={(e) => setSearchName(e.target.value)}
+                        />
+                    </div>
+                    <button
+                        onClick={() => setIsFilterSheetOpen(true)}
+                        className={`px-4 h-12 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition-all ${
+                            filterRfid || filterDepartment || filterDate 
+                            ? 'bg-teal-50 text-teal-600 border border-teal-100' 
+                            : 'bg-slate-50 text-slate-600 border border-slate-100'
+                        }`}
+                    >
+                        <Filter size={18} />
+                        <span>Filter</span>
+                    </button>
+                </div>
+            </div>
+
+            {/* Mobile Filter Bottom Sheet */}
+            <BottomSheet
+                isOpen={isFilterSheetOpen}
+                onClose={() => setIsFilterSheetOpen(false)}
+                title="Filters"
+            >
+                <div className="space-y-6">
+                    <div>
+                        <label className="admin-mobile-label block mb-2">RFID</label>
+                        <input
+                            type="text"
+                            className="form-input h-12"
+                            placeholder="Filter by RFID..."
+                            value={filterRfid}
+                            onChange={(e) => setFilterRfid(e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <label className="admin-mobile-label block mb-2">Department</label>
+                        <input
+                            type="text"
+                            className="form-input h-12"
+                            placeholder="Filter by department..."
+                            value={filterDepartment}
+                            onChange={(e) => setFilterDepartment(e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <label className="admin-mobile-label block mb-2">Date</label>
+                        <input
+                            type="date"
+                            className="form-input h-12"
+                            value={filterDate}
+                            onChange={(e) => setFilterDate(e.target.value)}
+                        />
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3 pt-4">
+                        <button
+                            onClick={() => {
+                                setFilterRfid('');
+                                setFilterDepartment('');
+                                setFilterDate('');
+                                setIsFilterSheetOpen(false);
+                            }}
+                            className="flex items-center justify-center gap-2 h-12 rounded-xl bg-slate-50 text-slate-600 font-bold text-sm active:bg-slate-100 transition-all"
+                        >
+                            <RotateCcw size={16} />
+                            <span>Reset</span>
+                        </button>
+                        <button
+                            onClick={() => setIsFilterSheetOpen(false)}
+                            className="flex items-center justify-center h-12 rounded-xl bg-[#0d9488] text-white font-bold text-sm active:scale-[0.98] transition-all"
+                        >
+                            Apply Filters
+                        </button>
+                    </div>
+                </div>
+            </BottomSheet>
 
                 {isLoading ? (
                     <div className="flex justify-center py-8">
@@ -732,8 +807,17 @@ const AttendanceManagement = () => {
                                     <option key={index} value={rfid} />
                                 ))}
                             </datalist>
-                            <Button type="submit" variant="primary" className="w-full">
-                                Submit
+                            <Button
+                                type="submit"
+                                variant="primary"
+                                className="w-full flex items-center justify-center"
+                                disabled={isDetectingAction}
+                            >
+                                {isDetectingAction ? (
+                                    <><Spinner size="sm" className="mr-2" /> Checking...</>
+                                ) : (
+                                    'Submit'
+                                )}
                             </Button>
                         </form>
                     )}
@@ -756,9 +840,8 @@ const AttendanceManagement = () => {
                     onClose={() => {
                         setIsFaceAttendanceOpen(false);
                     }}
-                    onAttendanceMarked={refreshLatestAttendance} // Add this callback
+                    onAttendanceMarked={refreshLatestAttendance}
                 />
-            </div>
         </Fragment>
     );
 };

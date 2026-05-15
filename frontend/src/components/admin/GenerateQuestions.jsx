@@ -143,7 +143,7 @@ const Card = ({ title, children, icon: Icon, className = "", headerActions }) =>
     animate={{ opacity: 1, y: 0 }}
     transition={{ delay: 0.1 }}
     className={`bg-white rounded-xl shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300 ${className}`}>
-   <div className="p-6 border-b border-gray-100">
+   <div className="p-4 md:p-6 border-b border-gray-100">
       <div className="flex items-center justify-between">
         <div className="flex items-center">
          {Icon && <Icon className="text-gray-600 mr-3" size={24} />}
@@ -152,7 +152,7 @@ const Card = ({ title, children, icon: Icon, className = "", headerActions }) =>
         {headerActions && <div className="flex items-center space-x-2">{headerActions}</div>}
       </div>
     </div>
-    <div className="p-6">{children}</div>
+    <div className="p-4 md:p-6">{children}</div>
   </Motion.div>
 );
 
@@ -672,7 +672,7 @@ const GenerateQuestions = () => {
 
   return (
    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-4 md:py-8">
         <AnimatePresence>
             {(generationProgress.isGenerating || generationProgress.percentage > 0) && (
               <ProgressIndicator 
@@ -684,11 +684,11 @@ const GenerateQuestions = () => {
             )}
         </AnimatePresence>
 
-        <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-gray-800 mb-4">
+        <div className="text-center mb-4 md:mb-8">
+            <h1 className="text-2xl md:text-4xl font-bold text-gray-800 mb-2 md:mb-4">
                 AI Question Generator
             </h1>
-            <p className="text-gray-600 text-lg">Create intelligent assessments for your employees with advanced AI</p>
+            <p className="text-gray-600 text-sm md:text-lg">Create intelligent assessments for your employees with advanced AI</p>
         </div>
         
         <AnimatePresence>
@@ -698,7 +698,7 @@ const GenerateQuestions = () => {
             <Alert type="success" message={message} onClose={() => setMessage('')} />
         </AnimatePresence>
         
-        <form onSubmit={(e) => { e.preventDefault(); handleGenerate(); }} className="space-y-8">
+        <form onSubmit={(e) => { e.preventDefault(); handleGenerate(); }} className="space-y-4 md:space-y-8">
             <Card title="Step 1: Select Employees" icon={UserCheck}>
                 <div className="space-y-3">
                     <AnimatePresence>

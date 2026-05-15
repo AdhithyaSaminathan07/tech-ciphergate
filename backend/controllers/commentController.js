@@ -19,18 +19,17 @@ const getMyComments = asyncHandler(async (req, res) => {
   const comments = await Comment.find({ worker: req.user._id })
     .sort({ createdAt: -1 });
 
-  // Mark all comments and replies as read
-  for (const comment of comments) {
-    comment.isNewComment = false;
-    if (comment.replies && comment.replies.length > 0) {
-      comment.replies.forEach(reply => {
-        reply.isNewComment = false;
-      });
+  // Map isNewComment to isNew for frontend compatibility
+  const transformedComments = comments.map(comment => {
+    const obj = comment.toObject();
+    obj.isNew = obj.isNewComment;
+    if (obj.replies) {
+      obj.replies = obj.replies.map(r => ({ ...r, isNew: r.isNewComment }));
     }
-    await comment.save();
-  }
+    return obj;
+  });
 
-  res.json(comments);
+  res.json(transformedComments);
 });
 
 // @desc    Get all comments (admin)
@@ -134,7 +133,7 @@ const addReply = asyncHandler(async (req, res) => {
   const newReply = {
     text,
     isAdminReply: req.user.role === 'admin',
-    isNew: true
+    isNewComment: true
   };
 
   // Add reply to comment
@@ -185,7 +184,16 @@ const getUnreadAdminReplies = asyncHandler(async (req, res) => {
     hasUnreadAdminReply: true
   });
 
-  res.json(comments);
+  const transformedComments = comments.map(comment => {
+    const obj = comment.toObject();
+    obj.isNew = obj.isNewComment;
+    if (obj.replies) {
+      obj.replies = obj.replies.map(r => ({ ...r, isNew: r.isNewComment }));
+    }
+    return obj;
+  });
+
+  res.json(transformedComments);
 });
 
 const markAdminRepliesAsRead = asyncHandler(async (req, res) => {

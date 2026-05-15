@@ -1,15 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 import ShatteredLogo from '../components/common/ShatteredLogo';
 
 const Home = () => {
   const navigate = useNavigate();
+  const { user, isAuthenticated, isAdmin, isWorker, loading: authLoading } = useAuth();
   const [activeFeature, setActiveFeature] = useState(0);
   const [typingText, setTypingText] = useState('');
   const [cipherGateText, setCipherGateText] = useState('');
   const [showColorAnimation, setShowColorAnimation] = useState(false);
   const cipherGateFullText = "CipherGate";
+
+  // Auto-redirect if already logged in
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      if (isAdmin) navigate('/admin');
+      else if (isWorker) navigate('/worker');
+    }
+  }, [isAuthenticated, isAdmin, isWorker, authLoading, navigate]);
 
   const features = [
     {
@@ -148,8 +158,8 @@ const Home = () => {
                 key={feature.title}
                 onClick={() => setActiveFeature(index)}
                 className={`flex flex-col items-center p-4 rounded-xl cursor-pointer transition-all ${activeFeature === index
-                    ? 'bg-[#0d9488]/20 border border-[#0d9488]'
-                    : 'bg-gray-100 hover:bg-gray-200'
+                  ? 'bg-[#0d9488]/20 border border-[#0d9488]'
+                  : 'bg-gray-100 hover:bg-gray-200'
                   }`}
               >
                 <div className={`mb-2 ${activeFeature === index ? 'text-[#0d9488]' : 'text-black'}`}>

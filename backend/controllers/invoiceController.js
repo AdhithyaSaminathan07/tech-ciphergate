@@ -3,6 +3,18 @@ const Admin = require('../models/Admin');
 const Worker = require('../models/Worker');
 const DeleteHistory = require('../models/DeleteHistory'); // Add this line
 const mongoose = require('mongoose');
+const { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parse, format } = require('date-fns');
+
+// Helper to parse DD-MM-YYYY to Date object
+const parseInvoiceDate = (dateStr) => {
+  if (!dateStr) return new Date();
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    // Expects DD-MM-YYYY
+    return new Date(parts[2], parts[1] - 1, parts[0]);
+  }
+  return new Date(dateStr);
+};
 
 // Create a new invoice
 const createInvoice = async (req, res) => {
@@ -30,24 +42,24 @@ const createInvoice = async (req, res) => {
 
     // Validate required fields
     if (!invoiceNo || !invoiceDate || !items || !items.length) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Required fields are missing' 
+      return res.status(400).json({
+        success: false,
+        message: 'Required fields are missing'
       });
     }
 
     // Check if invoice already exists
     const existingInvoice = await Invoice.findOne({ invoiceNo });
     if (existingInvoice) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invoice with this number already exists' 
+      return res.status(400).json({
+        success: false,
+        message: 'Invoice with this number already exists'
       });
     }
 
     // Determine the creator model based on user role
     const createdByModel = req.user.role === 'admin' ? 'Admin' : 'Worker';
-    
+
     // Create new invoice
     const invoice = new Invoice({
       invoiceNo,
@@ -69,11 +81,12 @@ const createInvoice = async (req, res) => {
       createdBy: req.user._id,
       createdByModel,
       workerInfo: workerInfo || {},
-      source: source || (req.user.role === 'admin' ? 'admin' : 'worker')
+      source: source || (req.user.role === 'admin' ? 'admin' : 'worker'),
+      actualDate: parseInvoiceDate(invoiceDate)
     });
 
     const savedInvoice = await invoice.save();
-    
+
     res.status(201).json({
       success: true,
       message: 'Invoice created successfully',
@@ -81,10 +94,10 @@ const createInvoice = async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating invoice:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: 'Error creating invoice',
-      error: error.message 
+      error: error.message
     });
   }
 };
@@ -95,6 +108,7 @@ const updateInvoice = async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
 
+
     // Remove fields that shouldn't be updated
     delete updateData._id;
     delete updateData.__v;
@@ -103,6 +117,10 @@ const updateInvoice = async (req, res) => {
 
     // Add updatedAt timestamp
     updateData.updatedAt = new Date();
+
+    if (updateData.invoiceDate) {
+      updateData.actualDate = parseInvoiceDate(updateData.invoiceDate);
+    }
 
     const invoice = await Invoice.findByIdAndUpdate(
       id,
@@ -121,7 +139,7 @@ const updateInvoice = async (req, res) => {
     // Workers can update their own invoices, admins can update any invoice
     const isInvoiceOwner = invoice.createdBy.toString() === req.user._id.toString();
     const isAdmin = req.user.role === 'admin';
-    
+
     if (!isInvoiceOwner && !isAdmin) {
       return res.status(403).json({
         success: false,
@@ -148,8 +166,8 @@ const updateInvoice = async (req, res) => {
 const getInvoicesByAdminOrWorker = async (req, res) => {
   try {
     // Workers can only see their own invoices, admins can see all
-    const query = req.user.role === 'worker' 
-      ? { createdBy: req.user._id } 
+    const query = req.user.role === 'worker'
+      ? { createdBy: req.user._id }
       : {};
 
     const invoices = await Invoice.find(query)
@@ -194,7 +212,48 @@ const getInvoicesByAdmin = async (req, res) => {
 // Get all invoices (admin only)
 const getAllInvoices = async (req, res) => {
   try {
-    const invoices = await Invoice.find()
+    const { filterType, startDate, endDate, gstFilter } = req.query;
+    let query = {};
+
+    const now = new Date();
+
+    if (filterType === 'today') {
+      query.actualDate = {
+        $gte: startOfDay(now),
+        $lte: endOfDay(now)
+      };
+    } else if (filterType === 'weekly') {
+      query.actualDate = {
+        $gte: startOfWeek(now, { weekStartsOn: 1 }), // Start from Monday
+        $lte: endOfWeek(now, { weekStartsOn: 1 })
+      };
+    } else if (filterType === 'monthly') {
+      query.actualDate = {
+        $gte: startOfMonth(now),
+        $lte: endOfMonth(now)
+      };
+    } else if (filterType === 'custom' && startDate && endDate) {
+      query.actualDate = {
+        $gte: startOfDay(new Date(startDate)),
+        $lte: endOfDay(new Date(endDate))
+      };
+    }
+
+    // Apply GST filter
+    if (gstFilter === 'gst') {
+      query.gstEnabled = true;
+    } else if (gstFilter === 'non-gst') {
+      query.gstEnabled = false;
+    } else if (gstFilter === 'igst') {
+      query.gstEnabled = true;
+      query.saleType = 'Interstate';
+    } else if (gstFilter === 'cgst-sgst') {
+      query.gstEnabled = true;
+      query.saleType = 'Intrastate';
+    }
+    // If filterType is 'all' or missing, query remains {} which fetches everything.
+
+    const invoices = await Invoice.find(query)
       .populate([
         {
           path: 'createdBy',
@@ -233,7 +292,7 @@ const getAllInvoices = async (req, res) => {
 const getInvoiceById = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -272,7 +331,7 @@ const getInvoiceById = async (req, res) => {
     // Workers can access their own invoices, admins can access any invoice
     const isInvoiceOwner = invoice.createdBy.toString() === req.user._id.toString();
     const isAdmin = req.user.role === 'admin';
-    
+
     if (!isInvoiceOwner && !isAdmin) {
       return res.status(403).json({
         success: false,
@@ -299,7 +358,7 @@ const getInvoiceById = async (req, res) => {
 const deleteInvoice = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -321,7 +380,7 @@ const deleteInvoice = async (req, res) => {
     // Workers can delete their own invoices, admins can delete any invoice
     const isInvoiceOwner = invoice.createdBy.toString() === req.user._id.toString();
     const isAdmin = req.user.role === 'admin';
-    
+
     if (!isInvoiceOwner && !isAdmin) {
       return res.status(403).json({
         success: false,
@@ -330,20 +389,20 @@ const deleteInvoice = async (req, res) => {
     }
 
     // Calculate total amount for storing in delete history
-    const subtotal = invoice.items.reduce((sum, item) => 
+    const subtotal = invoice.items.reduce((sum, item) =>
       sum + (item.isTotalOverridden ? item.total : (item.qty * item.rate)), 0);
-    
-    const gstTotal = (invoice.gstEnabled) ? 
-      invoice.items.reduce((sum, item) => 
+
+    const gstTotal = (invoice.gstEnabled) ?
+      invoice.items.reduce((sum, item) =>
         sum + (item.isTotalOverridden ? (item.total * item.gst / 100) : (item.qty * item.rate * item.gst / 100)), 0) : 0;
-    
+
     const totalAmount = subtotal + gstTotal;
 
     // Get user information for delete history
     let deletedByName = 'Unknown User';
     let deletedById = req.user._id;
     let deletedByRole = req.user.role === 'admin' ? 'Admin' : 'Worker';
-    
+
     try {
       if (req.user.role === 'admin') {
         const admin = await Admin.findById(req.user._id);
@@ -424,7 +483,7 @@ const getNewInvoiceCount = async (req, res) => {
     ).sort({ adminLastViewed: -1 });
 
     let newInvoiceCount = 0;
-    
+
     if (latestViewed) {
       // Count invoices created after the last viewed time
       newInvoiceCount = await Invoice.countDocuments({
@@ -509,7 +568,7 @@ const getDeleteHistoryForWorker = async (req, res) => {
 const getDeletedInvoiceById = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -531,7 +590,7 @@ const getDeletedInvoiceById = async (req, res) => {
     // Workers can access their own delete history, admins can access any delete history
     const isRecordOwner = deleteHistoryRecord.deletedById.toString() === req.user._id.toString();
     const isAdmin = req.user.role === 'admin';
-    
+
     if (!isRecordOwner && !isAdmin) {
       return res.status(403).json({
         success: false,

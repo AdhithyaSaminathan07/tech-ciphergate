@@ -15,7 +15,8 @@ import HolidayManagement from '../../components/admin/HolidayManagement';
 import FaceAttendancePage from '../../components/admin/FaceAttendancePage';
 import FaceTest from '../../components/admin/FaceTest'; // Import FaceTest
 import NotificationManagement from '../../components/admin/NotificationManagement'; // Import NotificationManagement
-
+import WorkAllocation from '../../components/admin/WorkAllocation';
+import KpiManagement from '../../components/admin/KpiManagement';
 const AdminDashboard = () => {
   return (
     <Routes>
@@ -29,7 +30,9 @@ const AdminDashboard = () => {
       <Route path="holidays" element={<HolidayManagement />} />
       <Route path="comments" element={<CommentManagement />} />
       <Route path="departments" element={<DepartmentManagement />} />
-      <Route path="food-requests" element={<FoodRequestManagement />} /> 
+      <Route path="work-allocation" element={<WorkAllocation />} />
+      <Route path="kpi-management" element={<KpiManagement />} />
+      <Route path="food-requests" element={<FoodRequestManagement />} />
       <Route path="custom-tasks" element={<CustomTasks />} />
       <Route path="face-attendance" element={<FaceAttendancePage />} />
       <Route path="face-test" element={<FaceTest />} /> {/* Add FaceTest route */}

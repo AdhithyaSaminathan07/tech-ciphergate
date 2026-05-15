@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext,useRef } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { FaPlus, FaEdit, FaTrash } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import appContext from '../../context/AppContext';
@@ -12,10 +12,16 @@ import {
   updateNotification,
   deleteNotification
 } from '../../services/notificationService';
+import { getWorkers } from '../../services/workerService';
 
 const NotificationManagement = () => {
   const messageInputRef = useRef(null);
   const { subdomain } = useContext(appContext);
+  const [workers, setWorkers] = useState([]);
+  const [targetType, setTargetType] = useState('all');
+  const [selectedWorkers, setSelectedWorkers] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  
   const [notifications, setNotifications] = useState([]);
   const [formData, setFormData] = useState({ messageData: '' });
   const [isLoading, setIsLoading] = useState(true);
@@ -28,8 +34,20 @@ const NotificationManagement = () => {
   const [filterStartDate, setFilterStartDate] = useState('');
 
   useEffect(() => {
-    fetchNotifications();
-  }, []);
+    if (subdomain) {
+      fetchNotifications();
+      fetchWorkers();
+    }
+  }, [subdomain]);
+
+  const fetchWorkers = async () => {
+    try {
+      const data = await getWorkers(subdomain);
+      setWorkers(data);
+    } catch (err) {
+      console.error('Failed to fetch workers:', err);
+    }
+  };
 
   const fetchNotifications = async () => {
     setIsLoading(true);
@@ -52,6 +70,9 @@ const NotificationManagement = () => {
 
   const openAddModal = () => {
     setFormData({ messageData: '' });
+    setTargetType('all');
+    setSelectedWorkers([]);
+    setSearchTerm('');
     setIsAddModalOpen(true);
   };
 
@@ -72,16 +93,21 @@ const NotificationManagement = () => {
 
   const handleAdd = async (e) => {
     e.preventDefault();
+    if (targetType === 'specific' && selectedWorkers.length === 0) {
+      return toast.error('Please select at least one employee');
+    }
     try {
       const newNotification = await createNotification({
         ...formData,
-        subdomain
+        subdomain,
+        targetType,
+        targetUsers: selectedWorkers
       });
       setNotifications((prev) => [newNotification, ...prev]);
-      toast.success('Notification created');
+      toast.success('Notification sent');
       setIsAddModalOpen(false);
     } catch (err) {
-      toast.error('Failed to create notification');
+      toast.error('Failed to send notification');
     }
   };
 
@@ -124,8 +150,8 @@ const NotificationManagement = () => {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Notification Management</h1>
+      <div className="flex justify-between md:justify-end items-center mb-6">
+        <h1 className="text-2xl font-bold md:hidden">Notification Management</h1>
         <Button variant="primary" onClick={openAddModal} className="flex items-center">
           <FaPlus className="mr-2" /> Add Notification
         </Button>
@@ -178,22 +204,104 @@ const NotificationManagement = () => {
       )}
 
       {/* Add Modal */}
-      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add Notification">
+      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Send Notification">
         <form onSubmit={handleAdd}>
+          <div className="form-group mb-4">
+            <label className="form-label font-bold text-gray-700">Target Audience</label>
+            <div className="flex gap-4 mt-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="targetType"
+                  value="all"
+                  checked={targetType === 'all'}
+                  onChange={() => setTargetType('all')}
+                  className="form-radio text-teal-600 focus:ring-teal-500"
+                />
+                <span className="text-sm text-gray-700">All Employees</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="targetType"
+                  value="specific"
+                  checked={targetType === 'specific'}
+                  onChange={() => setTargetType('specific')}
+                  className="form-radio text-teal-600 focus:ring-teal-500"
+                />
+                <span className="text-sm text-gray-700">Specific Employees</span>
+              </label>
+            </div>
+          </div>
+
+          {targetType === 'specific' && (
+            <div className="form-group mb-4">
+              <label className="form-label font-bold text-gray-700">Select Employees</label>
+              {/* Search Bar */}
+              <div className="relative mt-1 mb-2">
+                <input
+                  type="text"
+                  placeholder="Search employees..."
+                  className="form-input focus:border-teal-500 focus:ring-teal-500 text-sm pl-10"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+              </div>
+
+              <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2 custom-scrollbar bg-white">
+                {workers
+                  .filter(worker => 
+                    (worker.name && worker.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                    (worker.username && worker.username.toLowerCase().includes(searchTerm.toLowerCase()))
+                  )
+                  .map(worker => (
+                    <label key={worker._id} className="flex items-center gap-2 p-1.5 hover:bg-teal-50 rounded-lg cursor-pointer transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={selectedWorkers.includes(worker._id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedWorkers([...selectedWorkers, worker._id]);
+                          } else {
+                            setSelectedWorkers(selectedWorkers.filter(id => id !== worker._id));
+                          }
+                        }}
+                        className="form-checkbox text-teal-600 rounded focus:ring-teal-500"
+                      />
+                      <span className="text-sm text-gray-700 font-medium">{worker.name} <span className="text-gray-400 text-xs">({worker.username})</span></span>
+                    </label>
+                  ))}
+                {workers.filter(worker => 
+                  worker.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  worker.username.toLowerCase().includes(searchTerm.toLowerCase())
+                ).length === 0 && (
+                  <div className="text-center text-gray-500 text-sm py-2">No employees found</div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="form-group">
-            <label className="form-label">Message</label>
+            <label className="form-label font-bold text-gray-700">Message</label>
             <textarea
               ref={messageInputRef}
               name="messageData"
-              className="form-input"
+              className="form-input mt-1 focus:border-teal-500 focus:ring-teal-500"
               value={formData.messageData}
               onChange={handleChange}
               required
+              rows={4}
+              placeholder="Type your announcement here..."
             />
           </div>
-          <div className="flex justify-end space-x-2 mt-4">
+          <div className="flex justify-end space-x-2 mt-6">
             <Button variant="outline" onClick={() => setIsAddModalOpen(false)}>Cancel</Button>
-            <Button type="submit" variant="primary">Create</Button>
+            <Button type="submit" variant="primary">Send Notification</Button>
           </div>
         </form>
       </Modal>

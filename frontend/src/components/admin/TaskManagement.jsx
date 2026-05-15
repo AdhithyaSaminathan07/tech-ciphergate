@@ -204,8 +204,8 @@ const TaskManagement = () => {
   
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Task Management</h1>
+      <div className="flex justify-between md:justify-end items-center mb-6">
+        <h1 className="text-2xl font-bold md:hidden">Task Management</h1>
         <Button
           variant="danger"
           onClick={openResetModal}

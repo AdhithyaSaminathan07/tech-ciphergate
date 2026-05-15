@@ -8,7 +8,7 @@ const certificateSchema = new mongoose.Schema({
     type: {
         type: String,
         required: true,
-        enum: ['Intern', 'Offer', 'Acceptance', 'Relieving', 'Experience'],
+        enum: ['Intern', 'Offer', 'Acceptance', 'Relieving', 'Experience', 'Payslip'],
     },
     content: {
         type: Object, // Stores all dynamic fields for the certificate
@@ -22,6 +22,10 @@ const certificateSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Worker',
         required: false
+    },
+    subdomain: {
+        type: String,
+        required: true
     }
 });
 

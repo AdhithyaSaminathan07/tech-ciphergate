@@ -1,10 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useContext } from 'react';
 import { FaUpload, FaDownload } from 'react-icons/fa';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import axios from 'axios';
 import CertificateHistory from './CertificateHistory';
 import Modal from '../common/Modal';
+import appContext from '../../context/AppContext';
 
 // Styled fonts and global styles
 const styleTag = document.createElement("style");
@@ -65,6 +66,7 @@ const CornerImage = ({ className }) => (
 );
 
 const InternCertificate = () => {
+  const { subdomain } = useContext(appContext);
   const [formData, setFormData] = useState({
     fullName: 'YOUR NAME HERE',
     registerNumber: '24PCS5308',
@@ -91,7 +93,7 @@ const InternCertificate = () => {
   const [currentCertId, setCurrentCertId] = useState(null);
   const [refreshHistory, setRefreshHistory] = useState(0);
   const [isViewMode, setIsViewMode] = useState(false);
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [activeTab, setActiveTab] = useState('generate');
 
   const certificateRef = useRef();
 
@@ -131,7 +133,8 @@ const InternCertificate = () => {
           signatories,
           signatures,
           logoSelection
-        }
+        },
+        subdomain // Add subdomain to payload
       };
 
       const token = localStorage.getItem('token');
@@ -207,7 +210,6 @@ const InternCertificate = () => {
     loadCertificateData(cert);
     setIsViewMode(true);
     setCurrentCertId(cert._id);
-    setShowHistoryModal(false); // Close modal
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -215,14 +217,12 @@ const InternCertificate = () => {
     loadCertificateData(cert);
     setIsViewMode(false);
     setCurrentCertId(cert._id);
-    setShowHistoryModal(false); // Close modal
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleHistoryDownload = (cert) => {
     loadCertificateData(cert);
     setIsViewMode(true); // Download should be safe in view mode
-    setShowHistoryModal(false); // Close modal
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setTimeout(() => {
       if (window.confirm('Certificate data loaded. Ready to download?')) {
@@ -264,26 +264,50 @@ const InternCertificate = () => {
   return (
     <div className="min-h-screen bg-gray-300 py-12 flex flex-col items-center">
 
-      {/* 0. Mode Indicator / New Button */}
-      <div className="fixed top-4 right-4 z-50 flex flex-col md:flex-row gap-2 items-end">
-        {currentCertId && (
-          <div className={`px-4 py-2 rounded shadow font-bold text-white ${isViewMode ? 'bg-blue-600' : 'bg-yellow-600'}`}>
-            {isViewMode ? 'VIEW MODE' : 'EDIT MODE'}
-          </div>
-        )}
-        <button
-          onClick={() => setShowHistoryModal(true)}
-          className="bg-blue-800 text-white px-4 py-2 rounded shadow hover:bg-blue-900 transition"
-        >
-          History
-        </button>
-        <button
-          onClick={handleNew}
-          className="bg-gray-800 text-white px-4 py-2 rounded shadow hover:bg-black transition"
-        >
-          New Certificate
-        </button>
+      {/* Tabs */}
+      <div className="border-b border-gray-200 mb-6 w-full max-w-[210mm]">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => {
+              setActiveTab('generate');
+              setIsViewMode(false);
+            }}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'generate'
+              ? 'border-[#4a9d2d] text-[#4a9d2d]'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+          >
+            Generate
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'history'
+              ? 'border-[#4a9d2d] text-[#4a9d2d]'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+          >
+            History
+          </button>
+          <button
+            onClick={() => {
+              handleNew();
+              setActiveTab('generate');
+            }}
+            className="whitespace-nowrap py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300"
+          >
+            + Add New
+          </button>
+        </nav>
       </div>
+
+      {activeTab === 'generate' && (
+        <>
+          {/* Mode Indicator */}
+          {currentCertId && (
+            <div className={`mb-4 px-4 py-2 rounded shadow font-bold text-white ${isViewMode ? 'bg-blue-600' : 'bg-yellow-600'}`}>
+              {isViewMode ? 'VIEW MODE' : 'EDIT MODE'}
+            </div>
+          )}
 
       {/* 1. Main Certificate Content */}
       <div className="w-full overflow-hidden flex justify-center md:block md:w-auto md:overflow-visible my-4 md:my-0">
@@ -495,24 +519,21 @@ const InternCertificate = () => {
         </button>
       </div>
 
-      {/* 3. Certificate History Modal */}
-      <Modal
-        isOpen={showHistoryModal}
-        title="Internship Certificate History"
-        onClose={() => setShowHistoryModal(false)}
-        size="xl"
-      >
-        <div className="w-full">
+        </>
+      )}
+
+      {activeTab === 'history' && (
+        <div className="w-full max-w-[1200px] bg-white p-6 rounded-xl shadow-sm">
           <CertificateHistory
             type="Intern"
-            onView={handleView}
-            onEdit={handleEdit}
+            onView={(cert) => { handleView(cert); setActiveTab('generate'); }}
+            onEdit={(cert) => { handleEdit(cert); setActiveTab('generate'); }}
             onDelete={() => handleNew()} // Clear selection if deleted
             onDownload={handleHistoryDownload}
             refreshTrigger={refreshHistory}
           />
         </div>
-      </Modal>
+      )}
 
     </div >
   );

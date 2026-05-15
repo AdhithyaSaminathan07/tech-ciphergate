@@ -1,9 +1,10 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useMemo } from 'react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../hooks/useAuth';
 import { getMyTasks } from '../../services/taskService';
 import { getTopics } from '../../services/topicService';
 import { getColumns } from '../../services/columnService';
+import { getMySalaryReport } from '../../services/salaryService';
 import TaskForm from './TaskForm';
 import Scoreboard from './Scoreboard';
 import Card from '../common/Card';
@@ -11,61 +12,88 @@ import Spinner from '../common/Spinner';
 import CustomTaskForm from './CustomTaskForm';
 import { readNotification } from '../../services/notificationService';
 import appContext from '../../context/AppContext';
-import { FaMoneyBillAlt, FaCamera } from 'react-icons/fa';
-import { motion } from 'framer-motion';
+import { FaMoneyBillAlt, FaCamera, FaTasks, FaHistory, FaBell, FaExclamationTriangle, FaTrophy, FaChevronDown, FaChevronUp, FaWallet, FaArrowRight, FaCrown, FaMedal, FaArrowCircleUp, FaClipboardList, FaClipboardCheck } from 'react-icons/fa';
+import { motion, AnimatePresence } from 'framer-motion';
 import CountUp from 'react-countup';
-import { FaChevronDown, FaChevronUp } from 'react-icons/fa';
-// Removed Link import since we won't be using it for navigation
 import api from '../../services/api';
-// Import the attendance components
 import FaceAttendance from '../admin/FaceAttendance';
-import RFIDAttendancePopup from './RFIDAttendancePopup'; // We'll create this component
-import MyFines from '../dashboard/MyFines'; // Import MyFines component
+import RFIDAttendancePopup from './RFIDAttendancePopup';
+import MyFines from '../dashboard/MyFines';
+import { Link, useNavigate } from 'react-router-dom';
+
+/* ─────────────────────────────────────────
+   Shared Components (matching Admin style)
+───────────────────────────────────────── */
+
+const SectionHeader = ({ title, sub, action, actionLink }) => (
+  <div className="flex items-start justify-between mb-4">
+    <div>
+      <h2 className="dash-title text-[14px] md:text-[16px] font-bold text-dash-text tracking-tight">
+        {title}
+      </h2>
+      {sub && <p className="text-[11px] text-dash-muted font-medium mt-0.5">{sub}</p>}
+    </div>
+    {action && actionLink && (
+      <Link to={actionLink}
+        className="text-[11px] font-bold text-dash-green hover:opacity-80 flex items-center gap-1 flex-shrink-0 transition-opacity">
+        {action} <FaArrowRight size={10} />
+      </Link>
+    )}
+  </div>
+);
 
 const Dashboard = () => {
   const { subdomain } = useContext(appContext);
-  const [notifications, setNotifications] = useState([]);
   const { user } = useAuth();
-  console.log(user);
+  const navigate = useNavigate();
+  
+  const [notifications, setNotifications] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [tasks, setTasks] = useState([]);
   const [topics, setTopics] = useState([]);
   const [columns, setColumns] = useState([]);
   const [showAllRecentTasks, setShowAllRecentTasks] = useState(false);
-  const [attendanceLocation, setAttendanceLocation] = useState(null);
-  // State for controlling attendance popups
   const [showFaceAttendance, setShowFaceAttendance] = useState(false);
   const [showRFIDAttendance, setShowRFIDAttendance] = useState(false);
   const [accessControl, setAccessControl] = useState({ rfidAttendance: true, faceAttendance: true });
+  const [showDeductionBreakdown, setShowDeductionBreakdown] = useState(false);
+  const [salaryData, setSalaryData] = useState({
+    baseSalary: 0,
+    finalSalary: 0,
+    totalDeductions: 0,
+    delayedTasks: [],
+    report: null
+  });
+  const [topTeams, setTopTeams] = useState([]);
 
-  // prepare breakdown for tooltip
-  const baseSalary = typeof user?.salary === 'number' ? user.salary : 0;
-  const finalSalary = typeof user?.finalSalary === 'number' ? user.finalSalary : 0;
-  const diff = finalSalary - baseSalary;
-  const allowances = diff > 0 ? diff : 0;
-  const deductions = diff < 0 ? -diff : 0;
-
-  const fetchNotifications = async () => {
-    setIsLoading(true);
+  const fetchSalary = async () => {
     try {
-      const data = await readNotification(subdomain);
-      console.log(data.notifications);
-      setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
-    } catch (err) {
-      toast.error('Failed to fetch notifications');
-    } finally {
-      setIsLoading(false);
+      const data = await getMySalaryReport();
+      setSalaryData({
+        baseSalary: data.baseSalary ?? 0,
+        finalSalary: data.finalSalary ?? 0,
+        totalDeductions: data.totalDeductions ?? 0,
+        delayedTasks: data.delayedTasks ?? [],
+        report: data.report ?? null
+      });
+    } catch (error) {
+      console.error('Failed to fetch salary report:', error);
     }
   };
 
-  // Fetch attendance location settings
+  const fetchNotifications = async () => {
+    try {
+      const data = await readNotification(subdomain);
+      setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
+    } catch (err) {
+      console.error('Failed to fetch notifications');
+    }
+  };
+
   const fetchAttendanceLocation = async () => {
     try {
       if (subdomain && subdomain !== 'main') {
         const response = await api.get(`/settings/public/${subdomain}`);
-        if (response.data?.attendanceLocation?.enabled) {
-          setAttendanceLocation(response.data.attendanceLocation);
-        }
         if (response.data?.attendanceAccessControl?.employee) {
           setAccessControl(response.data.attendanceAccessControl.employee);
         }
@@ -75,34 +103,42 @@ const Dashboard = () => {
     }
   };
 
-  useEffect(() => {
-    fetchNotifications();
-    fetchAttendanceLocation();
-  }, []);
+  const fetchTopTeams = async () => {
+    try {
+      const now = new Date();
+      const fromDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+      const toDate = new Date(now.getFullYear(), now.getMonth() + 1, 0).toLocaleDateString('en-CA');
+      
+      const response = await api.get('/salary/top-teams-earnings', {
+        params: { subdomain, fromDate, toDate }
+      });
+      
+      setTopTeams(response.data.topTeams || []);
+    } catch (error) {
+      console.error('Failed to fetch top teams:', error);
+    }
+  };
 
   useEffect(() => {
     const loadDashboardData = async () => {
       setIsLoading(true);
       try {
-        const [tasksData, topicsData, columnsData] = await Promise.all([
-          getMyTasks(),
-          getTopics({ subdomain: user.subdomain }),
-          getColumns({ subdomain: user.subdomain })
+        await Promise.all([
+          fetchNotifications(),
+          fetchAttendanceLocation(),
+          fetchSalary(),
+          fetchTopTeams(),
+          (async () => {
+            const [tasksData, topicsData, columnsData] = await Promise.all([
+              getMyTasks(),
+              getTopics({ subdomain: user.subdomain }),
+              getColumns({ subdomain: user.subdomain })
+            ]);
+            setTasks(tasksData);
+            setTopics(topicsData.filter(topic => topic.department === 'all' || topic.department === user.department));
+            setColumns(columnsData.filter(column => column.department === 'all' || column.department === user.department));
+          })()
         ]);
-
-        setTasks(tasksData);
-
-        // Filter topics for the worker's department
-        const filteredTopics = topicsData.filter(topic =>
-          topic.department === 'all' || topic.department === user.department
-        );
-        setTopics(filteredTopics);
-
-        // Filter columns for the worker's department
-        const filteredColumns = columnsData.filter(column =>
-          column.department === 'all' || column.department === user.department
-        );
-        setColumns(filteredColumns);
       } catch (error) {
         toast.error('Failed to load dashboard data');
         console.error(error);
@@ -111,26 +147,362 @@ const Dashboard = () => {
       }
     };
 
-    loadDashboardData();
-  }, [user]);
+    if (user) loadDashboardData();
+  }, [user, subdomain]);
 
+  const handleAttendanceMarked = () => fetchSalary();
+  
   const handleTaskSubmit = (newTask) => {
     setTasks(prev => [newTask, ...prev]);
     toast.success('Task submitted successfully!');
   };
 
+  const totalPoints = useMemo(() => tasks.reduce((acc, t) => acc + (t.points || 0), 0), [tasks]);
+
+  const calculatedTaskPenalties = useMemo(() => {
+    if (!salaryData.delayedTasks || salaryData.delayedTasks.length === 0 || !salaryData.report?.report) {
+      return { taskPenalties: [], totalTaskPenalty: 0 };
+    }
+
+    const parseSalary = (str) => {
+      if (!str) return 0;
+      const cleaned = str.replace(/[^0-9.]/g, '');
+      return parseFloat(cleaned) || 0;
+    };
+
+    const now = new Date();
+    const reportYear = now.getFullYear();
+
+    const claimedDays = new Set();
+    let totalDeductionVal = 0;
+
+    const taskPenalties = salaryData.delayedTasks.map(task => {
+      const start = new Date(task.endDate);
+      start.setDate(start.getDate() + 1);
+      start.setHours(0, 0, 0, 0);
+
+      const end = task.doneDate ? new Date(task.doneDate) : new Date();
+      end.setHours(23, 59, 59, 999);
+
+      let taskDeduction = 0;
+      const dailyList = [];
+
+      salaryData.report.report.forEach(day => {
+        const dDate = new Date(`${day.date}, ${reportYear}`);
+        if (dDate >= start && dDate <= end) {
+          const amt = parseSalary(day.totalSalary);
+          if (!claimedDays.has(day.date)) {
+            claimedDays.add(day.date);
+            totalDeductionVal += amt;
+            taskDeduction += amt;
+            dailyList.push({ date: day.date, amount: amt });
+          } else {
+            dailyList.push({ date: day.date, amount: 0, alreadyDeducted: true });
+          }
+        }
+      });
+
+      return {
+        ...task,
+        taskDeduction,
+        dailyList,
+        overdueWorkingDays: dailyList.length,
+        period: `${start.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} → ${task.doneDate ? new Date(task.doneDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'Ongoing'}`
+      };
+    });
+
+    return { taskPenalties, totalTaskPenalty: totalDeductionVal };
+  }, [salaryData.delayedTasks, salaryData.report]);
+
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-64">
+      <div className="flex justify-center items-center h-screen bg-[#F5F7FA]">
         <Spinner size="lg" />
       </div>
     );
   }
 
   return (
-    // Added w-full overflow-x-hidden to prevent horizontal scrolling
-    <div className="w-full overflow-x-hidden">
-      {/* Face Attendance Popup */}
+    <div className="bg-[#F8FAFC] min-h-screen px-3 py-1.5 md:px-6 md:py-3 lg:px-8 lg:py-4">
+      <div className="max-w-[1600px] mx-auto flex flex-col gap-4 md:gap-8">
+        
+        {/* Header / Greeting */}
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            <h1 className="text-base md:text-lg font-semibold text-slate-900 tracking-tight">
+              Welcome back, {user?.name || user?.username}
+            </h1>
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-100 shadow-sm">
+              <span className="w-1 h-1 rounded-full bg-teal-500 animate-pulse"></span>
+              Live
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            You are in the <span className="font-medium text-slate-600">{user?.department}</span> department.
+          </p>
+        </div>
+
+        {/* Top Grid: Attendance, Salary, Top Teams */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+          
+          {/* 1. Attendance Card */}
+          <div className="bg-white rounded-xl p-4 md:p-6 border border-slate-100 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Attendance</p>
+              <div className="flex flex-col gap-3">
+                {accessControl.faceAttendance && (
+                  <button
+                    onClick={() => setShowFaceAttendance(true)}
+                    className="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-7 h-7 rounded-md bg-white text-slate-700 flex items-center justify-center border border-slate-100 shadow-sm group-hover:text-teal-600 transition-colors">
+                        <FaCamera size={12} />
+                      </div>
+                      <span className="text-sm font-medium text-slate-800">Face ID</span>
+                    </div>
+                    <FaArrowRight className="text-slate-300 group-hover:text-teal-600 transition-colors" size={10} />
+                  </button>
+                )}
+                {accessControl.rfidAttendance && (
+                  <button
+                    onClick={() => setShowRFIDAttendance(true)}
+                    className="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-7 h-7 rounded-md bg-white text-slate-700 flex items-center justify-center border border-slate-100 shadow-sm group-hover:text-teal-600 transition-colors">
+                        <FaHistory size={12} />
+                      </div>
+                      <span className="text-sm font-medium text-slate-800">RFID Tap</span>
+                    </div>
+                    <FaArrowRight className="text-slate-300 group-hover:text-teal-600 transition-colors" size={10} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Salary Card */}
+          <div className="bg-white rounded-xl p-4 md:p-6 border border-slate-100 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Salary - Current Month</p>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-slate-600">Base Salary</span>
+                  <span className="text-sm font-semibold text-slate-800">₹{salaryData.baseSalary.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-slate-600">Final Payout</span>
+                  <span className="text-sm font-bold text-teal-600">₹{salaryData.finalSalary.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between items-center border-t border-slate-100 pt-3">
+                  <span className="text-sm text-slate-600">Deductions</span>
+                  <span className="text-sm font-semibold text-rose-600">₹{salaryData.totalDeductions.toLocaleString('en-IN')}</span>
+                </div>
+
+                {/* Breakdown Toggle */}
+                {calculatedTaskPenalties.taskPenalties.length > 0 && (
+                  <button
+                    onClick={() => setShowDeductionBreakdown(!showDeductionBreakdown)}
+                    className="text-xs font-semibold text-slate-500 hover:text-teal-600 transition-colors flex items-center gap-1 mt-2"
+                  >
+                    {showDeductionBreakdown ? 'Hide Breakdown' : 'View Breakdown'}
+                    <FaChevronDown className={`transition-transform ${showDeductionBreakdown ? 'rotate-180' : ''}`} size={10} />
+                  </button>
+                )}
+
+                {/* Breakdown Content */}
+                <AnimatePresence>
+                  {showDeductionBreakdown && calculatedTaskPenalties.taskPenalties.length > 0 && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="space-y-2 mt-2">
+                        {calculatedTaskPenalties.taskPenalties.map((task, index) => (
+                          <div key={index} className="p-2 bg-slate-50 rounded-lg text-xs">
+                            <div className="flex justify-between mb-1">
+                              <span className="font-semibold text-slate-700 truncate max-w-[70%]">{task.title}</span>
+                              <span className="font-semibold text-rose-600">₹{task.taskDeduction.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="flex justify-between text-slate-500">
+                              <span>{task.period}</span>
+                              <span>{task.overdueWorkingDays} days overdue</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Top Teams Card */}
+          <div className="bg-white rounded-xl p-4 md:p-6 border border-slate-100 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Top Teams</p>
+              <div className="space-y-3">
+                {topTeams && topTeams.length > 0 ? (
+                  topTeams.slice(0, 3).map((team, index) => (
+                    <div key={index} className={`flex items-center justify-between p-2.5 rounded-lg transition-colors ${
+                      index === 0 ? 'bg-amber-50/50 border border-amber-100' :
+                      index === 1 ? 'bg-slate-50/50 border border-slate-200' :
+                      index === 2 ? 'bg-orange-50/50 border border-orange-100' :
+                      'bg-slate-50'
+                    }`}>
+                      <div className="flex items-center gap-3">
+                        <div className="w-6 h-6 flex items-center justify-center">
+                          {index === 0 ? (
+                            <FaCrown className="text-amber-500" size={14} />
+                          ) : index === 1 ? (
+                            <FaMedal className="text-slate-400" size={14} />
+                          ) : index === 2 ? (
+                            <FaMedal className="text-orange-400" size={14} />
+                          ) : (
+                            <span className="text-xs font-bold text-slate-400">#{index + 1}</span>
+                          )}
+                        </div>
+                        <span className="text-sm font-semibold text-slate-700 truncate max-w-[120px]">{team.name}</span>
+                      </div>
+                      <span className={`text-sm font-bold ${
+                        index === 0 ? 'text-amber-600' :
+                        index === 1 ? 'text-slate-600' :
+                        index === 2 ? 'text-orange-600' :
+                        'text-slate-800'
+                      }`}>₹{team.amount.toLocaleString('en-IN')}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-8 text-center flex-1 flex flex-col items-center justify-center">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No data available</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Sections: Grid Layout */}
+        <div className="grid grid-cols-1 gap-6">
+          
+          {/* Row 1: Notification & Fines */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Latest Notification */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-700 flex items-center justify-center border border-slate-100">
+                  <FaBell size={14} />
+                </div>
+                <h2 className="text-lg font-bold text-slate-900">Latest Notification</h2>
+              </div>
+              {notifications.length > 0 ? (
+                <div className="p-4 bg-slate-50 rounded-xl">
+                  <p className="text-sm text-slate-700 mb-2">{notifications[0]?.messageData}</p>
+                  <p className="text-xs text-slate-400 font-medium">{new Date(notifications[0]?.createdAt).toLocaleString()}</p>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400 text-center py-4">No notifications found</p>
+              )}
+            </div>
+
+            {/* My Fines */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-700 flex items-center justify-center border border-slate-100">
+                  <FaExclamationTriangle size={14} />
+                </div>
+                <h2 className="text-lg font-bold text-slate-900">My Fines</h2>
+              </div>
+              <MyFines noCard={true} />
+            </div>
+          </div>
+
+          {/* Row 2: Forms Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Submit Custom Task */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-700 flex items-center justify-center border border-slate-100">
+                  <FaClipboardList size={14} />
+                </div>
+                <h2 className="text-lg font-bold text-slate-900">Submit Custom Task</h2>
+              </div>
+              <CustomTaskForm />
+            </div>
+
+            {/* Submit Task */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-700 flex items-center justify-center border border-slate-100">
+                  <FaTasks size={14} />
+                </div>
+                <h2 className="text-lg font-bold text-slate-900">Submit Task</h2>
+              </div>
+              <TaskForm topics={topics} columns={columns} onTaskSubmit={handleTaskSubmit} />
+            </div>
+          </div>
+
+          {/* Row 3: Activity & Scoreboard */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Your Recent Activity */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-700 flex items-center justify-center border border-slate-100">
+                  <FaClipboardCheck size={14} />
+                </div>
+                <h2 className="text-lg font-bold text-slate-900">Your Recent Activity</h2>
+              </div>
+              <div className="space-y-3">
+                {tasks.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-4">No activity found.</p>
+                ) : (
+                  <>
+                    {(showAllRecentTasks ? tasks : tasks.slice(0, 5)).map((task) => (
+                      <div key={task._id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-bold text-teal-600">+{task.points}</span>
+                          <div>
+                            <p className="text-sm font-semibold text-slate-700">{task.topics?.[0]?.name || task.description || 'Task Submission'}</p>
+                            <p className="text-xs text-slate-400">{new Date(task.createdAt).toLocaleString()}</p>
+                          </div>
+                        </div>
+                        <span className="text-xs font-semibold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100">Verified</span>
+                      </div>
+                    ))}
+                    {tasks.length > 5 && (
+                      <button
+                        onClick={() => setShowAllRecentTasks(!showAllRecentTasks)}
+                        className="w-full text-xs font-semibold text-slate-500 hover:text-teal-600 transition-colors py-2"
+                      >
+                        {showAllRecentTasks ? 'Show Less' : `View All ${tasks.length} Tasks`}
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Department Scoreboard */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-700 flex items-center justify-center border border-slate-100">
+                  <FaArrowCircleUp size={14} />
+                </div>
+                <h2 className="text-lg font-bold text-slate-900">Department Scoreboard</h2>
+              </div>
+              <Scoreboard department={user.department} noCard={true} />
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* Attendance Popups */}
       {showFaceAttendance && (
         <FaceAttendance
           subdomain={subdomain}
@@ -138,310 +510,20 @@ const Dashboard = () => {
           onClose={() => setShowFaceAttendance(false)}
           workerMode={true}
           currentWorker={user}
+          onAttendanceMarked={handleAttendanceMarked}
         />
       )}
-
-      {/* RFID Attendance Popup */}
       {showRFIDAttendance && (
         <RFIDAttendancePopup
           isOpen={showRFIDAttendance}
           onClose={() => setShowRFIDAttendance(false)}
           subdomain={subdomain}
           user={user}
+          onAttendanceMarked={handleAttendanceMarked}
         />
       )}
-
-      {/* Improved responsive grid for salary cards */}
-      <div
-        className="mb-6 rounded-3xl p-6 shadow-lg bg-white text-gray-800 relative overflow-hidden border border-gray-100"
-      >
-        {/* Decorative circles */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-[#0d9488] opacity-5 rounded-full -mr-10 -mt-10"></div>
-        <div className="absolute bottom-0 left-0 w-24 h-24 bg-[#0d9488] opacity-5 rounded-full -ml-10 -mb-10"></div>
-
-        <div className="relative z-10">
-          <motion.h2
-            initial={{ x: -20, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            transition={{ type: 'spring', stiffness: 120, damping: 20, duration: 0.5 }}
-            className="text-2xl font-bold mb-2 text-[#0d9488]"
-          >
-            Welcome, {user?.name || user?.username}!
-          </motion.h2>
-          <p className="text-gray-600 text-sm mb-6">
-            Your workspace at{' '}
-            <motion.span
-              initial={{ x: -20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 120, damping: 20, duration: 0.5 }}
-              className="font-bold text-[#0d9488]"
-            >
-              {user?.subdomain}
-            </motion.span>
-          </p>
-
-          {/* Responsive grid that works well on all screen sizes */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Base Salary with Icon */}
-            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-              <div className="flex items-center space-x-3">
-                <div className="bg-white p-2 rounded-lg flex-shrink-0 border border-gray-200">
-                  <FaMoneyBillAlt className="h-6 w-6 text-[#0d9488]" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-600 truncate">Base Monthly Salary</p>
-                  {baseSalary > 0 ? (
-                    <CountUp
-                      start={0}
-                      end={baseSalary}
-                      duration={1}
-                      prefix="₹"
-                      decimals={2}
-                      className="text-xl font-bold text-gray-800 truncate"
-                    />
-                  ) : (
-                    <p className="text-xl font-bold text-gray-800 truncate">N/A</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Final Monthly Salary with Icon */}
-            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-              <div className="flex items-center space-x-3">
-                <div className="bg-white p-2 rounded-lg flex-shrink-0 border border-gray-200">
-                  <FaMoneyBillAlt className="h-6 w-6 text-[#0d9488]" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-600 truncate">Final Monthly Salary</p>
-                  {finalSalary > 0 ? (
-                    <div
-                      title={
-                        `Base: ₹${baseSalary.toFixed(2)} | ` +
-                        `Allowances: ₹${allowances.toFixed(2)} | ` +
-                        `Deductions: ₹${deductions.toFixed(2)}`
-                      }
-                    >
-                      <CountUp
-                        start={0}
-                        end={finalSalary}
-                        duration={1}
-                        prefix="₹"
-                        decimals={2}
-                        className="text-xl font-bold text-gray-800 truncate"
-                      />
-                    </div>
-                  ) : (
-                    <p className="text-xl font-bold text-gray-800 truncate">N/A</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Attendance Cards */}
-            {accessControl.faceAttendance && (
-              <div
-                className="bg-gray-50 p-4 rounded-xl border border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
-                onClick={() => setShowFaceAttendance(true)}
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="bg-white p-2 rounded-lg flex-shrink-0 border border-gray-200">
-                    <FaCamera className="h-6 w-6 text-[#0d9488]" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-600 truncate">Face Attendance</p>
-                    <p className="text-sm font-bold text-[#0d9488] truncate">
-                      Mark Attendance
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {accessControl.rfidAttendance && (
-              <div
-                className="bg-gray-50 p-4 rounded-xl border border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
-                onClick={() => setShowRFIDAttendance(true)}
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="bg-white p-2 rounded-lg flex-shrink-0 border border-gray-200">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#0d9488]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-600 truncate">RFID Attendance</p>
-                    <p className="text-sm font-bold text-[#0d9488] truncate">
-                      Mark Attendance
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Attendance Location Information */}
-      {attendanceLocation && (
-        <Card className="mb-6 bg-blue-50 border-blue-200">
-          <div className="flex items-start">
-            <div className="flex-shrink-0">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </div>
-            <div className="ml-3 min-w-0">
-              <h3 className="text-lg font-medium text-blue-800">Attendance Location</h3>
-              <div className="mt-2 text-sm text-blue-700">
-                <p>Attendance is restricted to a specific location:</p>
-                <p className="mt-1 font-medium truncate">
-                  Coordinates: {attendanceLocation.latitude.toFixed(6)}, {attendanceLocation.longitude.toFixed(6)}
-                </p>
-                <p className="mt-1 truncate">
-                  Radius: {attendanceLocation.radius} meters
-                </p>
-                <p className="mt-2 text-xs">
-                  You must be within this area to mark attendance using Face or RFID methods.
-                </p>
-              </div>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {
-        Array.isArray(notifications) && notifications.length > 0 && (
-          <Card
-            title={
-              <div className="flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2 text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-                <span className="truncate">Latest Notification</span>
-              </div>
-            }
-            className="mb-6"
-          >
-            <div className="w-full">
-              <p className="whitespace-normal break-words">
-                {notifications[0]?.messageData || "No notifications found."}
-              </p>
-              <p className="text-xs text-gray-500 mt-2">
-                {new Date(notifications[0]?.createdAt).toLocaleString()}
-              </p>
-            </div>
-          </Card>
-        )
-      }
-
-      {/* My Fines Section */}
-      <MyFines />
-
-      <Card className="mb-6">
-        <h2 className="text-xl font-bold mb-4 flex items-center">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2 text-purple-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-          </svg>
-          <span className="truncate">Submit Custom Task</span>
-        </h2>
-        <CustomTaskForm />
-      </Card>
-
-      <h1 className="text-2xl font-bold mb-6 flex items-center">
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-        </svg>
-        <span className="truncate">Employee Dashboard</span>
-      </h1>
-
-      <Card className="mb-6">
-        <TaskForm
-          topics={topics}
-          columns={columns}
-          onTaskSubmit={handleTaskSubmit}
-        />
-      </Card>
-
-      <Card
-        title={
-          <div className="flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-            <span className="truncate">Your Recent Activity</span>
-          </div>
-        }
-      >
-        {tasks.length === 0 ? (
-          <p className="text-gray-500 py-4 text-center">
-            No task submissions yet. Use the form above to submit your first task!
-          </p>
-        ) : (
-          <div className="space-y-4">
-            {/* CONDITIONAL RENDERING OF TASKS */}
-            {(showAllRecentTasks ? tasks : tasks.slice(0, 5)).map((task) => ( //
-              <div
-                key={task._id}
-                className="border-b border-gray-200 pb-4 last:border-b-0 last:pb-0"
-              >
-                <div className="flex justify-between items-start">
-                  <div className="min-w-0">
-                    <p className="font-medium truncate">
-                      Submitted task: {task.points} points
-                    </p>
-                    <p className="text-sm text-gray-500 truncate">
-                      {new Date(task.createdAt).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="bg-green-100 text-green-800 text-sm font-medium px-2 py-1 rounded-full flex-shrink-0">
-                    +{task.points}
-                  </div>
-                </div>
-
-                {task.topics && task.topics.length > 0 && (
-                  <div className="mt-2">
-                    <p className="text-xs text-gray-500 mb-1">Topics:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {task.topics.map((topic, index) => (
-                        <span
-                          key={index}
-                          className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full truncate max-w-[120px]"
-                        >
-                          {topic?.name || 'Unknown Topic'}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-            {/* END CONDITIONAL RENDERING OF TASKS */}
-
-            {/* "View All / Show Less" BUTTON */}
-            {tasks.length > 5 && ( // Only show if more than 5 tasks exist
-              <button
-                onClick={() => setShowAllRecentTasks(!showAllRecentTasks)} // Toggle visibility
-                className="mt-4 w-full py-2 text-sm text-blue-600 hover:text-blue-800 border border-blue-300 rounded-md flex items-center justify-center" //
-              >
-                {showAllRecentTasks ? ( // Change text and icon based on state
-                  <>Show Less <FaChevronUp className="ml-1" /></> //
-                ) : (
-                  <>View All ({tasks.length}) Tasks <FaChevronDown className="ml-1" /></> //
-                )}
-              </button>
-            )}
-            {/* END "View All / Show Less" BUTTON */}
-          </div>
-        )}
-      </Card>
-
-      <div className="mt-6">
-        <Scoreboard department={user.department} />
-      </div>
     </div>
   );
 };
 
-export default Dashboard;
+export default Dashboard;

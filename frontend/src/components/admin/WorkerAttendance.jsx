@@ -148,8 +148,8 @@ const WorkerAttendance = () => {
 
     return (
         <Fragment>
-            <div className="flex justify-between items-center mb-6 mt-4">
-                <h1 className="text-2xl font-bold">Attendance Report</h1>
+            <div className="flex justify-between md:justify-end items-center mb-6 mt-4">
+                <h1 className="text-2xl font-bold md:hidden">Attendance Report</h1>
                 <div className="flex justify-end space-x-4 items-center mb-6">
                     <Link to={'/admin/attendance'}>
                         <Button

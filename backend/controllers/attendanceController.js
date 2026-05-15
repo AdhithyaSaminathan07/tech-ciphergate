@@ -53,6 +53,11 @@ const putAttendance = async (req, res) => {
             throw new Error('Worker not found');
         }
 
+        if (worker.status === 'Relieved') {
+            res.status(403);
+            throw new Error('This employee is relieved and cannot mark attendance');
+        }
+
         const department = await Department.findById(worker.department);
         if (!department) {
             res.status(404);
@@ -206,6 +211,11 @@ const putRfidAttendance = async (req, res) => {
         if (!worker) {
             res.status(404);
             throw new Error('Worker not found');
+        }
+
+        if (worker.status === 'Relieved') {
+            res.status(403);
+            throw new Error('This employee is relieved and cannot mark attendance');
         }
 
         const { subdomain } = worker;
@@ -511,6 +521,11 @@ const recognizeFaceAndMarkAttendance = async (req, res) => {
         if (!bestMatch || minDistance > threshold) {
             res.status(404);
             throw new Error('No matching worker found');
+        }
+
+        if (bestMatch.status === 'Relieved') {
+            res.status(403);
+            throw new Error('This employee is relieved and cannot mark attendance');
         }
 
         // Get the worker's department

@@ -1,0 +1,206 @@
+/* Relieve Employee Modal Styles */
+.relieve-modal-container {
+  font-family: 'Inter', sans-serif;
+}
+
+.step-indicator {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+  position: relative;
+}
+
+.step-indicator::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #e2e8f0;
+  z-index: 1;
+  transform: translateY(-50%);
+}
+
+.step-item {
+  position: relative;
+  z-index: 2;
+  background: white;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #e2e8f0;
+  color: #64748b;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.step-item.active {
+  border-color: #0d9488;
+  background: #0d9488;
+  color: white;
+  box-shadow: 0 0 0 4px rgba(13, 148, 136, 0.2);
+}
+
+.step-item.completed {
+  border-color: #0d9488;
+  background: #0d9488;
+  color: white;
+}
+
+.doc-card {
+  border: 2px solid #f1f5f9;
+  border-radius: 1rem;
+  padding: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.doc-card:hover {
+  border-color: #0d9488;
+  background: #f0fdfa;
+}
+
+.doc-card.selected {
+  border-color: #0d9488;
+  background: #f0fdfa;
+}
+
+/* --- A4 DOCUMENT CAPTURE STYLES --- */
+.capture-container {
+  position: fixed;
+  top: -10000px;
+  left: -10000px;
+  z-index: -1;
+  width: 210mm;
+}
+
+.a4-preview {
+  width: 210mm;
+  min-height: 297mm;
+  background: white;
+  padding: 50px 60px;
+  position: relative;
+  box-sizing: border-box;
+  font-family: 'Montserrat', 'Inter', sans-serif;
+  color: #1f2937;
+  overflow: hidden;
+}
+
+.preview-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: #f1f5f9;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 8px;
+  font-weight: bold;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+/* Header Separator */
+.header-separator-container {
+  position: relative;
+  width: 100%;
+  margin: 15px 0 30px 0;
+  height: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-thin-line {
+  position: absolute;
+  width: 100%;
+  height: 1px;
+  background-color: #9ca3af;
+  z-index: 1;
+}
+
+.header-thick-line {
+  position: relative;
+  width: 100%;
+  height: 2px;
+  background-color: #4a9d2d;
+  z-index: 2;
+}
+
+/* Watermark */
+.watermark-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 350px;
+  height: 350px;
+  opacity: 0.05;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.watermark-img {
+  width: 100%;
+  height: auto;
+}
+
+/* Payslip Tables */
+.payslip-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+.payslip-table th {
+  background: #f8fafc;
+  color: #4a9d2d;
+  text-align: left;
+  padding: 10px;
+  font-size: 11px;
+  border: 1px solid #e2e8f0;
+}
+
+.payslip-table td {
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  font-size: 11px;
+}
+
+.summary-table {
+  width: 40%;
+  margin-left: auto;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+.summary-table td {
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  font-size: 11px;
+}
+
+.summary-table .label-cell {
+  background: #f8fafc;
+  font-weight: bold;
+}
+
+.summary-table .value-cell {
+  text-align: right;
+  font-weight: bold;
+}
+
+.footer-stripe {
+  height: 15px;
+  background: #4a9d2d;
+  width: 100%;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+}

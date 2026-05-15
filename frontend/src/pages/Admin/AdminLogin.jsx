@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import appContext from '../../context/AppContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { requestPasswordResetOtp, resetPasswordWithOtp } from '../../services/authService';
+import { FaMoneyBillAlt, FaCamera, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import Spinner from '../../components/common/Spinner';
 
 const AdminLogin = () => {
@@ -26,8 +27,16 @@ const AdminLogin = () => {
     const [isOtpSent, setIsOtpSent] = useState(false);
     const [isOtpVerified, setIsOtpVerified] = useState(false);
 
-    const { login } = useAuth();
+    const { login, isAuthenticated, isAdmin, isWorker, loading: authLoading } = useAuth();
     const navigate = useNavigate();
+
+    // Auto-redirect if already logged in
+    useEffect(() => {
+        if (!authLoading && isAuthenticated) {
+            if (isWorker) navigate('/worker');
+            else if (isAdmin) navigate('/admin');
+        }
+    }, [isAuthenticated, isWorker, isAdmin, authLoading, navigate]);
 
     // Generate floating particles for background animation
     const particles = Array.from({ length: 20 }, (_, i) => ({
@@ -62,7 +71,6 @@ const AdminLogin = () => {
                 setSubdomain(result.subdomain);
             }
 
-            toast.success('Login successful!');
             navigate('/admin');
         } catch (error) {
             toast.error(error.response?.data?.message || 'Login failed. Please check your credentials.');
@@ -142,6 +150,25 @@ const AdminLogin = () => {
                     }}
                 />
             ))}
+
+            {/* Back Button and Side Switch */}
+            <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-50">
+                <button
+                    onClick={() => navigate(-1)}
+                    className="flex items-center gap-2 px-3 py-2 bg-white/50 backdrop-blur-sm border border-gray-200 rounded-xl text-gray-600 hover:text-[#0d9488] hover:bg-white transition-all shadow-sm active:scale-95 group"
+                >
+                    <FaChevronLeft className="text-xs group-hover:-translate-x-1 transition-transform" />
+                    <span className="text-sm font-bold uppercase tracking-wider">Back</span>
+                </button>
+
+                <Link
+                    to="/worker/login"
+                    className="flex items-center gap-2 px-4 py-2 bg-teal-50 border border-teal-100 rounded-xl text-[#0d9488] hover:bg-[#0d9488] hover:text-white transition-all shadow-sm active:scale-95 group"
+                >
+                    <span className="text-sm font-black uppercase tracking-wider">Employee Side</span>
+                    <FaChevronRight className="text-xs group-hover:translate-x-1 transition-transform" />
+                </Link>
+            </div>
 
             <motion.div
                 initial={{ opacity: 0, y: 20 }}

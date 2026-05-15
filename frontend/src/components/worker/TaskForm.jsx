@@ -160,23 +160,23 @@ const handleSubmit = async (e) => {
   
 return (
   <div>
-    <h2 className="text-xl font-semibold mb-4">Submit Task</h2>
+    <h2 className="text-lg font-bold mb-3">Submit Task</h2>
     
     <form onSubmit={handleSubmit}>
       {/* Column Inputs */}
-      <div className="mb-6">
-        <h3 className="text-lg font-medium mb-2">Task Data</h3>
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-gray-600 mb-2">Task Data</h3>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2"> {/* Adjusted grid for better responsiveness */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2"> {/* Adjusted grid for better responsiveness */}
           {displayedColumns.map((column) => (
             <div key={column._id} className="form-group">
-              <label htmlFor={`column-${column._id}`} className="form-label">
+              <label htmlFor={`column-${column._id}`} className="text-[10px] font-bold text-gray-500 uppercase block mb-1">
                 {column.name}
               </label>
               <input
                 type="number"
                 id={`column-${column._id}`}
-                className="form-input"
+                className="form-input h-8 text-sm"
                 value={formData[column.name] || ''}
                 onChange={(e) => handleColumnChange(column.name, e.target.value)}
                 min="0"
@@ -189,7 +189,7 @@ return (
           <button
             type="button"
             onClick={() => setShowAllColumns(!showAllColumns)}
-            className="mt-4 w-full py-2 text-sm text-blue-600 hover:text-blue-800 border border-blue-300 rounded-md flex items-center justify-center"
+            className="mt-3 w-full py-1.5 text-xs text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-center transition-colors"
           >
             {showAllColumns ? (
               <>Show Less {<FaChevronUp className="ml-1" />}</>
@@ -202,30 +202,30 @@ return (
       
      {/* Topics Section with Toggles */}
      {topics.length > 0 && (
-        <div className="mb-6">
-          <h3 className="text-lg font-medium mb-2">Topics</h3>
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-gray-600 mb-2">Topics</h3>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"> {/* Responsive grid for topic cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2"> {/* Responsive grid for topic cards */}
             {displayedTopics.map((topic) => (
               <div 
                 key={topic._id} 
                 className={`
-                  p-4 rounded-md border
+                  p-3 rounded-xl border
                   ${selectedTopics.includes(topic._id) || (selectedSubtopics[topic._id] && selectedSubtopics[topic._id].length > 0)
-                      ? 'bg-blue-100 border-blue-400 shadow-md' // Highlight selected topic
-                      : 'bg-gray-50 border-gray-200'
+                      ? 'bg-blue-50 border-blue-200 shadow-sm' // Highlight selected topic
+                      : 'bg-gray-50 border-gray-100'
                   }
-                  flex flex-col
+                  flex flex-col transition-all
                 `}
               >
-                <label className="inline-flex items-center gap-2 mb-2 cursor-pointer flex-shrink-0">
+                <label className="inline-flex items-center gap-2 mb-1 cursor-pointer flex-shrink-0">
                   <input
                     type="checkbox"
-                    className="form-checkbox h-4 w-4 text-blue-600 rounded-sm"
+                    className="form-checkbox h-3.5 w-3.5 text-blue-600 rounded-sm"
                     checked={selectedTopics.includes(topic._id)}
                     onChange={() => handleMainTopicChange(topic._id)}
                   />
-                  <span className="flex-1 font-semibold text-gray-800 break-words">
+                  <span className="flex-1 font-bold text-xs text-gray-700 break-words">
                     {topic?.name || 'Unknown Topic'} ({topic?.points ?? 0} pts)
                   </span>
                 </label>

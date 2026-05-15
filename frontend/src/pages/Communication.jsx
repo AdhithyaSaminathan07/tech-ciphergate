@@ -115,7 +115,7 @@ function InstaxbotPanel({ tenentId }) {
     const wsUrl = API_BASE
       .replace(/^https/, 'wss')
       .replace(/^http/, 'ws')
-      + `/api/instaxbot/ws-proxy?tenentId=${tenentId}`;
+      + `/instaxbot/ws-proxy?tenentId=${tenentId}`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;

@@ -11,6 +11,14 @@ const FaceCapture = ({ onFacesCaptured }) => {
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [error, setError] = useState('');
   const [isCapturing, setIsCapturing] = useState(false);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const loadModels = async () => {
@@ -68,9 +76,10 @@ const FaceCapture = ({ onFacesCaptured }) => {
         .withFaceLandmarks()
         .withFaceDescriptor();
 
-      if (detections) {
+      if (detections && isMounted.current) {
         // Draw detection on canvas for visual feedback
         const canvas = canvasRef.current;
+        if (!canvas) return;
         const displaySize = { width: video.videoWidth, height: video.videoHeight };
         faceapi.matchDimensions(canvas, displaySize);
         

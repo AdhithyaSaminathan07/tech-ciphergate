@@ -12,7 +12,6 @@ const fileSchema = new mongoose.Schema({
     contents_url: String,
     patch: String
 }, { _id: false });
-
 // Branch contribution schema
 const branchContributionSchema = new mongoose.Schema({
     repository: { type: String, required: true },
@@ -25,7 +24,6 @@ const branchContributionSchema = new mongoose.Schema({
     repo_stars: { type: Number, default: 0 },
     repo_forks: { type: Number, default: 0 }
 }, { _id: false });
-
 // User details schema
 const userDetailsSchema = new mongoose.Schema({
     name: String,
@@ -36,7 +34,6 @@ const userDetailsSchema = new mongoose.Schema({
     public_repos: { type: Number, default: 0 },
     followers: { type: Number, default: 0 }
 }, { _id: false });
-
 // Activity schema
 const activitySchema = new mongoose.Schema({
     type: { type: String, enum: ['commit', 'pr', 'merge', 'push', 'pull'] },
@@ -49,7 +46,8 @@ const activitySchema = new mongoose.Schema({
     repo_private: { type: Boolean, default: false },
     sha: String,
     number: Number,
-    files: [fileSchema] // Fixed: Array of file objects instead of strings
+    files: [fileSchema]
+     // Fixed: Array of file objects instead of strings
 }, { _id: false });
 
 // Updated contributor schema with more flexible validation
@@ -57,9 +55,9 @@ const contributorSchema = new mongoose.Schema({
     login: { type: String, required: true },
     name: String,
     avatar_url: String,
-    github_id: { type: String, required: false }, // Make optional temporarily
+    github_id: { type: String, required: false }, 
+    // Make optional temporarily
     html_url: String,
-
     // Score and statistics
     score: { type: Number, default: 0 },
     valid_commits: { type: Number, default: 0 },
@@ -71,28 +69,40 @@ const contributorSchema = new mongoose.Schema({
     merges: { type: Number, default: 0 },
     pushes: { type: Number, default: 0 },
     pulls: { type: Number, default: 0 },
-
     // Counts
     repo_count: { type: Number, default: 0 },
+
     branch_count: { type: Number, default: 0 },
+
     total_contributions: { type: Number, default: 0 },
 
     // Detailed information
+
     user_details: userDetailsSchema,
+
     branch_contributions: [branchContributionSchema],
+
     recent_activities: [activitySchema],
 
     // Metadata
+
     repositories: [String],
+
     last_updated: { type: Date, default: Date.now },
+
     github_username: String
+
 }, {
+
     timestamps: true
 });
 
 // Create compound index to allow multiple entries per github_username
+
 contributorSchema.index({ login: 1, github_username: 1 }, { unique: true });
+
 contributorSchema.index({ score: -1 });
+
 contributorSchema.index({ last_updated: -1 });
 
 module.exports = mongoose.model('Contributor', contributorSchema);

@@ -22,5 +22,4 @@ router.post('/worker', protect, getWorkerAttendance);
 router.post('/worker-last', protect, getWorkerLastAttendance);
 router.post('/face-recognition', protect, recognizeFaceAndMarkAttendance);
 
-
 module.exports = router;

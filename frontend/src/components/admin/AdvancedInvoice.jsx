@@ -45,12 +45,13 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
     ],
     bankName = 'ICICI',
     accountNumber = '612805036053',
-    ifscCode = 'ICIC000612',
+    ifscCode = 'ICIC0006128',
     upiId = 'techvaseegrah.ibz@icici',
     gstEnabled = false,
     saleType = 'Intrastate',
     customerGst = '',
-    invoiceType = 'INVOICE'
+    invoiceType = 'INVOICE',
+    status = 'Invoice'
   } = initialData || {};
 
   const [invoiceData, setInvoiceData] = useState({
@@ -70,7 +71,8 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
     gstEnabled,
     saleType,
     customerGst,
-    invoiceType
+    invoiceType,
+    status
   });
 
   const [includeFields, setIncludeFields] = useState({
@@ -1784,7 +1786,8 @@ temporarily interrupt app availability. We will provide advance notice when poss
                         name="bankName"
                         value={invoiceData.bankName}
                         onChange={handleInputChange}
-                        className="ml-2 px-1 py-0.5 border-b border-gray-300 focus:outline-none focus:border-green-500 text-sm font-normal"
+                        readOnly
+                        className="ml-2 px-1 py-0.5 border-b border-gray-300 bg-gray-50 focus:outline-none text-sm font-normal cursor-not-allowed"
                       />
                     </p>
                   </div>
@@ -1795,7 +1798,8 @@ temporarily interrupt app availability. We will provide advance notice when poss
                         name="accountNumber"
                         value={invoiceData.accountNumber}
                         onChange={handleInputChange}
-                        className="ml-2 px-1 py-0.5 border-b border-gray-300 focus:outline-none focus:border-green-500 text-sm font-normal"
+                        readOnly
+                        className="ml-2 px-1 py-0.5 border-b border-gray-300 bg-gray-50 focus:outline-none text-sm font-normal cursor-not-allowed"
                       />
                     </p>
                   </div>
@@ -1806,7 +1810,8 @@ temporarily interrupt app availability. We will provide advance notice when poss
                         name="ifscCode"
                         value={invoiceData.ifscCode}
                         onChange={handleInputChange}
-                        className="ml-2 px-1 py-0.5 border-b border-gray-300 focus:outline-none focus:border-green-500 text-sm font-normal"
+                        readOnly
+                        className="ml-2 px-1 py-0.5 border-b border-gray-300 bg-gray-50 focus:outline-none text-sm font-normal cursor-not-allowed"
                       />
                     </p>
                   </div>
@@ -1817,7 +1822,8 @@ temporarily interrupt app availability. We will provide advance notice when poss
                         name="upiId"
                         value={invoiceData.upiId}
                         onChange={handleInputChange}
-                        className="ml-2 px-1 py-0.5 border-b border-gray-300 focus:outline-none focus:border-green-500 text-sm font-normal"
+                        readOnly
+                        className="ml-2 px-1 py-0.5 border-b border-gray-300 bg-gray-50 focus:outline-none text-sm font-normal cursor-not-allowed"
                       />
                     </p>
                   </div>

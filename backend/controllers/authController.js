@@ -8,7 +8,7 @@ const Worker = require('../models/Worker');
 const crypto = require('crypto');
 const { sendPasswordResetEmail } = require('../config/email');
 
-// Add this helper at the top
+// Generate JWT
 const generateToken = (id, role) => {
   return jwt.sign({ id, role }, process.env.JWT_SECRET, {
     expiresIn: '30d'
@@ -102,28 +102,27 @@ const registerAdmin = asyncHandler(async (req, res) => {
   }
 });
 
+// @desc    Login admin
+// @route   POST /api/auth/admin
+// @access  Public
 const loginAdmin = asyncHandler(async (req, res) => {
   const { username, password } = req.body;
 
+  // Find admin and include password field
   const admin = await Admin.findOne({ username }).select('+password');
 
-  if (admin && (await bcrypt.compare(password, admin.password))) {
-    const tenentId = admin._id.toString();
-    
-    res.json({
-      _id: admin._id,
-      username: admin.username,
-      email: admin.email,
-      role: 'admin',
-      subdomain: admin.subdomain,
-      organizationId: admin.organizationId,
-      // ── ADD THESE ──────────────────────────────────────────────────
-      tenentId: tenentId,
-      tenentid: tenentId,
-      // ───────────────────────────────────────────────────────────────
-      token: generateToken(admin._id, 'admin')
-    });
-  } else {
+    if (admin && (await bcrypt.compare(password, admin.password))) {
+      res.json({
+        _id: admin._id,
+        username: admin.username,
+        email: admin.email,
+        photo: admin.photo,
+        role: 'admin',
+        subdomain: admin.subdomain,
+        organizationId: admin.organizationId,
+        token: generateToken(admin._id, 'admin')
+      });
+    } else {
     res.status(401);
     throw new Error('Invalid credentials');
   }
@@ -156,6 +155,9 @@ const checkAdminInitialization = asyncHandler(async (req, res) => {
 });
 
 
+// @desc    Login worker
+// @route   POST /api/auth/worker
+// @access  Public
 const loginWorker = asyncHandler(async (req, res) => {
   const { username, password, subdomain } = req.body;
 
@@ -166,13 +168,12 @@ const loginWorker = asyncHandler(async (req, res) => {
     throw new Error("Worker not found, check your Company name.");
   }
 
-  if (worker && (await bcrypt.compare(password, worker.password))) {
-    // Find admin by subdomain to get the tenentId (admin's _id or subdomain itself)
-    const admin = await Admin.findOne({ subdomain });
-    
-    // Use admin._id as tenentId if found, otherwise use subdomain as fallback
-    const tenentId = admin ? admin._id.toString() : subdomain;
+  if (worker.status !== 'Active') {
+    res.status(401);
+    throw new Error("Account is inactive. Please contact your administrator.");
+  }
 
+  if (worker && (await bcrypt.compare(password, worker.password))) {
     res.json({
       _id: worker._id,
       username: worker.username,
@@ -184,10 +185,6 @@ const loginWorker = asyncHandler(async (req, res) => {
       rfid: worker.rfid ? worker.rfid : 'unassigned',
       department: worker.department ? worker.department.name : 'Unassigned',
       role: 'worker',
-      // ── ADD THESE ──────────────────────────────────────────────────
-      tenentId: tenentId,
-      tenentid: tenentId,   // lowercase variant for Instaxbot compatibility
-      // ───────────────────────────────────────────────────────────────
       token: generateToken(worker._id, 'worker')
     });
   } else {
@@ -195,7 +192,6 @@ const loginWorker = asyncHandler(async (req, res) => {
     throw new Error('Invalid credentials');
   }
 });
-
 
 // @desc    Request password reset OTP for Admin
 // @route   POST /api/auth/request-reset-otp
@@ -258,6 +254,7 @@ const resetPasswordWithOtp = asyncHandler(async (req, res) => {
   // Hash new password
   const salt = await bcrypt.genSalt(10);
   admin.password = await bcrypt.hash(password, salt);
+  admin.passwordChangedAt = Date.now() - 1000; // Subtract 1s to ensure token issued right after is valid
 
   // Clear OTP fields
   admin.resetPasswordOtp = undefined;
@@ -267,12 +264,45 @@ const resetPasswordWithOtp = asyncHandler(async (req, res) => {
   res.status(200).json({ message: 'Password reset successfully. You can now log in.' });
 });
 
+// @desc    Update current admin
+// @route   PUT /api/auth/me
+// @access  Private
+const updateMe = asyncHandler(async (req, res) => {
+  const admin = await Admin.findById(req.user._id);
+
+  if (!admin) {
+    res.status(404);
+    throw new Error('Admin not found');
+  }
+
+  if (req.body.email) admin.email = req.body.email;
+  if (req.body.photo) admin.photo = req.body.photo;
+  
+  if (req.body.password) {
+    const salt = await bcrypt.genSalt(10);
+    admin.password = await bcrypt.hash(req.body.password, salt);
+    admin.passwordChangedAt = Date.now() - 1000; // Subtract 1s to account for slight time differences
+  }
+
+  const updatedAdmin = await admin.save();
+
+  res.json({
+    _id: updatedAdmin._id,
+    username: updatedAdmin.username,
+    email: updatedAdmin.email,
+    photo: updatedAdmin.photo,
+    role: 'admin',
+    subdomain: updatedAdmin.subdomain
+  });
+});
+
 module.exports = {
   subdomainAvailable,
   registerAdmin,
   loginAdmin,
   loginWorker,
   getMe,
+  updateMe,
   checkAdminInitialization,
   requestPasswordResetOtp,
   resetPasswordWithOtp

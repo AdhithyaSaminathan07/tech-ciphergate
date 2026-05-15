@@ -307,8 +307,21 @@ function processAttendanceByDay(attendanceData) {
     return (
         // Added w-full overflow-x-hidden to prevent horizontal scrolling
         <Fragment>      
-            <h1 className='text-2xl font-bold'>Attendance Report</h1>
-            <div className='bg-white border rounded-lg p-4 w-full overflow-x-hidden'>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <div>
+                    <h1 className='text-2xl font-black text-slate-900 tracking-tight'>Attendance Report</h1>
+                    <p className="text-xs text-slate-500 font-medium mt-1">Track your daily working hours and logs</p>
+                </div>
+                <Button 
+                    variant="primary" 
+                    onClick={downloadAttendanceCSV} 
+                    className="w-full sm:w-auto bg-[#0d9488] hover:bg-[#0f766e] text-white shadow-lg shadow-teal-100 flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl transition-all active:scale-95"
+                >
+                    <FaDownload size={14} /> 
+                    <span className="font-bold tracking-tight">Export Data</span>
+                </Button>
+            </div>
+            <div className='bg-white border border-slate-200/60 rounded-2xl p-6 shadow-sm w-full overflow-x-hidden'>
             {/* Improved responsive grid for filters */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <input
@@ -340,11 +353,7 @@ function processAttendanceByDay(attendanceData) {
                 onChange={e => setFilterDate(e.target.value)}
               />
             </div>
-            <div className="flex justify-end mb-6">
-              <Button variant="primary" onClick={downloadAttendanceCSV} className="w-full sm:w-auto">
-                <FaDownload className="mr-2" /> Download
-              </Button>
-            </div>
+
                 
 
 

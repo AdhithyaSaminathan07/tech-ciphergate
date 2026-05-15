@@ -164,9 +164,16 @@ const LeaveManagement = () => {
               `Total days: ${leave.totalDays || 0}`
             )}
           </p>
-          {leave.leaveType !== 'Permission' && leave.deductionFactor > 1 && (
+          {leave.leaveType === 'Paid Leave' && (
             <div className="mt-2 flex flex-wrap gap-1">
-              <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200 uppercase tracking-tighter shadow-sm flex items-center">
+              {/* <span className="bg-teal-50 text-teal-700 px-2.5 py-1 rounded-full text-[10px] font-black border border-teal-100 uppercase tracking-tighter shadow-sm flex items-center">
+                <FiDollarSign className="mr-0.5" /> SALARY: PAID (INDEPENDENT OF APPROVAL)
+              </span> */}
+            </div>
+          )}
+          {leave.leaveType !== 'Permission' && leave.leaveType !== 'Paid Leave' && leave.deductionFactor > 1 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              <span className="bg-red-100 text-red-700 px-2.5 py-1 rounded text-[10px] font-bold border border-red-200 uppercase tracking-tighter shadow-sm flex items-center">
                 <FiDollarSign className="mr-0.5" /> {leave.deductionFactor}X Deduction
               </span>
               {leave.penaltyReasons?.attendanceRule && (
@@ -228,7 +235,7 @@ const LeaveManagement = () => {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Leave Management</h1>
+      <h1 className="text-2xl font-bold mb-6 md:hidden">Leave Management</h1>
 
       {loading ? (
         <Spinner size="md" variant="default" />

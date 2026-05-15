@@ -78,12 +78,12 @@ const DeveloperCompensation = () => {
 
   const handleAddProject = async (e) => {
     e.preventDefault();
-    
+
     if (!selectedDeveloper) {
       toast.error('Please select a developer first');
       return;
     }
-    
+
     try {
       const projectAmount = parseFloat(projectForm.projectAmount);
       if (isNaN(projectAmount) || projectAmount <= 0) {
@@ -93,7 +93,7 @@ const DeveloperCompensation = () => {
 
       const developerId = selectedDeveloper._id;
       const sixtyPercent = projectAmount * 0.6;
-      
+
       // Prepare project data
       const projectData = {
         developerId: developerId,
@@ -126,17 +126,17 @@ const DeveloperCompensation = () => {
 
   const handleCalculateEarnings = (developer) => {
     const projects = developerProjects[developer._id] || [];
-    
+
     // Calculate totals with profit sharing logic
     let totalEarnings = 0;
     let totalFinalProfitSharing = 0;
     let totalBaseSalary = 0;
     let totalActualSalary = 0;
     let totalDeductedAmount = 0;
-    
+
     projects.forEach(project => {
       totalEarnings += project.developerEarnings;
-      
+
       // Calculate final profit sharing for each project
       let finalProfitSharing = project.developerEarnings;
       if (project.baseSalary && project.actualSalary) {
@@ -148,9 +148,9 @@ const DeveloperCompensation = () => {
       }
       totalFinalProfitSharing += finalProfitSharing;
     });
-    
+
     const totalProjects = projects.length;
-    
+
     setCalculationResult({
       developer: developer,
       totalEarnings: totalEarnings,
@@ -168,7 +168,7 @@ const DeveloperCompensation = () => {
     if (window.confirm('Are you sure you want to delete this project?')) {
       try {
         await deleteDeveloperProject(projectId);
-        
+
         // Update local state to remove the project
         setDeveloperProjects(prev => {
           const updatedProjects = prev[developerId].filter(project => project._id !== projectId);
@@ -176,12 +176,12 @@ const DeveloperCompensation = () => {
             ...prev,
             [developerId]: updatedProjects
           };
-          
+
           // Refresh the calculation result if it's currently displayed
           if (calculationResult && calculationResult.developer._id === developerId) {
             const totalEarnings = updatedProjects.reduce((sum, project) => sum + project.developerEarnings, 0);
             const totalProjects = updatedProjects.length;
-            
+
             setCalculationResult({
               ...calculationResult,
               totalEarnings: totalEarnings,
@@ -189,10 +189,10 @@ const DeveloperCompensation = () => {
               projects: updatedProjects
             });
           }
-          
+
           return newDeveloperProjects;
         });
-        
+
         toast.success('Project deleted successfully');
       } catch (error) {
         toast.error('Failed to delete project');
@@ -201,9 +201,9 @@ const DeveloperCompensation = () => {
   };
 
   const [summaryFilter, setSummaryFilter] = useState({ month: '', year: '' });
-  const [profitSharingFilter, setProfitSharingFilter] = useState({ 
-    month: new Date().getMonth() + 1, 
-    year: new Date().getFullYear() 
+  const [profitSharingFilter, setProfitSharingFilter] = useState({
+    month: new Date().getMonth() + 1,
+    year: new Date().getFullYear()
   });
   const [profitSharingData, setProfitSharingData] = useState(null);
   const [isProfitSharingModalOpen, setIsProfitSharingModalOpen] = useState(false);
@@ -237,37 +237,37 @@ const DeveloperCompensation = () => {
   const handleViewProfitSharing = async () => {
     try {
       setIsLoading(true);
-      
+
       // Get all developers
       const allDevelopers = await getWorkers({ subdomain });
       const developers = allDevelopers.filter(worker => worker.employeeType === 'developer');
-      
+
       // For each developer, get their salary report for the selected month/year
       const profitSharingResults = [];
-      
+
       for (const developer of developers) {
         // Calculate the start and end dates for the selected month/year
         const startDate = new Date(profitSharingFilter.year, profitSharingFilter.month - 1, 1);
         const endDate = new Date(profitSharingFilter.year, profitSharingFilter.month, 0);
-        
+
         try {
           // Get developer projects for this month/year directly from backend
           const projects = await getDeveloperProjectsByMonth(developer._id, subdomain, profitSharingFilter.month, profitSharingFilter.year);
-          
+
           // Use values returned from backend
           const totalProjectAmount = projects.projects.reduce((sum, project) => sum + project.projectAmount, 0);
           const sixtyPercentProfit = projects.totalEarnings; // This is the sum of 60% of each project amount
-          
+
           // Get salary report for the selected month/year to get actual salary
           const salaryReport = await getSalaryReport(developer._id, startDate.toISOString().split('T')[0], endDate.toISOString().split('T')[0]);
-          
+
           // Calculate profit sharing based on the formula: 60% of project profit - (base salary - actual salary)
           const baseSalary = developer.salary || 0;
           const actualSalary = salaryReport.finalSalaryWithFines || salaryReport.report?.summary?.finalSalary || 0;
           const deductedAmount = Math.max(0, baseSalary - actualSalary);
-          
+
           const finalProfitSharing = sixtyPercentProfit - deductedAmount;
-          
+
           profitSharingResults.push({
             developerId: developer._id,
             developerName: developer.name,
@@ -295,7 +295,7 @@ const DeveloperCompensation = () => {
           });
         }
       }
-      
+
       setProfitSharingData({
         month: profitSharingFilter.month,
         year: profitSharingFilter.year,
@@ -480,7 +480,7 @@ const DeveloperCompensation = () => {
                 required
               />
             </div>
-            
+
             <div>
               <label htmlFor="projectAmount" className="form-label">Project Amount (₹)</label>
               <input
@@ -495,7 +495,7 @@ const DeveloperCompensation = () => {
                 step="0.01"
               />
             </div>
-            
+
             <div>
               <label htmlFor="projectDate" className="form-label">Project Date</label>
               <input
@@ -508,7 +508,7 @@ const DeveloperCompensation = () => {
                 required
               />
             </div>
-            
+
             <div className="pt-4">
               <p className="text-sm text-gray-600">
                 <strong>Calculation:</strong><br />
@@ -519,7 +519,7 @@ const DeveloperCompensation = () => {
               </p>
             </div>
           </div>
-          
+
           <div className="flex justify-end mt-6 space-x-2">
             <Button
               type="button"
@@ -565,7 +565,7 @@ const DeveloperCompensation = () => {
                   <p className="text-2xl font-bold text-purple-600">₹{calculationResult.totalFinalProfitSharing?.toFixed(2)}</p>
                 </div>
               </div>
-              
+
               {/* Net Profit Sharing Summary */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div className="bg-green-50 p-4 rounded-lg">
@@ -577,7 +577,7 @@ const DeveloperCompensation = () => {
                   <p className="text-xl font-bold text-indigo-600">₹{calculationResult.totalFinalProfitSharing?.toFixed(2)}</p>
                 </div>
               </div>
-              
+
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -594,7 +594,7 @@ const DeveloperCompensation = () => {
                     {calculationResult.projects.map((project, index) => {
                       const deductedAmount = project.baseSalary && project.actualSalary ? project.baseSalary - project.actualSalary : 0;
                       const finalProfitSharing = project.developerEarnings - deductedAmount;
-                      
+
                       return (
                         <tr key={project._id || index}>
                           <td className="px-6 py-4 whitespace-nowrap">{project.projectName}</td>
@@ -619,7 +619,7 @@ const DeveloperCompensation = () => {
               </div>
             </div>
           )}
-          
+
           <div className="flex justify-end mt-6">
             <Button
               variant="outline"
@@ -644,12 +644,12 @@ const DeveloperCompensation = () => {
               {/* Month/Year filter display */}
               <div className="mb-4 p-3 bg-gray-100 rounded-lg">
                 <p className="text-sm text-gray-700">
-                  <strong>Filter:</strong> {summaryData.filter?.month && summaryData.filter?.year 
-                    ? `Month: ${summaryData.filter.month}, Year: ${summaryData.filter.year}` 
+                  <strong>Filter:</strong> {summaryData.filter?.month && summaryData.filter?.year
+                    ? `Month: ${summaryData.filter.month}, Year: ${summaryData.filter.year}`
                     : 'All months and years'}
                 </p>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div className="bg-blue-50 p-4 rounded-lg">
                   <h3 className="text-lg font-semibold text-blue-800">Total Developers</h3>
@@ -664,7 +664,7 @@ const DeveloperCompensation = () => {
                   <p className="text-2xl font-bold text-purple-600">₹{summaryData.overallTotalEarnings?.toFixed(2)}</p>
                 </div>
               </div>
-              
+
               {/* Additional summary details */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div className="bg-gray-50 p-4 rounded-lg">
@@ -684,7 +684,7 @@ const DeveloperCompensation = () => {
                   <p className="text-xl font-bold text-indigo-600">₹{summaryData.overallTotalFinalProfitSharing?.toFixed(2)}</p>
                 </div>
               </div>
-              
+
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -771,7 +771,7 @@ const DeveloperCompensation = () => {
               </div>
             </div>
           </div>
-          
+
           <div className="flex justify-end mt-6">
             <Button
               variant="outline"

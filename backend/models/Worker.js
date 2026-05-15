@@ -30,7 +30,6 @@ const workerSchema = mongoose.Schema({
   department: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Department',
-    required: [true, 'Please select a department']
   },
   photo: {
     type: String,
@@ -101,7 +100,7 @@ const workerSchema = mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Active', 'Relieved'],
+    enum: ['Active', 'Relieved', 'Deleted'],
     default: 'Active'
   },
   relievedAt: {
@@ -112,6 +111,24 @@ const workerSchema = mongoose.Schema({
     enum: ['not_submitted', 'submitted', 'returned'],
     default: 'not_submitted'
   },
+  email: {
+    type: String,
+    trim: true,
+    lowercase: true
+  },
+  phoneNumber: {
+    type: String,
+    trim: true
+  },
+  joiningDate: {
+    type: Date,
+    default: Date.now
+  },
+  designation: {
+    type: String,
+    trim: true,
+    default: 'Employee'
+  },
   certificate_notes: {
     type: String,
     default: ''
@@ -119,9 +136,29 @@ const workerSchema = mongoose.Schema({
   relievingLetterId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Certificate'
-  }
+  },
+  bankDetails: {
+    accountHolderName: { type: String, trim: true },
+    bankName: { type: String, trim: true },
+    accountNumber: { type: String, trim: true },
+    ifscCode: { type: String, trim: true },
+    branchName: { type: String, trim: true },
+    upiId: { type: String, trim: true }
+  },
+  notificationSettings: {
+    pushEnabled: { type: Boolean, default: true },
+    soundEnabled: { type: Boolean, default: true },
+    priorityFilter: { type: String, enum: ['All', 'High', 'Medium'], default: 'All' }
+  },
+  passwordChangedAt: Date
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+workerSchema.virtual('faceEnrolled').get(function() {
+  return Array.isArray(this.faceEmbeddings) && this.faceEmbeddings.length > 0;
 });
 
 module.exports = mongoose.model('Worker', workerSchema);

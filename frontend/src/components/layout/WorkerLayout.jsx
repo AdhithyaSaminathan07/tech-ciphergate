@@ -1,6 +1,5 @@
 import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-
 import {
   FaHome,
   FaCalendarPlus,
@@ -12,7 +11,8 @@ import {
   FaClipboardList,
   FaBook,
   FaGraduationCap,
-  FaCommentDots
+  FaCommentDots,
+  FaTasks
 } from 'react-icons/fa';
 import { useAuth } from '../../hooks/useAuth';
 import { getMyLeaves } from '../../services/leaveService';
@@ -22,6 +22,8 @@ import {
 } from '../../services/commentService';
 import Sidebar from './Sidebar';
 import appContext from '../../context/AppContext';
+import Header from './Header';
+import BottomNavigation from './BottomNavigation';
 
 const WorkerLayout = ({ children }) => {
   const { user, logout } = useAuth();
@@ -30,15 +32,12 @@ const WorkerLayout = ({ children }) => {
   const navigate = useNavigate();
   const { subdomain } = useContext(appContext);
 
-  // Check for new comments and leave updates
   useEffect(() => {
     const fetchNotificationCounts = async () => {
       try {
         if (!subdomain || subdomain == 'main') {
           return;
         }
-
-        // Fetch leaves
         const leaves = await getMyLeaves({ subdomain });
         const unviewedLeaves = leaves.filter(leave =>
           !leave.workerViewed &&
@@ -46,7 +45,6 @@ const WorkerLayout = ({ children }) => {
         ).length;
         setLeaveUpdates(unviewedLeaves);
 
-        // Fetch comments
         const comments = await getMyComments();
         const unreadAdminReplies = await getUnreadAdminReplies();
 
@@ -54,23 +52,15 @@ const WorkerLayout = ({ children }) => {
           comment.isNew ||
           (comment.replies && comment.replies.some(reply => reply.isNew))
         ).length;
-
-        // Add unread admin replies to notification count
         setNewComments(newUnreadComments + unreadAdminReplies.length);
       } catch (error) {
-        console.error('Failed to fetch notifications:', error);
+        console.error('Failed to fetch notifications:', error.message || error);
       }
     };
-
-    // Fetch immediately on mount
     fetchNotificationCounts();
-
-    // Set up periodic refresh (every 5 minutes)
     const intervalId = setInterval(fetchNotificationCounts, 5 * 60 * 1000);
-
-    // Cleanup interval on component unmount
     return () => clearInterval(intervalId);
-  }, []);
+  }, [subdomain]);
 
   const handleLogout = () => {
     logout();
@@ -78,91 +68,102 @@ const WorkerLayout = ({ children }) => {
   };
 
   const sidebarLinks = [
+    { to: '/worker', icon: <FaHome />, label: 'Dashboard' },
     {
-      to: '/worker',
-      icon: <FaHome />,
-      label: 'Dashboard'
-    },
-    {
-      to: '/worker/attendance',
+      label: 'Attendance',
       icon: <FaRegCalendarCheck />,
-      label: 'Attendance Report'
-    },
-    {
       isDropdown: true,
-      icon: <FaGraduationCap />,
-      label: 'Test',
       children: [
-        {
-          to: '/worker/tests',
-          icon: <FaClipboardList />,
-          label: 'My Test'
-        },
-        {
-          to: '/worker/daily-topics',
-          icon: <FaBook />,
-          label: 'Daily Topics'
-        }
+        { to: '/worker/attendance', label: 'Attendance Report' },
+        { to: '/worker/leave-apply', label: 'Apply for Leave' },
+        { to: '/worker/leave-requests', label: 'Leave Requests', badge: leaveUpdates > 0 ? leaveUpdates : null },
       ]
     },
     {
-      to: '/worker/food-request',
-      icon: <FaPizzaSlice />,
-      label: 'Food Request'
+      label: 'Operations',
+      icon: <FaTasks />,
+      isDropdown: true,
+      children: [
+        { to: '/worker/work-allocation', label: 'Work Allocation' },
+        { to: '/worker/invoices', label: 'Invoices' },
+      ]
     },
     {
-      to: '/worker/leave-apply',
-      icon: <FaCalendarPlus />,
-      label: 'Apply for Leave'
-    },
-    {
-      to: '/worker/leave-requests',
-      icon: <FaCalendarCheck />,
-      label: 'Leave Requests',
-      badge: leaveUpdates > 0 ? leaveUpdates : null
-    },
-    {
-      to: '/worker/notifications',
-      icon: <FaRegBell />,
-      label: 'Notifications',
-      badge: newComments > 0 ? newComments : null
-    },
-    {
-      to: '/worker/comments',
+      label: 'Communication',
       icon: <FaComments />,
-      label: 'Comments',
-      badge: newComments > 0 ? newComments : null
+      isDropdown: true,
+      children: [
+        { to: '/worker/comments', label: 'Comments', badge: newComments > 0 ? newComments : null },
+        { to: '/worker/communication', label: 'Communication' },
+        { to: '/worker/food-request', label: 'Food Request' },
+      ]
     },
     {
-      to: '/worker/communication',
-      icon: <FaCommentDots />,
-      label: 'Communication'
+      label: 'Training',
+      icon: <FaGraduationCap />,
+      isDropdown: true,
+      children: [
+        { to: '/worker/tests', label: 'My Test' },
+        { to: '/worker/daily-topics', label: 'Daily Topics' },
+      ]
     },
-    {
-      to: '/worker/invoices',
-      icon: <FaClipboardList />,
-      label: 'Invoices'
-    }
   ];
 
-  return (
-    // Added w-full overflow-x-hidden to prevent horizontal scrolling
-    <div className="flex bg-gray-100 w-full overflow-x-hidden">
-      <Sidebar
-        links={sidebarLinks}
-        logoText="Employee Dashboard"
-        user={{
-          ...user,
-          displayName: `${user.name} (${user.department})` // Show name and department
-        }}
-        onLogout={handleLogout}
-      />
+  const bottomNavItems = [
+    { to: '/worker', icon: <FaHome />, label: 'Home' },
+    { to: '/worker/work-allocation', icon: <FaTasks />, label: 'Work' },
+    { to: '/worker/leave-requests', icon: <FaCalendarCheck />, label: 'Leave', badgeKey: 'leaves' },
+    { to: '/worker/attendance', icon: <FaRegCalendarCheck />, label: 'Reports' },
+    { to: '/worker/tests', icon: <FaGraduationCap />, label: 'Training' },
+  ];
 
-      {/* Main content area - adjusted for sidebar */}
-      <div className="flex-1 md:ml-64 w-full overflow-x-hidden"> 
-        <main className="p-4 md:p-6 min-h-screen w-full overflow-x-hidden">
+  const bottomNavPaths = bottomNavItems.map(item => item.to);
+
+  const allLinks = sidebarLinks.reduce((acc, link) => {
+    if (link.isDropdown && link.children) {
+      const mappedChildren = link.children
+        .filter(child => !child.isSubHeader)
+        .map(child => ({
+          ...child,
+          icon: child.icon || link.icon
+        }));
+      return [...acc, ...mappedChildren];
+    }
+    if (!link.isHeader && !link.isDropdown) {
+      return [...acc, link];
+    }
+    return acc;
+  }, []);
+
+  const menuLinks = allLinks.filter(link => !bottomNavPaths.includes(link.to));
+
+  return (
+    <div className="flex h-screen bg-[#f8fafc] w-full overflow-hidden">
+      <div className="hidden md:block">
+        <Sidebar
+          links={sidebarLinks}
+          logoText="Employee Dashboard"
+          user={{
+            ...user,
+            displayName: `${user.name} (${user.department})`
+          }}
+          onLogout={handleLogout}
+          isAdmin={false}
+        />
+      </div>
+
+      <div className="flex-1 w-full flex flex-col h-screen overflow-hidden relative">
+        <Header 
+          user={{ ...user, displayName: `${user.name} (${user.department})` }} 
+          menuLinks={menuLinks} 
+          onLogout={handleLogout}
+          isAdmin={false}
+          onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        />
+        <main className="flex-1 p-1 sm:p-4 md:p-6 pb-24 md:pb-6 overflow-x-hidden overflow-y-auto custom-main-scroll">
           {children}
         </main>
+        <BottomNavigation navItems={bottomNavItems} badges={{ comments: newComments, leaves: leaveUpdates }} />
       </div>
     </div>
   );

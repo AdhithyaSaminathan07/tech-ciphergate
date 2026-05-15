@@ -34,7 +34,8 @@ const createDepartment = asyncHandler(async (req, res) => {
 
     // Get worker count
     const workerCount = await Worker.countDocuments({
-      department: department._id
+      department: department._id,
+      status: 'Active'
     });
 
     // Prepare response
@@ -77,7 +78,7 @@ const getDepartments = asyncHandler(async (req, res) => {
       departments.map(async (department) => {
         // Find all workers in this department, selecting only name & photo
         const employees = await Worker
-          .find({ department: department._id })
+          .find({ department: department._id, status: 'Active' })
           .select('name photo');
 
         // Calculate attendance percentage for this department
@@ -125,15 +126,22 @@ const deleteDepartment = asyncHandler(async (req, res) => {
     throw new Error('Department not found');
   }
 
-  // Check for associated workers
-  const workerCount = await Worker.countDocuments({
-    department: req.params.id
+  // Check for associated active workers
+  const activeWorkerCount = await Worker.countDocuments({
+    department: req.params.id,
+    status: 'Active'
   });
 
-  if (workerCount > 0) {
+  if (activeWorkerCount > 0) {
     res.status(400);
-    throw new Error(`Cannot delete department. ${workerCount} workers are assigned.`);
+    throw new Error(`Cannot delete department. ${activeWorkerCount} active workers are assigned.`);
   }
+
+  // Set department to null for any remaining non-active workers (Relieved or Deleted)
+  await Worker.updateMany(
+    { department: req.params.id },
+    { $set: { department: null } }
+  );
 
   await department.deleteOne();
   res.json({
@@ -177,7 +185,8 @@ const updateDepartment = asyncHandler(async (req, res) => {
 
     // Get worker count
     const workerCount = await Worker.countDocuments({
-      department: department._id
+      department: department._id,
+      status: 'Active'
     });
 
     // Prepare response

@@ -20,6 +20,15 @@ export const registerAdmin = async (userData) => {
   }
 };
 
+export const updateMe = async (userData) => {
+  try {
+    const response = await api.put('/auth/me', userData);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Failed to update profile');
+  }
+};
+
 export const login = async (credentials, userType) => {
   try {
     const response = await api.post(`/auth/${userType}`, credentials);
@@ -37,6 +46,7 @@ export const login = async (credentials, userType) => {
       role: userData.role,
       name: userData.name,
       department: userData.department,
+      photo: userData.photo,
       // Add these two lines to save salary information
       salary: userData.salary,
       finalSalary: userData.finalSalary
