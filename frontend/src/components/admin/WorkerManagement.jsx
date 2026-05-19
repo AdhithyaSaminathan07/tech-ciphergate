@@ -198,7 +198,7 @@ const WorkerManagement = () => {
 
     // Split into Active vs Archived (for visual separation)
     const active = filtered.filter(w => w.status === 'Active' || !w.status);
-    const archived = filtered.filter(w => w.status === 'Relieved' || w.status === 'Deleted');
+    const archived = filtered.filter(w => w.status === 'Relieved');
 
     return { active, archived };
   }, [workers, searchTerm, departmentFilter, batchFilter, sortBy]);
@@ -863,7 +863,7 @@ const WorkerManagement = () => {
 
 
   return (
-    <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pb-8">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between md:justify-end mb-8 gap-4">
         <div className="md:hidden">
@@ -897,7 +897,7 @@ const WorkerManagement = () => {
           className={`flex items-center space-x-2 px-6 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'archived' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-orange-600 hover:bg-white/50'}`}
         >
           <UserX size={18} className={activeTab === 'archived' ? 'text-orange-600' : 'text-gray-400'} />
-          <span>Relieved & Archived</span>
+          <span>Relieved Employees</span>
           <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'archived' ? 'bg-orange-100 text-orange-600' : 'bg-gray-200 text-gray-500'}`}>
             {processedWorkers.archived.length}
           </span>

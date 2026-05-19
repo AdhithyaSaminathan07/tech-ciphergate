@@ -283,8 +283,8 @@ const Dashboard = () => {
   });
 
   return (
-    <div className="bg-dash-bg min-h-screen p-2 md:p-4 lg:p-6">
-      <div className="max-w-[1600px] mx-auto flex flex-col gap-3 md:gap-5">
+    <div className="bg-dash-bg min-h-screen">
+      <div className="max-w-[1600px] mx-auto flex flex-col gap-4 md:gap-6 pb-10">
 
         <WelcomeBanner 
           userName={user?.name || user?.username || 'admin21'} 

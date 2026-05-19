@@ -2,16 +2,14 @@ import React, { useState, useRef, useEffect, useContext, useMemo } from 'react';
 import { FaBell, FaCheckDouble, FaCog, FaBellSlash, FaCalendarCheck, FaFileInvoice, FaComments, FaCommentDots, FaHamburger, FaBookOpen } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../../context/NotificationContext';
-import { Bell, CheckCircle2, AlertCircle, Clock, MoreVertical, Settings2, Menu, X, ChevronRight, Search, Plus, LogOut } from 'lucide-react';
+import { Bell, CheckCircle2, AlertCircle, Clock, MoreVertical, Settings2, Menu, X, ChevronRight, Search, Plus, LogOut, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getFullFileUrl } from '../../utils/fileUtils';
 import appContext from '../../context/AppContext';
 import { getWorkers } from '../../services/workerService';
 import { getAllTasks } from '../../services/taskService';
 import { getDepartments } from '../../services/departmentService';
-
 import AdminMobileMenu from './AdminMobileMenu';
-
 const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = false, onMenuClick, title }) => {
     const { notifications, unreadCount, markAsRead, settings, updateSettings } = useNotification();
     const { subdomain } = useContext(appContext);
@@ -32,7 +30,6 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
     const profileRef = useRef(null);
     const quickActionsRef = useRef(null);
     const navigate = useNavigate();
-
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -51,7 +48,6 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
-
     const filteredWorkers = useMemo(() => workers.filter(w =>
         w.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         w.username?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -71,11 +67,9 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
         ...filteredWorkers.map(w => ({ ...w, searchType: 'worker' })),
         ...filteredTasks.map(t => ({ ...t, searchType: 'task' }))
     ], [filteredDepartments, filteredWorkers, filteredTasks]);
-
     useEffect(() => {
         setSelectedIndex(0);
     }, [searchQuery]);
-
     useEffect(() => {
         const handleKeyDown = (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
@@ -104,7 +98,6 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isSearchOpen, combinedResults, selectedIndex]);
-
     const handleItemClick = (item) => {
         setIsSearchOpen(false);
         setSearchQuery('');
@@ -116,7 +109,6 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
             navigate(`/admin/departments`);
         }
     };
-
     useEffect(() => {
         if (isSearchOpen && (isAdmin ? workers.length === 0 : tasks.length === 0)) {
             const fetchSearchData = async () => {
@@ -147,67 +139,97 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
             navigate(notification.link);
         }
     };
-
     return (
         <>
-            <header className="sticky top-0 z-[100] w-full px-0.5 md:px-4 py-1 md:py-4 pointer-events-none">
-                <div className="max-w-[1440px] mx-auto relative h-14 md:h-16 pointer-events-auto">
+            <header className={`sticky top-0 z-[100] w-full ${isAdmin ? 'px-0 py-0' : 'px-0.5 md:px-4 py-1 md:py-4'} transition-all duration-300 pointer-events-none`}>
+                <div className={`${isAdmin ? 'w-full' : 'max-w-[1440px] mx-auto'} relative h-14 md:h-16 pointer-events-auto`}>
                     {/* Background Bar */}
                     <div className="absolute inset-0">
-                        <div className="h-full bg-white/90 backdrop-blur-md rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] border border-slate-100/50" />
+                        <div
+                            className={`
+                                mx-auto 
+                                h-14 
+                                md:h-16 
+                                flex 
+                                items-stretch 
+                                bg-white
+                                border-b
+                                border-slate-200/70
+                                shadow-[0_1px_2px_rgba(0,0,0,0.04)]
+                                backdrop-blur-md
+                                relative
+                                overflow-hidden
+                                transition-all
+                                duration-300
+                                ${isAdmin ? 'ring-0' : ''}
+                            `}
+                        />
                     </div>
-
                     {/* Content Overlay */}
-                    <div className="relative z-10 h-full flex items-center justify-between px-2 md:px-6">
-                        {/* Left Side: Logo & Menu */}
-                        <div className="flex items-center gap-2 md:gap-3 flex-none lg:flex-initial lg:min-w-[240px]">
+                    <div className={`relative z-10 h-full flex items-stretch justify-between ${isAdmin ? 'px-4 md:px-8' : 'px-2 md:px-6'}`}>
+                        {/* Left Side: Logo & Menu (True Bottom Aligned) */}
+                        <div className="flex items-end h-full pt-5 pb-[2px] lg:min-w-[240px]">
                             {isAdmin && (
                                 <button
                                     onClick={onMenuClick}
-                                    className="p-2 -ml-2 rounded-xl text-slate-600 hover:bg-slate-50 transition-all active:scale-95 md:hidden"
+                                    className="p-2 -ml-2 rounded-xl text-slate-500 hover:bg-slate-100/80 hover:text-slate-900 transition-all active:scale-90 md:hidden"
                                 >
-                                    <Menu size={22} />
+                                    <Menu size={20} />
                                 </button>
                             )}
-                            <div className="flex items-center gap-2">
-                                <span className="font-bold text-teal-600 tracking-tight text-base md:text-lg uppercase whitespace-nowrap">{title || 'Dashboard'}</span>
-                            </div>
+
+                            <h1
+                                className={`
+                                    font-black 
+                                    text-emerald-700 
+                                    tracking-[0.12em] 
+                                    uppercase 
+                                    leading-none
+                                    self-end
+                                    ${isAdmin ? 'text-lg md:text-xl' : 'text-base md:text-lg'}
+                                `}
+                                style={{
+                                    transform: 'translateY(2px)'
+                                }}
+                            >
+                                {title || 'Dashboard'}
+                            </h1>
                         </div>
 
                         {/* Center: Search Bar */}
-                        <div className="hidden md:flex items-center justify-center flex-1 max-w-xl px-4">
-                            <div 
-                                className="w-full max-w-[480px] flex items-center bg-slate-50/50 border border-slate-200/60 rounded-2xl px-4 py-2 gap-3 cursor-pointer hover:border-teal-300 hover:bg-white transition-all group" 
+                        <div className="hidden md:flex items-center justify-center flex-1 max-w-xl px-4 h-full">
+                            <div
+                                className={`w-full max-w-[560px] flex items-center bg-slate-100/50 border border-transparent rounded-xl px-4 py-2.5 gap-3 cursor-pointer hover:bg-slate-100 transition-all group ${isAdmin ? 'bg-slate-50/80 hover:ring-2 hover:ring-teal-500/10 shadow-sm' : ''}`}
                                 onClick={() => setIsSearchOpen(true)}
                             >
-                                <Search size={18} className="text-teal-600" />
-                                <span className="text-[14px] text-slate-400 font-medium group-hover:text-slate-500 flex-1">
-                                    {isAdmin ? "Search employees, tasks, reports..." : "Search tasks..."}
+                                <Search size={18} className="text-teal-600/80" />
+                                <span className="text-[13px] text-slate-500 font-medium group-hover:text-slate-600 flex-1">
+                                    {isAdmin ? "Search everything..." : "Search tasks..."}
                                 </span>
-                                <kbd className="hidden lg:inline-flex text-[10px] font-black text-slate-400 bg-white px-1.5 py-0.5 rounded border border-slate-100">⌘K</kbd>
+                                <div className="hidden lg:flex items-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity">
+                                    <kbd className="text-[10px] font-sans font-bold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200 shadow-sm">⌘</kbd>
+                                    <kbd className="text-[10px] font-sans font-bold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200 shadow-sm">K</kbd>
+                                </div>
                             </div>
                         </div>
-
                         {/* Right Side: Tools & Profile */}
-                        <div className="flex items-center gap-1.5 md:gap-4 flex-1 justify-end lg:flex-initial lg:min-w-[240px]">
+                        <div className="flex items-center gap-1.5 md:gap-4 flex-1 justify-end lg:flex-initial lg:min-w-[240px] h-full">
                             {/* Mobile Search Icon */}
-                            <button 
-                                onClick={() => setIsSearchOpen(true)} 
+                            <button
+                                onClick={() => setIsSearchOpen(true)}
                                 className="md:hidden p-2 rounded-xl text-slate-400 hover:bg-slate-50"
                             >
                                 <Search size={18} />
                             </button>
-
                             {/* Mobile Three Dots Menu (Worker Only) */}
                             {!isAdmin && (
                                 <div className="relative md:hidden" ref={dotMenuRef}>
-                                    <button 
-                                        onClick={() => setIs3DotOpen(!is3DotOpen)} 
+                                    <button
+                                        onClick={() => setIs3DotOpen(!is3DotOpen)}
                                         className={`p-2 rounded-xl transition-all duration-300 ${is3DotOpen ? 'bg-slate-100 text-slate-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
                                     >
                                         <MoreVertical size={18} />
                                     </button>
-
                                     <AnimatePresence>
                                         {is3DotOpen && (
                                             <motion.div
@@ -240,7 +262,6 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                     </AnimatePresence>
                                 </div>
                             )}
-
                             {/* Quick Actions (+) */}
                             <div className="relative" ref={quickActionsRef}>
                                 <button
@@ -319,11 +340,11 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                             <div className="relative" ref={dropdownRef}>
                                 <button
                                     onClick={() => setIsOpen(!isOpen)}
-                                    className={`relative p-2 rounded-xl transition-all duration-300 ${isOpen ? 'bg-teal-50 text-teal-600' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50/50'}`}
+                                    className={`relative p-2.5 rounded-xl transition-all duration-300 ${isOpen ? 'bg-teal-50 text-teal-600 shadow-inner' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100/50'}`}
                                 >
-                                    <Bell className={`w-4 h-4 md:w-5 md:h-5 ${unreadCount > 0 ? 'animate-wiggle' : ''}`} />
+                                    <Bell className={`w-[18px] h-[18px] md:w-[20px] md:h-[20px] ${unreadCount > 0 ? 'animate-wiggle' : ''}`} strokeWidth={isAdmin ? 2.5 : 2} />
                                     {unreadCount > 0 && (
-                                        <span className="absolute top-1 right-1 inline-flex items-center justify-center w-4 h-4 text-[9px] font-black text-white bg-rose-500 rounded-full border-2 border-white shadow-sm">
+                                        <span className="absolute top-2 right-2 inline-flex items-center justify-center w-4 h-4 text-[9px] font-black text-white bg-rose-500 rounded-full border-2 border-white shadow-sm ring-2 ring-rose-500/20">
                                             {unreadCount > 9 ? '9+' : unreadCount}
                                         </span>
                                     )}
@@ -444,74 +465,102 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                 </AnimatePresence>
                             </div>
 
-                            {/* Profile */}
+                            {/* Profile Section */}
                             {user && (
-                                <div className="flex items-center pl-1.5 md:pl-4 border-l border-slate-100 ml-0.5 relative" ref={profileRef}>
-                                    <div className="flex flex-col items-end mr-3 hidden lg:flex">
-                                        <span className="text-xs font-black text-slate-800 leading-none">{user.name || 'User'}</span>
-                                        <span className="text-[9px] font-black text-teal-600 uppercase tracking-widest mt-1">{user.role || 'Member'}</span>
-                                    </div>
-
-                                    <button
+                                <div className="flex items-center pl-4 md:pl-8 ml-2 relative h-full" ref={profileRef}>
+                                    <div
                                         onClick={() => setIsProfileOpen(!isProfileOpen)}
-                                        className={`h-9 w-9 rounded-xl bg-[#0d9488] text-white flex items-center justify-center font-black shadow-sm border-2 border-white relative group overflow-hidden transition-all active:scale-95 ${isProfileOpen ? 'ring-2 ring-teal-500 ring-offset-2' : ''}`}
+                                        className={`flex items-center gap-3 cursor-pointer group px-3 py-1.5 rounded-2xl transition-all duration-300 ${isProfileOpen ? 'bg-slate-100/80 shadow-inner' : 'hover:bg-slate-50'}`}
                                     >
-                                        {user.photo ? (
-                                            <img src={getFullFileUrl(user.photo)} alt="Profile" className="w-full h-full object-cover relative z-10" />
-                                        ) : (
-                                            <span className="relative z-10 text-xs">{user.name ? user.name.charAt(0).toUpperCase() : 'U'}</span>
-                                        )}
-                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors"></div>
-                                    </button>
+                                        <div className="flex flex-col items-end hidden sm:flex">
+                                            <span className="text-[13px] font-black text-slate-900 leading-tight tracking-tight uppercase">{user.name || 'User'}</span>
+                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                                <span className="text-[9px] font-black text-teal-600 uppercase tracking-[0.15em]">{user.role || 'Member'}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className={`relative h-10 w-10 rounded-xl overflow-hidden shadow-md transition-all duration-300 group-hover:shadow-teal-500/10 group-hover:scale-105 border-2 ${isProfileOpen ? 'border-teal-500 shadow-teal-500/20' : 'border-white'}`}>
+                                            {user.photo ? (
+                                                <img src={getFullFileUrl(user.photo)} alt="Profile" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full bg-slate-900 flex items-center justify-center text-white font-black text-sm">
+                                                    {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                                                </div>
+                                            )}
+                                            <div className="absolute inset-0 ring-1 ring-inset ring-black/5 rounded-xl" />
+                                        </div>
+
+                                        <ChevronDown size={14} className={`text-slate-400 transition-transform duration-300 ${isProfileOpen ? 'rotate-180 text-teal-600' : 'group-hover:text-slate-600'}`} />
+                                    </div>
 
                                     <AnimatePresence>
                                         {isProfileOpen && (
                                             <motion.div
-                                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                initial={{ opacity: 0, y: 12, scale: 0.95 }}
                                                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                className="absolute right-0 mt-3 top-full w-64 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-[350]"
+                                                exit={{ opacity: 0, y: 12, scale: 0.95 }}
+                                                transition={{ type: "spring", stiffness: 350, damping: 28 }}
+                                                className="absolute right-0 mt-2 top-[85%] w-[260px] bg-white/98 backdrop-blur-xl rounded-[20px] shadow-[0_15px_40px_rgba(0,0,0,0.12)] border border-slate-100 overflow-hidden z-[500]"
                                             >
-                                                <div className="p-4 border-b border-slate-50 bg-slate-50/30">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 rounded-xl bg-teal-600 flex items-center justify-center text-white font-black text-sm overflow-hidden">
-                                                            {user.photo ? (
-                                                                <img src={getFullFileUrl(user.photo)} alt="Profile" className="w-full h-full object-cover" />
-                                                            ) : (
-                                                                user.name ? user.name.charAt(0).toUpperCase() : 'U'
-                                                            )}
+                                                {/* Compact Premium Header */}
+                                                <div className="p-4 bg-slate-900 text-white relative overflow-hidden">
+                                                    <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/10 rounded-full blur-2xl" />
+
+                                                    <div className="relative flex items-center gap-3">
+                                                        <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center border border-white/20 p-0.5 shadow-lg flex-shrink-0">
+                                                            <div className="w-full h-full rounded-lg overflow-hidden flex items-center justify-center">
+                                                                {user.photo ? (
+                                                                    <img src={getFullFileUrl(user.photo)} alt="Profile" className="w-full h-full object-cover" />
+                                                                ) : (
+                                                                    <span className="text-sm font-black">{user.name ? user.name.charAt(0).toUpperCase() : 'U'}</span>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                         <div className="flex-1 min-w-0">
-                                                            <p className="text-sm font-black text-slate-900 truncate">{user.displayName || user.name}</p>
-                                                            <p className="text-[10px] text-teal-600 font-black uppercase tracking-widest truncate">{user.role || 'Member'}</p>
+                                                            <h3 className="text-[13px] font-black tracking-tight uppercase truncate">{user.displayName || user.name}</h3>
+                                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                                                <span className="text-[9px] font-black text-teal-400 uppercase tracking-[0.15em]">{user.role || 'Member'}</span>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
 
-                                                <div className="p-2 space-y-1">
-                                                    <button
-                                                        onClick={() => {
-                                                            navigate(isAdmin ? '/admin/profile' : '/worker/profile');
-                                                            setIsProfileOpen(false);
-                                                        }}
-                                                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-[#0d9488] rounded-xl transition-all"
-                                                    >
-                                                        <Settings2 size={18} className="opacity-70" />
-                                                        <span>Profile Settings</span>
-                                                    </button>
+                                                <div className="p-1.5 bg-white">
+                                                    <div className="space-y-0.5">
+                                                        <button
+                                                            onClick={() => {
+                                                                navigate(isAdmin ? '/admin/profile' : '/worker/profile');
+                                                                setIsProfileOpen(false);
+                                                            }}
+                                                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-600 hover:text-teal-600 hover:bg-slate-50 transition-all group/btn"
+                                                        >
+                                                            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center group-hover/btn:bg-white shadow-sm transition-all">
+                                                                <Settings2 size={16} />
+                                                            </div>
+                                                            <span className="text-[12px] font-bold uppercase tracking-tight">Account Settings</span>
+                                                            <ChevronRight size={12} className="ml-auto opacity-40 group-hover/btn:opacity-100 transition-all" />
+                                                        </button>
 
-                                                    <div className="h-px bg-slate-50 mx-2" />
+                                                        <button
+                                                            onClick={() => {
+                                                                setIsProfileOpen(false);
+                                                                onLogout();
+                                                            }}
+                                                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-rose-500 hover:bg-rose-50 transition-all group/btn"
+                                                        >
+                                                            <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center group-hover/btn:bg-white shadow-sm transition-all">
+                                                                <LogOut size={16} />
+                                                            </div>
+                                                            <span className="text-[12px] font-bold uppercase tracking-tight">Logout Session</span>
+                                                            <ChevronRight size={12} className="ml-auto opacity-40 group-hover/btn:opacity-100 transition-all" />
+                                                        </button>
+                                                    </div>
+                                                </div>
 
-                                                    <button
-                                                        onClick={() => {
-                                                            setIsProfileOpen(false);
-                                                            onLogout();
-                                                        }}
-                                                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
-                                                    >
-                                                        <LogOut size={18} className="opacity-70" />
-                                                        <span>Logout Session</span>
-                                                    </button>
+                                                <div className="px-4 py-3 bg-slate-50/50 border-t border-slate-50 flex justify-center">
+                                                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em]">Security Core v2.4</p>
                                                 </div>
                                             </motion.div>
                                         )}

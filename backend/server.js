@@ -70,7 +70,6 @@ const startServer = async () => {
     const exitManagementRoutes = require('./routes/exitManagementRoutes');
     const salesVelocityRoutes = require('./routes/salesVelocityRoutes');
     const instaxbotRoutes = require('./routes/instaxbotRoutes');
-    const { attachInstaxbotWsProxy } = require('./routes/instaxbotRoutes');
 
     // Test App routes
     const testQuestionRoutes = require('./routes/testQuestionRoutes');
@@ -156,7 +155,6 @@ const startServer = async () => {
     const server = http.createServer(app);
     const { init: initSocket } = require('./utils/socket');
     initSocket(server);
-    attachInstaxbotWsProxy(server);
 
     const PORT = process.env.PORT || 5000;
     server.listen(PORT, () => {

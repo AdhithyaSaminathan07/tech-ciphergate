@@ -82,7 +82,7 @@ This represents a significant reduction in generation time!
    ```env
    DEEPSEEK_API_KEY=your_actual_deepseek_api_key_here
    MONGO_URI=your_mongodb_connection_string_here
-   PORT=5000
+   PORT=5002
    JWT_SECRET=your_jwt_secret_here
    ```
 
