@@ -157,8 +157,10 @@ const workerSchema = mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-workerSchema.virtual('faceEnrolled').get(function() {
+workerSchema.virtual('faceEnrolled').get(function () {
   return Array.isArray(this.faceEmbeddings) && this.faceEmbeddings.length > 0;
 });
+
+workerSchema.index({ subdomain: 1, status: 1 });
 
 module.exports = mongoose.model('Worker', workerSchema);

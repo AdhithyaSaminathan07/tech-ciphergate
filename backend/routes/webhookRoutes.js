@@ -3,6 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const { handleWhatsAppWebhook, verifyWebhook } = require('../controllers/webhookController');
+const { verifyFacebookWebhook, handleFacebookWebhook } = require('../controllers/socialWebhookController');
 
 /**
  * @swagger
@@ -41,5 +42,9 @@ const { handleWhatsAppWebhook, verifyWebhook } = require('../controllers/webhook
 router.route('/whatsapp')
   .get(verifyWebhook)
   .post(handleWhatsAppWebhook);
+
+router.route('/facebook')
+  .get(verifyFacebookWebhook)
+  .post(handleFacebookWebhook);
 
 module.exports = router;

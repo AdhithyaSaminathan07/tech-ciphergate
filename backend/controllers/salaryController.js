@@ -7,8 +7,179 @@ const Leave = require('../models/Leave');
 const Settings = require('../models/Settings');
 const DeveloperProject = require('../models/DeveloperProject');
 const SalaryProject = require('../models/SalaryProject');
+const ProjectPaymentLedger = require('../models/ProjectPaymentLedger');
 const { calculateWorkerProductivity } = require('../utils/productivityCalculator');
 const Ticket = require('../models/ticketModel');
+
+// ─── Helper: Automatically record/freeze project payments for a past month ───
+const autoRecordProjectPaymentsHelper = async (employeeId, subdomain, month, year) => {
+  const monthStart = new Date(year, month - 1, 1);
+  monthStart.setHours(0, 0, 0, 0);
+  const monthEnd = new Date(year, month, 0);
+  monthEnd.setHours(23, 59, 59, 999);
+
+  // Find all projects this employee is assigned to that overlap with this month
+  const salaryProjects = await SalaryProject.find({
+    subdomain,
+    developers: employeeId,
+    startDate: { $lte: monthEnd },
+    endDate: { $gte: monthStart }
+  }).populate('developers', 'name');
+
+  if (salaryProjects.length === 0) {
+    return [];
+  }
+
+  const ledgers = [];
+  for (const project of salaryProjects) {
+    // Only record if not already recorded/settled
+    const existing = await ProjectPaymentLedger.findOne({ employeeId, projectId: project._id, month, year });
+    if (existing && existing.isSettled) {
+      continue;
+    }
+
+    const pObj = project.toObject();
+    const devCount = pObj.developers.length || 1;
+    const share = pObj.projectProfit / devCount;
+    const startD = new Date(pObj.startDate);
+    const endD = new Date(pObj.endDate);
+    let totalWorkingDays = 0;
+    const cur = new Date(startD);
+    while (cur <= endD) {
+      if (cur.getDay() !== 0) totalWorkingDays++;
+      cur.setDate(cur.getDate() + 1);
+    }
+    const perDayValue = totalWorkingDays > 0 ? share / totalWorkingDays : 0;
+
+    const projectStart = new Date(pObj.startDate);
+    projectStart.setHours(0, 0, 0, 0);
+    const projectEnd = new Date(pObj.endDate);
+    projectEnd.setHours(23, 59, 59, 999);
+    const overlapStart = new Date(Math.max(monthStart.getTime(), projectStart.getTime()));
+    const overlapEnd = new Date(Math.min(monthEnd.getTime(), projectEnd.getTime()));
+
+    let paidWorkingDays = 0;
+    if (overlapStart <= overlapEnd) {
+      const d = new Date(overlapStart);
+      d.setHours(0, 0, 0, 0);
+      while (d <= overlapEnd) {
+        if (d.getDay() !== 0) paidWorkingDays++;
+        d.setDate(d.getDate() + 1);
+      }
+    }
+
+    const paidAmount = paidWorkingDays * perDayValue;
+
+    const ledger = await ProjectPaymentLedger.findOneAndUpdate(
+      { employeeId, projectId: project._id, month, year },
+      {
+        subdomain,
+        paidAmount,
+        paidPerDayValue: perDayValue,
+        paidWorkingDays,
+        projectTotalWorkingDaysAtPayment: totalWorkingDays,
+        perDeveloperShareAtPayment: share,
+        currentPerDayValue: perDayValue,
+        currentEntitlement: paidAmount,
+        adjustmentAmount: 0,
+        isSettled: true,
+        settledAt: new Date(),
+        updatedAt: new Date()
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    ledgers.push(ledger);
+  }
+  return ledgers;
+};
+
+// ─── Helper: Calculate project adjustments from frozen ledger entries ──────────
+// This function recalculates adjustments for ALL past frozen payments for a worker.
+// It uses CURRENT project data (duration, developer count) to compute what the
+// employee SHOULD have earned, then compares against what was actually paid.
+// Adjustment = currentEntitlement - paidAmount (negative = overpaid)
+const calculateProjectAdjustments = async (workerId, subdomain, currentMonth, currentYear) => {
+  // Find all settled/frozen ledger entries for this worker (past months only)
+  const ledgerEntries = await ProjectPaymentLedger.find({
+    employeeId: workerId,
+    subdomain,
+    isSettled: true,
+    // Exclude current month — current month hasn't been paid yet
+    $or: [
+      { year: { $lt: currentYear } },
+      { year: currentYear, month: { $lt: currentMonth } }
+    ]
+  });
+
+  if (ledgerEntries.length === 0) {
+    return { totalAdjustment: 0, adjustmentDetails: [] };
+  }
+
+  // Get unique project IDs from ledger
+  const projectIds = [...new Set(ledgerEntries.map(l => l.projectId.toString()))];
+
+  // Fetch CURRENT project data to get the latest duration
+  const projects = await SalaryProject.find({ _id: { $in: projectIds } }).populate('developers', 'name');
+  const projectMap = {};
+  projects.forEach(p => {
+    const pObj = p.toObject();
+    const devCount = pObj.developers.length || 1;
+    const share = pObj.projectProfit / devCount;
+    // Count CURRENT total working days (excluding Sundays)
+    const start = new Date(pObj.startDate);
+    const end = new Date(pObj.endDate);
+    let workingDays = 0;
+    const cur = new Date(start);
+    while (cur <= end) {
+      if (cur.getDay() !== 0) workingDays++;
+      cur.setDate(cur.getDate() + 1);
+    }
+    const currentPerDay = workingDays > 0 ? share / workingDays : 0;
+    projectMap[pObj._id.toString()] = {
+      ...pObj,
+      currentPerDeveloperShare: share,
+      currentTotalWorkingDays: workingDays,
+      currentPerDayValue: currentPerDay
+    };
+  });
+
+  let totalAdjustment = 0;
+  const adjustmentDetails = [];
+
+  for (const entry of ledgerEntries) {
+    const project = projectMap[entry.projectId.toString()];
+    if (!project) continue;
+
+    // Recalculate: what SHOULD have been paid for that month
+    const currentEntitlement = entry.paidWorkingDays * project.currentPerDayValue;
+    const adjustment = currentEntitlement - entry.paidAmount;
+
+    // Update ledger entry with recalculated values (for audit trail)
+    entry.currentPerDayValue = project.currentPerDayValue;
+    entry.currentEntitlement = currentEntitlement;
+    entry.adjustmentAmount = adjustment;
+    entry.updatedAt = new Date();
+    await entry.save();
+
+    totalAdjustment += adjustment;
+    adjustmentDetails.push({
+      projectId: entry.projectId,
+      projectName: project.projectName,
+      month: entry.month,
+      year: entry.year,
+      paidAmount: entry.paidAmount,
+      paidPerDayValue: entry.paidPerDayValue,
+      paidWorkingDays: entry.paidWorkingDays,
+      currentPerDayValue: project.currentPerDayValue,
+      currentEntitlement,
+      adjustment,
+      originalTotalDays: entry.projectTotalWorkingDaysAtPayment,
+      currentTotalDays: project.currentTotalWorkingDays
+    });
+  }
+
+  return { totalAdjustment, adjustmentDetails };
+};
 
 const calculateDailyAttendancePenalties = async (subdomain, fromDate, toDate, workerId, workerDeptId, thresh) => {
   const companyPenaltyMap = {};
@@ -426,6 +597,27 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
       };
     });
 
+    // ─── PROJECT ADJUSTMENT LEDGER: Recalculate past overpayments/underpayments ──
+    const reportFromDate = new Date(fromDate);
+    const currentReportMonth = reportFromDate.getMonth() + 1;
+    const currentReportYear = reportFromDate.getFullYear();
+
+    // Auto-record if it is a completed past month
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const isPastMonth = (currentReportYear < currentYear) || (currentReportYear === currentYear && currentReportMonth < currentMonth);
+    if (isPastMonth) {
+      await autoRecordProjectPaymentsHelper(id, worker.subdomain, currentReportMonth, currentReportYear);
+    }
+
+    const { totalAdjustment: projectAdjustment, adjustmentDetails: projectAdjustmentDetails } = await calculateProjectAdjustments(
+      id, worker.subdomain, currentReportMonth, currentReportYear
+    );
+
+    // Apply project adjustment to final salary (adjustment may be negative for overpayments)
+    const finalSalaryWithAdjustment = Math.max(0, finalSalaryWithFines + projectAdjustment);
+
     res.status(200).json({
       message: 'Salary report generated successfully',
       report,
@@ -433,7 +625,9 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
       totalBonusAmount: totalBonusAmount,
       totalFinesAmount: totalFinesAmount, // ADD THIS
       finalSalaryWithBonus: finalSalaryWithBonus,
-      finalSalaryWithFines: finalSalaryWithFines, // ADD THIS
+      finalSalaryWithFines: finalSalaryWithAdjustment, // NOW includes adjustment
+      projectAdjustment, // NEW: total adjustment amount
+      projectAdjustmentDetails, // NEW: detailed breakdown per project/month
       isCurrentlyViolating,
       earliestDeadline,
       delayedTasks,
@@ -673,10 +867,31 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
       };
     });
 
+    // ─── PROJECT ADJUSTMENT LEDGER: Recalculate past overpayments/underpayments ──
+    const startDateObj = new Date(start);
+    const currentReportMonth = startDateObj.getMonth() + 1;
+    const currentReportYear = startDateObj.getFullYear();
+
+    // Auto-record if it is a completed past month
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const isPastMonth = (currentReportYear < currentYear) || (currentReportYear === currentYear && currentReportMonth < currentMonth);
+    if (isPastMonth) {
+      await autoRecordProjectPaymentsHelper(id, worker.subdomain, currentReportMonth, currentReportYear);
+    }
+
+    const { totalAdjustment: projectAdjustment, adjustmentDetails: projectAdjustmentDetails } = await calculateProjectAdjustments(
+      id, worker.subdomain, currentReportMonth, currentReportYear
+    );
+
+    // Apply project adjustment to final salary
+    const finalSalaryWithAdjustment = Math.max(0, finalSalaryWithFines + projectAdjustment);
+
     const responseData = {
       message: 'Salary report generated successfully',
       baseSalary: worker.salary,
-      finalSalary: finalSalaryWithFines,
+      finalSalary: finalSalaryWithAdjustment,
       actualEarnedSalary: report.summary.finalSalary || 0,
       totalDeductions: (report.summary.totalSalaryDeduction || 0) + totalFinesAmount,
       report,
@@ -684,6 +899,9 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
       totalBonusAmount: totalBonusAmount,
       totalFinesAmount: totalFinesAmount,
       finalSalaryWithBonus: finalSalaryWithBonus,
+      finalSalaryWithFines: finalSalaryWithAdjustment,
+      projectAdjustment, // NEW: total adjustment amount
+      projectAdjustmentDetails, // NEW: detailed breakdown
       isCurrentlyViolating,
       earliestDeadline,
       delayedTasks,
@@ -1261,17 +1479,51 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         });
       });
 
+      // ─── PROJECT ADJUSTMENT for bulk ──
+      // Note: for bulk we use a sync-compatible approach — query ledger entries
+      // We'll calculate this in a post-processing step below
       return {
         workerId,
         name: worker.name,
         department: worker.department?.name || 'N/A',
         grossFinalSalary: finalSalaryWithFines,
         taskPenalty: taskPenalty,
-        totalFinalSalary: finalSalaryWithFines
+        totalFinalSalary: finalSalaryWithFines,
+        subdomain: worker.subdomain
       };
     });
 
-    res.status(200).json({ reports: results });
+    // ─── Apply project adjustments to bulk results ──
+    const bulkFromDate = new Date(fromDate);
+    const bulkMonth = bulkFromDate.getMonth() + 1;
+    const bulkYear = bulkFromDate.getFullYear();
+
+    // Auto-record if it is a completed past month
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const isPastMonth = (bulkYear < currentYear) || (bulkYear === currentYear && bulkMonth < currentMonth);
+
+    const adjustedResults = await Promise.all(results.map(async (result) => {
+      try {
+        if (isPastMonth) {
+          await autoRecordProjectPaymentsHelper(result.workerId, result.subdomain || subdomain, bulkMonth, bulkYear);
+        }
+        const { totalAdjustment } = await calculateProjectAdjustments(
+          result.workerId, result.subdomain || subdomain, bulkMonth, bulkYear
+        );
+        return {
+          ...result,
+          projectAdjustment: totalAdjustment,
+          totalFinalSalary: Math.max(0, result.totalFinalSalary + totalAdjustment)
+        };
+      } catch (err) {
+        // If adjustment calculation fails, return original result
+        return { ...result, projectAdjustment: 0 };
+      }
+    }));
+
+    res.status(200).json({ reports: adjustedResults });
   } catch (error) {
     console.error('Bulk salary report error:', error);
     res.status(500).json({ message: 'Failed to generate bulk salary report' });
@@ -1439,6 +1691,216 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
   }
 });
 
+// ─── Record/Freeze Project Payment for a month ────────────────────────────────
+// Called by admin to freeze the current month's project salary into the ledger.
+// Once frozen, any future project extension will create an adjustment.
+const recordProjectPayment = asyncHandler(async (req, res) => {
+  const { employeeId, projectId, subdomain, month, year } = req.body;
+
+  if (!employeeId || !projectId || !subdomain || !month || !year) {
+    return res.status(400).json({ message: 'employeeId, projectId, subdomain, month, and year are required' });
+  }
+
+  // Check if already recorded
+  const existing = await ProjectPaymentLedger.findOne({ employeeId, projectId, month, year });
+  if (existing && existing.isSettled) {
+    return res.status(400).json({ message: 'Payment for this project/month is already recorded', ledger: existing });
+  }
+
+  // Get current project data
+  const project = await SalaryProject.findById(projectId).populate('developers', 'name');
+  if (!project) {
+    return res.status(404).json({ message: 'Project not found' });
+  }
+
+  // Calculate current per-day value
+  const pObj = project.toObject();
+  const devCount = pObj.developers.length || 1;
+  const share = pObj.projectProfit / devCount;
+  const startD = new Date(pObj.startDate);
+  const endD = new Date(pObj.endDate);
+  let totalWorkingDays = 0;
+  const cur = new Date(startD);
+  while (cur <= endD) {
+    if (cur.getDay() !== 0) totalWorkingDays++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  const perDayValue = totalWorkingDays > 0 ? share / totalWorkingDays : 0;
+
+  // Calculate working days for this employee in this project for the given month
+  const monthStart = new Date(year, month - 1, 1);
+  monthStart.setHours(0, 0, 0, 0);
+  const monthEnd = new Date(year, month, 0);
+  monthEnd.setHours(23, 59, 59, 999);
+  const projectStart = new Date(pObj.startDate);
+  projectStart.setHours(0, 0, 0, 0);
+  const projectEnd = new Date(pObj.endDate);
+  projectEnd.setHours(23, 59, 59, 999);
+
+  // Overlap between project range and month range
+  const overlapStart = new Date(Math.max(monthStart.getTime(), projectStart.getTime()));
+  const overlapEnd = new Date(Math.min(monthEnd.getTime(), projectEnd.getTime()));
+
+  let paidWorkingDays = 0;
+  if (overlapStart <= overlapEnd) {
+    const d = new Date(overlapStart);
+    d.setHours(0, 0, 0, 0);
+    while (d <= overlapEnd) {
+      if (d.getDay() !== 0) paidWorkingDays++;
+      d.setDate(d.getDate() + 1);
+    }
+  }
+
+  const paidAmount = paidWorkingDays * perDayValue;
+
+  // Upsert the ledger entry
+  const ledger = await ProjectPaymentLedger.findOneAndUpdate(
+    { employeeId, projectId, month, year },
+    {
+      subdomain,
+      paidAmount,
+      paidPerDayValue: perDayValue,
+      paidWorkingDays,
+      projectTotalWorkingDaysAtPayment: totalWorkingDays,
+      perDeveloperShareAtPayment: share,
+      currentPerDayValue: perDayValue,
+      currentEntitlement: paidAmount,
+      adjustmentAmount: 0,
+      isSettled: true,
+      settledAt: new Date(),
+      updatedAt: new Date()
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+
+  res.status(200).json({
+    message: 'Project payment recorded successfully',
+    ledger,
+    details: {
+      perDayValue,
+      paidWorkingDays,
+      totalWorkingDays,
+      perDeveloperShare: share,
+      paidAmount
+    }
+  });
+});
+
+// ─── Bulk Record: Freeze payments for ALL projects of an employee for a month ─
+const recordAllProjectPayments = asyncHandler(async (req, res) => {
+  const { employeeId, subdomain, month, year } = req.body;
+
+  if (!employeeId || !subdomain || !month || !year) {
+    return res.status(400).json({ message: 'employeeId, subdomain, month, and year are required' });
+  }
+
+  const monthStart = new Date(year, month - 1, 1);
+  monthStart.setHours(0, 0, 0, 0);
+  const monthEnd = new Date(year, month, 0);
+  monthEnd.setHours(23, 59, 59, 999);
+
+  // Find all projects this employee is assigned to that overlap with this month
+  const salaryProjects = await SalaryProject.find({
+    subdomain,
+    developers: employeeId,
+    startDate: { $lte: monthEnd },
+    endDate: { $gte: monthStart }
+  }).populate('developers', 'name');
+
+  if (salaryProjects.length === 0) {
+    return res.status(200).json({ message: 'No projects found for this employee in the given month', ledgers: [] });
+  }
+
+  const ledgers = [];
+  for (const project of salaryProjects) {
+    const pObj = project.toObject();
+    const devCount = pObj.developers.length || 1;
+    const share = pObj.projectProfit / devCount;
+    const startD = new Date(pObj.startDate);
+    const endD = new Date(pObj.endDate);
+    let totalWorkingDays = 0;
+    const cur = new Date(startD);
+    while (cur <= endD) {
+      if (cur.getDay() !== 0) totalWorkingDays++;
+      cur.setDate(cur.getDate() + 1);
+    }
+    const perDayValue = totalWorkingDays > 0 ? share / totalWorkingDays : 0;
+
+    const projectStart = new Date(pObj.startDate);
+    projectStart.setHours(0, 0, 0, 0);
+    const projectEnd = new Date(pObj.endDate);
+    projectEnd.setHours(23, 59, 59, 999);
+    const overlapStart = new Date(Math.max(monthStart.getTime(), projectStart.getTime()));
+    const overlapEnd = new Date(Math.min(monthEnd.getTime(), projectEnd.getTime()));
+
+    let paidWorkingDays = 0;
+    if (overlapStart <= overlapEnd) {
+      const d = new Date(overlapStart);
+      d.setHours(0, 0, 0, 0);
+      while (d <= overlapEnd) {
+        if (d.getDay() !== 0) paidWorkingDays++;
+        d.setDate(d.getDate() + 1);
+      }
+    }
+
+    const paidAmount = paidWorkingDays * perDayValue;
+
+    const ledger = await ProjectPaymentLedger.findOneAndUpdate(
+      { employeeId, projectId: project._id, month, year },
+      {
+        subdomain,
+        paidAmount,
+        paidPerDayValue: perDayValue,
+        paidWorkingDays,
+        projectTotalWorkingDaysAtPayment: totalWorkingDays,
+        perDeveloperShareAtPayment: share,
+        currentPerDayValue: perDayValue,
+        currentEntitlement: paidAmount,
+        adjustmentAmount: 0,
+        isSettled: true,
+        settledAt: new Date(),
+        updatedAt: new Date()
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    ledgers.push(ledger);
+  }
+
+  res.status(200).json({
+    message: `${ledgers.length} project payment(s) recorded successfully`,
+    ledgers
+  });
+});
+
+// ─── Get Project Adjustment Ledger History ─────────────────────────────────────
+const getProjectAdjustmentLedger = asyncHandler(async (req, res) => {
+  const { workerId } = req.params;
+  const { subdomain } = req.query;
+
+  if (!workerId) {
+    return res.status(400).json({ message: 'workerId is required' });
+  }
+
+  const ledgerEntries = await ProjectPaymentLedger.find({
+    employeeId: workerId,
+    ...(subdomain ? { subdomain } : {})
+  })
+    .populate('projectId', 'projectName startDate endDate projectAmount projectProfit')
+    .sort({ year: -1, month: -1 });
+
+  // Also recalculate adjustments against current project data
+  const now = new Date();
+  const { totalAdjustment, adjustmentDetails } = await calculateProjectAdjustments(
+    workerId, subdomain || '', now.getMonth() + 1, now.getFullYear()
+  );
+
+  res.status(200).json({
+    ledgerEntries,
+    totalAdjustment,
+    adjustmentDetails
+  });
+});
+
 module.exports = {
   giveBonus,
   removeBonus,
@@ -1457,5 +1919,9 @@ module.exports = {
   getSalaryProjects,
   getSalaryProjectsForWorker,
   updateSalaryProject,
-  deleteSalaryProject
+  deleteSalaryProject,
+  // Project adjustment ledger
+  recordProjectPayment,
+  recordAllProjectPayments,
+  getProjectAdjustmentLedger
 };

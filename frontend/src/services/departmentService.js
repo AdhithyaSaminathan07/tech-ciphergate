@@ -48,7 +48,8 @@ export const getDepartments = async (subdomain) => {
     return Array.isArray(response.data) ? response.data : [];
     
   } catch (error) {
-    // ... error handling ...
+    console.error('Departments fetch error:', error);
+    throw error.response ? error.response.data : new Error('Failed to fetch departments');
   }
 };
 

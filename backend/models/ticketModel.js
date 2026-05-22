@@ -92,6 +92,26 @@ const ticketSchema = new mongoose.Schema({
             type: Date
         }
     }],
+    referenceFiles: [{
+        url: {
+            type: String,
+            required: true
+        },
+        name: {
+            type: String,
+            required: true
+        },
+        type: {
+            type: String
+        },
+        size: {
+            type: Number
+        },
+        uploadedAt: {
+            type: Date,
+            default: Date.now
+        }
+    }],
     isDeleted: {
         type: Boolean,
         default: false
@@ -124,5 +144,8 @@ ticketSchema.pre('save', function (next) {
 
     next();
 });
+
+ticketSchema.index({ subdomain: 1, isDeleted: 1 });
+ticketSchema.index({ status: 1 });
 
 module.exports = mongoose.model('Ticket', ticketSchema);

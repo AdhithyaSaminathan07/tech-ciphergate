@@ -178,6 +178,7 @@ const loginWorker = asyncHandler(async (req, res) => {
       _id: worker._id,
       username: worker.username,
       name: worker.name,
+      email: worker.email,
       subdomain: worker.subdomain,
       salary: worker.salary,
       finalSalary: worker.finalSalary,

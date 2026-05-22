@@ -8,7 +8,7 @@ import Spinner from '../common/Spinner';
 import { useAuth } from '../../hooks/useAuth';
 import {
     Search, CheckSquare, AlertCircle, Bookmark, Zap, ArrowUp, ArrowDown,
-    Minus, X, User, AlignLeft, Calendar, Users, Paperclip, CheckCircle2, History, Upload, File, HelpCircle
+    Minus, X, User, AlignLeft, Calendar, Users, Paperclip, CheckCircle2, History, Upload, File, HelpCircle, Download, FileText
 } from 'lucide-react';
 import { getFullFileUrl } from '../../utils/fileUtils';
 
@@ -61,6 +61,14 @@ const WorkerWorkAllocation = () => {
     const [refViewer, setRefViewer] = useState({ isOpen: false, url: '', name: '' });
     const [activeSubTask, setActiveSubTask] = useState(null);
     const [isFetchingCompletions, setIsFetchingCompletions] = useState(false);
+    const [expandedSubTasks, setExpandedSubTasks] = useState({});
+
+    const toggleSubTaskExpand = (idx) => {
+        setExpandedSubTasks(prev => ({
+            ...prev,
+            [idx]: !prev[idx]
+        }));
+    };
 
     const columns = ['To Do', 'In Progress', 'Review', 'Done'];
 
@@ -71,6 +79,7 @@ const WorkerWorkAllocation = () => {
     }, [subdomain, user]);
 
     useEffect(() => {
+        setExpandedSubTasks({});
         if (selectedTicket) {
             fetchCompletions(selectedTicket._id);
         } else {
@@ -455,13 +464,13 @@ const WorkerWorkAllocation = () => {
                                                 <div className="flex justify-between items-center mb-1 text-[10px] text-gray-400 font-bold uppercase tracking-wider">
                                                     <span>My Progress</span>
                                                     <span>
-                                                        {ticket.status === 'Done' ? 100 : Math.round((ticket.checklist.filter(i => i.completed).length / ticket.checklist.length) * 100)}%
+                                                        {ticket.status === 'Done' ? 100 : (ticket.status === 'Review' ? 90 : (ticket.status === 'In Progress' ? 25 : 0))}%
                                                     </span>
                                                 </div>
                                                 <div className="w-full bg-gray-100 rounded-full h-1 shadow-inner">
                                                     <div
                                                         className="bg-teal-500 h-1 rounded-full transition-all duration-300 shadow-sm"
-                                                        style={{ width: `${ticket.status === 'Done' ? 100 : (ticket.checklist.filter(i => i.completed).length / ticket.checklist.length) * 100}%` }}
+                                                        style={{ width: `${ticket.status === 'Done' ? 100 : (ticket.status === 'Review' ? 90 : (ticket.status === 'In Progress' ? 25 : 0))}%` }}
                                                     ></div>
                                                 </div>
                                             </div>
@@ -532,7 +541,7 @@ const WorkerWorkAllocation = () => {
             {/* Responsive Detail Modal */}
             {isModalOpen && selectedTicket && (
                 <div className="fixed inset-0 bg-black/40 z-[600] flex flex-col items-center justify-center sm:p-6 backdrop-blur-sm transition-opacity">
-                    <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-5xl h-[95vh] sm:h-[85vh] flex flex-col mt-auto sm:mt-0 overflow-hidden">
+                    <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-[1300px] h-[95vh] sm:h-[90vh] flex flex-col mt-auto sm:mt-0 overflow-hidden">
 
                         {/* Header */}
                         <div className="px-6 py-4 flex justify-between items-center text-gray-600 shrink-0 border-b border-gray-100 bg-gray-50/50">
@@ -578,14 +587,14 @@ const WorkerWorkAllocation = () => {
                                                             )}
                                                     </span>
                                                     <span className="text-sm font-extrabold text-teal-600">
-                                                        {selectedTicket.checklist.length > 0 ? Math.round((selectedTicket.checklist.filter((item, idx) => ticketCompletions.some(c => (String(c.subTaskId) === String(item._id) || String(c.subTaskId) === String(idx)) && String(c.workerId?._id || c.workerId) === String(user._id) && c.isCompleted)).length / selectedTicket.checklist.length) * 100) : 0}%
+                                                        {selectedTicket.status === 'Done' ? 100 : (selectedTicket.status === 'Review' ? 90 : (selectedTicket.status === 'In Progress' ? 25 : 0))}%
                                                     </span>
                                                 </div>
 
                                                 <div className="w-full bg-gray-200 rounded-full h-2 mb-6 shadow-inner">
                                                     <div
                                                         className="bg-teal-500 h-2 rounded-full transition-all duration-500 shadow-sm"
-                                                        style={{ width: `${selectedTicket.checklist.length > 0 ? (selectedTicket.checklist.filter((item, idx) => ticketCompletions.some(c => (String(c.subTaskId) === String(item._id) || String(c.subTaskId) === String(idx)) && String(c.workerId?._id || c.workerId) === String(user._id) && c.isCompleted)).length / selectedTicket.checklist.length) * 100 : 0}%` }}
+                                                        style={{ width: `${selectedTicket.status === 'Done' ? 100 : (selectedTicket.status === 'Review' ? 90 : (selectedTicket.status === 'In Progress' ? 25 : 0))}%` }}
                                                     ></div>
                                                 </div>
 
@@ -615,22 +624,32 @@ const WorkerWorkAllocation = () => {
                                                                         />
                                                                     </div>
                                                                     <div className="flex-1 min-w-0 mr-4">
-                                                                        <div className="flex items-center gap-2 mb-1">
-                                                                            <label
-                                                                                htmlFor={`item-${idx}`}
-                                                                                className={`text-sm font-bold block cursor-pointer transition-all truncate ${isDone ? 'text-gray-400 line-through' : 'text-gray-700 hover:text-teal-700'}`}
-                                                                                title={item.text}
-                                                                            >
-                                                                                {item.text}
-                                                                            </label>
-                                                                            {status === 'Submitted' && (
-                                                                                <span className="text-[9px] font-extrabold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full uppercase tracking-tighter">Submitted</span>
-                                                                            )}
-                                                                            {status === 'Approved' && (
-                                                                                <span className="text-[9px] font-extrabold bg-teal-100 text-teal-600 px-1.5 py-0.5 rounded-full uppercase tracking-tighter">Approved</span>
-                                                                            )}
-                                                                            {status === 'Rejected' && (
-                                                                                <span className="text-[9px] font-extrabold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full uppercase tracking-tighter">Rejected</span>
+                                                                        <div className="flex flex-col mb-1">
+                                                                            <div className="flex items-start gap-2">
+                                                                                <div
+                                                                                    onClick={() => toggleSubTaskExpand(idx)}
+                                                                                    className={`text-sm font-bold block cursor-pointer transition-all hover:text-teal-700 ${expandedSubTasks[idx] ? 'whitespace-pre-wrap break-words' : 'truncate'} ${isDone ? 'text-gray-400 line-through' : 'text-gray-700'}`}
+                                                                                    title={expandedSubTasks[idx] ? "Click to collapse" : "Click to view more details"}
+                                                                                >
+                                                                                    {item.text}
+                                                                                </div>
+                                                                                {status === 'Submitted' && (
+                                                                                    <span className="text-[9px] font-extrabold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full uppercase tracking-tighter shrink-0 mt-0.5">Submitted</span>
+                                                                                )}
+                                                                                {status === 'Approved' && (
+                                                                                    <span className="text-[9px] font-extrabold bg-teal-100 text-teal-600 px-1.5 py-0.5 rounded-full uppercase tracking-tighter shrink-0 mt-0.5">Approved</span>
+                                                                                )}
+                                                                                {status === 'Rejected' && (
+                                                                                    <span className="text-[9px] font-extrabold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full uppercase tracking-tighter shrink-0 mt-0.5">Rejected</span>
+                                                                                )}
+                                                                            </div>
+                                                                            {item.text && item.text.length > 40 && (
+                                                                                <button
+                                                                                    onClick={() => toggleSubTaskExpand(idx)}
+                                                                                    className="text-[10px] text-teal-600 hover:text-teal-800 font-bold mt-1 text-left hover:underline select-none"
+                                                                                >
+                                                                                    {expandedSubTasks[idx] ? 'Show less' : '... more details'}
+                                                                                </button>
                                                                             )}
                                                                         </div>
 
@@ -739,6 +758,34 @@ const WorkerWorkAllocation = () => {
                                             </div>
                                         )}
                                     </div>
+
+                                    {/* Task References Section */}
+                                    {selectedTicket.referenceFiles && selectedTicket.referenceFiles.length > 0 && (
+                                        <div className="mt-6 pt-4 border-t border-gray-100">
+                                            <label className="text-sm font-bold text-gray-700 flex items-center mb-3">
+                                                <Paperclip className="w-4 h-4 mr-2 text-teal-600" /> Task References
+                                            </label>
+                                            <div className="bg-gray-50/50 border border-gray-200 rounded-xl p-4 flex flex-wrap gap-3">
+                                                {selectedTicket.referenceFiles.map((file, idx) => (
+                                                    <div
+                                                        key={file._id || idx}
+                                                        onClick={() => setRefViewer({ isOpen: true, url: getFullFileUrl(file.url), name: file.name || `Reference ${idx + 1}` })}
+                                                        className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-150 hover:border-teal-300 hover:text-teal-600 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer select-none"
+                                                    >
+                                                        <img
+                                                            src={getFullFileUrl(file.url)}
+                                                            alt={file.name}
+                                                            className="w-8 h-8 rounded object-cover border border-gray-100 shrink-0"
+                                                            onError={(e) => {
+                                                                e.target.style.display = 'none';
+                                                            }}
+                                                        />
+                                                        <span className="truncate max-w-[150px]">{file.name || `Reference ${idx + 1}`}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Employee Query Section */}
                                     <div className="mt-6 pt-4 border-t border-gray-100">
@@ -966,6 +1013,8 @@ const WorkerWorkAllocation = () => {
                     </div>
                 </div>
             )}
+
+
 
             {/* Custom Scrollbar Styles appended for webkit */}
             <style dangerouslySetInnerHTML={{

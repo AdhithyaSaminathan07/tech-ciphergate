@@ -171,16 +171,18 @@ const ApiKeyManagement = () => {
                                         <p className="text-xs text-gray-500">{apiKey.subdomain}</p>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <div className="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-md border border-gray-200 group">
+                                        <div className="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-md border border-gray-200 group w-fit">
                                             <code className="text-xs font-mono text-blue-700">
-                                                {apiKey.key.substring(0, 8)}...{apiKey.key.substring(apiKey.key.length - 4)}
+                                                {apiKey.key ? `${apiKey.key.substring(0, 8)}...${apiKey.key.substring(apiKey.key.length - 4)}` : 'N/A'}
                                             </code>
-                                            <button 
-                                                onClick={() => copyToClipboard(apiKey.key)}
-                                                className="text-gray-400 hover:text-blue-600 transition-colors"
-                                            >
-                                                {copiedKey === apiKey.key ? <FiCheck className="text-green-500" /> : <FiCopy size={14} />}
-                                            </button>
+                                            {apiKey.key && (
+                                                <button 
+                                                    onClick={() => copyToClipboard(apiKey.key)}
+                                                    className="text-gray-400 hover:text-blue-600 transition-colors"
+                                                >
+                                                    {copiedKey === apiKey.key ? <FiCheck className="text-green-500" /> : <FiCopy size={14} />}
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">

@@ -4,7 +4,9 @@ const {
     getTickets,
     createTicket,
     updateTicket,
-    deleteTicket
+    deleteTicket,
+    uploadTicketReference,
+    deleteTicketReference
 } = require('../controllers/ticketController');
 const {
     upsertCompletion,
@@ -36,10 +38,6 @@ router.route('/')
     .get(protect, getTickets)
     .post(protect, createTicket);
 
-router.route('/:id')
-    .put(protect, updateTicket)
-    .delete(protect, deleteTicket);
-
 // Sub-task completion routes
 router.get('/:ticketId/completions', protect, getTicketCompletions);
 router.post('/completions/upload', protect, upload.array('proofs', 10), upsertCompletion);
@@ -47,5 +45,12 @@ router.post('/completions/reference', protect, upload.array('references', 10), u
 router.delete('/completions/:completionId/proof/:fileId', protect, deleteProofFile);
 router.delete('/completions/:completionId/reference/:fileId', protect, deleteReferenceFile);
 router.put('/completions/:completionId/review', protect, reviewCompletion);
+
+router.route('/:id')
+    .put(protect, updateTicket)
+    .delete(protect, deleteTicket);
+
+router.post('/:id/reference', protect, upload.array('references', 10), uploadTicketReference);
+router.delete('/:id/reference/:fileId', protect, deleteTicketReference);
 
 module.exports = router;

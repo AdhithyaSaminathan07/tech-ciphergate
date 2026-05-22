@@ -89,3 +89,27 @@ export const uploadReference = async (formData) => {
         throw error.response?.data?.message || 'Error uploading reference';
     }
 };
+
+// Upload ticket-level reference files
+export const uploadTicketReference = async (ticketId, formData) => {
+    try {
+        const response = await api.post(`${API_URL}/${ticketId}/reference`, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        });
+        return response.data;
+    } catch (error) {
+        throw error.response?.data?.message || 'Error uploading ticket reference';
+    }
+};
+
+// Delete ticket-level reference file
+export const deleteTicketReference = async (ticketId, fileId) => {
+    try {
+        const response = await api.delete(`${API_URL}/${ticketId}/reference/${fileId}`);
+        return response.data;
+    } catch (error) {
+        throw error.response?.data?.message || 'Error deleting ticket reference';
+    }
+};

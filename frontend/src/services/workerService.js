@@ -70,7 +70,7 @@ export const getWorkers = async (subdomainParam) => {
     return response.data || [];
   } catch (error) {
     console.error('Workers fetch error:', error);
-    return [];
+    throw error.response ? error.response.data : new Error('Failed to fetch workers');
   }
 };
 

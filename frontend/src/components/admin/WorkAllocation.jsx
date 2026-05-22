@@ -1,7 +1,7 @@
- import React, { useState, useEffect, useContext, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useRef } from 'react';
 import appContext from '../../context/AppContext';
 import { useSocket } from '../../context/SocketContextNew';
-import { getTickets, createTicket, updateTicket, deleteTicket, getTicketCompletions, uploadReference } from '../../services/ticketService';
+import { getTickets, createTicket, updateTicket, deleteTicket, getTicketCompletions, uploadReference, uploadTicketReference, deleteTicketReference } from '../../services/ticketService';
 import { getWorkers } from '../../services/workerService';
 import Spinner from '../common/Spinner';
 import {
@@ -45,8 +45,8 @@ const TitleInput = ({ initialValue, onUpdate }) => {
             autoFocus
             value={localValue}
             onChange={handleChange}
-            className="w-full text-xl font-bold text-gray-800 border-none bg-transparent rounded-xl p-0 focus:outline-none transition-all leading-tight placeholder-gray-200 overflow-hidden text-ellipsis whitespace-nowrap"
-            placeholder="Untitled Workspace..."
+            className="w-full text-lg font-bold text-slate-800 border border-slate-200 bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:border-teal-500 rounded-xl px-4 py-3 focus:outline-none transition-all leading-snug placeholder-slate-300 shadow-sm"
+            placeholder="Enter workspace title..."
             title={localValue}
         />
     );
@@ -369,12 +369,16 @@ const WorkAllocation = () => {
     const [zoomedImage, setZoomedImage] = useState(null);
     const [uploadingRef, setUploadingRef] = useState({ ticketId: null, subTaskId: null, workerId: null });
     const refFileInputRef = useRef(null);
+    const taskRefFileInputRef = useRef(null);
+    const [isDraggingTaskRef, setIsDraggingTaskRef] = useState(false);
+    const [expandedSubTasks, setExpandedSubTasks] = useState({});
 
     const columns = ['To Do', 'In Progress', 'Review', 'Done'];
 
     useEffect(() => { fetchData(); }, [subdomain]);
 
     useEffect(() => {
+        setExpandedSubTasks({});
         if (selectedTicket && selectedTicket._id !== 'new') {
             fetchCompletions(selectedTicket._id);
         } else {
@@ -437,6 +441,13 @@ const WorkAllocation = () => {
             socket.off('subtask:completion_updated');
         };
     }, [socket, selectedTicket]);
+
+    const toggleSubTaskExpand = (idx) => {
+        setExpandedSubTasks(prev => ({
+            ...prev,
+            [idx]: !prev[idx]
+        }));
+    };
 
     const fetchData = async () => {
         setLoading(true);
@@ -521,9 +532,9 @@ const WorkAllocation = () => {
 
     const handleDeleteReference = async (ticketId, subTaskId, workerId, fileId) => {
         try {
-            const comp = ticketCompletions.find(c => 
-                String(c.ticketId) === String(ticketId) && 
-                String(c.subTaskId) === String(subTaskId) && 
+            const comp = ticketCompletions.find(c =>
+                String(c.ticketId) === String(ticketId) &&
+                String(c.subTaskId) === String(subTaskId) &&
                 String(c.workerId?._id || c.workerId) === String(workerId)
             );
             if (!comp) return;
@@ -559,18 +570,93 @@ const WorkAllocation = () => {
         }
     };
 
+    const uploadTaskRefFiles = async (files, ticketId) => {
+        if (!files || files.length === 0) return;
+
+        const formData = new FormData();
+        for (let i = 0; i < files.length; i++) {
+            formData.append('references', files[i]);
+        }
+
+        try {
+            const data = await uploadTicketReference(ticketId, formData);
+            if (data.success) {
+                if (ticketId === 'new') {
+                    const newFiles = data.referenceFiles || [];
+                    setSelectedTicket(prev => ({
+                        ...prev,
+                        referenceFiles: [...(prev.referenceFiles || []), ...newFiles]
+                    }));
+                } else {
+                    setSelectedTicket(data.ticket);
+                    setTickets(prev => prev.map(t => t._id === data.ticket._id ? data.ticket : t));
+                }
+                toast.success('Task reference uploaded successfully!', {
+                    icon: <CheckCircle2 className="w-5 h-5 text-teal-500" />,
+                    className: 'bg-white rounded-xl shadow-xl border border-gray-100 p-4 min-h-0 text-gray-800 text-sm font-bold flex items-center gap-3',
+                    progressClassName: 'bg-teal-500',
+                });
+            } else {
+                toast.error('Failed to upload task reference: ' + data.message);
+            }
+        } catch (error) {
+            console.error('Task Reference upload error:', error);
+            toast.error('Error uploading task reference');
+        }
+    };
+
+    const handleTaskRefFileChange = async (e) => {
+        const files = e.target.files;
+        if (selectedTicket) {
+            await uploadTaskRefFiles(files, selectedTicket._id);
+        }
+        if (taskRefFileInputRef.current) taskRefFileInputRef.current.value = '';
+    };
+
+    const handleDeleteTaskReference = async (ticketId, fileId) => {
+        setSelectedTicket(prev => {
+            const currentFiles = prev.referenceFiles || [];
+            return {
+                ...prev,
+                referenceFiles: currentFiles.filter(f => f._id !== fileId)
+            };
+        });
+
+        if (ticketId !== 'new') {
+            try {
+                const data = await deleteTicketReference(ticketId, fileId);
+                if (data.success) {
+                    setSelectedTicket(data.ticket);
+                    setTickets(prev => prev.map(t => t._id === data.ticket._id ? data.ticket : t));
+                    toast.success('Task reference deleted successfully', {
+                        icon: <CheckCircle2 className="w-5 h-5 text-teal-500" />,
+                        className: 'bg-white rounded-xl shadow-xl border border-gray-100 p-4 min-h-0 text-gray-800 text-sm font-bold flex items-center gap-3',
+                        progressClassName: 'bg-teal-500',
+                    });
+                } else {
+                    toast.error('Failed to delete task reference: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Task Reference delete error:', error);
+                toast.error('Error deleting task reference');
+            }
+        } else {
+            toast.success('Task reference removed successfully');
+        }
+    };
+
     const triggerReferenceUpload = (ticketId, subTaskId, workerId) => {
-        const comp = ticketCompletions.find(c => 
-            String(c.ticketId) === String(ticketId) && 
-            String(c.subTaskId) === String(subTaskId) && 
+        const comp = ticketCompletions.find(c =>
+            String(c.ticketId) === String(ticketId) &&
+            String(c.subTaskId) === String(subTaskId) &&
             String(c.workerId?._id || c.workerId) === String(workerId)
         );
-        setRefManager({ 
-            isOpen: true, 
-            ticketId, 
-            subTaskId, 
-            workerId, 
-            files: comp?.referenceFiles || [] 
+        setRefManager({
+            isOpen: true,
+            ticketId,
+            subTaskId,
+            workerId,
+            files: comp?.referenceFiles || []
         });
     };
 
@@ -1135,13 +1221,13 @@ const WorkAllocation = () => {
                                                     <div className="flex justify-between items-center mb-1.5 text-[9px] text-slate-400 font-bold uppercase tracking-widest">
                                                         <span>PROGRESS</span>
                                                         <span className="text-slate-400">
-                                                            {ticket.status === 'Done' ? 100 : Math.round((ticket.checklist.filter(i => i.completed).length / ticket.checklist.length) * 100)}%
+                                                            {ticket.status === 'Done' ? 100 : (ticket.status === 'Review' ? 90 : (ticket.status === 'In Progress' ? 25 : 0))}%
                                                         </span>
                                                     </div>
                                                     <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
                                                         <div
                                                             className="bg-[#0d9488] h-1 rounded-full transition-all duration-700"
-                                                            style={{ width: `${ticket.status === 'Done' ? 100 : (ticket.checklist.filter(i => i.completed).length / ticket.checklist.length) * 100}%` }}
+                                                            style={{ width: `${ticket.status === 'Done' ? 100 : (ticket.status === 'Review' ? 90 : (ticket.status === 'In Progress' ? 25 : 0))}%` }}
                                                         ></div>
                                                     </div>
                                                 </div>
@@ -1340,7 +1426,7 @@ const WorkAllocation = () => {
 
                         {/* Body - Responsive Layout */}
                         <div className="flex-1 overflow-y-auto lg:overflow-hidden bg-white">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[30%_25%_45%] lg:h-full divide-y md:divide-y-0 lg:divide-x divide-gray-100">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[38%_25%_37%] lg:h-full divide-y md:divide-y-0 lg:divide-x divide-gray-100">
 
                                 {/* 🔹 COLUMN 1: Task Input & Checklist (LEFT) */}
                                 <div className="lg:h-full flex flex-col px-4 py-4 lg:px-6 lg:py-6 lg:overflow-hidden">
@@ -1378,15 +1464,18 @@ const WorkAllocation = () => {
                                             </span>
                                         </div>
 
-                                        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-2 pb-2">
+                                        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3 pb-2">
                                             {(selectedTicket.checklist && selectedTicket.checklist.length > 0 ? selectedTicket.checklist : [{ text: '', completed: false }]).map((item, idx) => (
-                                                <div key={idx} className="flex items-center gap-3 group py-2 px-3 bg-white hover:bg-teal-50/20 rounded-xl transition-all border border-gray-100 hover:border-teal-100 shadow-sm min-h-[56px] relative overflow-hidden">
-                                                    <div className="flex items-center shrink-0">
-                                                        <div className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-colors ${item.completed ? 'bg-teal-500 border-teal-500 text-white' : 'border-gray-200'}`}>
+                                                <div key={idx} className="flex items-start gap-3 group p-3 bg-white hover:bg-slate-50/50 rounded-xl transition-all border border-slate-200 hover:border-slate-300 focus-within:border-teal-500 focus-within:ring-1 focus-within:ring-teal-500/20 shadow-sm relative min-h-[58px]">
+                                                    <div className="flex items-center shrink-0 mt-1">
+                                                        <div
+                                                            onClick={() => toggleChecklistItem(idx)}
+                                                            className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-colors cursor-pointer ${item.completed ? 'bg-teal-500 border-teal-500 text-white' : 'border-slate-300 hover:border-teal-500'}`}
+                                                        >
                                                             {item.completed && <Check className="w-3.5 h-3.5" />}
                                                         </div>
                                                     </div>
-                                                    <div className="relative flex-1 h-[40px] overflow-hidden group/textarea">
+                                                    <div className="flex-1 flex items-center min-w-0">
                                                         <textarea
                                                             autoFocus={idx > 0 && item.text === ''}
                                                             value={item.text}
@@ -1395,17 +1484,25 @@ const WorkAllocation = () => {
                                                                 if (e.key === 'Enter') { e.preventDefault(); addChecklistItem(idx); }
                                                                 else if (e.key === 'Backspace' && item.text === '' && (selectedTicket.checklist || []).length > 1) { e.preventDefault(); removeChecklistItem(idx); }
                                                             }}
-                                                            className={`w-full bg-transparent border-none focus:ring-0 text-sm font-semibold text-gray-700 placeholder-gray-300 outline-none resize-none overflow-y-auto scrollbar-hidden h-full leading-tight py-0.5 ${item.completed ? 'text-gray-400 line-through italic' : ''}`}
-                                                            placeholder="Next sub-task..."
-                                                            rows={2}
+                                                            className={`w-full bg-transparent border-none focus:ring-0 text-sm font-semibold text-slate-700 placeholder-slate-300 outline-none resize-none min-h-[24px] max-h-[120px] leading-relaxed py-1 scrollbar-hidden ${item.completed ? 'text-slate-400 line-through italic' : ''}`}
+                                                            placeholder="Add sub-task details..."
+                                                            rows={1}
                                                             title={item.text}
+                                                            onInput={(e) => {
+                                                                e.target.style.height = 'auto';
+                                                                e.target.style.height = e.target.scrollHeight + 'px';
+                                                            }}
+                                                            ref={(el) => {
+                                                                if (el) {
+                                                                    el.style.height = 'auto';
+                                                                    el.style.height = el.scrollHeight + 'px';
+                                                                }
+                                                            }}
                                                         />
-                                                        {/* Subtle bottom fade to indicate scrollability */}
-                                                        <div className="absolute bottom-0 left-0 right-0 h-3 bg-gradient-to-t from-white to-transparent pointer-events-none group-hover:from-teal-50/40 transition-colors"></div>
                                                     </div>
                                                     <button
                                                         onClick={() => removeChecklistItem(idx)}
-                                                        className="p-1.5 text-orange-400 hover:text-red-600 hover:bg-red-50 transition-all rounded-lg bg-orange-50/50 hover:bg-red-100/50"
+                                                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all rounded-lg shrink-0 mt-0.5"
                                                     >
                                                         <X className="w-4 h-4" />
                                                     </button>
@@ -1583,24 +1680,179 @@ const WorkAllocation = () => {
                                 <div className="lg:h-full flex flex-col px-4 py-4 lg:px-6 lg:py-6 lg:overflow-hidden bg-gray-50/20">
                                     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
 
-                                        {/* Progress Card */}
-                                        {selectedTicket._id !== 'new' && (
-                                            <div className="bg-white border border-teal-100/50 rounded-2xl p-4 shadow-sm mb-6 shrink-0 relative overflow-hidden">
-                                                <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
-                                                <div className="flex justify-between items-center mb-3">
-                                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-                                                        <BarChart2 className="w-3.5 h-3.5 text-teal-500" />
-                                                        Overall Completion
-                                                    </span>
-                                                    <span className="text-[11px] font-extrabold bg-teal-50 text-teal-600 px-2 py-0.5 rounded-full border border-teal-100">
-                                                        {Math.round((selectedTicket.checklist?.filter(i => i.completed).length / selectedTicket.checklist?.length) * 100) || 0}% DONE
-                                                    </span>
+                                        {/* Progress Card & Shared Task References Grid */}
+                                        {selectedTicket._id !== 'new' ? (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 shrink-0">
+                                                {/* Left Column: Progress Card */}
+                                                <div className="bg-white border border-teal-100/50 rounded-2xl p-4 shadow-sm relative overflow-hidden flex flex-col justify-center">
+                                                    <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
+                                                    <div className="flex justify-between items-center mb-3">
+                                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                                                            <BarChart2 className="w-3.5 h-3.5 text-teal-500" />
+                                                            Overall Completion
+                                                        </span>
+                                                        <span className="text-[11px] font-extrabold bg-teal-50 text-teal-600 px-2 py-0.5 rounded-full border border-teal-100">
+                                                            {selectedTicket.status === 'Done' ? 100 : (selectedTicket.status === 'Review' ? 90 : (selectedTicket.status === 'In Progress' ? 25 : 0))}% DONE
+                                                        </span>
+                                                    </div>
+                                                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden shadow-inner flex">
+                                                        <div
+                                                            className="bg-teal-500 h-2 transition-all duration-1000 ease-out"
+                                                            style={{ width: `${selectedTicket.status === 'Done' ? 100 : (selectedTicket.status === 'Review' ? 90 : (selectedTicket.status === 'In Progress' ? 25 : 0))}%` }}
+                                                        ></div>
+                                                    </div>
                                                 </div>
-                                                <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden shadow-inner flex">
+
+                                                {/* Right Column: Shared Task References Card */}
+                                                <div className="bg-white border border-teal-100/50 rounded-2xl p-4 shadow-sm relative overflow-hidden flex flex-col justify-between">
+                                                    <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
+                                                    <div className="flex justify-between items-center mb-3">
+                                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                                                            <Paperclip className="w-3.5 h-3.5 text-teal-500" />
+                                                            Task References
+                                                        </span>
+                                                        <input
+                                                            type="file"
+                                                            ref={taskRefFileInputRef}
+                                                            onChange={handleTaskRefFileChange}
+                                                            multiple
+                                                            className="hidden"
+                                                            accept="image/*"
+                                                        />
+                                                        <button
+                                                            onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
+                                                            className="text-[10px] font-extrabold uppercase bg-teal-50 text-teal-600 hover:bg-teal-100 px-2 py-1 rounded-lg border border-teal-100 transition-colors"
+                                                        >
+                                                            Upload
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Drag & Drop Zone */}
                                                     <div
-                                                        className="bg-teal-500 h-2 transition-all duration-1000 ease-out"
-                                                        style={{ width: `${(selectedTicket.checklist?.filter(i => i.completed).length / (selectedTicket.checklist?.length || 1)) * 100}%` }}
-                                                    ></div>
+                                                        onDragOver={(e) => { e.preventDefault(); setIsDraggingTaskRef(true); }}
+                                                        onDragEnter={(e) => { e.preventDefault(); setIsDraggingTaskRef(true); }}
+                                                        onDragLeave={(e) => { e.preventDefault(); setIsDraggingTaskRef(false); }}
+                                                        onDrop={async (e) => {
+                                                            e.preventDefault();
+                                                            setIsDraggingTaskRef(false);
+                                                            const files = e.dataTransfer.files;
+                                                            await uploadTaskRefFiles(files, selectedTicket._id);
+                                                        }}
+                                                        className={`text-center py-2 px-3 border border-dashed rounded-xl transition-all cursor-pointer ${isDraggingTaskRef
+                                                            ? 'border-teal-500 bg-teal-50/50'
+                                                            : 'border-gray-200 hover:border-teal-400 hover:bg-gray-50/30'
+                                                            }`}
+                                                        onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
+                                                    >
+                                                        <p className="text-[10px] font-bold text-gray-400">
+                                                            {isDraggingTaskRef ? 'Drop files here!' : 'Drag & drop references here'}
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Previews of uploaded task references */}
+                                                    {selectedTicket.referenceFiles && selectedTicket.referenceFiles.length > 0 && (
+                                                        <div className="flex flex-wrap gap-2 mt-3 max-h-[80px] overflow-y-auto custom-scrollbar">
+                                                            {selectedTicket.referenceFiles.map(file => (
+                                                                <div key={file._id} className="relative w-8 h-8 rounded-lg border border-gray-200 overflow-hidden group shadow-sm shrink-0">
+                                                                    <img
+                                                                        src={getFullFileUrl(file.url)}
+                                                                        alt={file.name}
+                                                                        className="w-full h-full object-cover cursor-pointer"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setZoomedImage(getFullFileUrl(file.url));
+                                                                        }}
+                                                                    />
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleDeleteTaskReference(selectedTicket._id, file._id);
+                                                                        }}
+                                                                        className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                    >
+                                                                        <Trash2 className="w-3 h-3 text-red-400" />
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="mb-6 shrink-0">
+                                                {/* Full-width Task References Card for New Task */}
+                                                <div className="bg-white border border-teal-100/50 rounded-2xl p-4 shadow-sm relative overflow-hidden flex flex-col justify-between min-h-[140px]">
+                                                    <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
+                                                    <div className="flex justify-between items-center mb-3">
+                                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                                                            <Paperclip className="w-3.5 h-3.5 text-teal-500" />
+                                                            Task References
+                                                        </span>
+                                                        <input
+                                                            type="file"
+                                                            ref={taskRefFileInputRef}
+                                                            onChange={handleTaskRefFileChange}
+                                                            multiple
+                                                            className="hidden"
+                                                            accept="image/*"
+                                                        />
+                                                        <button
+                                                            onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
+                                                            className="text-[10px] font-extrabold uppercase bg-teal-50 text-teal-600 hover:bg-teal-100 px-2 py-1 rounded-lg border border-teal-100 transition-colors"
+                                                        >
+                                                            Upload
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Drag & Drop Zone */}
+                                                    <div
+                                                        onDragOver={(e) => { e.preventDefault(); setIsDraggingTaskRef(true); }}
+                                                        onDragEnter={(e) => { e.preventDefault(); setIsDraggingTaskRef(true); }}
+                                                        onDragLeave={(e) => { e.preventDefault(); setIsDraggingTaskRef(false); }}
+                                                        onDrop={async (e) => {
+                                                            e.preventDefault();
+                                                            setIsDraggingTaskRef(false);
+                                                            const files = e.dataTransfer.files;
+                                                            await uploadTaskRefFiles(files, selectedTicket._id);
+                                                        }}
+                                                        className={`text-center py-4 px-3 border border-dashed rounded-xl transition-all cursor-pointer ${isDraggingTaskRef
+                                                            ? 'border-teal-500 bg-teal-50/50'
+                                                            : 'border-gray-200 hover:border-teal-400 hover:bg-gray-50/30'
+                                                            }`}
+                                                        onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
+                                                    >
+                                                        <p className="text-[10px] font-bold text-gray-400">
+                                                            {isDraggingTaskRef ? 'Drop files here!' : 'Drag & drop references here'}
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Previews of uploaded task references */}
+                                                    {selectedTicket.referenceFiles && selectedTicket.referenceFiles.length > 0 && (
+                                                        <div className="flex flex-wrap gap-2 mt-3 max-h-[80px] overflow-y-auto custom-scrollbar">
+                                                            {selectedTicket.referenceFiles.map(file => (
+                                                                <div key={file._id} className="relative w-8 h-8 rounded-lg border border-gray-200 overflow-hidden group shadow-sm shrink-0">
+                                                                    <img
+                                                                        src={getFullFileUrl(file.url)}
+                                                                        alt={file.name}
+                                                                        className="w-full h-full object-cover cursor-pointer"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setZoomedImage(getFullFileUrl(file.url));
+                                                                        }}
+                                                                    />
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleDeleteTaskReference(selectedTicket._id, file._id);
+                                                                        }}
+                                                                        className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                    >
+                                                                        <Trash2 className="w-3 h-3 text-red-400" />
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         )}
@@ -1630,9 +1882,23 @@ const WorkAllocation = () => {
                                                                         <span className="text-[9px] font-black bg-teal-100 text-teal-700 px-2 py-0.5 rounded border border-teal-200 shrink-0">
                                                                             ST-{String(idx + 1).padStart(2, '0')}
                                                                         </span>
-                                                                        <span className="text-xs font-bold text-gray-800 truncate" title={item.text || `Point ${idx + 1}`}>
-                                                                            {item.text || `Point ${idx + 1}`}
-                                                                        </span>
+                                                                        <div className="flex flex-col min-w-0">
+                                                                            <span
+                                                                                className={`text-xs font-bold text-gray-800 cursor-pointer hover:text-teal-600 transition-colors ${expandedSubTasks[idx] ? 'whitespace-pre-wrap break-words' : 'truncate'}`}
+                                                                                title={expandedSubTasks[idx] ? "Click to collapse" : "Click to view more details"}
+                                                                                onClick={() => toggleSubTaskExpand(idx)}
+                                                                            >
+                                                                                {item.text || `Point ${idx + 1}`}
+                                                                            </span>
+                                                                            {item.text && item.text.length > 40 && (
+                                                                                <button
+                                                                                    onClick={() => toggleSubTaskExpand(idx)}
+                                                                                    className="text-[9px] text-teal-600 hover:text-teal-800 font-bold mt-0.5 text-left hover:underline select-none"
+                                                                                >
+                                                                                    {expandedSubTasks[idx] ? 'Show less' : '... more details'}
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                     <div className="flex -space-x-1.5">
                                                                         {selectedTicket.assignees.slice(0, 5).map(w => (
@@ -1975,7 +2241,7 @@ const WorkAllocation = () => {
                                 <h3 className="text-base font-bold text-gray-800">Reference Images</h3>
                                 <p className="text-xs text-gray-500 font-medium">Manage reference images for this task</p>
                             </div>
-                            <button 
+                            <button
                                 onClick={() => setRefManager({ isOpen: false, ticketId: '', subTaskId: '', workerId: '', files: [] })}
                                 className="p-2 hover:bg-gray-200 rounded-full transition-colors bg-white shadow-sm"
                             >
@@ -1989,9 +2255,9 @@ const WorkAllocation = () => {
                                         <div key={file._id || fIdx} className="group relative border border-gray-100 rounded-xl overflow-hidden bg-gray-50/50 hover:shadow-md transition-all">
                                             <div className="aspect-square flex items-center justify-center bg-gray-100">
                                                 {file.url.match(/\.(jpeg|jpg|gif|png|webp)$/i) || file.url.includes('blob:') ? (
-                                                    <img 
-                                                        src={getFullFileUrl(file.url)} 
-                                                        alt={file.name} 
+                                                    <img
+                                                        src={getFullFileUrl(file.url)}
+                                                        alt={file.name}
                                                         className="w-full h-full object-cover"
                                                     />
                                                 ) : (
@@ -2001,15 +2267,15 @@ const WorkAllocation = () => {
                                             <div className="p-3 bg-white border-t border-gray-50">
                                                 <p className="text-xs font-bold text-gray-700 truncate" title={file.name}>{file.name}</p>
                                                 <div className="flex justify-between items-center mt-2">
-                                                    <a 
-                                                        href={getFullFileUrl(file.url)} 
-                                                        target="_blank" 
+                                                    <a
+                                                        href={getFullFileUrl(file.url)}
+                                                        target="_blank"
                                                         rel="noopener noreferrer"
                                                         className="text-[10px] font-bold text-teal-600 hover:text-teal-700 uppercase"
                                                     >
                                                         Full View
                                                     </a>
-                                                    <button 
+                                                    <button
                                                         onClick={() => handleDeleteReference(refManager.ticketId, refManager.subTaskId, refManager.workerId, file._id)}
                                                         className="text-[10px] font-bold text-red-500 hover:text-red-600 uppercase"
                                                     >
@@ -2021,7 +2287,7 @@ const WorkAllocation = () => {
                                     ))}
                                 </div>
                             ) : (
-                                <div 
+                                <div
                                     onClick={() => {
                                         setUploadingRef({ ticketId: refManager.ticketId, subTaskId: refManager.subTaskId, workerId: refManager.workerId });
                                         if (refFileInputRef.current) refFileInputRef.current.click();
@@ -2044,11 +2310,10 @@ const WorkAllocation = () => {
                                         const files = e.dataTransfer.files;
                                         await uploadRefFiles(files, refManager.ticketId, refManager.subTaskId, refManager.workerId);
                                     }}
-                                    className={`text-center py-12 rounded-xl border-2 border-dashed cursor-pointer transition-all ${
-                                        isDraggingRef 
-                                            ? 'border-teal-500 bg-teal-50/50' 
-                                            : 'border-gray-200 hover:border-teal-400 hover:bg-gray-50/50'
-                                    }`}
+                                    className={`text-center py-12 rounded-xl border-2 border-dashed cursor-pointer transition-all ${isDraggingRef
+                                        ? 'border-teal-500 bg-teal-50/50'
+                                        : 'border-gray-200 hover:border-teal-400 hover:bg-gray-50/50'
+                                        }`}
                                 >
                                     <ImagePlus className={`w-12 h-12 mx-auto mb-3 transition-colors ${isDraggingRef ? 'text-teal-500' : 'text-gray-300'}`} />
                                     <p className="text-sm font-bold text-gray-600 mb-1">
@@ -2085,6 +2350,8 @@ const WorkAllocation = () => {
                     </div>
                 </div>
             )}
+
+
         </div >
     );
 };

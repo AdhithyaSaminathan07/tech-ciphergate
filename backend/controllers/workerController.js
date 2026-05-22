@@ -221,11 +221,12 @@ const getWorkers = asyncHandler(async (req, res) => {
 
     const workers = await Worker.find(query)
       .select('-password')
-      .populate('department', 'name');
+      .populate('department', 'name')
+      .lean();
 
     // Transform workers to include department name and full photo URL
     const transformedWorkers = workers.map(worker => ({
-      ...worker.toObject(),
+      ...worker,
       department: worker.department ? worker.department.name : 'N/A',
       photoUrl: worker.photo
         ? `/uploads/${worker.photo}`
@@ -255,7 +256,8 @@ const getPublicWorkers = asyncHandler(async (req, res) => {
 
     const workers = await Worker.find(query)
       .select('name username subdomain department photo employeeType class status')
-      .populate('department', 'name');
+      .populate('department', 'name')
+      .lean();
 
     const transformedWorkers = workers.map(worker => ({
       _id: worker._id,
@@ -591,7 +593,8 @@ const getWorkersByDepartment = asyncHandler(async (req, res) => {
       status: { $ne: 'Relieved' }
     })
       .select('-password')
-      .populate('department', 'name');
+      .populate('department', 'name')
+      .lean();
 
     res.json(workers);
   } catch (error) {

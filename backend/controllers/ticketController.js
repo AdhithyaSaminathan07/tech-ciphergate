@@ -64,7 +64,8 @@ exports.getTickets = async (req, res) => {
         const tickets = await Ticket.find(query)
             .populate('assignee', 'name username status')
             .populate('assignees', 'name username department status')
-            .sort({ createdAt: -1 });
+            .sort({ createdAt: -1 })
+            .lean();
 
         res.status(200).json(tickets);
     } catch (error) {
@@ -77,7 +78,7 @@ exports.getTickets = async (req, res) => {
 // @access  Private/Admin
 exports.createTicket = async (req, res) => {
     try {
-        const { title, description, assignee, assignees, team, priority, status, issueType, storyPoints, labels, startDate, endDate, checklist } = req.body;
+        const { title, description, assignee, assignees, team, priority, status, issueType, storyPoints, labels, startDate, endDate, checklist, referenceFiles } = req.body;
         const subdomain = req.user?.subdomain || req.body.subdomain;
         const reporter = req.user?._id;
 
@@ -100,7 +101,8 @@ exports.createTicket = async (req, res) => {
             subdomain,
             startDate: formattedStartDate,
             endDate: formattedEndDate,
-            checklist: checklist || parseChecklist(description)
+            checklist: checklist || parseChecklist(description),
+            referenceFiles: referenceFiles || []
         });
 
         const savedTicket = await newTicket.save();
@@ -291,5 +293,127 @@ exports.deleteTicket = async (req, res) => {
         res.status(200).json({ id: req.params.id, message: 'Ticket deleted successfully' });
     } catch (error) {
         res.status(500).json({ message: 'Error deleting ticket', error: error.message });
+    }
+};
+
+// @desc    Upload reference files for a ticket
+// @route   POST /api/tickets/:id/reference
+// @access  Private/Admin
+exports.uploadTicketReference = async (req, res) => {
+    try {
+        const ticketId = req.params.id;
+        const subdomain = req.user.subdomain;
+
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({ message: 'Reference files are mandatory' });
+        }
+
+        const mongoose = require('mongoose');
+        const fullBaseUrl = `${req.protocol}://${req.get('host')}`;
+        const referenceFiles = req.files.map(file => ({
+            _id: new mongoose.Types.ObjectId(),
+            url: `${fullBaseUrl}/uploads/${file.filename}`,
+            name: file.originalname,
+            type: file.mimetype,
+            size: file.size,
+            uploadedAt: new Date()
+        }));
+
+        if (ticketId === 'new' || !mongoose.Types.ObjectId.isValid(ticketId)) {
+            return res.status(200).json({
+                success: true,
+                message: 'Reference files uploaded successfully',
+                referenceFiles
+            });
+        }
+
+        const ticket = await Ticket.findById(ticketId);
+        if (!ticket) {
+            return res.status(404).json({ message: 'Ticket not found' });
+        }
+
+
+
+        if (!ticket.referenceFiles) {
+            ticket.referenceFiles = [];
+        }
+        ticket.referenceFiles.push(...referenceFiles);
+        await ticket.save();
+
+        await ticket.populate([
+            { path: 'assignee', select: 'name username status' },
+            { path: 'assignees', select: 'name username department status' }
+        ]);
+
+        // Socket emission
+        try {
+            const io = getIO();
+            if (io) {
+                io.to(subdomain).emit('ticket:updated', ticket);
+            }
+        } catch (socketErr) {
+            console.error('Socket emission error:', socketErr.message);
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Reference files uploaded successfully',
+            ticket
+        });
+    } catch (error) {
+        console.error('Upload Ticket Reference Error:', error);
+        res.status(500).json({ success: false, message: 'Error saving reference', error: error.message });
+    }
+};
+
+// @desc    Delete a ticket reference file
+// @route   DELETE /api/tickets/:id/reference/:fileId
+// @access  Private/Admin
+exports.deleteTicketReference = async (req, res) => {
+    try {
+        const ticketId = req.params.id;
+        const fileId = req.params.fileId;
+        const subdomain = req.user.subdomain;
+
+        // Only admin can delete reference files
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'Not authorized to delete reference files' });
+        }
+
+        const ticket = await Ticket.findById(ticketId);
+        if (!ticket) {
+            return res.status(404).json({ message: 'Ticket not found' });
+        }
+
+        const file = ticket.referenceFiles.find(f => f._id.toString() === fileId);
+        if (!file) {
+            return res.status(404).json({ message: 'File not found' });
+        }
+
+        // Delete from filesystem
+        const filename = file.url.split('/').pop();
+        const path = require('path');
+        const fs = require('fs');
+        const filePath = path.join(__dirname, '..', 'uploads', filename);
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+        }
+
+        ticket.referenceFiles.pull(fileId);
+        await ticket.save();
+
+        await ticket.populate([
+            { path: 'assignee', select: 'name username status' },
+            { path: 'assignees', select: 'name username department status' }
+        ]);
+
+        const io = getIO();
+        if (io) {
+            io.to(subdomain).emit('ticket:updated', ticket);
+        }
+
+        res.status(200).json({ success: true, ticket });
+    } catch (error) {
+        res.status(500).json({ message: 'Error deleting reference file', error: error.message });
     }
 };

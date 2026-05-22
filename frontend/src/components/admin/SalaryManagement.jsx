@@ -3,7 +3,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { FaDonate, FaFileInvoiceDollar, FaFilePdf, FaTrash, FaCalendarAlt, FaList, FaChevronLeft } from 'react-icons/fa';
-import { FiRefreshCcw } from "react-icons/fi";
+import { FiRefreshCcw, FiFilter, FiX, FiChevronDown, FiChevronUp, FiSliders } from "react-icons/fi";
 import { getWorkers } from '../../services/workerService';
 import { getDepartments } from '../../services/departmentService';
 import Card from '../common/Card';
@@ -62,7 +62,10 @@ const SalaryManagement = () => {
     const [workers, setWorkers] = useState([]);
     const [departments, setDepartments] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
+    const [searchTerm, setSearchTerm] = useState(() => {
+        const val = localStorage.getItem('salarySearchTerm');
+        return (val === null || val === 'null' || val === 'undefined') ? '' : val;
+    });
     const [isLoadingDepartments, setIsLoadingDepartments] = useState(true);
     const [formData, setFormData] = useState({
         bonus: '',
@@ -120,6 +123,89 @@ const SalaryManagement = () => {
     const [bulkAttendanceFilter, setBulkAttendanceFilter] = useState('All');
     const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
 
+    // Advanced filtering state variables
+    const [isSalaryFilterOpen, setIsSalaryFilterOpen] = useState(() => {
+        return localStorage.getItem('isSalaryFilterOpen') === 'true';
+    });
+    const [filterDepartment, setFilterDepartment] = useState(() => {
+        const val = localStorage.getItem('salaryFilterDepartment');
+        return (val === null || val === 'null' || val === 'undefined') ? '' : val;
+    });
+    const [filterMinSalary, setFilterMinSalary] = useState(() => {
+        const val = localStorage.getItem('salaryFilterMinSalary');
+        return (val === null || val === 'null' || val === 'undefined') ? '' : val;
+    });
+    const [filterMaxSalary, setFilterMaxSalary] = useState(() => {
+        const val = localStorage.getItem('salaryFilterMaxSalary');
+        return (val === null || val === 'null' || val === 'undefined') ? '' : val;
+    });
+    const [filterFineStatus, setFilterFineStatus] = useState(() => {
+        const val = localStorage.getItem('salaryFilterFineStatus');
+        return (val === null || val === 'null' || val === 'undefined') ? 'All' : val;
+    });
+    const [filterBankStatus, setFilterBankStatus] = useState(() => {
+        const val = localStorage.getItem('salaryFilterBankStatus');
+        return (val === null || val === 'null' || val === 'undefined') ? 'All' : val;
+    });
+    const [sortBy, setSortBy] = useState(() => {
+        const val = localStorage.getItem('salarySortBy');
+        return (val === null || val === 'null' || val === 'undefined') ? '' : val;
+    });
+
+    const getActiveFilterCount = () => {
+        let count = 0;
+        if (searchTerm) count++;
+        if (filterDepartment && filterDepartment !== 'All') count++;
+        if (filterFineStatus && filterFineStatus !== 'All') count++;
+        if (filterBankStatus && filterBankStatus !== 'All') count++;
+        if (filterMinSalary) count++;
+        if (filterMaxSalary) count++;
+        if (sortBy) count++;
+        return count;
+    };
+
+    const resetSalaryFilters = () => {
+        setFilterDepartment('');
+        setFilterFineStatus('All');
+        setFilterBankStatus('All');
+        setFilterMinSalary('');
+        setFilterMaxSalary('');
+        setSortBy('');
+        setSearchTerm('');
+    };
+
+    useEffect(() => {
+        localStorage.setItem('salarySearchTerm', searchTerm);
+    }, [searchTerm]);
+
+    useEffect(() => {
+        localStorage.setItem('isSalaryFilterOpen', isSalaryFilterOpen);
+    }, [isSalaryFilterOpen]);
+
+    useEffect(() => {
+        localStorage.setItem('salaryFilterDepartment', filterDepartment);
+    }, [filterDepartment]);
+
+    useEffect(() => {
+        localStorage.setItem('salaryFilterMinSalary', filterMinSalary);
+    }, [filterMinSalary]);
+
+    useEffect(() => {
+        localStorage.setItem('salaryFilterMaxSalary', filterMaxSalary);
+    }, [filterMaxSalary]);
+
+    useEffect(() => {
+        localStorage.setItem('salaryFilterFineStatus', filterFineStatus);
+    }, [filterFineStatus]);
+
+    useEffect(() => {
+        localStorage.setItem('salaryFilterBankStatus', filterBankStatus);
+    }, [filterBankStatus]);
+
+    useEffect(() => {
+        localStorage.setItem('salarySortBy', sortBy);
+    }, [sortBy]);
+
     useEffect(() => {
         localStorage.setItem('deductionView', deductionView);
     }, [deductionView]);
@@ -156,27 +242,6 @@ const SalaryManagement = () => {
         setMonthDateRange();
     }, []);
 
-    const filteredWorkers = Array.isArray(workers)
-        ? workers.filter(
-            worker =>
-                (worker.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    (worker.department && worker.department.toLowerCase().includes(searchTerm.toLowerCase()))) &&
-                worker.status !== 'Relieved'
-        )
-        : [];
-
-    const bulkFilteredWorkers = Array.isArray(workers)
-        ? workers.filter(worker => {
-            const matchesSearch = worker.name.toLowerCase().includes(bulkSearchTerm.toLowerCase()) ||
-                (worker.department?.name || worker.department || '').toLowerCase().includes(bulkSearchTerm.toLowerCase());
-
-            const deptId = worker.department?._id || worker.department;
-            const matchesDepartment = bulkDepartmentFilter === 'All' || deptId === bulkDepartmentFilter;
-
-            return matchesSearch && matchesDepartment && worker.status !== 'Relieved';
-        })
-        : [];
-
     // ADD FUNCTION TO CALCULATE MONTHLY FINES
     const calculateMonthlyFines = (worker, month, year) => {
         if (!worker.fines || !Array.isArray(worker.fines) || worker.fines.length === 0) {
@@ -203,10 +268,106 @@ const SalaryManagement = () => {
             .reduce((total, fine) => total + (fine.amount || 0), 0);
     };
 
+    const getWorkerDeptId = (worker) => {
+        if (!worker || !worker.department) return null;
+        if (typeof worker.department === 'object') {
+            return worker.department._id;
+        }
+        const dept = departments.find(d => d._id === worker.department || d.name === worker.department);
+        return dept ? dept._id : worker.department;
+    };
+
+    const filteredWorkers = Array.isArray(workers)
+        ? workers
+            .filter(worker => {
+                // 1. Status is not Relieved
+                if (worker.status === 'Relieved') return false;
+
+                // 2. Search term filter (Name or Department or RFID/Employee ID)
+                const matchesSearch = !searchTerm ||
+                    (worker.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (worker.department && (typeof worker.department === 'object' ? worker.department.name : worker.department).toLowerCase().includes(searchTerm.toLowerCase())) ||
+                    (worker.rfid || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+                if (!matchesSearch) return false;
+
+                // 3. Department filter
+                if (filterDepartment && filterDepartment !== 'All') {
+                    const workerDeptId = getWorkerDeptId(worker);
+                    if (workerDeptId !== filterDepartment) return false;
+                }
+
+                // 4. Min Salary filter
+                if (filterMinSalary) {
+                    const minSal = parseFloat(filterMinSalary);
+                    if (!isNaN(minSal) && (worker.salary || 0) < minSal) return false;
+                }
+
+                // 5. Max Salary filter
+                if (filterMaxSalary) {
+                    const maxSal = parseFloat(filterMaxSalary);
+                    if (!isNaN(maxSal) && (worker.salary || 0) > maxSal) return false;
+                }
+
+                // 6. Fine status filter
+                if (filterFineStatus && filterFineStatus !== 'All') {
+                    const currentMonth = new Date().getMonth() + 1;
+                    const currentYear = new Date().getFullYear();
+                    const workerFineAmount = calculateMonthlyFines(worker, currentMonth, currentYear);
+                    if (filterFineStatus === 'Has Fines' && workerFineAmount === 0) return false;
+                    if (filterFineStatus === 'No Fines' && workerFineAmount > 0) return false;
+                }
+
+                // 7. Bank Details status filter
+                if (filterBankStatus && filterBankStatus !== 'All') {
+                    const hasBankDetails = worker?.bankDetails?.accountNumber && worker?.bankDetails?.ifscCode;
+                    if (filterBankStatus === 'Added' && !hasBankDetails) return false;
+                    if (filterBankStatus === 'Pending' && hasBankDetails) return false;
+                }
+
+                return true;
+            })
+            .sort((a, b) => {
+                if (!sortBy) return 0;
+
+                const currentMonth = new Date().getMonth() + 1;
+                const currentYear = new Date().getFullYear();
+
+                if (sortBy === 'name-asc') {
+                    return (a.name || '').localeCompare(b.name || '');
+                } else if (sortBy === 'name-desc') {
+                    return (b.name || '').localeCompare(a.name || '');
+                } else if (sortBy === 'salary-asc') {
+                    return (a.salary || 0) - (b.salary || 0);
+                } else if (sortBy === 'salary-desc') {
+                    return (b.salary || 0) - (a.salary || 0);
+                } else if (sortBy === 'final-asc') {
+                    return (a.finalSalary || 0) - (b.finalSalary || 0);
+                } else if (sortBy === 'final-desc') {
+                    return (b.finalSalary || 0) - (a.finalSalary || 0);
+                } else if (sortBy === 'fine-desc') {
+                    const fineA = calculateMonthlyFines(a, currentMonth, currentYear);
+                    const fineB = calculateMonthlyFines(b, currentMonth, currentYear);
+                    return fineB - fineA;
+                }
+                return 0;
+            })
+        : [];
+
+    const bulkFilteredWorkers = Array.isArray(workers)
+        ? workers.filter(worker => {
+            const matchesSearch = worker.name.toLowerCase().includes(bulkSearchTerm.toLowerCase()) ||
+                (worker.department?.name || worker.department || '').toLowerCase().includes(bulkSearchTerm.toLowerCase());
+
+            const workerDeptId = getWorkerDeptId(worker);
+            const matchesDepartment = bulkDepartmentFilter === 'All' || workerDeptId === bulkDepartmentFilter;
+
+            return matchesSearch && matchesDepartment && worker.status !== 'Relieved';
+        })
+        : [];
+
     const openEditModal = (worker) => {
-        const departmentId = typeof worker.department === 'object'
-            ? worker.department._id
-            : (departments.find(dept => dept.name === worker.department)?._id || worker.department);
+        const departmentId = getWorkerDeptId(worker);
         setSelectedWorker(worker);
         setFormData({
             bonus: '',
@@ -396,6 +557,10 @@ const SalaryManagement = () => {
             ['Total Deductions', formatCurrencyForPDF(reportData.report.totalSalaryDeduction || 0)],
             ['Net Base Salary', formatCurrencyForPDF(reportData.report.summary?.netBaseSalary || 0)],
             ['Project Earnings', formatCurrencyForPDF(reportData.report.summary?.totalProjectSalary || 0)],
+            ...(reportData.projectAdjustment && reportData.projectAdjustment !== 0 ? [
+                ['Project Adjustment', `${reportData.projectAdjustment > 0 ? '+' : ''}${formatCurrencyForPDF(reportData.projectAdjustment)}`],
+                ['Final Project Pay', formatCurrencyForPDF(Math.max(0, (reportData.report.summary?.totalProjectSalary || 0) + (reportData.projectAdjustment || 0)))]
+            ] : []),
             // ADD FINE INFORMATION TO THE SUMMARY
             ...(reportData.totalFinesAmount > 0 ? [
                 ['Total Fines', formatCurrencyForPDF(reportData.totalFinesAmount)]
@@ -822,6 +987,10 @@ const SalaryManagement = () => {
             ['Total Deductions', formatCurrencyForPDF(individualReportData.report.totalSalaryDeduction || 0)],
             ['Net Base Salary', formatCurrencyForPDF(individualReportData.report.summary?.netBaseSalary || 0)],
             ['Project Earnings', formatCurrencyForPDF(individualReportData.report.summary?.totalProjectSalary || 0)],
+            ...(individualReportData.projectAdjustment && individualReportData.projectAdjustment !== 0 ? [
+                ['Project Adjustment', `${individualReportData.projectAdjustment > 0 ? '+' : ''}${formatCurrencyForPDF(individualReportData.projectAdjustment)}`],
+                ['Final Project Pay', formatCurrencyForPDF(Math.max(0, (individualReportData.report.summary?.totalProjectSalary || 0) + (individualReportData.projectAdjustment || 0)))]
+            ] : []),
             // ADD FINE INFORMATION TO THE SUMMARY
             ...(individualReportData.totalFinesAmount > 0 ? [
                 ['Total Fines', formatCurrencyForPDF(individualReportData.totalFinesAmount)]
@@ -1044,7 +1213,11 @@ const SalaryManagement = () => {
         },
         {
             header: 'Department',
-            accessor: 'department'
+            accessor: 'department',
+            render: (record) => {
+                if (!record?.department) return 'N/A';
+                return typeof record.department === 'object' ? record.department.name : record.department;
+            }
         },
         {
             header: 'Actions',
@@ -1125,12 +1298,13 @@ const SalaryManagement = () => {
         doc.text(`Total Payout: Rs. ${totalPayout.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, pageWidth - 60, 33);
 
         // Table
-        const tableColumn = ['Employee', 'Department', 'Working', 'Absent', 'Net Salary'];
+        const tableColumn = ['Employee', 'Department', 'Working', 'Absent', 'Project Adj', 'Net Salary'];
         const tableRows = bulkReportData.map(r => [
             r.name,
             r.department,
             `${r.totalWorkingDays} Days`,
             `${r.totalAbsentDays} Days`,
+            r.projectAdjustment ? `${r.projectAdjustment > 0 ? '+' : ''}Rs. ${r.projectAdjustment.toFixed(2)}` : 'Rs. 0.00',
             `Rs. ${Math.max(0, r.totalFinalSalary - (deductionView ? (r.taskPenalty || 0) : 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
         ]);
 
@@ -1143,7 +1317,8 @@ const SalaryManagement = () => {
             alternateRowStyles: { fillColor: [248, 250, 252] },
             styles: { fontSize: 9, cellPadding: 4 },
             columnStyles: {
-                4: { halign: 'right', fontStyle: 'bold' }
+                4: { halign: 'right' },
+                5: { halign: 'right', fontStyle: 'bold' }
             }
         });
 
@@ -1339,7 +1514,7 @@ const SalaryManagement = () => {
         const monthName = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][selectedMonth - 1];
 
         const headers = [
-            'Employee', 'Department', 'Working Days', 'Absent Days', 'Final Salary',
+            'Employee', 'Department', 'Working Days', 'Absent Days', 'Project Adj', 'Final Salary',
             'Bank Status', 'Payment Mode', 'Report Status'
         ];
 
@@ -1353,6 +1528,7 @@ const SalaryManagement = () => {
                 report.department,
                 report.totalWorkingDays,
                 report.totalAbsentDays,
+                (report.projectAdjustment || 0).toFixed(2),
                 finalSalary.toFixed(2),
                 hasBankDetails ? 'Added' : 'Pending',
                 hasBankDetails ? 'Bank Transfer' : 'Cash',
@@ -1576,14 +1752,165 @@ const SalaryManagement = () => {
                 )}
             </Card>
             <Card>
-                <div className="mb-4">
-                    <input
-                        type="text"
-                        className="form-input"
-                        placeholder="Search by name or department..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
+                <div className="flex flex-col gap-4 mb-4">
+                    {/* Search & Toggle Row */}
+                    <div className="flex flex-col md:flex-row items-center gap-3">
+                        <div className="relative flex-1 w-full">
+                            <input
+                                type="text"
+                                className="form-input pl-10 pr-10 py-2.5 w-full rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all text-sm"
+                                placeholder="Search by name, employee ID, or department..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                                <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                            </div>
+                            {searchTerm && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearchTerm('')}
+                                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                                >
+                                    <FiX size={16} />
+                                </button>
+                            )}
+                        </div>
+                        
+                        <div className="flex items-center gap-2 w-full md:w-auto flex-none justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setIsSalaryFilterOpen(!isSalaryFilterOpen)}
+                                className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border font-bold text-xs transition-all duration-200 active:scale-95 w-full md:w-auto shadow-sm ${
+                                    isSalaryFilterOpen 
+                                    ? 'bg-teal-50 border-teal-200 text-teal-700' 
+                                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+                                }`}
+                            >
+                                <FiSliders size={14} className="text-slate-500" />
+                                <span>Filters</span>
+                                {getActiveFilterCount() > 0 && (
+                                    <span className="flex-none flex items-center justify-center w-5 h-5 rounded-full bg-teal-500 text-white text-[10px] font-black leading-none">
+                                        {getActiveFilterCount()}
+                                    </span>
+                                )}
+                                {isSalaryFilterOpen ? <FiChevronUp size={14} className="ml-1 text-slate-500" /> : <FiChevronDown size={14} className="ml-1 text-slate-500" />}
+                            </button>
+
+                            {getActiveFilterCount() > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={resetSalaryFilters}
+                                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 transition-all font-bold text-xs active:scale-95 shadow-sm"
+                                    title="Reset All Filters"
+                                >
+                                    <FiX size={14} />
+                                    <span>Reset</span>
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Collapsible Advanced Filters Panel */}
+                    <AnimatePresence>
+                        {isSalaryFilterOpen && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.2, ease: 'easeInOut' }}
+                                className="overflow-hidden bg-slate-50/50 border border-slate-100 rounded-2xl p-4 md:p-5"
+                            >
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                    {/* Department */}
+                                    <div className="flex flex-col">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Department</label>
+                                        <select
+                                            value={filterDepartment}
+                                            onChange={(e) => setFilterDepartment(e.target.value)}
+                                            className="form-input bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-slate-700 font-bold cursor-pointer shadow-sm"
+                                        >
+                                            <option value="">All Departments</option>
+                                            {departments.map(dept => (
+                                                <option key={dept._id} value={dept._id}>{dept.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Fine Status */}
+                                    <div className="flex flex-col">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Fine Status (This Month)</label>
+                                        <select
+                                            value={filterFineStatus}
+                                            onChange={(e) => setFilterFineStatus(e.target.value)}
+                                            className="form-input bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-slate-700 font-bold cursor-pointer shadow-sm"
+                                        >
+                                            <option value="All">All Workers</option>
+                                            <option value="Has Fines">Has Fines</option>
+                                            <option value="No Fines">No Fines</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Bank Status */}
+                                    <div className="flex flex-col">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Bank Details</label>
+                                        <select
+                                            value={filterBankStatus}
+                                            onChange={(e) => setFilterBankStatus(e.target.value)}
+                                            className="form-input bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-slate-700 font-bold cursor-pointer shadow-sm"
+                                        >
+                                            <option value="All">All Workers</option>
+                                            <option value="Added">Bank Details Added</option>
+                                            <option value="Pending">Bank Details Pending</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Sort By */}
+                                    <div className="flex flex-col">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Sort By</label>
+                                        <select
+                                            value={sortBy}
+                                            onChange={(e) => setSortBy(e.target.value)}
+                                            className="form-input bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-slate-700 font-bold cursor-pointer shadow-sm"
+                                        >
+                                            <option value="">Default Order</option>
+                                            <option value="name-asc">Name (A - Z)</option>
+                                            <option value="name-desc">Name (Z - A)</option>
+                                            <option value="salary-desc">Base Salary (High to Low)</option>
+                                            <option value="salary-asc">Base Salary (Low to High)</option>
+                                            <option value="final-desc">Net Salary (High to Low)</option>
+                                            <option value="final-asc">Net Salary (Low to High)</option>
+                                            <option value="fine-desc">Fines Amount (High to Low)</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Min Salary */}
+                                    <div className="flex flex-col sm:col-span-2 md:col-span-1">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Min Base Salary (₹)</label>
+                                        <input
+                                            type="number"
+                                            placeholder="Min Salary"
+                                            value={filterMinSalary}
+                                            onChange={(e) => setFilterMinSalary(e.target.value)}
+                                            className="form-input bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-slate-700 font-bold shadow-sm"
+                                        />
+                                    </div>
+
+                                    {/* Max Salary */}
+                                    <div className="flex flex-col sm:col-span-2 md:col-span-1">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Max Base Salary (₹)</label>
+                                        <input
+                                            type="number"
+                                            placeholder="Max Salary"
+                                            value={filterMaxSalary}
+                                            onChange={(e) => setFilterMaxSalary(e.target.value)}
+                                            className="form-input bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-slate-700 font-bold shadow-sm"
+                                        />
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </div>
                 {isLoading ? (
                     <div className="flex justify-center py-8">
@@ -1984,6 +2311,11 @@ const SalaryManagement = () => {
                                                                         </td>
                                                                         <td className="px-4 py-4">
                                                                             <p className="font-black text-emerald-600 text-sm">₹{Math.max(0, report.totalFinalSalary - (deductionView ? (report.taskPenalty || 0) : 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                                                            {report.projectAdjustment !== undefined && report.projectAdjustment !== 0 && (
+                                                                                <span className={`inline-flex items-center px-1.5 py-0.5 mt-1 rounded text-[8px] font-black uppercase tracking-wider ${report.projectAdjustment < 0 ? 'bg-rose-50 text-rose-600 border border-rose-100/50' : 'bg-emerald-50 text-emerald-600 border border-emerald-100/50'}`}>
+                                                                                    {report.projectAdjustment > 0 ? '+' : ''}₹{report.projectAdjustment.toFixed(2)} Adj
+                                                                                </span>
+                                                                            )}
                                                                         </td>
                                                                         <td className="px-4 py-4">
                                                                             <span className={`inline-flex items-center px-2 py-1 rounded-lg font-bold text-[9px] uppercase tracking-wider ${hasBankDetails ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
@@ -2166,6 +2498,18 @@ const SalaryManagement = () => {
                                                     <span className="text-xs font-bold text-teal-700">Project Bonus</span>
                                                     <span className="text-xs font-black text-teal-600">+ ₹{individualReportData.report.summary.totalProjectSalary?.toLocaleString()}</span>
                                                 </div>
+                                                {individualReportData.projectAdjustment !== undefined && individualReportData.projectAdjustment !== 0 && (
+                                                    <div className={`flex justify-between items-center p-3 px-4 rounded-2xl border ${individualReportData.projectAdjustment < 0 ? 'bg-rose-50/50 border-rose-100/50' : 'bg-emerald-50/50 border-emerald-100/50'}`}>
+                                                        <span className={`text-xs font-bold ${individualReportData.projectAdjustment < 0 ? 'text-rose-700' : 'text-emerald-700'}`}>Project Adjustment</span>
+                                                        <span className={`text-xs font-black ${individualReportData.projectAdjustment < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{individualReportData.projectAdjustment > 0 ? '+' : ''} ₹{individualReportData.projectAdjustment?.toLocaleString()}</span>
+                                                    </div>
+                                                )}
+                                                {individualReportData.projectAdjustment !== undefined && individualReportData.projectAdjustment !== 0 && (
+                                                    <div className="flex justify-between items-center bg-slate-100/50 p-3 px-4 rounded-2xl border border-slate-200/50">
+                                                        <span className="text-xs font-bold text-slate-700">Final Project Pay</span>
+                                                        <span className="text-xs font-black text-slate-900">₹{Math.max(0, (individualReportData.report.summary.totalProjectSalary || 0) + (individualReportData.projectAdjustment || 0)).toLocaleString()}</span>
+                                                    </div>
+                                                )}
                                                 {individualReportData.totalBonusAmount > 0 && (
                                                     <div className="flex justify-between items-center bg-emerald-50/50 p-3 px-4 rounded-2xl border border-emerald-100/50">
                                                         <span className="text-xs font-bold text-emerald-700">Additional Bonus</span>
@@ -2320,6 +2664,35 @@ const SalaryManagement = () => {
                                     );
                                 })()}
                             </AnimatePresence>
+
+                            {/* Project Adjustment Breakdown */}
+                            {individualReportData.projectAdjustmentDetails && individualReportData.projectAdjustmentDetails.length > 0 && (
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Project Adjustment Breakdown</h4>
+                                        <div className="h-px flex-1 bg-slate-100 mx-4"></div>
+                                    </div>
+                                    <div className="bg-slate-50/50 rounded-[2rem] p-6 border border-slate-100 space-y-2">
+                                        {individualReportData.projectAdjustmentDetails.map((detail, idx) => (
+                                            <div key={idx} className="flex flex-wrap items-center justify-between bg-white rounded-xl p-3 px-4 border border-slate-100 gap-2">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xs font-bold text-slate-700">{detail.projectName}</span>
+                                                    <span className="text-[10px] font-medium text-slate-400">
+                                                        {['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][detail.month]} {detail.year}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-4 text-[10px]">
+                                                    <span className="text-slate-400">Paid: ₹{detail.paidAmount?.toFixed(2)}</span>
+                                                    <span className="text-slate-400">Entitled: ₹{detail.currentEntitlement?.toFixed(2)}</span>
+                                                    <span className={`font-black ${detail.adjustment < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                        {detail.adjustment > 0 ? '+' : ''}₹{detail.adjustment?.toFixed(2)}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Detailed Stats Grid */}
                             <div className="space-y-4">
@@ -2534,6 +2907,18 @@ const SalaryManagement = () => {
                                                     <p className="text-xl font-bold text-teal-600 tracking-tight">+ ₹{reportData.report.summary.totalProjectSalary?.toFixed(2) || '0.00'}</p>
                                                 </div>
                                             )}
+                                            {reportData.projectAdjustment !== undefined && reportData.projectAdjustment !== 0 && (
+                                                <div>
+                                                    <p className={`text-[10px] font-black uppercase tracking-[0.15em] mb-2 ${reportData.projectAdjustment < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>Project Adjustment</p>
+                                                    <p className={`text-xl font-bold tracking-tight ${reportData.projectAdjustment < 0 ? 'text-rose-500' : 'text-emerald-600'}`}>{reportData.projectAdjustment > 0 ? '+' : ''} ₹{reportData.projectAdjustment?.toFixed(2)}</p>
+                                                </div>
+                                            )}
+                                            {reportData.projectAdjustment !== undefined && reportData.projectAdjustment !== 0 && (
+                                                <div>
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2">Final Project Pay</p>
+                                                    <p className="text-xl font-bold text-slate-800 tracking-tight">₹{Math.max(0, (reportData.report.summary.totalProjectSalary || 0) + (reportData.projectAdjustment || 0)).toFixed(2)}</p>
+                                                </div>
+                                            )}
                                             {reportData.totalBonusAmount > 0 && (
                                                 <div>
                                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2">Bonus Amount</p>
@@ -2615,6 +3000,63 @@ const SalaryManagement = () => {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Record Payment & Adjustment Details */}
+                            {reportData.report.summary.totalProjectSalary > 0 && (
+                                <div className="flex flex-wrap items-center gap-3 mt-2">
+                                    {(() => {
+                                        const fromD = new Date(reportDateRange.fromDate);
+                                        const reportMonth = fromD.getMonth() + 1;
+                                        const reportYear = fromD.getFullYear();
+                                        const now = new Date();
+                                        const currentYear = now.getFullYear();
+                                        const currentMonth = now.getMonth() + 1;
+                                        const isPastMonth = (reportYear < currentYear) || (reportYear === currentYear && reportMonth < currentMonth);
+                                        return isPastMonth ? (
+                                            <span className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest bg-slate-100 text-slate-600 border border-slate-200/50 flex items-center gap-1.5">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                                <span>Payment Frozen</span>
+                                            </span>
+                                        ) : (
+                                            <span className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest bg-amber-50 text-amber-600 border border-amber-100 flex items-center gap-1.5">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                <span>Active (Dynamic)</span>
+                                            </span>
+                                        );
+                                    })()}
+                                    {reportData.projectAdjustment !== undefined && reportData.projectAdjustment !== 0 && (
+                                        <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest ${reportData.projectAdjustment < 0 ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-emerald-50 text-emerald-600 border border-emerald-100'}`}>
+                                            Adjustment: {reportData.projectAdjustment > 0 ? '+' : ''}₹{reportData.projectAdjustment?.toFixed(2)}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Adjustment Details Breakdown */}
+                            {reportData.projectAdjustmentDetails && reportData.projectAdjustmentDetails.length > 0 && (
+                                <div className="bg-slate-50/50 rounded-[2rem] p-6 border border-slate-100 mt-2">
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Project Adjustment Breakdown</h4>
+                                    <div className="space-y-2">
+                                        {reportData.projectAdjustmentDetails.map((detail, idx) => (
+                                            <div key={idx} className="flex flex-wrap items-center justify-between bg-white rounded-xl p-3 px-4 border border-slate-100 gap-2">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xs font-bold text-slate-700">{detail.projectName}</span>
+                                                    <span className="text-[10px] font-medium text-slate-400">
+                                                        {['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][detail.month]} {detail.year}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-4 text-[10px]">
+                                                    <span className="text-slate-400">Paid: ₹{detail.paidAmount?.toFixed(2)}</span>
+                                                    <span className="text-slate-400">Entitled: ₹{detail.currentEntitlement?.toFixed(2)}</span>
+                                                    <span className={`font-black ${detail.adjustment < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                        {detail.adjustment > 0 ? '+' : ''}₹{detail.adjustment?.toFixed(2)}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Collapsible Task Deduction Breakdown Toggle */}
                             {deductionView && reportData.delayedTasks?.length > 0 && (

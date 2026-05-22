@@ -1,6 +1,6 @@
 const express = require('express');
 const { protect, adminOnly, adminOrWorker, workerOnly } = require('../middleware/authMiddleware');
-const { giveBonus, removeBonus, resetSalary, getWorkerSalaryReport, getMySalaryReport, getCompensationReport, getBulkSalaryReport, getTopTeamsEarnings, addDeveloperProject, getDeveloperProjects, deleteDeveloperProject, getAllDeveloperProjectsSummary, createSalaryProject, getSalaryProjects, getSalaryProjectsForWorker, updateSalaryProject, deleteSalaryProject } = require('../controllers/salaryController');
+const { giveBonus, removeBonus, resetSalary, getWorkerSalaryReport, getMySalaryReport, getCompensationReport, getBulkSalaryReport, getTopTeamsEarnings, addDeveloperProject, getDeveloperProjects, deleteDeveloperProject, getAllDeveloperProjectsSummary, createSalaryProject, getSalaryProjects, getSalaryProjectsForWorker, updateSalaryProject, deleteSalaryProject, recordProjectPayment, recordAllProjectPayments, getProjectAdjustmentLedger } = require('../controllers/salaryController');
 const router = express.Router();
 
 router.route('/give-bonus/:id').post(protect, adminOnly, giveBonus);
@@ -25,5 +25,11 @@ router.route('/salary-projects/:id').put(protect, adminOnly, updateSalaryProject
 router.route('/salary-projects/:id').delete(protect, adminOnly, deleteSalaryProject);
 router.route('/salary-projects-for-worker/:workerId').get(protect, getSalaryProjectsForWorker);
 
+// ─── Project Payment Ledger (Dynamic Recalculation) Routes ───
+router.route('/record-project-payment').post(protect, adminOnly, recordProjectPayment);
+router.route('/record-all-project-payments').post(protect, adminOnly, recordAllProjectPayments);
+router.route('/project-adjustment-ledger/:workerId').get(protect, getProjectAdjustmentLedger);
+
 module.exports = router;
+
 

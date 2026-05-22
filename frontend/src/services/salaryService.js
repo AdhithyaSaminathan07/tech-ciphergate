@@ -222,4 +222,44 @@ export const getSalaryProjectsForWorker = async (workerId, subdomain, fromDate, 
   } catch (error) {
     throw error.response ? error.response.data : new Error('Failed to get salary projects for worker');
   }
-};
+};
+
+// ─── Project Payment Ledger (Dynamic Recalculation) ───
+
+export const recordProjectPayment = async (data) => {
+  try {
+    const token = getAuthToken();
+    const response = await api.post('/salary/record-project-payment', data, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response ? error.response.data : new Error('Failed to record project payment');
+  }
+};
+
+export const recordAllProjectPayments = async (data) => {
+  try {
+    const token = getAuthToken();
+    const response = await api.post('/salary/record-all-project-payments', data, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response ? error.response.data : new Error('Failed to record project payments');
+  }
+};
+
+export const getProjectAdjustmentLedger = async (workerId, subdomain) => {
+  try {
+    const token = getAuthToken();
+    const response = await api.get(`/salary/project-adjustment-ledger/${workerId}`, {
+      params: { subdomain },
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response ? error.response.data : new Error('Failed to get project adjustment ledger');
+  }
+};
+
