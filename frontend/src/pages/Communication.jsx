@@ -44,7 +44,7 @@ const Communication = () => {
       ? 'http://localhost:5173'
       : 'https://youtubeclients.vercel.app';
 
-    return `${baseUrl}/login?sso_username=${encodeURIComponent(ssoUser)}&sso_key=${SSO_KEY}&embed=true&role=staff&redirect=comments`;
+    return `${baseUrl}/?sso_username=${encodeURIComponent(ssoUser)}&sso_key=${SSO_KEY}&embed=true&role=staff&redirect=comments`;
   }, [user?.email, user?.username]);
 
   if (!gowhatsUrl || !instaxbotUrl || !instaxbotCommentsUrl || !youtubeCommentsUrl) {
