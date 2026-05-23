@@ -192,6 +192,9 @@ exports.updateTicket = async (req, res) => {
             if (status === 'Done' && req.user.role !== 'admin') {
                 return res.status(403).json({ message: 'Non-admin users cannot mark tasks as Done. Move to Review instead.' });
             }
+            if (ticket.status === 'Done' && status !== 'Done' && req.user.role !== 'admin') {
+                return res.status(403).json({ message: 'Approved/Done tasks cannot be moved back by non-admin users.' });
+            }
             ticket.status = status;
         }
 

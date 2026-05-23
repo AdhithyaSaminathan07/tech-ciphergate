@@ -311,7 +311,12 @@ const WorkerWorkAllocation = () => {
     const updateSelectedTicketStatus = async (status) => {
         // Prevent worker from marking as Done manually
         if (status === 'Done') {
-            alert('Only Admin can mark tasks as Done. Please move to Review.');
+            toast.warning('Only Admin can mark tasks as Done. Please move to Review.');
+            return;
+        }
+
+        if (selectedTicket.status === 'Done') {
+            toast.error('Approved/Done tasks cannot be moved back by employees.');
             return;
         }
 
@@ -332,6 +337,11 @@ const WorkerWorkAllocation = () => {
 
         // Prevent worker from dragging to Done
         if (targetStatus === 'Done') {
+            return;
+        }
+
+        if (ticket.status === 'Done') {
+            toast.error('Approved/Done tasks cannot be moved back by employees.');
             return;
         }
 
@@ -843,7 +853,8 @@ const WorkerWorkAllocation = () => {
                                         <select
                                             value={selectedTicket.status}
                                             onChange={(e) => updateSelectedTicketStatus(e.target.value)}
-                                            className="w-full md:w-auto bg-gray-100 hover:bg-gray-200 border border-gray-200 text-gray-700 text-xs font-bold rounded-lg p-2.5 pr-8 focus:ring-2 focus:ring-teal-500 appearance-none uppercase transition-colors cursor-pointer outline-none"
+                                            disabled={selectedTicket.status === 'Done'}
+                                            className="w-full md:w-auto bg-gray-100 hover:bg-gray-200 border border-gray-200 text-gray-700 text-xs font-bold rounded-lg p-2.5 pr-8 focus:ring-2 focus:ring-teal-500 appearance-none uppercase transition-colors cursor-pointer outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                                             style={{ backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234B5563' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', backgroundSize: '1.2em' }}
                                         >
                                             {columns.map(status => (
