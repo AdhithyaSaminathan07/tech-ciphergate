@@ -5,7 +5,7 @@ import api from '../../services/api';
 import {
     FiCheckCircle, FiBookOpen, FiShield, FiAlertCircle,
     FiLogOut, FiDownload, FiArrowRight, FiCheck, FiChevronRight,
-    FiLock, FiUnlock, FiFileText
+    FiLock, FiUnlock, FiFileText, FiChevronDown, FiChevronUp, FiList
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
@@ -20,6 +20,7 @@ const RulesAcceptance = () => {
     const [isAccepted, setIsAccepted] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [selectedRuleIndex, setSelectedRuleIndex] = useState(0);
+    const [isOutlineOpen, setIsOutlineOpen] = useState(false);
     // Track which rule indexes have been fully scrolled/read
     const [readRules, setReadRules] = useState(new Set());
 
@@ -55,6 +56,48 @@ const RulesAcceptance = () => {
         fetchActiveRules();
     }, [navigate]);
 
+    // Automatically check scroll position and non-scrollable content height
+    useEffect(() => {
+        if (rules.length === 0) return;
+
+        const checkReadStatus = () => {
+            const el = containerRef.current;
+            if (!el) return;
+
+            const isScrollable = el.scrollHeight > el.clientHeight + 15;
+            const isAtBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 25;
+
+            // If it fits or is already scrolled to bottom
+            if (!isScrollable || isAtBottom) {
+                setReadRules(prev => {
+                    if (prev.has(selectedRuleIndex)) return prev;
+                    const next = new Set(prev);
+                    next.add(selectedRuleIndex);
+                    return next;
+                });
+            }
+
+            if (isScrollable) {
+                const totalScrollable = el.scrollHeight - el.clientHeight;
+                const percentage = Math.min(100, Math.ceil((el.scrollTop / totalScrollable) * 100));
+                setScrollPercentage(percentage);
+            } else {
+                setScrollPercentage(100);
+            }
+        };
+
+        checkReadStatus();
+        const t1 = setTimeout(checkReadStatus, 100);
+        const t2 = setTimeout(checkReadStatus, 400);
+
+        window.addEventListener('resize', checkReadStatus);
+        return () => {
+            clearTimeout(t1);
+            clearTimeout(t2);
+            window.removeEventListener('resize', checkReadStatus);
+        };
+    }, [selectedRuleIndex, rules, rules[selectedRuleIndex]?.content]);
+
     const handleScroll = (e) => {
         if (!config?.scrollValidation) return;
 
@@ -63,7 +106,6 @@ const RulesAcceptance = () => {
 
         if (totalScrollable <= 0) {
             setScrollPercentage(100);
-            // Mark current rule as read
             setReadRules(prev => {
                 const next = new Set(prev);
                 next.add(selectedRuleIndex);
@@ -75,8 +117,7 @@ const RulesAcceptance = () => {
         const percentage = Math.min(100, Math.ceil((scrollTop / totalScrollable) * 100));
         setScrollPercentage(percentage);
 
-        if (scrollHeight - scrollTop <= clientHeight + 15) {
-            // Mark current rule as read
+        if (scrollHeight - scrollTop <= clientHeight + 25) {
             setReadRules(prev => {
                 const next = new Set(prev);
                 next.add(selectedRuleIndex);
@@ -85,22 +126,15 @@ const RulesAcceptance = () => {
         }
     };
 
-    // When switching rules, reset scroll progress for the new rule
     const handleSelectRule = (idx) => {
         setSelectedRuleIndex(idx);
         setScrollPercentage(0);
-        // If content is short (no scroll needed), mark as read immediately
-        // We'll do this via a small timeout after render
+        setIsOutlineOpen(false); // Close dropdown on mobile selection
         setTimeout(() => {
             const el = containerRef.current;
-            if (el && el.scrollHeight <= el.clientHeight + 15) {
-                setReadRules(prev => {
-                    const next = new Set(prev);
-                    next.add(idx);
-                    return next;
-                });
+            if (el) {
+                el.scrollTo({ top: 0 });
             }
-            el && el.scrollTo({ top: 0 });
         }, 50);
     };
 
@@ -158,19 +192,11 @@ const RulesAcceptance = () => {
     }
 
     const activeRule = rules[selectedRuleIndex];
-
-    // All rules read = readRules contains all indexes
     const allRulesRead = rules.length > 0 && readRules.size >= rules.length;
-    // Overall reading progress percentage
     const overallProgress = rules.length > 0 ? Math.round((readRules.size / rules.length) * 100) : 0;
-
-    // Accept button enabled when: all rules read (or no scroll validation) AND checkbox checked (if required)
     const canAccept = !submitting &&
         !(config?.scrollValidation && !allRulesRead) &&
         !(config?.requireCheckbox && !isAccepted);
-
-    // scrolledToEnd now means current rule reached bottom — but we use allRulesRead for the gate
-    const currentRuleRead = readRules.has(selectedRuleIndex);
 
     return (
         <div style={{
@@ -187,104 +213,229 @@ const RulesAcceptance = () => {
                     from { opacity: 0; transform: translateY(10px); }
                     to { opacity: 1; transform: translateY(0); }
                 }
-                @keyframes shimmer {
-                    0% { background-position: -200% 0; }
-                    100% { background-position: 200% 0; }
-                }
-                .rules-scroll::-webkit-scrollbar { width: 5px; }
+                
+                .rules-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
                 .rules-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
                 .rules-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
                 .rules-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+                
                 .rule-nav-btn { transition: all 0.18s ease; }
                 .rule-nav-btn:hover { transform: translateX(2px); }
                 .rule-nav-btn.active { 
                     background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
                     box-shadow: 0 4px 15px rgba(13, 148, 136, 0.25);
                 }
-                .accept-btn {
-                    transition: all 0.2s ease;
-                    cursor: pointer;
-                }
+                
+                .accept-btn { transition: all 0.2s ease; cursor: pointer; }
                 .accept-btn:hover:not(:disabled) {
                     transform: translateY(-1px);
                     box-shadow: 0 8px 25px rgba(13, 148, 136, 0.35) !important;
                 }
                 .accept-btn:active:not(:disabled) { transform: translateY(0); }
                 .accept-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+                
                 .card-shadow { box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04); }
-                .progress-bar-fill {
-                    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-                }
+                .progress-bar-fill { transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+                
                 .prose-rules h1, .prose-rules h2, .prose-rules h3, .prose-rules h4 {
-                    color: #1e293b; font-weight: 700; margin: 1em 0 0.5em;
+                    color: #1e293b; font-weight: 700; margin: 0.8em 0 0.4em;
                 }
-                .prose-rules p { color: #475569; line-height: 1.75; margin: 0.75em 0; }
-                .prose-rules ul, .prose-rules ol { color: #475569; padding-left: 1.5em; line-height: 1.75; }
-                .prose-rules li { margin: 0.35em 0; }
+                .prose-rules p { color: #475569; line-height: 1.6; margin: 0.6em 0; font-size: 13.5px; }
+                .prose-rules ul, .prose-rules ol { color: #475569; padding-left: 1.3em; line-height: 1.6; font-size: 13.5px; }
+                .prose-rules li { margin: 0.25em 0; }
                 .prose-rules strong { color: #1e293b; font-weight: 600; }
                 .prose-rules em { font-style: italic; }
+                
                 .fade-in { animation: fadeInUp 0.3s ease both; }
+
+                /* Mobile Responsive styles */
+                .responsive-header {
+                    padding: 0 12px;
+                    height: auto;
+                    min-height: 60px;
+                    flex-direction: column;
+                    gap: 8px;
+                    align-items: stretch;
+                    padding-top: 10px;
+                    padding-bottom: 10px;
+                }
+                .responsive-header-logo-container {
+                    justify-content: space-between;
+                    width: 100%;
+                }
+                .responsive-header-actions {
+                    justify-content: space-between;
+                    width: 100%;
+                }
+                .responsive-main {
+                    grid-template-columns: 1fr;
+                    padding: 10px;
+                    gap: 12px;
+                }
+                .responsive-doc-header {
+                    flex-direction: row;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 10px;
+                    padding: 12px 16px !important;
+                }
+                .responsive-doc-header-nav {
+                    width: auto;
+                    justify-content: flex-end;
+                }
+                .responsive-viewer-container {
+                    max-height: 50vh !important;
+                    padding: 16px 20px !important;
+                }
+                .responsive-footer-actions {
+                    flex-direction: column;
+                    align-items: stretch !important;
+                    width: 100%;
+                    padding: 12px 16px !important;
+                    gap: 10px !important;
+                }
+                .responsive-form-container {
+                    flex-direction: column;
+                    align-items: stretch !important;
+                    width: 100%;
+                    gap: 10px !important;
+                }
+                .responsive-checkbox-label {
+                    margin-bottom: 4px;
+                }
+
+                .desktop-outline-panel {
+                    display: none;
+                }
+                .mobile-outline-toggle {
+                    display: block;
+                }
+
+                @media (min-width: 768px) {
+                    .desktop-outline-panel {
+                        display: block;
+                    }
+                    .mobile-outline-toggle {
+                        display: none;
+                    }
+                    .responsive-header {
+                        padding: 0 24px;
+                        height: 64px;
+                        flex-direction: row;
+                        gap: 0;
+                        align-items: center;
+                        padding-top: 0;
+                        padding-bottom: 0;
+                    }
+                    .responsive-header-logo-container {
+                        width: auto;
+                        justify-content: flex-start;
+                    }
+                    .responsive-header-actions {
+                        width: auto;
+                        justify-content: flex-end;
+                    }
+                    .responsive-main {
+                        grid-template-columns: 260px 1fr;
+                        padding: 20px;
+                        gap: 16px;
+                    }
+                    .responsive-doc-header {
+                        padding: 16px 24px !important;
+                    }
+                    .responsive-viewer-container {
+                        max-height: 58vh !important;
+                        padding: 24px 28px !important;
+                    }
+                    .responsive-footer-actions {
+                        flex-direction: row;
+                        align-items: center !important;
+                        padding: 16px 24px !important;
+                        gap: 14px !important;
+                    }
+                    .responsive-form-container {
+                        flex-direction: row;
+                        align-items: center !important;
+                        width: auto;
+                        gap: 14px !important;
+                    }
+                    .responsive-checkbox-label {
+                        margin-bottom: 0;
+                    }
+                }
+
+                @media (min-width: 1024px) {
+                    .responsive-main {
+                        grid-template-columns: 310px 1fr;
+                        padding: 28px 40px;
+                        gap: 20px;
+                    }
+                    .responsive-viewer-container {
+                        max-height: 62vh !important;
+                        padding: 28px 36px !important;
+                    }
+                }
             `}</style>
 
             {/* ── TOP HEADER ── */}
-            <header style={{
+            <header className="responsive-header" style={{
                 background: '#ffffff',
                 borderBottom: '1px solid #e2e8f0',
-                padding: '0 32px',
-                height: '64px',
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
                 position: 'sticky',
                 top: 0,
                 zIndex: 50,
                 boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
             }}>
                 {/* Logo + Title */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{
-                        width: '38px', height: '38px',
-                        background: 'linear-gradient(135deg, #0d9488, #0f766e)',
-                        borderRadius: '10px',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        boxShadow: '0 4px 12px rgba(13,148,136,0.25)'
-                    }}>
-                        <FiShield size={20} color="#ffffff" />
-                    </div>
-                    <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '17px', fontWeight: '700', color: '#0f172a', letterSpacing: '-0.3px' }}>
-                                CipherGate
-                            </span>
-                            <span style={{ color: '#cbd5e1', fontSize: '16px' }}>|</span>
-                            <span style={{ fontSize: '15px', fontWeight: '600', color: '#0d9488' }}>
-                                Rules & Regulations
-                            </span>
+                <div className="responsive-header-logo-container" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                            width: '34px', height: '34px',
+                            background: 'linear-gradient(135deg, #0d9488, #0f766e)',
+                            borderRadius: '8px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            boxShadow: '0 4px 10px rgba(13,148,136,0.2)',
+                            flexShrink: 0
+                        }}>
+                            <FiShield size={18} color="#ffffff" />
                         </div>
-                        <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '1px', fontWeight: '500' }}>
-                            Policy Document — Version {config?.currentVersion || '1.0'}
-                        </p>
+                        <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '15px', fontWeight: '700', color: '#0f172a', letterSpacing: '-0.3px' }}>
+                                    CipherGate
+                                </span>
+                                <span style={{ color: '#cbd5e1', fontSize: '12px' }}>|</span>
+                                <span style={{ fontSize: '13px', fontWeight: '600', color: '#0d9488' }}>
+                                    Rules Acceptance
+                                </span>
+                            </div>
+                            <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '1px', fontWeight: '500' }}>
+                                Policy Document — Version {config?.currentVersion || '1.0'}
+                            </p>
+                        </div>
                     </div>
                 </div>
 
                 {/* Progress badge + Sign out */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div className="responsive-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     {config?.scrollValidation && (
                         <div style={{
-                            display: 'flex', alignItems: 'center', gap: '6px',
+                            display: 'flex', alignItems: 'center', gap: '5px',
                             background: allRulesRead ? '#f0fdf4' : '#fffbeb',
                             border: `1px solid ${allRulesRead ? '#bbf7d0' : '#fde68a'}`,
-                            borderRadius: '8px', padding: '5px 12px'
+                            borderRadius: '6px', padding: '4px 10px'
                         }}>
                             {allRulesRead
-                                ? <FiCheckCircle size={13} color="#16a34a" />
-                                : <FiAlertCircle size={13} color="#d97706" />
+                                ? <FiCheckCircle size={12} color="#16a34a" />
+                                : <FiAlertCircle size={12} color="#d97706" />
                             }
                             <span style={{
-                                fontSize: '12px', fontWeight: '600',
-                                color: allRulesRead ? '#16a34a' : '#d97706'
+                                fontSize: '11px', fontWeight: '600',
+                                color: allRulesRead ? '#16a34a' : '#d97706',
+                                whiteSpace: 'nowrap'
                             }}>
-                                {allRulesRead ? 'All Policies Read' : `${readRules.size}/${rules.length} Sections Read`}
+                                {allRulesRead ? 'All Read' : `${readRules.size}/${rules.length} Read`}
                             </span>
                         </div>
                     )}
@@ -292,13 +443,13 @@ const RulesAcceptance = () => {
                     <button
                         onClick={handleLogout}
                         style={{
-                            display: 'flex', alignItems: 'center', gap: '7px',
+                            display: 'flex', alignItems: 'center', gap: '6px',
                             background: '#f8fafc',
                             border: '1px solid #e2e8f0',
                             color: '#64748b',
-                            padding: '8px 16px',
+                            padding: '6px 12px',
                             borderRadius: '8px',
-                            fontSize: '13px', fontWeight: '600',
+                            fontSize: '12px', fontWeight: '600',
                             cursor: 'pointer',
                             transition: 'all 0.18s ease'
                         }}
@@ -313,34 +464,135 @@ const RulesAcceptance = () => {
                             e.currentTarget.style.color = '#64748b';
                         }}
                     >
-                        <FiLogOut size={14} />
+                        <FiLogOut size={13} />
                         Sign Out
                     </button>
                 </div>
             </header>
 
             {/* ── MAIN CONTENT ── */}
-            <main style={{
+            <main className="responsive-main" style={{
                 flex: 1,
                 maxWidth: '1400px',
                 margin: '0 auto',
                 width: '100%',
-                padding: '32px 48px 48px 48px',
                 display: 'grid',
-                gridTemplateColumns: '300px 1fr',
-                gap: '24px',
                 alignItems: 'start'
             }}>
 
-                {/* ── LEFT: Navigation Panel ── */}
-                <div style={{
+                {/* ── LEFT/TOP: Outline Navigation Toggle (Mobile Only) ── */}
+                <div className="mobile-outline-toggle" style={{ width: '100%' }}>
+                    <button
+                        onClick={() => setIsOutlineOpen(!isOutlineOpen)}
+                        style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            background: '#ffffff',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '12px',
+                            padding: '12px 16px',
+                            fontSize: '13px',
+                            fontWeight: '600',
+                            color: '#1e293b',
+                            cursor: 'pointer',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                        }}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <FiList size={16} color="#0d9488" />
+                            <span>Document Outline ({readRules.size}/{rules.length} Read)</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{
+                                fontSize: '11px',
+                                padding: '2px 8px',
+                                borderRadius: '999px',
+                                background: allRulesRead ? '#d1fae5' : '#fef3c7',
+                                color: allRulesRead ? '#065f46' : '#92400e'
+                            }}>
+                                {allRulesRead ? 'Ready' : 'Progress'}
+                            </span>
+                            {isOutlineOpen ? <FiChevronUp size={16} /> : <FiChevronDown size={16} />}
+                        </div>
+                    </button>
+
+                    {/* Expandable Menu */}
+                    {isOutlineOpen && (
+                        <div className="card-shadow fade-in" style={{
+                            background: '#ffffff',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '12px',
+                            marginTop: '8px',
+                            maxHeight: '280px',
+                            overflowY: 'auto',
+                            padding: '8px',
+                            position: 'absolute',
+                            left: '10px',
+                            right: '10px',
+                            zIndex: 40
+                        }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                {rules.map((rule, idx) => {
+                                    const isActive = selectedRuleIndex === idx;
+                                    const isRead = readRules.has(idx);
+                                    return (
+                                        <button
+                                            key={rule._id}
+                                            onClick={() => handleSelectRule(idx)}
+                                            style={{
+                                                width: '100%',
+                                                textAlign: 'left',
+                                                padding: '10px 12px',
+                                                borderRadius: '8px',
+                                                border: isActive ? 'none' : isRead ? '1px solid #99f6e4' : '1px solid #f1f5f9',
+                                                background: isActive ? 'linear-gradient(135deg, #0d9488 0%, #0f766e 100%)' : isRead ? '#f0fdfa' : '#fafafa',
+                                                color: isActive ? '#ffffff' : '#1e293b',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                gap: '8px'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                                                <div style={{
+                                                    minWidth: '20px', height: '20px',
+                                                    borderRadius: '5px',
+                                                    background: isActive ? 'rgba(255,255,255,0.25)' : isRead ? '#0d9488' : '#e2e8f0',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    fontSize: '9px', fontWeight: '750',
+                                                    color: isActive ? '#fff' : isRead ? '#fff' : '#64748b',
+                                                    flexShrink: 0
+                                                }}>
+                                                    {isRead && !isActive ? <FiCheck size={10} strokeWidth={3} /> : idx + 1}
+                                                </div>
+                                                <div style={{ minWidth: 0, flex: 1 }}>
+                                                    <span style={{ fontSize: '8px', display: 'block', textTransform: 'uppercase', color: isActive ? 'rgba(255,255,255,0.8)' : '#0d9488', fontWeight: '700' }}>
+                                                        {rule.category}
+                                                    </span>
+                                                    <span style={{ fontSize: '12px', fontWeight: '600', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                        {rule.title}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <FiChevronRight size={12} color={isActive ? 'rgba(255,255,255,0.8)' : '#94a3b8'} />
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* ── LEFT: Navigation Panel (Desktop Only) ── */}
+                <div className="desktop-outline-panel" style={{
                     background: '#ffffff',
                     border: '1px solid #e2e8f0',
                     borderRadius: '16px',
-                    overflow: 'hidden',
-                    position: 'sticky',
-                    top: '88px'
-                }} className="card-shadow">
+                    overflow: 'hidden'
+                }} className="card-shadow desktop-outline-panel">
 
                     {/* Panel Header */}
                     <div style={{
@@ -350,17 +602,17 @@ const RulesAcceptance = () => {
                     }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                             <FiBookOpen size={16} color="#0d9488" />
-                            <span style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: '750', color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                                 Document Outline
                             </span>
                         </div>
-                        <p style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.5', marginLeft: '24px' }}>
+                        <p style={{ fontSize: '11px', color: '#64748b', lineHeight: '1.4' }}>
                             Select each section to review. Read all policies to enable acceptance.
                         </p>
                     </div>
 
                     {/* Rule Navigation Items */}
-                    <div style={{ padding: '12px', maxHeight: '62vh', overflowY: 'auto' }} className="rules-scroll">
+                    <div style={{ padding: '12px', maxHeight: '38vh', overflowY: 'auto' }} className="rules-scroll">
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             {rules.map((rule, idx) => {
                                 const isActive = selectedRuleIndex === idx;
@@ -373,7 +625,7 @@ const RulesAcceptance = () => {
                                         style={{
                                             width: '100%',
                                             textAlign: 'left',
-                                            padding: '11px 14px',
+                                            padding: '10px 12px',
                                             borderRadius: '10px',
                                             border: isActive ? 'none' : isRead ? '1px solid #99f6e4' : '1px solid #f1f5f9',
                                             background: isActive ? undefined : isRead ? '#f0fdfa' : '#fafafa',
@@ -399,7 +651,7 @@ const RulesAcceptance = () => {
 
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{
-                                                fontSize: '10px',
+                                                fontSize: '9px',
                                                 fontWeight: '700',
                                                 textTransform: 'uppercase',
                                                 letterSpacing: '0.6px',
@@ -409,7 +661,7 @@ const RulesAcceptance = () => {
                                                 {rule.category}
                                             </div>
                                             <div style={{
-                                                fontSize: '12.5px',
+                                                fontSize: '12px',
                                                 fontWeight: '600',
                                                 color: isActive ? '#ffffff' : '#1e293b',
                                                 whiteSpace: 'nowrap',
@@ -463,11 +715,6 @@ const RulesAcceptance = () => {
                                 }}
                             />
                         </div>
-                        {!allRulesRead && (
-                            <p style={{ fontSize: '10.5px', color: '#94a3b8', marginTop: '6px', fontStyle: 'italic' }}>
-                                Scroll through each section to unlock acceptance
-                            </p>
-                        )}
                     </div>
                 </div>
 
@@ -482,36 +729,33 @@ const RulesAcceptance = () => {
                 }} className="card-shadow">
 
                     {/* Document Header */}
-                    <div style={{
-                        padding: '20px 28px',
+                    <div className="responsive-doc-header" style={{
                         borderBottom: '1px solid #f1f5f9',
                         display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
                         background: 'linear-gradient(135deg, #f0fdfa 0%, #f8fafc 100%)'
                     }}>
-                        <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
                                 <span style={{
-                                    fontSize: '10px',
+                                    fontSize: '9px',
                                     fontWeight: '700',
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.8px',
                                     color: '#0d9488',
                                     background: '#f0fdfa',
                                     border: '1px solid #99f6e4',
-                                    padding: '3px 10px',
+                                    padding: '2px 8px',
                                     borderRadius: '999px'
                                 }}>
                                     {activeRule?.category}
                                 </span>
                                 {activeRule?.severity && (
                                     <span style={{
-                                        fontSize: '10px',
+                                        fontSize: '9px',
                                         fontWeight: '700',
                                         textTransform: 'uppercase',
                                         letterSpacing: '0.5px',
-                                        padding: '3px 10px',
+                                        padding: '2px 8px',
                                         borderRadius: '999px',
                                         ...(activeRule.severity === 'critical'
                                             ? { color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca' }
@@ -519,42 +763,43 @@ const RulesAcceptance = () => {
                                             ? { color: '#d97706', background: '#fffbeb', border: '1px solid #fde68a' }
                                             : { color: '#059669', background: '#ecfdf5', border: '1px solid #a7f3d0' })
                                     }}>
-                                        {activeRule.severity} Priority
+                                        {activeRule.severity}
                                     </span>
                                 )}
                             </div>
                             <h2 style={{
-                                fontSize: '20px',
-                                fontWeight: '700',
+                                fontSize: '15px',
+                                fontWeight: '750',
                                 color: '#0f172a',
                                 letterSpacing: '-0.3px',
-                                margin: 0
+                                margin: 0,
+                                wordBreak: 'break-word'
                             }}>
                                 {activeRule?.title}
                             </h2>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div className="responsive-doc-header-nav" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <div style={{
-                                display: 'flex', alignItems: 'center', gap: '5px',
-                                color: '#64748b', fontSize: '12px', fontWeight: '500'
+                                display: 'flex', alignItems: 'center', gap: '4px',
+                                color: '#64748b', fontSize: '11px', fontWeight: '500'
                             }}>
-                                <FiFileText size={14} />
-                                <span>{selectedRuleIndex + 1} of {rules.length}</span>
+                                <FiFileText size={12} />
+                                <span>{selectedRuleIndex + 1}/{rules.length}</span>
                             </div>
-                            {/* Next/Prev buttons */}
+                            {/* Next button */}
                             {selectedRuleIndex < rules.length - 1 && (
                                 <button
                                     onClick={() => handleSelectRule(selectedRuleIndex + 1)}
                                     style={{
-                                        display: 'flex', alignItems: 'center', gap: '4px',
+                                        display: 'flex', alignItems: 'center', gap: '3px',
                                         background: '#f0fdfa', border: '1px solid #99f6e4',
                                         color: '#0d9488', padding: '4px 10px',
-                                        borderRadius: '7px', fontSize: '12px', fontWeight: '600',
+                                        borderRadius: '6px', fontSize: '11px', fontWeight: '600',
                                         cursor: 'pointer'
                                     }}
                                 >
-                                    Next <FiChevronRight size={12} />
+                                    Next <FiChevronRight size={11} />
                                 </button>
                             )}
                         </div>
@@ -564,13 +809,12 @@ const RulesAcceptance = () => {
                     <div
                         ref={containerRef}
                         onScroll={handleScroll}
-                        className="rules-scroll fade-in"
+                        className="rules-scroll fade-in responsive-viewer-container"
                         style={{
                             flex: 1,
-                            padding: '28px 36px',
                             overflowY: 'auto',
-                            maxHeight: '62vh',
-                            lineHeight: '1.75'
+                            lineHeight: '1.6',
+                            outline: 'none'
                         }}
                     >
                         {activeRule ? (
@@ -580,15 +824,15 @@ const RulesAcceptance = () => {
                                 {/* Attachments */}
                                 {activeRule.attachments && activeRule.attachments.length > 0 && (
                                     <div style={{
-                                        marginTop: '28px',
-                                        paddingTop: '20px',
+                                        marginTop: '20px',
+                                        paddingTop: '16px',
                                         borderTop: '1px solid #f1f5f9'
                                     }}>
-                                        <h4 style={{ fontSize: '13px', fontWeight: '700', color: '#1e293b', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            <FiDownload size={13} color="#0d9488" />
+                                        <h4 style={{ fontSize: '12px', fontWeight: '700', color: '#1e293b', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <FiDownload size={12} color="#0d9488" />
                                             Policy Attachments
                                         </h4>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                                             {activeRule.attachments.map((fileUrl, index) => {
                                                 const fileName = fileUrl.split('/').pop() || 'Attachment';
                                                 return (
@@ -598,16 +842,16 @@ const RulesAcceptance = () => {
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         style={{
-                                                            display: 'inline-flex', alignItems: 'center', gap: '7px',
+                                                            display: 'inline-flex', alignItems: 'center', gap: '5px',
                                                             color: '#0d9488', background: '#f0fdfa',
                                                             border: '1px solid #99f6e4',
-                                                            padding: '7px 14px', borderRadius: '8px',
-                                                            fontSize: '13px', fontWeight: '600',
+                                                            padding: '5px 10px', borderRadius: '6px',
+                                                            fontSize: '12px', fontWeight: '600',
                                                             textDecoration: 'none',
                                                             transition: 'all 0.15s ease'
                                                         }}
                                                     >
-                                                        <FiDownload size={13} />
+                                                        <FiDownload size={11} />
                                                         {fileName}
                                                     </a>
                                                 );
@@ -620,64 +864,64 @@ const RulesAcceptance = () => {
                             <div style={{
                                 display: 'flex', flexDirection: 'column',
                                 alignItems: 'center', justifyContent: 'center',
-                                height: '200px', color: '#94a3b8'
+                                height: '160px', color: '#94a3b8'
                             }}>
-                                <FiBookOpen size={40} style={{ marginBottom: '12px', opacity: 0.4 }} />
-                                <p style={{ fontSize: '14px' }}>Select a document category to begin reading.</p>
+                                <FiBookOpen size={36} style={{ marginBottom: '10px', opacity: 0.4 }} />
+                                <p style={{ fontSize: '13px' }}>Select a document category to begin reading.</p>
                             </div>
                         )}
                     </div>
 
                     {/* ── FOOTER: Scroll hint + Agreement Form ── */}
-                    <div style={{
+                    <div className="responsive-footer-actions" style={{
                         borderTop: '1px solid #e2e8f0',
-                        padding: '18px 28px',
                         background: '#fafafa',
                         display: 'flex',
-                        flexWrap: 'wrap',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '14px'
+                        justifyContent: 'space-between'
                     }}>
                         {/* Left: Status indicator */}
-                        <div>
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
                             {config?.scrollValidation && !allRulesRead ? (
                                 <div style={{
-                                    display: 'flex', alignItems: 'center', gap: '8px',
+                                    display: 'flex', alignItems: 'center', gap: '6px',
                                     color: '#d97706',
                                     background: '#fffbeb',
                                     border: '1px solid #fde68a',
-                                    padding: '8px 14px', borderRadius: '10px',
-                                    fontSize: '13px', fontWeight: '500'
+                                    padding: '6px 12px', borderRadius: '8px',
+                                    fontSize: '12px', fontWeight: '500',
+                                    width: '100%',
+                                    boxSizing: 'border-box'
                                 }}>
-                                    <FiLock size={14} />
+                                    <FiLock size={13} style={{ flexShrink: 0 }} />
                                     <span>
                                         {readRules.size === 0
-                                            ? 'Scroll through each policy section to proceed'
+                                            ? 'Scroll/review all policies to continue'
                                             : `${rules.length - readRules.size} section${rules.length - readRules.size !== 1 ? 's' : ''} remaining`
                                         }
                                     </span>
                                 </div>
                             ) : (
                                 <div style={{
-                                    display: 'flex', alignItems: 'center', gap: '8px',
+                                    display: 'flex', alignItems: 'center', gap: '6px',
                                     color: '#0d9488',
                                     background: '#f0fdfa',
                                     border: '1px solid #99f6e4',
-                                    padding: '8px 14px', borderRadius: '10px',
-                                    fontSize: '13px', fontWeight: '600'
+                                    padding: '6px 12px', borderRadius: '8px',
+                                    fontSize: '12px', fontWeight: '600',
+                                    width: '100%',
+                                    boxSizing: 'border-box'
                                 }}>
-                                    <FiUnlock size={14} />
-                                    <span>All {rules.length} policy sections read & reviewed ✓</span>
+                                    <FiUnlock size={13} style={{ flexShrink: 0 }} />
+                                    <span>All {rules.length} sections reviewed ✓</span>
                                 </div>
                             )}
                         </div>
 
                         {/* Right: Checkbox + Submit Button */}
-                        <form onSubmit={handleAcceptSubmit} style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                        <form onSubmit={handleAcceptSubmit} className="responsive-form-container" style={{ display: 'flex' }}>
                             {config?.requireCheckbox && (
-                                <label style={{
-                                    display: 'flex', alignItems: 'center', gap: '10px',
+                                <label className="responsive-checkbox-label" style={{
+                                    display: 'flex', alignItems: 'center', gap: '8px',
                                     cursor: (config.scrollValidation && !allRulesRead) ? 'not-allowed' : 'pointer',
                                     opacity: (config.scrollValidation && !allRulesRead) ? 0.5 : 1,
                                     userSelect: 'none'
@@ -689,8 +933,8 @@ const RulesAcceptance = () => {
                                             }
                                         }}
                                         style={{
-                                            width: '20px', height: '20px',
-                                            borderRadius: '6px',
+                                            width: '18px', height: '18px',
+                                            borderRadius: '5px',
                                             border: isAccepted ? '2px solid #0d9488' : '2px solid #cbd5e1',
                                             background: isAccepted
                                                 ? 'linear-gradient(135deg, #0d9488, #0f766e)'
@@ -698,14 +942,14 @@ const RulesAcceptance = () => {
                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                                             transition: 'all 0.15s ease',
                                             flexShrink: 0,
-                                            boxShadow: isAccepted ? '0 2px 8px rgba(13,148,136,0.3)' : 'none',
+                                            boxShadow: isAccepted ? '0 2px 6px rgba(13,148,136,0.2)' : 'none',
                                             cursor: 'pointer'
                                         }}
                                     >
-                                        {isAccepted && <FiCheck size={12} color="#ffffff" strokeWidth={3} />}
+                                        {isAccepted && <FiCheck size={11} color="#ffffff" strokeWidth={3} />}
                                     </div>
-                                    <span style={{ fontSize: '13px', fontWeight: '500', color: '#475569' }}>
-                                        I accept the terms and conditions
+                                    <span style={{ fontSize: '12px', fontWeight: '600', color: '#475569' }}>
+                                        I accept all rules & conditions
                                     </span>
                                 </label>
                             )}
@@ -715,34 +959,35 @@ const RulesAcceptance = () => {
                                 disabled={!canAccept}
                                 className="accept-btn"
                                 style={{
-                                    display: 'flex', alignItems: 'center', gap: '8px',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
                                     background: canAccept
                                         ? 'linear-gradient(135deg, #0d9488 0%, #0f766e 100%)'
                                         : '#e2e8f0',
                                     color: canAccept ? '#ffffff' : '#94a3b8',
                                     border: 'none',
-                                    padding: '11px 24px',
-                                    borderRadius: '10px',
-                                    fontSize: '14px', fontWeight: '700',
+                                    padding: '10px 20px',
+                                    borderRadius: '8px',
+                                    fontSize: '13px', fontWeight: '700',
                                     letterSpacing: '-0.1px',
-                                    boxShadow: canAccept ? '0 4px 15px rgba(13,148,136,0.3)' : 'none'
+                                    boxShadow: canAccept ? '0 4px 12px rgba(13,148,136,0.25)' : 'none',
+                                    width: '100%'
                                 }}
                             >
                                 {submitting ? (
                                     <>
                                         <div style={{
-                                            width: '15px', height: '15px',
+                                            width: '13px', height: '13px',
                                             border: '2px solid rgba(255,255,255,0.4)',
                                             borderTopColor: '#ffffff',
                                             borderRadius: '50%',
                                             animation: 'spin 0.7s linear infinite'
                                         }} />
-                                        <span>Processing...</span>
+                                        <span>Accepting...</span>
                                     </>
                                 ) : (
                                     <>
                                         <span>Accept & Continue</span>
-                                        <FiArrowRight size={15} strokeWidth={2.5} />
+                                        <FiArrowRight size={14} strokeWidth={2.5} />
                                     </>
                                 )}
                             </button>
@@ -755,26 +1000,28 @@ const RulesAcceptance = () => {
             <footer style={{
                 background: '#ffffff',
                 borderTop: '1px solid #f1f5f9',
-                padding: '14px 32px',
+                padding: '12px 20px',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between'
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '6px'
             }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <div style={{
-                        width: '20px', height: '20px',
+                        width: '18px', height: '18px',
                         background: 'linear-gradient(135deg, #0d9488, #0f766e)',
-                        borderRadius: '5px',
+                        borderRadius: '4px',
                         display: 'flex', alignItems: 'center', justifyContent: 'center'
                     }}>
-                        <FiShield size={11} color="#fff" />
+                        <FiShield size={10} color="#fff" />
                     </div>
-                    <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '500' }}>
-                        CipherGate Suite · All Rights Reserved © {new Date().getFullYear()}
+                    <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '500' }}>
+                        CipherGate · All Rights Reserved © {new Date().getFullYear()}
                     </span>
                 </div>
-                <span style={{ fontSize: '11px', color: '#cbd5e1' }}>
-                    Policy Version {config?.currentVersion || '1.0'}
+                <span style={{ fontSize: '10px', color: '#cbd5e1' }}>
+                    v{config?.currentVersion || '1.0'}
                 </span>
             </footer>
         </div>

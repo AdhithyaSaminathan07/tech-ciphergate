@@ -613,7 +613,7 @@ const getAdminPerformanceOverview = asyncHandler(async (req, res) => {
 const getAdminEmployeeAnalytics = asyncHandler(async (req, res) => {
     const subdomain = req.user.subdomain;
 
-    const workers = await Worker.find({ subdomain, status: { $in: ['Active', 'Relieved'] } })
+    const workers = await Worker.find({ subdomain, status: 'Active' })
         .select('name username photo performancePoints currentStreak longestStreak performanceLevel totalCompletedTickets totalDelayedTickets department status')
         .populate('department', 'name')
         .sort({ performancePoints: -1 })
