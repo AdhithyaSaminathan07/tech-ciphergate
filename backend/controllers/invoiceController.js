@@ -254,23 +254,17 @@ const getAllInvoices = async (req, res) => {
     // If filterType is 'all' or missing, query remains {} which fetches everything.
 
     const invoices = await Invoice.find(query)
-      .populate([
-        {
-          path: 'createdBy',
-          select: 'name email',
-          model: 'Admin'
-        },
-        {
-          path: 'createdBy',
-          select: 'name department',
-          model: 'Worker',
-          populate: {
-            path: 'department',
-            select: 'name',
-            model: 'Department'
-          }
+      .populate({
+        path: 'createdBy',
+        select: 'name email department',
+        options: { strictPopulate: false },
+        populate: {
+          path: 'department',
+          select: 'name',
+          model: 'Department',
+          options: { strictPopulate: false }
         }
-      ])
+      })
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -302,23 +296,17 @@ const getInvoiceById = async (req, res) => {
     }
 
     const invoice = await Invoice.findById(id)
-      .populate([
-        {
-          path: 'createdBy',
-          select: 'name email',
-          model: 'Admin'
-        },
-        {
-          path: 'createdBy',
-          select: 'name department',
-          model: 'Worker',
-          populate: {
-            path: 'department',
-            select: 'name',
-            model: 'Department'
-          }
+      .populate({
+        path: 'createdBy',
+        select: 'name email department',
+        options: { strictPopulate: false },
+        populate: {
+          path: 'department',
+          select: 'name',
+          model: 'Department',
+          options: { strictPopulate: false }
         }
-      ]);
+      });
 
     if (!invoice) {
       return res.status(404).json({

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 import { useSocket } from './SocketContextNew';
 import { toast } from 'react-toastify';
 import { useAuth } from '../hooks/useAuth';
@@ -20,18 +20,29 @@ export const NotificationProvider = ({ children }) => {
     const lastSoundPlayRef = useRef(0);
 
     const token = localStorage.getItem('token');
-    const apiBase = '/api/user-notifications';
+    const apiBase = '/user-notifications';
 
     useEffect(() => {
         if (!token || !user) return;
 
         const fetchNotifications = async () => {
             try {
-                const res = await axios.get(apiBase, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                console.log('[Notification Debug] Fetching notifications from api base:', apiBase);
+                const res = await api.get(apiBase);
                 setNotifications(res.data.notifications);
                 setUnreadCount(res.data.unreadCount);
+
+                // Auto-subscribe if push is enabled (default to true if user.notificationSettings doesn't exist yet)
+                const pushEnabled = user.notificationSettings?.pushEnabled !== false;
+                setSettings({
+                    pushEnabled,
+                    soundEnabled: user.notificationSettings?.soundEnabled !== false
+                });
+
+                if (pushEnabled) {
+                    console.log('[Notification Debug] Automatic push subscription triggered on login.');
+                    subscribeToPush();
+                }
             } catch (err) {
                 console.error('Error fetching notifications:', err);
             }
@@ -82,9 +93,7 @@ export const NotificationProvider = ({ children }) => {
 
     const markAsRead = async (id) => {
         try {
-            await axios.put(`${apiBase}/${id}/read`, {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            await api.put(`${apiBase}/${id}/read`);
             
             if (id === 'all') {
                 setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
@@ -100,20 +109,36 @@ export const NotificationProvider = ({ children }) => {
 
     const subscribeToPush = async () => {
         if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-            console.log('Push messaging is not supported');
+            console.warn('[Notification Debug] Service workers or Push Messaging is not supported by this browser.');
             return;
         }
 
         try {
-            const registration = await navigator.serviceWorker.ready;
-            const publicVapidKey = import.meta.env.VITE_PUBLIC_VAPID_KEY;
-            
-            if (!publicVapidKey) {
-                console.warn('VAPID key not configured');
+            console.log('[Notification Debug] Checking permissions...');
+            // Request permission explicitly
+            let permission = Notification.permission;
+            if (permission === 'default') {
+                permission = await Notification.requestPermission();
+            }
+            console.log('[Notification Debug] Permission status:', permission);
+
+            if (permission !== 'granted') {
+                console.warn('[Notification Debug] Push notification permission not granted.');
                 return;
             }
 
-            // Base64 to Uint8Array
+            const registration = await navigator.serviceWorker.ready;
+            console.log('[Notification Debug] Service Worker active registration verified:', !!registration);
+
+            const publicVapidKey = import.meta.env.VITE_PUBLIC_VAPID_KEY;
+            console.log('[Notification Debug] Public VAPID Key loaded:', publicVapidKey ? 'YES' : 'NO');
+            
+            if (!publicVapidKey) {
+                console.warn('[Notification Debug] VAPID key not configured in frontend environment.');
+                return;
+            }
+
+            // Base64 to Uint8Array converter
             const padding = '='.repeat((4 - publicVapidKey.length % 4) % 4);
             const base64 = (publicVapidKey + padding)
                 .replace(/\-/g, '+')
@@ -124,26 +149,26 @@ export const NotificationProvider = ({ children }) => {
                 outputArray[i] = rawData.charCodeAt(i);
             }
 
+            console.log('[Notification Debug] Subscribing to PushManager...');
             const subscription = await registration.pushManager.subscribe({
                 userVisibleOnly: true,
                 applicationServerKey: outputArray
             });
+            console.log('[Notification Debug] Generated subscription object successfully.');
 
-            await axios.post(`${apiBase}/subscribe`, { subscription }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            console.log('[Notification Debug] Sending subscription payload to backend...');
+            const res = await api.post(`${apiBase}/subscribe`, { subscription });
+            console.log('[Notification Debug] Push Subscription saved on server. Status:', res.status);
             
             toast.success('Push notifications enabled');
         } catch (error) {
-            console.error('Error subscribing to push', error);
+            console.error('[Notification Debug] Error subscribing to push notifications:', error);
         }
     };
 
     const updateSettings = async (newSettings) => {
         try {
-            const res = await axios.put(`${apiBase}/settings`, newSettings, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const res = await api.put(`${apiBase}/settings`, newSettings);
             setSettings(res.data);
             if (res.data.pushEnabled) {
                 subscribeToPush();

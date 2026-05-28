@@ -11,6 +11,7 @@ const WorkerLogin = lazy(() => import('./pages/Worker/WorkerLogin'));
 // Protected pages
 const AdminDashboard = lazy(() => import('./pages/Admin/AdminDashboard'));
 const WorkerDashboard = lazy(() => import('./pages/Worker/WorkerDashboard'));
+const RulesAcceptance = lazy(() => import('./pages/Worker/RulesAcceptance'));
 
 // Communication page
 const Communication = lazy(() => import('./pages/Communication'));
@@ -196,6 +197,7 @@ function App() {
 
               {/* Protected Worker routes */}
               <Route element={<PrivateRoute allowedRoles={['worker']} />}>
+                <Route path="/worker/rules-acceptance" element={<RulesAcceptance />} />
                 <Route path="worker/*" element={<WorkerDashboard />}>
                   {/* Worker routes are handled inside WorkerDashboard component */}
                   <Route path="*" element={<Navigate to="/worker" replace />} />

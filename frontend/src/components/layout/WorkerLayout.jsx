@@ -12,7 +12,8 @@ import {
   FaBook,
   FaGraduationCap,
   FaCommentDots,
-  FaTasks
+  FaTasks,
+  FaTrophy
 } from 'react-icons/fa';
 import { useAuth } from '../../hooks/useAuth';
 import { getMyLeaves } from '../../services/leaveService';
@@ -86,6 +87,7 @@ const WorkerLayout = ({ children }) => {
       children: [
         { to: '/worker/work-allocation', label: 'Work Allocation' },
         { to: '/worker/invoices', label: 'Invoices' },
+        { to: '/worker/performance', label: 'My Performance', icon: <FaTrophy /> },
       ]
     },
     {
@@ -106,6 +108,11 @@ const WorkerLayout = ({ children }) => {
         { to: '/worker/tests', label: 'My Test' },
         { to: '/worker/daily-topics', label: 'Daily Topics' },
       ]
+    },
+    {
+      to: '/worker/rules',
+      label: 'Rules & Regulations',
+      icon: <FaBook />,
     },
   ];
 

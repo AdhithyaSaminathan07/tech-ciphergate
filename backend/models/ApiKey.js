@@ -17,7 +17,6 @@ const apiKeySchema = new mongoose.Schema({
     },
     permissions: {
         type: [String],
-        enum: ['read', 'write', 'admin'],
         default: ['read']
     },
     expiry: {

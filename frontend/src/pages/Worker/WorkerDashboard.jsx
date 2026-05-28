@@ -1,6 +1,7 @@
-import { useState, lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { useState, useEffect, lazy, Suspense } from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import WorkerLayout from '../../components/layout/WorkerLayout';
+import api from '../../services/api';
 
 // Lazy load worker components
 const Dashboard = lazy(() => import('../../components/worker/Dashboard'));
@@ -18,6 +19,8 @@ const WorkerInvoiceManagement = lazy(() => import('../../components/worker/Worke
 const Communication = lazy(() => import('../../pages/Communication'));
 const WorkerWorkAllocation = lazy(() => import('../../components/worker/WorkerWorkAllocation'));
 const Profile = lazy(() => import('../../components/worker/Profile'));
+const EmployeeRulesView = lazy(() => import('../../components/worker/EmployeeRulesView'));
+const WorkerPerformancePage = lazy(() => import('../../components/worker/WorkerPerformancePage'));
 
 // Simple loader for worker dashboard
 const WorkerPageLoader = () => (
@@ -27,8 +30,24 @@ const WorkerPageLoader = () => (
 );
 
 const WorkerDashboard = () => {
+  const navigate = useNavigate();
   // State to track if a test is in progress
   const [isTestInProgress, setIsTestInProgress] = useState(false);
+
+  // Check rules acceptance status on mount
+  useEffect(() => {
+    const checkRulesStatus = async () => {
+      try {
+        const { data } = await api.get('/rules/status');
+        if (data && data.rulesAcceptanceRequired) {
+          navigate('/worker/rules-acceptance');
+        }
+      } catch (err) {
+        console.error('Error checking rules acceptance status:', err);
+      }
+    };
+    checkRulesStatus();
+  }, [navigate]);
 
   // Handler to update test state
   const handleTestStateChange = (inProgress) => {
@@ -54,6 +73,8 @@ const WorkerDashboard = () => {
           <Route path="communication" element={<Communication />} />
           <Route path="/work-allocation" element={<WorkerWorkAllocation />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/rules" element={<EmployeeRulesView />} />
+          <Route path="/performance" element={<WorkerPerformancePage />} />
 
           <Route path="*" element={<Navigate to="/worker" replace />} />
         </Routes>

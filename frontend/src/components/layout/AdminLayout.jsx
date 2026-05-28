@@ -13,6 +13,7 @@ import {
   FaClipboardList,
   FaRegCalendarCheck,
   FaRegBell,
+  FaBook,
   FaDollarSign,
   FaQuestionCircle,
   FaHistory,
@@ -97,6 +98,8 @@ const RenewalManagement = React.lazy(() => import('../admin/RenewalManagement'))
 const ApiKeyManagement = React.lazy(() => import('../admin/ApiKeyManagement'));
 const AdminDeleteHistory = React.lazy(() => import('../admin/AdminDeleteHistory'));
 const FaceAttendancePage = React.lazy(() => import('../admin/FaceAttendancePage'));
+const AdminRulesDashboard = React.lazy(() => import('../admin/AdminRulesDashboard'));
+const PerformanceRewards = React.lazy(() => import('../admin/PerformanceRewards'));
 
 // Lazy load test management components
 const GenerateQuestions = React.lazy(() => import('../admin/GenerateQuestions'));
@@ -204,6 +207,7 @@ const AdminLayout = () => {
       isDropdown: true,
       children: [
         { to: '/admin/work-allocation', label: 'Work Allocation', icon: <FaNetworkWired /> },
+        { to: '/admin/performance-rewards', label: 'Performance & Rewards', icon: <FaTrophy /> },
         { to: '/admin/tasks', label: 'Tasks', icon: <FaTasks /> },
         { to: '/admin/custom-tasks', label: 'Custom Tasks', icon: <FaClipboardList /> },
         { to: '/admin/topics', label: 'Topics', icon: <FaTags /> },
@@ -251,6 +255,7 @@ const AdminLayout = () => {
       children: [
         { to: '/admin/settings', label: 'Settings', icon: <FaCog /> },
         { to: '/admin/api-keys', label: 'API Management', icon: <FaKey /> },
+        { to: '/admin/rules', label: 'Rules & Regulations', icon: <FaBook /> },
       ],
     },
   ];
@@ -385,6 +390,8 @@ const AdminLayout = () => {
               <Route path="api-keys" element={<ApiKeyManagement />} />
               <Route path="delete-history" element={<AdminDeleteHistory />} />
               <Route path="face-attendance" element={<FaceAttendancePage />} />
+              <Route path="rules" element={<AdminRulesDashboard />} />
+              <Route path="performance-rewards" element={<PerformanceRewards />} />
 
               <Route path="*" element={<Navigate to="/admin" replace />} />
             </Routes>

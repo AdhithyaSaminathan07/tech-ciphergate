@@ -195,7 +195,12 @@ exports.updateTicket = async (req, res) => {
             if (ticket.status === 'Done' && status !== 'Done' && req.user.role !== 'admin') {
                 return res.status(403).json({ message: 'Approved/Done tasks cannot be moved back by non-admin users.' });
             }
+            const previousStatus = ticket.status;
             ticket.status = status;
+            // Flag for performance points if newly moved to Done
+            if (status === 'Done' && previousStatus !== 'Done') {
+                ticket._justCompletedForPerformance = true;
+            }
         }
 
         if (issueType !== undefined) ticket.issueType = issueType;
@@ -232,6 +237,20 @@ exports.updateTicket = async (req, res) => {
             { path: 'assignee', select: 'name username status' },
             { path: 'assignees', select: 'name username department status' }
         ]);
+
+        // Trigger performance points if ticket just moved to Done
+        if (ticket._justCompletedForPerformance) {
+            try {
+                const { awardPointsOnTicketDone } = require('./performanceController');
+                const ticketSubdomain = updatedTicket.subdomain || subdomain;
+                // Run async, don't block response
+                awardPointsOnTicketDone(updatedTicket, ticketSubdomain).catch(err =>
+                    console.error('Performance points error:', err.message)
+                );
+            } catch (perfErr) {
+                console.error('Performance module error:', perfErr.message);
+            }
+        }
 
         // Trigger push notifications
         try {

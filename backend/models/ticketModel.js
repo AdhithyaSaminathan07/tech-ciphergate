@@ -112,6 +112,28 @@ const ticketSchema = new mongoose.Schema({
             default: Date.now
         }
     }],
+    // Performance & Rewards fields
+    pointsAwarded: {
+        type: Number,
+        default: null
+    },
+    actualCompletionDate: {
+        type: Date,
+        default: null
+    },
+    estimatedDays: {
+        type: Number,
+        default: null
+    },
+    efficiencyRatio: {
+        type: Number,
+        default: null
+    },
+    performanceStatus: {
+        type: String,
+        enum: ['early', 'on_time', 'delayed', 'pending', 'no_dates'],
+        default: 'pending'
+    },
     isDeleted: {
         type: Boolean,
         default: false

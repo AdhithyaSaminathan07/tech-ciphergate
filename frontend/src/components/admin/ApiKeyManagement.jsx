@@ -2,15 +2,59 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
     FiKey, FiPlus, FiTrash2, FiCopy, FiCheck, FiShield, 
-    FiCalendar, FiActivity, FiToggleLeft, FiToggleRight 
+    FiCalendar, FiActivity, FiToggleLeft, FiToggleRight,
+    FiAlertTriangle
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
+
+const AVAILABLE_MODULES = [
+    { id: 'attendance', name: 'Attendance', actions: ['read', 'write'] },
+    { id: 'invoices', name: 'Invoices', actions: ['read', 'write'] },
+    { id: 'workers', name: 'Workers', actions: ['read'] },
+    { id: 'tasks', name: 'Tasks', actions: ['read'] },
+    { id: 'salary', name: 'Salary Report', actions: ['read'] },
+    { id: 'leaves', name: 'Leaves', actions: ['read'] },
+    { id: 'fines', name: 'Fines', actions: ['read'] },
+    { id: 'departments', name: 'Departments', actions: ['read'] },
+    { id: 'holidays', name: 'Holidays', actions: ['read'] },
+    { id: 'tickets', name: 'Tickets/Helpdesk', actions: ['read'] },
+    { id: 'settings', name: 'Settings', actions: ['read'] }
+];
+
+const formatPermissions = (permissions) => {
+    if (!permissions || permissions.length === 0) return ['None'];
+    if (permissions.includes('admin')) return ['Full Admin'];
+    if (permissions.includes('write')) return ['Global Read & Write'];
+    if (permissions.includes('read')) return ['Global Read Only'];
+    
+    // Group by module
+    const groups = {};
+    permissions.forEach(p => {
+        const parts = p.split(':');
+        if (parts.length === 2) {
+            const [mod, act] = parts;
+            if (!groups[mod]) groups[mod] = [];
+            groups[mod].push(act);
+        } else {
+            if (!groups[p]) groups[p] = [];
+            groups[p].push(p);
+        }
+    });
+
+    return Object.entries(groups).map(([mod, acts]) => {
+        return `${mod} (${acts.join(', ')})`;
+    });
+};
 
 const ApiKeyManagement = () => {
     const [keys, setKeys] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [copiedKey, setCopiedKey] = useState('');
+    const [permissionType, setPermissionType] = useState('read'); // 'read', 'write', 'admin', 'custom'
+    const [customPermissions, setCustomPermissions] = useState([]);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [keyToDelete, setKeyToDelete] = useState(null);
     
     // Form state
     const [formData, setFormData] = useState({
@@ -42,29 +86,50 @@ const ApiKeyManagement = () => {
         e.preventDefault();
         try {
             const token = localStorage.getItem('token');
-            const res = await axios.post('/api/admin/keys', formData, {
+            const payload = {
+                ...formData,
+                permissions: permissionType === 'custom' ? customPermissions : [permissionType]
+            };
+
+            if (permissionType === 'custom' && customPermissions.length === 0) {
+                toast.error('Please select at least one permission');
+                return;
+            }
+
+            const res = await axios.post('/api/admin/keys', payload, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             toast.success('API Key generated successfully!');
             setKeys([res.data.data, ...keys]);
             setShowCreateModal(false);
             setFormData({ ...formData, clientName: '' });
+            setCustomPermissions([]);
+            setPermissionType('read');
         } catch (error) {
             toast.error(error.response?.data?.message || 'Failed to generate key');
         }
     };
 
-    const handleDeleteKey = async (id) => {
-        if (!window.confirm('Are you sure you want to revoke this API key? This cannot be undone.')) return;
+    const initiateDelete = (id) => {
+        setKeyToDelete(id);
+        setShowDeleteConfirm(true);
+    };
+
+    const confirmDeleteKey = async () => {
+        if (!keyToDelete) return;
         try {
             const token = localStorage.getItem('token');
-            await axios.delete(`/api/admin/keys/${id}`, {
+            await axios.delete(`/api/admin/keys/${keyToDelete}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setKeys(keys.filter(k => k._id !== id));
-            toast.success('Key revoked');
+            setKeys(keys.filter(k => k._id !== keyToDelete));
+            toast.success('Key revoked successfully');
+            setShowDeleteConfirm(false);
+            setKeyToDelete(null);
         } catch (error) {
             toast.error('Failed to revoke key');
+            setShowDeleteConfirm(false);
+            setKeyToDelete(null);
         }
     };
 
@@ -90,7 +155,7 @@ const ApiKeyManagement = () => {
 
     return (
         <div className="p-6 bg-gray-50 min-h-screen">
-            <div className="max-w-6xl mx-auto">
+            <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pb-8">
                 {/* Header */}
                 <div className="flex justify-between items-center mb-8">
                     <div>
@@ -186,9 +251,9 @@ const ApiKeyManagement = () => {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <div className="flex gap-1">
-                                            {apiKey.permissions.map(p => (
-                                                <span key={p} className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
+                                        <div className="flex flex-wrap gap-1 max-w-[220px]">
+                                            {formatPermissions(apiKey.permissions).map(p => (
+                                                <span key={p} className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100 whitespace-nowrap">
                                                     {p}
                                                 </span>
                                             ))}
@@ -210,7 +275,7 @@ const ApiKeyManagement = () => {
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <button 
-                                            onClick={() => handleDeleteKey(apiKey._id)}
+                                            onClick={() => initiateDelete(apiKey._id)}
                                             className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                                             title="Revoke Key"
                                         >
@@ -241,39 +306,55 @@ const ApiKeyManagement = () => {
 
             {/* Create Modal */}
             {showCreateModal && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
-                        <div className="bg-blue-600 p-6 text-white">
-                            <h2 className="text-xl font-bold flex items-center gap-2"><FiKey /> Generate API Key</h2>
-                            <p className="text-blue-100 text-sm mt-1">Create a new secret key for external access.</p>
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] border border-slate-100 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 p-6 text-white relative">
+                            <button 
+                                type="button"
+                                onClick={() => setShowCreateModal(false)}
+                                className="absolute top-5 right-5 text-slate-400 hover:text-white transition-colors p-1.5 hover:bg-white/10 rounded-xl"
+                            >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                            <h2 className="text-xl font-extrabold flex items-center gap-3">
+                                <div className="p-2.5 bg-white/10 rounded-xl text-blue-400 border border-white/10 shadow-inner">
+                                    <FiKey size={18} />
+                                </div>
+                                Generate API Key
+                            </h2>
+                            <p className="text-slate-300 text-xs mt-2 font-normal leading-relaxed">
+                                Issue a secure credential key for external integrations to authenticate programmatically.
+                            </p>
                         </div>
-                        <form onSubmit={handleCreateKey} className="p-6 space-y-4">
+                        <form onSubmit={handleCreateKey} className="p-6 space-y-5">
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Client/App Name</label>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Client / App Name</label>
                                 <input 
                                     type="text"
                                     required
-                                    placeholder="e.g. Mobile App Team"
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                                    placeholder="e.g. Mobile App Team, Billing Integration"
+                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm text-slate-800"
                                     value={formData.clientName}
                                     onChange={e => setFormData({ ...formData, clientName: e.target.value })}
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Subdomain</label>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Tenant Subdomain</label>
                                 <input 
                                     type="text"
                                     required
                                     disabled
-                                    className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-500"
+                                    className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-400 text-sm cursor-not-allowed font-medium"
                                     value={formData.subdomain}
                                 />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Expiry (Days)</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Key Lifespan</label>
                                     <select 
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none"
+                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm text-slate-700 cursor-pointer"
                                         value={formData.expiryDays}
                                         onChange={e => setFormData({ ...formData, expiryDays: parseInt(e.target.value) })}
                                     >
@@ -284,34 +365,147 @@ const ApiKeyManagement = () => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Permissions</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Permission Profile</label>
                                     <select 
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none"
-                                        value={formData.permissions[0]}
-                                        onChange={e => setFormData({ ...formData, permissions: [e.target.value] })}
+                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm text-slate-700 cursor-pointer"
+                                        value={permissionType}
+                                        onChange={e => setPermissionType(e.target.value)}
                                     >
-                                        <option value="read">Read Only</option>
-                                        <option value="write">Read & Write</option>
-                                        <option value="admin">Full Admin</option>
+                                        <option value="read">Global Read Only</option>
+                                        <option value="write">Global Read & Write</option>
+                                        <option value="admin">Full Admin Access</option>
+                                        <option value="custom">Custom Permissions...</option>
                                     </select>
                                 </div>
                             </div>
-                            <div className="flex gap-3 mt-6 pt-4 border-t border-gray-100">
+
+                            {permissionType === 'custom' && (
+                                <div className="space-y-3 mt-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-150 max-h-64 overflow-y-auto">
+                                    <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-2">Select Scopes</label>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        {AVAILABLE_MODULES.map(module => (
+                                            <div key={module.id} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl hover:border-slate-200/80 transition-all shadow-sm">
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs font-bold text-slate-800">{module.name}</span>
+                                                    <span className="text-[10px] text-slate-400 font-mono mt-0.5">{module.id}</span>
+                                                </div>
+                                                <div className="flex gap-4">
+                                                    {module.actions.includes('read') && (
+                                                        <label className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-800 cursor-pointer select-none font-medium transition-colors">
+                                                            <input 
+                                                                type="checkbox"
+                                                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 focus:ring-offset-0 transition-all h-4 w-4 cursor-pointer"
+                                                                checked={customPermissions.includes(`${module.id}:read`)}
+                                                                onChange={(e) => {
+                                                                    const val = `${module.id}:read`;
+                                                                    if (e.target.checked) {
+                                                                        setCustomPermissions([...customPermissions, val]);
+                                                                    } else {
+                                                                        setCustomPermissions(customPermissions.filter(p => p !== val && p !== `${module.id}:write`));
+                                                                    }
+                                                                }}
+                                                            />
+                                                            Read
+                                                        </label>
+                                                    )}
+                                                    {module.actions.includes('write') && (
+                                                        <label className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-800 cursor-pointer select-none font-medium transition-colors">
+                                                            <input 
+                                                                type="checkbox"
+                                                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 focus:ring-offset-0 transition-all h-4 w-4 cursor-pointer"
+                                                                checked={customPermissions.includes(`${module.id}:write`)}
+                                                                onChange={(e) => {
+                                                                    const val = `${module.id}:write`;
+                                                                    if (e.target.checked) {
+                                                                        const readVal = `${module.id}:read`;
+                                                                        const newPerms = customPermissions.includes(readVal) 
+                                                                            ? [...customPermissions, val] 
+                                                                            : [...customPermissions, readVal, val];
+                                                                        setCustomPermissions(newPerms);
+                                                                    } else {
+                                                                        setCustomPermissions(customPermissions.filter(p => p !== val));
+                                                                    }
+                                                                }}
+                                                            />
+                                                            Write
+                                                        </label>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            <div className="flex gap-3 mt-6 pt-4 border-t border-slate-100">
                                 <button 
                                     type="button"
                                     onClick={() => setShowCreateModal(false)}
-                                    className="flex-1 px-4 py-2 text-gray-600 font-semibold hover:bg-gray-100 rounded-lg transition-all"
+                                    className="flex-1 px-4 py-2.5 text-slate-600 hover:text-slate-800 font-semibold hover:bg-slate-50 border border-slate-200 rounded-xl transition-all text-sm"
                                 >
                                     Cancel
                                 </button>
                                 <button 
                                     type="submit"
-                                    className="flex-1 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 shadow-md shadow-blue-200 transition-all"
+                                    className="flex-1 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/10 hover:shadow-blue-500/25 transition-all text-sm"
                                 >
-                                    Generate
+                                    Generate Key
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {showDeleteConfirm && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] border border-slate-100 w-full max-w-md overflow-hidden p-6 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="text-center">
+                            <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-100 shadow-sm">
+                                <FiAlertTriangle size={28} />
+                            </div>
+                            <h2 className="text-xl font-extrabold text-slate-900 tracking-tight mb-2">Revoke API Key</h2>
+                            <p className="text-slate-500 text-sm mb-5 leading-relaxed">
+                                Are you sure you want to revoke this credentials key? This action is permanent and cannot be reversed.
+                            </p>
+
+                            {/* Hashed/Target details for security */}
+                            {(() => {
+                                const targetKey = keys.find(k => k._id === keyToDelete);
+                                if (!targetKey) return null;
+                                return (
+                                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-6 text-left relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/5 rounded-full -mr-8 -mt-8 pointer-events-none" />
+                                        <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Key to be revoked</span>
+                                        <span className="block text-sm font-bold text-slate-800 truncate mb-1">{targetKey.clientName}</span>
+                                        <div className="flex items-center gap-1.5 font-mono text-xs text-slate-500 bg-white border border-slate-200/60 rounded-lg px-2.5 py-1.5 w-fit mt-2">
+                                            <FiKey size={12} className="text-slate-400" />
+                                            <span>{targetKey.key ? `${targetKey.key.substring(0, 8)}...${targetKey.key.substring(targetKey.key.length - 4)}` : 'N/A'}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
+                            <div className="flex gap-3">
+                                <button 
+                                    type="button"
+                                    onClick={() => {
+                                        setShowDeleteConfirm(false);
+                                        setKeyToDelete(null);
+                                    }}
+                                    className="flex-1 px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold rounded-xl transition-all text-sm"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={confirmDeleteKey}
+                                    className="flex-1 px-4 py-2.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold rounded-xl shadow-lg shadow-red-500/10 hover:shadow-red-500/25 transition-all text-sm"
+                                >
+                                    Yes, Revoke
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

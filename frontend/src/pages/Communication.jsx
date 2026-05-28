@@ -42,7 +42,7 @@ const Communication = () => {
 
     const baseUrl = window.location.hostname === 'localhost'
       ? 'http://localhost:5173'
-      : 'https://youtubeclients.vercel.app';
+      : 'https://youtubeai-client.vercel.app';
 
     return `${baseUrl}/?sso_username=${encodeURIComponent(ssoUser)}&sso_key=${SSO_KEY}&embed=true&role=staff&redirect=comments`;
   }, [user?.email, user?.username]);

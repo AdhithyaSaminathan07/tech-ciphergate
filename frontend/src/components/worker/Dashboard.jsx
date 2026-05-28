@@ -20,6 +20,11 @@ import FaceAttendance from '../admin/FaceAttendance';
 import RFIDAttendancePopup from './RFIDAttendancePopup';
 import MyFines from '../dashboard/MyFines';
 import { Link, useNavigate } from 'react-router-dom';
+import PerformanceCard from './PerformanceCard';
+import MiniLeaderboard from './MiniLeaderboard';
+import PointHistory from './PointHistory';
+import LeaderboardModal from './LeaderboardModal';
+import PointAnimation from './PointAnimation';
 
 /* ─────────────────────────────────────────
    Shared Components (matching Admin style)
@@ -57,6 +62,7 @@ const Dashboard = () => {
   const [showRFIDAttendance, setShowRFIDAttendance] = useState(false);
   const [accessControl, setAccessControl] = useState({ rfidAttendance: true, faceAttendance: true });
   const [showDeductionBreakdown, setShowDeductionBreakdown] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [salaryData, setSalaryData] = useState({
     baseSalary: 0,
     finalSalary: 0,
@@ -160,7 +166,7 @@ const Dashboard = () => {
   const totalPoints = useMemo(() => tasks.reduce((acc, t) => acc + (t.points || 0), 0), [tasks]);
 
   const calculatedTaskPenalties = useMemo(() => {
-    if (!salaryData.delayedTasks || salaryData.delayedTasks.length === 0 || !salaryData.report?.report) {
+    if (!salaryData.delayedTasks || salaryData.delayedTasks.length === 0) {
       return { taskPenalties: [], totalTaskPenalty: 0 };
     }
 
@@ -187,26 +193,37 @@ const Dashboard = () => {
       let taskDeduction = 0;
       const dailyList = [];
 
-      salaryData.report.report.forEach(day => {
-        const dDate = new Date(`${day.date}, ${reportYear}`);
-        if (dDate >= start && dDate <= end) {
-          const amt = parseSalary(day.totalSalary);
-          if (!claimedDays.has(day.date)) {
-            claimedDays.add(day.date);
-            totalDeductionVal += amt;
-            taskDeduction += amt;
-            dailyList.push({ date: day.date, amount: amt });
-          } else {
-            dailyList.push({ date: day.date, amount: 0, alreadyDeducted: true });
+      if (salaryData.report?.report) {
+        salaryData.report.report.forEach(day => {
+          const dDate = new Date(`${day.date}, ${reportYear}`);
+          if (dDate >= start && dDate <= end) {
+            const amt = parseSalary(day.totalSalary);
+            if (!claimedDays.has(day.date)) {
+              claimedDays.add(day.date);
+              totalDeductionVal += amt;
+              taskDeduction += amt;
+              dailyList.push({ date: day.date, amount: amt });
+            } else {
+              dailyList.push({ date: day.date, amount: 0, alreadyDeducted: true });
+            }
           }
+        });
+      } else {
+        const diffTime = Math.max(0, end - start);
+        const overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        taskDeduction = 0;
+        for (let i = 0; i < overdueDays; i++) {
+          dailyList.push({ date: 'N/A', amount: 0 });
         }
-      });
+      }
+
+      const overdueWorkingDays = dailyList.length > 0 ? dailyList.length : Math.max(0, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
 
       return {
         ...task,
         taskDeduction,
         dailyList,
-        overdueWorkingDays: dailyList.length,
+        overdueWorkingDays,
         period: `${start.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} → ${task.doneDate ? new Date(task.doneDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'Ongoing'}`
       };
     });
@@ -242,155 +259,261 @@ const Dashboard = () => {
           </p>
         </div>
 
-        {/* Top Grid: Attendance, Salary, Top Teams */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+        {/* Top Grid: Attendance, Salary, Top Team Earnings, Performance */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
           
           {/* 1. Attendance Card */}
-          <div className="bg-white rounded-xl p-4 md:p-6 border border-slate-100 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
+          <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
             <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Attendance</p>
-              <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Attendance</p>
+                <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Check-in</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mb-4 leading-relaxed">
+                Scan your face or RFID badge below to log daily attendance.
+              </p>
+              <div className="grid grid-cols-2 gap-3 mt-4">
                 {accessControl.faceAttendance && (
                   <button
                     onClick={() => setShowFaceAttendance(true)}
-                    className="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors group"
+                    className="flex flex-col items-center justify-center py-7 px-3 bg-slate-50 hover:bg-teal-50/50 hover:border-teal-200 border border-slate-100 rounded-xl transition-all group duration-200 text-center gap-3"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-7 h-7 rounded-md bg-white text-slate-700 flex items-center justify-center border border-slate-100 shadow-sm group-hover:text-teal-600 transition-colors">
-                        <FaCamera size={12} />
-                      </div>
-                      <span className="text-sm font-medium text-slate-800">Face ID</span>
+                    <div className="w-9 h-9 rounded-lg bg-teal-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+                      <FaCamera size={15} />
                     </div>
-                    <FaArrowRight className="text-slate-300 group-hover:text-teal-600 transition-colors" size={10} />
+                    <span className="text-xs font-bold text-slate-800">Face ID</span>
                   </button>
                 )}
                 {accessControl.rfidAttendance && (
                   <button
                     onClick={() => setShowRFIDAttendance(true)}
-                    className="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors group"
+                    className="flex flex-col items-center justify-center py-7 px-3 bg-slate-50 hover:bg-teal-50/50 hover:border-teal-200 border border-slate-100 rounded-xl transition-all group duration-200 text-center gap-3"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-7 h-7 rounded-md bg-white text-slate-700 flex items-center justify-center border border-slate-100 shadow-sm group-hover:text-teal-600 transition-colors">
-                        <FaHistory size={12} />
-                      </div>
-                      <span className="text-sm font-medium text-slate-800">RFID Tap</span>
+                    <div className="w-9 h-9 rounded-lg bg-slate-700 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+                      <FaHistory size={15} />
                     </div>
-                    <FaArrowRight className="text-slate-300 group-hover:text-teal-600 transition-colors" size={10} />
+                    <span className="text-xs font-bold text-slate-800">RFID</span>
                   </button>
                 )}
               </div>
+            </div>
+            <div className="text-[10px] text-slate-305 text-center mt-5">
+              Access verified securely via organization nodes
             </div>
           </div>
 
           {/* 2. Salary Card */}
-          <div className="bg-white rounded-xl p-4 md:p-6 border border-slate-100 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
+          <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
             <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Salary - Current Month</p>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-600">Base Salary</span>
-                  <span className="text-sm font-semibold text-slate-800">₹{salaryData.baseSalary.toLocaleString('en-IN')}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-slate-600">Final Payout</span>
-                  <span className="text-sm font-bold text-teal-600">₹{salaryData.finalSalary.toLocaleString('en-IN')}</span>
-                </div>
-                <div className="flex justify-between items-center border-t border-slate-100 pt-3">
-                  <span className="text-sm text-slate-600">Deductions</span>
-                  <span className="text-sm font-semibold text-rose-600">₹{salaryData.totalDeductions.toLocaleString('en-IN')}</span>
-                </div>
-
-                {/* Breakdown Toggle */}
-                {calculatedTaskPenalties.taskPenalties.length > 0 && (
-                  <button
-                    onClick={() => setShowDeductionBreakdown(!showDeductionBreakdown)}
-                    className="text-xs font-semibold text-slate-500 hover:text-teal-600 transition-colors flex items-center gap-1 mt-2"
-                  >
-                    {showDeductionBreakdown ? 'Hide Breakdown' : 'View Breakdown'}
-                    <FaChevronDown className={`transition-transform ${showDeductionBreakdown ? 'rotate-180' : ''}`} size={10} />
-                  </button>
-                )}
-
-                {/* Breakdown Content */}
-                <AnimatePresence>
-                  {showDeductionBreakdown && calculatedTaskPenalties.taskPenalties.length > 0 && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="space-y-2 mt-2">
-                        {calculatedTaskPenalties.taskPenalties.map((task, index) => (
-                          <div key={index} className="p-2 bg-slate-50 rounded-lg text-xs">
-                            <div className="flex justify-between mb-1">
-                              <span className="font-semibold text-slate-700 truncate max-w-[70%]">{task.title}</span>
-                              <span className="font-semibold text-rose-600">₹{task.taskDeduction.toLocaleString('en-IN')}</span>
-                            </div>
-                            <div className="flex justify-between text-slate-500">
-                              <span>{task.period}</span>
-                              <span>{task.overdueWorkingDays} days overdue</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Salary - Current Month</p>
+                <span className="text-[10px] bg-slate-50 text-slate-500 px-2 py-0.5 rounded-full font-bold">Estimated</span>
               </div>
-            </div>
-          </div>
-
-          {/* 3. Top Teams Card */}
-          <div className="bg-white rounded-xl p-4 md:p-6 border border-slate-100 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
-            <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Top Teams</p>
               <div className="space-y-3">
-                {topTeams && topTeams.length > 0 ? (
-                  topTeams.slice(0, 3).map((team, index) => (
-                    <div key={index} className={`flex items-center justify-between p-2.5 rounded-lg transition-colors ${
-                      index === 0 ? 'bg-amber-50/50 border border-amber-100' :
-                      index === 1 ? 'bg-slate-50/50 border border-slate-200' :
-                      index === 2 ? 'bg-orange-50/50 border border-orange-100' :
-                      'bg-slate-50'
-                    }`}>
-                      <div className="flex items-center gap-3">
-                        <div className="w-6 h-6 flex items-center justify-center">
-                          {index === 0 ? (
-                            <FaCrown className="text-amber-500" size={14} />
-                          ) : index === 1 ? (
-                            <FaMedal className="text-slate-400" size={14} />
-                          ) : index === 2 ? (
-                            <FaMedal className="text-orange-400" size={14} />
-                          ) : (
-                            <span className="text-xs font-bold text-slate-400">#{index + 1}</span>
-                          )}
+                {/* Deduction breakdown lines */}
+                <div className="space-y-1.5 text-xs font-semibold">
+                  <div className="flex justify-between items-center text-slate-505">
+                    <span>Base Salary</span>
+                    <span className="text-slate-850 font-bold">₹{Math.round(salaryData.baseSalary).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div 
+                    onClick={() => {
+                      if (calculatedTaskPenalties.taskPenalties.length > 0) {
+                        setShowDeductionBreakdown(!showDeductionBreakdown);
+                      }
+                    }}
+                    className={`flex justify-between items-center text-slate-500 ${calculatedTaskPenalties.taskPenalties.length > 0 ? 'cursor-pointer hover:bg-slate-50/80 p-0.5 rounded transition-all select-none' : ''}`}
+                  >
+                    <span className="flex items-center gap-1 text-rose-400">
+                      <span className="text-slate-400">−</span> Task Delay Penalties
+                      {calculatedTaskPenalties.taskPenalties.length > 0 && (
+                        <FaChevronDown className={`text-slate-400 transition-transform duration-200 ${showDeductionBreakdown ? 'rotate-180' : ''}`} size={8} />
+                      )}
+                    </span>
+                    <span className="text-rose-500 font-bold">−₹{Math.round(calculatedTaskPenalties.totalTaskPenalty).toLocaleString('en-IN')}</span>
+                  </div>
+
+                  {/* Task penalty breakdown (expandable) */}
+                  {calculatedTaskPenalties.taskPenalties.length > 0 && (
+                    <AnimatePresence>
+                      {showDeductionBreakdown && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="space-y-1 mt-1 mb-1 max-h-24 overflow-y-auto pr-1 pl-2">
+                            {calculatedTaskPenalties.taskPenalties.map((task, index) => (
+                              <div key={index} className="p-1.5 bg-rose-50/60 border border-rose-100/60 rounded-lg text-[10px] leading-relaxed">
+                                <div className="flex justify-between font-bold mb-0.5">
+                                  <span className="text-slate-700 truncate max-w-[70%]">{task.title}</span>
+                                  <span className="text-rose-600">−₹{Math.round(task.taskDeduction).toLocaleString('en-IN')}</span>
+                                </div>
+                                <div className="flex justify-between text-slate-400 font-semibold">
+                                  <span>{task.period}</span>
+                                  <span>{task.overdueWorkingDays}d late</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  )}
+
+                  <div className="flex justify-between items-center text-slate-500">
+                    <span className="flex items-center gap-1">
+                      <span className="text-slate-400">−</span> Delay Deduction
+                    </span>
+                    <span className="text-rose-500 font-bold">
+                      −₹{Math.round(salaryData.totalDeductions).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center border-t border-slate-100 pt-1.5 text-slate-600 font-bold">
+                    <span>Total Deductions</span>
+                    <span className="text-rose-700">−₹{Math.round(salaryData.totalDeductions + calculatedTaskPenalties.totalTaskPenalty).toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+
+                {/* Hero Stat: Final Payout — always baseSalary - totalDeductions */}
+                {(() => {
+                  const displayFinalPayout = Math.max(0, salaryData.baseSalary - salaryData.totalDeductions - calculatedTaskPenalties.totalTaskPenalty);
+                  const payoutRatio = salaryData.baseSalary > 0
+                    ? Math.max(0, Math.min(100, Math.round((displayFinalPayout / salaryData.baseSalary) * 100)))
+                    : 0;
+                  return (
+                    <>
+                      {/* Progress bar */}
+                      {salaryData.baseSalary > 0 && (
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[9px] font-bold text-slate-400 uppercase">
+                            <span>Payout ratio</span>
+                            <span>{payoutRatio}%</span>
+                          </div>
+                          <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                            <div
+                              className="bg-teal-500 h-full rounded-full transition-all duration-500"
+                              style={{ width: `${payoutRatio}%` }}
+                            ></div>
+                          </div>
                         </div>
-                        <span className="text-sm font-semibold text-slate-700 truncate max-w-[120px]">{team.name}</span>
+                      )}
+
+                      {/* Final Payout hero */}
+                      <div className="bg-teal-50/60 rounded-xl p-3 border border-teal-100 flex items-center justify-between">
+                        <div>
+                          <span className="block text-[10px] text-teal-600 uppercase font-black tracking-wider">Final Payout</span>
+                          <span className="text-xl font-black text-teal-700 tracking-tight">
+                            ₹{Math.round(displayFinalPayout).toLocaleString('en-IN')}
+                          </span>
+                          <span className="block text-[9px] text-teal-500 mt-0.5">
+                            After all deductions
+                          </span>
+                        </div>
+                        <div className="w-9 h-9 rounded-full bg-teal-100 text-teal-600 flex items-center justify-center">
+                          <FaWallet size={14} />
+                        </div>
                       </div>
-                      <span className={`text-sm font-bold ${
-                        index === 0 ? 'text-amber-600' :
-                        index === 1 ? 'text-slate-600' :
-                        index === 2 ? 'text-orange-600' :
-                        'text-slate-800'
-                      }`}>₹{team.amount.toLocaleString('en-IN')}</span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="py-8 text-center flex-1 flex flex-col items-center justify-center">
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No data available</p>
+                    </>
+                  );
+                })()}
+
+                {/* No deductions message */}
+                {salaryData.totalDeductions === 0 && calculatedTaskPenalties.taskPenalties.length === 0 && (
+                  <div className="text-[10px] text-teal-600 text-center font-semibold py-1">
+                    🎉 Perfect record this month!
                   </div>
                 )}
               </div>
             </div>
           </div>
+
+          {/* 3. Top Team Earnings Card */}
+          <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Top Team Earnings</p>
+                <span className="text-[10px] bg-slate-50 text-slate-500 px-2 py-0.5 rounded-full font-bold">Monthly Rank</span>
+              </div>
+              <div className="space-y-3 mt-3.5">
+                {topTeams && topTeams.length > 0 ? (
+                  (() => {
+                    const maxVal = Math.max(...topTeams.map(t => t.amount || 1));
+                    return topTeams.slice(0, 3).map((team, index) => {
+                      const medals = ['🥇', '🥈', '🥉'];
+                      const itemColors = index === 0 ? 'bg-amber-50/40 text-amber-900 border-amber-100/70' :
+                                       index === 1 ? 'bg-slate-50/50 text-slate-800 border-slate-200/70' :
+                                       'bg-orange-50/40 text-orange-900 border-orange-100/70';
+                      const barColors = index === 0 ? 'bg-amber-500' :
+                                        index === 1 ? 'bg-slate-400' :
+                                        'bg-orange-400';
+                      return (
+                        <div key={index} className={`flex flex-col p-3.5 rounded-xl border transition-all gap-2 ${itemColors}`}>
+                          <div className="flex items-center justify-between min-w-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-xs flex-shrink-0">{medals[index] || `#${index + 1}`}</span>
+                              <span className="text-xs font-bold text-slate-700 truncate">{team.name}</span>
+                            </div>
+                            <span className="text-xs font-extrabold text-slate-800 flex-shrink-0">
+                              ₹{Math.round(team.amount).toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                          {/* Relative progress bar to fill empty space and add visual polish */}
+                          <div className="w-full bg-slate-200/50 h-1 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full ${barColors}`} 
+                              style={{ width: `${Math.max(5, (team.amount / maxVal) * 100)}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()
+                ) : (
+                  <div className="py-8 text-center flex flex-col items-center justify-center">
+                    <p className="text-[10px] font-bold text-slate-350 uppercase tracking-wider">No team earnings recorded</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="text-[10px] text-slate-300 text-center mt-4">
+              Real-time standing analytics
+            </div>
+          </div>
+
+          {/* 4. Performance Card */}
+          <PerformanceCard onLeaderboardClick={() => setShowLeaderboard(true)} />
+
         </div>
 
         {/* Bottom Sections: Grid Layout */}
         <div className="grid grid-cols-1 gap-6">
           
-          {/* Row 1: Notification & Fines */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Row 1: Rankings, Fines, Notification */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Mini Leaderboard */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-slate-50 text-amber-600 flex items-center justify-center border border-slate-100">
+                  <FaTrophy size={14} />
+                </div>
+                <h2 className="text-lg font-bold text-slate-900">Rankings</h2>
+              </div>
+              <MiniLeaderboard onViewFull={() => setShowLeaderboard(true)} />
+            </div>
+
+            {/* My Fines */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-700 flex items-center justify-center border border-slate-100">
+                  <FaExclamationTriangle size={14} />
+                </div>
+                <h2 className="text-lg font-bold text-slate-900">My Fines</h2>
+              </div>
+              <MyFines noCard={true} />
+            </div>
+
             {/* Latest Notification */}
             <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
               <div className="flex items-center gap-3 mb-4">
@@ -407,17 +530,6 @@ const Dashboard = () => {
               ) : (
                 <p className="text-sm text-slate-400 text-center py-4">No notifications found</p>
               )}
-            </div>
-
-            {/* My Fines */}
-            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-700 flex items-center justify-center border border-slate-100">
-                  <FaExclamationTriangle size={14} />
-                </div>
-                <h2 className="text-lg font-bold text-slate-900">My Fines</h2>
-              </div>
-              <MyFines noCard={true} />
             </div>
           </div>
 
@@ -500,6 +612,17 @@ const Dashboard = () => {
 
         </div>
 
+        {/* Point History Section */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-slate-50 text-emerald-600 flex items-center justify-center border border-slate-100">
+              <FaTrophy size={14} />
+            </div>
+            <h2 className="text-lg font-bold text-slate-900">Performance Activity</h2>
+          </div>
+          <PointHistory />
+        </div>
+
       </div>
 
       {/* Attendance Popups */}
@@ -522,6 +645,15 @@ const Dashboard = () => {
           onAttendanceMarked={handleAttendanceMarked}
         />
       )}
+
+      {/* Leaderboard Modal */}
+      <LeaderboardModal
+        isOpen={showLeaderboard}
+        onClose={() => setShowLeaderboard(false)}
+      />
+
+      {/* Floating Point Animation Layer */}
+      <PointAnimation />
     </div>
   );
 };

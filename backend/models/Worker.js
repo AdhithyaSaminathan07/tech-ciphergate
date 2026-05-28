@@ -52,6 +52,32 @@ const workerSchema = mongoose.Schema({
     type: Object,
     default: {}
   },
+  // Performance & Rewards System Fields
+  performancePoints: {
+    type: Number,
+    default: 0
+  },
+  currentStreak: {
+    type: Number,
+    default: 0
+  },
+  longestStreak: {
+    type: Number,
+    default: 0
+  },
+  performanceLevel: {
+    type: String,
+    enum: ['Beginner', 'Performer', 'Rising Star', 'Elite Performer', 'Legend'],
+    default: 'Beginner'
+  },
+  totalCompletedTickets: {
+    type: Number,
+    default: 0
+  },
+  totalDelayedTickets: {
+    type: Number,
+    default: 0
+  },
   salary: {
     type: Number,
     default: 0
@@ -149,6 +175,10 @@ const workerSchema = mongoose.Schema({
     pushEnabled: { type: Boolean, default: true },
     soundEnabled: { type: Boolean, default: true },
     priorityFilter: { type: String, enum: ['All', 'High', 'Medium'], default: 'All' }
+  },
+  acceptedRulesVersion: {
+    type: String,
+    default: '0'
   },
   passwordChangedAt: Date
 }, {

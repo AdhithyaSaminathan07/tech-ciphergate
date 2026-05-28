@@ -22,10 +22,20 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor: handles 401 unauthorized
+// Response interceptor: handles 401 unauthorized and 403 rules acceptance
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response && error.response.status === 403 && error.response.data.rulesAcceptanceRequired) {
+      if (window.location.pathname !== '/worker/rules-acceptance') {
+        console.warn('Rules acceptance required. Redirecting...');
+        window.location.href = '/worker/rules-acceptance';
+      } else {
+        console.warn('Rules acceptance required, but already on the acceptance page. Suppressing redirect to prevent reload loop.');
+      }
+      return Promise.reject(error);
+    }
+
     if (error.response && error.response.status === 401) {
       console.error('Unauthorized access');
       // Clear localStorage

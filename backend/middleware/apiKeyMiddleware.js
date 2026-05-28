@@ -46,9 +46,10 @@ const validateApiKey = asyncHandler(async (req, res, next) => {
 
 /**
  * Middleware to check specific permissions
- * @param {string} requiredPermission - 'read', 'write', or 'admin'
+ * @param {string} moduleName - 'attendance', 'invoices', 'workers', etc.
+ * @param {string} requiredAction - 'read' or 'write'
  */
-const authorizeApi = (requiredPermission) => {
+const authorizeApi = (moduleName, requiredAction) => {
     return (req, res, next) => {
         if (!req.apiKey) {
             return res.status(500).json({
@@ -57,13 +58,15 @@ const authorizeApi = (requiredPermission) => {
             });
         }
 
-        const hasPermission = req.apiKey.permissions.includes(requiredPermission) || 
-                            req.apiKey.permissions.includes('admin');
+        const hasPermission = 
+            req.apiKey.permissions.includes('admin') ||
+            req.apiKey.permissions.includes(`${moduleName}:${requiredAction}`) ||
+            req.apiKey.permissions.includes(requiredAction); // backwards compatibility for legacy read/write keys
 
         if (!hasPermission) {
             return res.status(403).json({
                 success: false,
-                message: `Insufficient permissions. Required: ${requiredPermission}`
+                message: `Insufficient permissions. Required: ${moduleName}:${requiredAction}`
             });
         }
 

@@ -311,10 +311,72 @@ const settingsSchema = mongoose.Schema({
       type: Number,
       default: 1
     }
+  },
+  // Rules and Regulations Configuration
+  rulesConfiguration: {
+    forceAcceptance: {
+      type: Boolean,
+      default: true
+    },
+    scrollValidation: {
+      type: Boolean,
+      default: true
+    },
+    allowPdfDownload: {
+      type: Boolean,
+      default: true
+    },
+    requireCheckbox: {
+      type: Boolean,
+      default: true
+    },
+    autoNotify: {
+      type: Boolean,
+      default: true
+    },
+    gracePeriodDays: {
+      type: Number,
+      default: 0
+    },
+    mobileAcceptance: {
+      type: Boolean,
+      default: true
+    },
+    currentVersion: {
+      type: String,
+      default: '1.0'
+    }
+  },
+
+  // Performance & Rewards Configuration
+  performanceConfig: {
+    enabled: { type: Boolean, default: true },
+    basePoints: { type: Number, default: 1 },
+    advancedMode: { type: Boolean, default: false },
+    penaltyEnabled: { type: Boolean, default: true },
+    penaltyPercentage: { type: Number, default: 50 },
+    earlyBonusEnabled: { type: Boolean, default: true },
+    streakBonusEnabled: { type: Boolean, default: true },
+    badgeSystemEnabled: { type: Boolean, default: true },
+    leaderboardVisible: { type: Boolean, default: true },
+    priorityMultipliers: {
+      Low: { type: Number, default: 1 },
+      Medium: { type: Number, default: 1.5 },
+      High: { type: Number, default: 2 },
+      Critical: { type: Number, default: 3 }
+    },
+    typeMultipliers: {
+      Task: { type: Number, default: 1 },
+      Bug: { type: Number, default: 1.5 },
+      Story: { type: Number, default: 2 },
+      Epic: { type: Number, default: 3 }
+    }
   }
+
 }, {
   timestamps: true
 });
+
 
 // Method to reset daily email flag
 settingsSchema.methods.resetDailyEmailFlag = function () {

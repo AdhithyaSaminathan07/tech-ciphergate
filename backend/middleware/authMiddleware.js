@@ -54,6 +54,51 @@ const protect = asyncHandler(async (req, res, next) => {
       }
     }
 
+    // Check rules acceptance for workers
+    if (req.user.role === 'worker') {
+      const isBypassRoute = req.originalUrl.includes('/api/rules/active') || 
+                            req.originalUrl.includes('/api/rules/accept') || 
+                            req.originalUrl.includes('/api/rules/status') || 
+                            req.originalUrl.includes('/api/auth/me');
+
+      if (!isBypassRoute) {
+        const Settings = require('../models/Settings');
+        const settings = await Settings.findOne({ subdomain: req.user.subdomain });
+        
+        if (settings && settings.rulesConfiguration && settings.rulesConfiguration.forceAcceptance) {
+          const currentVersion = settings.rulesConfiguration.currentVersion || '1.0';
+          const acceptedVersion = req.user.acceptedRulesVersion || '0';
+
+          if (acceptedVersion !== currentVersion) {
+            // Only block if there are actually active rules in the database
+            const Rule = require('../models/Rule');
+            const activeRulesCount = await Rule.countDocuments({ subdomain: req.user.subdomain, status: 'active' });
+
+            if (activeRulesCount > 0) {
+              // Check if grace period is active
+              let gracePeriodActive = false;
+              const gracePeriodDays = settings.rulesConfiguration.gracePeriodDays || 0;
+              if (gracePeriodDays > 0 && settings.lastUpdated) {
+                const timeDiff = Date.now() - new Date(settings.lastUpdated).getTime();
+                const daysDiff = timeDiff / (1000 * 3600 * 24);
+                if (daysDiff <= gracePeriodDays) {
+                  gracePeriodActive = true;
+                }
+              }
+
+              if (!gracePeriodActive) {
+                return res.status(403).json({
+                  message: 'Rules acceptance required',
+                  rulesAcceptanceRequired: true,
+                  currentVersion
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
     next();
   } catch (error) {
     console.error('Token verification error:', error);

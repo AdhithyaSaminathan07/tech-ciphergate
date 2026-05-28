@@ -113,6 +113,8 @@ const startServer = async () => {
     app.use('/api/exit-management', exitManagementRoutes);
     app.use('/api/sales-velocity', salesVelocityRoutes);
     app.use('/api/instaxbot', instaxbotRoutes);
+    app.use('/api/rules', require('./routes/ruleRoutes'));
+    app.use('/api/performance', require('./routes/performanceRoutes'));
 
 
     // Test App routes

@@ -39,6 +39,17 @@ export const useAxios = () => {
           console.error('Error Response:', error.response.data);
           console.error('Error Status:', error.response.status);
 
+          // Redirect to rules acceptance page on 403 if required
+          if (error.response.status === 403 && error.response.data.rulesAcceptanceRequired) {
+            if (window.location.pathname !== '/worker/rules-acceptance') {
+              console.warn('Rules acceptance required. Redirecting...');
+              window.location.href = '/worker/rules-acceptance';
+            } else {
+              console.warn('Rules acceptance required, but already on the acceptance page. Suppressing redirect to prevent reload loop.');
+            }
+            return Promise.reject(error);
+          }
+
           // Automatically logout on 401 (Unauthorized) errors
           if (error.response.status === 401) {
             console.warn('Unauthorized: Logging out');

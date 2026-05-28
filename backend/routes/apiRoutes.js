@@ -37,6 +37,12 @@ const {
 const {
     getSettings
 } = require('../controllers/settingsController');
+const {
+    createInvoice,
+    updateInvoice,
+    getInvoiceById,
+    deleteInvoice
+} = require('../controllers/invoiceController');
 const { validateApiKey, authorizeApi } = require('../middleware/apiKeyMiddleware');
 const apiRateLimiter = require('../middleware/rateLimiter');
 
@@ -49,6 +55,75 @@ const injectSubdomain = (req, res, next) => {
     next();
 };
 
+// Middleware to mock the user context based on API Key's subdomain.
+// Since the invoice controller requires req.user.role and req.user._id,
+// we locate the Admin associated with this subdomain and assign it to req.user.
+const mockUserFromSubdomain = async (req, res, next) => {
+    try {
+        const subdomain = req.apiKey.subdomain;
+        const AdminModel = require('../models/Admin');
+        const adminInstance = await AdminModel.findOne({ subdomain });
+        if (!adminInstance) {
+            return res.status(404).json({
+                success: false,
+                message: `No Admin found for subdomain: ${subdomain}`
+            });
+        }
+        req.user = adminInstance.toObject();
+        req.user.role = 'admin';
+        next();
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+// Middleware to verify the requested invoice belongs to the API Key's subdomain.
+// Prevents cross-tenant queries/mutations.
+const verifyInvoiceSubdomain = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const subdomain = req.apiKey.subdomain;
+        
+        // Validate ObjectId
+        const mongoose = require('mongoose');
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid invoice ID'
+            });
+        }
+        
+        const InvoiceModel = require('../models/Invoice');
+        const invoiceInstance = await InvoiceModel.findById(id);
+        if (!invoiceInstance) {
+            return res.status(404).json({
+                success: false,
+                message: 'Invoice not found'
+            });
+        }
+        
+        // Fetch creator to check their subdomain
+        const AdminModel = require('../models/Admin');
+        const WorkerModel = require('../models/Worker');
+        
+        let creator = await AdminModel.findById(invoiceInstance.createdBy);
+        if (!creator) {
+            creator = await WorkerModel.findById(invoiceInstance.createdBy);
+        }
+        
+        if (!creator || creator.subdomain !== subdomain) {
+            return res.status(403).json({
+                success: false,
+                message: 'Access denied. Invoice does not belong to your subdomain.'
+            });
+        }
+        
+        next();
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
 // Apply security and rate limiting to all routes in this router
 router.use(apiRateLimiter);
 router.use(validateApiKey);
@@ -59,7 +134,7 @@ router.use(injectSubdomain);
  * @desc    Get attendance records with optional filters (date, rfid)
  * @access  Private (API Key)
  */
-router.get('/attendance', authorizeApi('read'), async (req, res) => {
+router.get('/attendance', authorizeApi('attendance', 'read'), async (req, res) => {
     try {
         const { date, rfid } = req.query;
         const { subdomain } = req.body;
@@ -108,7 +183,7 @@ router.get('/attendance', authorizeApi('read'), async (req, res) => {
  * @desc    Mark attendance for a worker via RFID
  * @access  Private (API Key)
  */
-router.post('/attendance', authorizeApi('write'), (req, res, next) => {
+router.post('/attendance', authorizeApi('attendance', 'write'), (req, res, next) => {
     putAttendance(req, res, next);
 });
 
@@ -117,7 +192,7 @@ router.post('/attendance', authorizeApi('write'), (req, res, next) => {
  * @desc    Get attendance summary/report
  * @access  Private (API Key)
  */
-router.get('/report', authorizeApi('read'), (req, res, next) => {
+router.get('/report', authorizeApi('attendance', 'read'), (req, res, next) => {
     getAttendanceSummary(req, res, next);
 });
 
@@ -128,7 +203,7 @@ router.get('/report', authorizeApi('read'), (req, res, next) => {
  * @desc    Get all active workers
  * @access  Private (API Key)
  */
-router.get('/workers', authorizeApi('read'), (req, res, next) => {
+router.get('/workers', authorizeApi('workers', 'read'), (req, res, next) => {
     getWorkers(req, res, next);
 });
 
@@ -137,7 +212,7 @@ router.get('/workers', authorizeApi('read'), (req, res, next) => {
  * @desc    Get worker by ID
  * @access  Private (API Key)
  */
-router.get('/workers/:id', authorizeApi('read'), (req, res, next) => {
+router.get('/workers/:id', authorizeApi('workers', 'read'), (req, res, next) => {
     getWorkerById(req, res, next);
 });
 
@@ -146,7 +221,7 @@ router.get('/workers/:id', authorizeApi('read'), (req, res, next) => {
  * @desc    Get worker by RFID
  * @access  Private (API Key)
  */
-router.post('/workers/rfid', authorizeApi('read'), (req, res, next) => {
+router.post('/workers/rfid', authorizeApi('workers', 'read'), (req, res, next) => {
     getWorkerByRfid(req, res, next);
 });
 
@@ -157,7 +232,7 @@ router.post('/workers/rfid', authorizeApi('read'), (req, res, next) => {
  * @desc    Get all tasks for the company
  * @access  Private (API Key)
  */
-router.get('/tasks', authorizeApi('read'), (req, res, next) => {
+router.get('/tasks', authorizeApi('tasks', 'read'), (req, res, next) => {
     getTasks(req, res, next);
 });
 
@@ -166,7 +241,7 @@ router.get('/tasks', authorizeApi('read'), (req, res, next) => {
  * @desc    Get tasks by date range
  * @access  Private (API Key)
  */
-router.get('/tasks/range', authorizeApi('read'), (req, res, next) => {
+router.get('/tasks/range', authorizeApi('tasks', 'read'), (req, res, next) => {
     getTasksByDateRange(req, res, next);
 });
 
@@ -177,7 +252,7 @@ router.get('/tasks/range', authorizeApi('read'), (req, res, next) => {
  * @desc    Get salary report for a worker
  * @access  Private (API Key)
  */
-router.get('/salary/report/:id', authorizeApi('read'), (req, res, next) => {
+router.get('/salary/report/:id', authorizeApi('salary', 'read'), (req, res, next) => {
     getWorkerSalaryReport(req, res, next);
 });
 
@@ -188,7 +263,7 @@ router.get('/salary/report/:id', authorizeApi('read'), (req, res, next) => {
  * @desc    Get all leave applications for the company
  * @access  Private (API Key)
  */
-router.get('/leaves', authorizeApi('read'), (req, res, next) => {
+router.get('/leaves', authorizeApi('leaves', 'read'), (req, res, next) => {
     // Manually set params for getLeaves controller
     req.params.subdomain = req.apiKey.subdomain;
     req.params.me = '0'; // Admin view
@@ -200,7 +275,7 @@ router.get('/leaves', authorizeApi('read'), (req, res, next) => {
  * @desc    Get leave applications by date range
  * @access  Private (API Key)
  */
-router.get('/leaves/range', authorizeApi('read'), (req, res, next) => {
+router.get('/leaves/range', authorizeApi('leaves', 'read'), (req, res, next) => {
     // Ensure subdomain is set in req.user for this controller
     req.user = req.user || {};
     req.user.subdomain = req.apiKey.subdomain;
@@ -214,7 +289,7 @@ router.get('/leaves/range', authorizeApi('read'), (req, res, next) => {
  * @desc    Get all fines for the company
  * @access  Private (API Key)
  */
-router.get('/fines', authorizeApi('read'), (req, res, next) => {
+router.get('/fines', authorizeApi('fines', 'read'), (req, res, next) => {
     getAllFines(req, res, next);
 });
 
@@ -223,7 +298,7 @@ router.get('/fines', authorizeApi('read'), (req, res, next) => {
  * @desc    Get fines for a specific worker
  * @access  Private (API Key)
  */
-router.get('/workers/:id/fines', authorizeApi('read'), (req, res, next) => {
+router.get('/workers/:id/fines', authorizeApi('fines', 'read'), (req, res, next) => {
     getWorkerFines(req, res, next);
 });
 
@@ -234,7 +309,7 @@ router.get('/workers/:id/fines', authorizeApi('read'), (req, res, next) => {
  * @desc    Get all departments for the company
  * @access  Private (API Key)
  */
-router.get('/departments', authorizeApi('read'), (req, res, next) => {
+router.get('/departments', authorizeApi('departments', 'read'), (req, res, next) => {
     // Controller expects subdomain in req.body
     req.body.subdomain = req.apiKey.subdomain;
     getDepartments(req, res, next);
@@ -247,7 +322,7 @@ router.get('/departments', authorizeApi('read'), (req, res, next) => {
  * @desc    Get all holidays for the company
  * @access  Private (API Key)
  */
-router.get('/holidays', authorizeApi('read'), (req, res, next) => {
+router.get('/holidays', authorizeApi('holidays', 'read'), (req, res, next) => {
     // Controller expects subdomain in req.params and user in req.user
     req.params.subdomain = req.apiKey.subdomain;
     req.user = req.user || { _id: 'api-key-system', role: 'admin' };
@@ -261,7 +336,7 @@ router.get('/holidays', authorizeApi('read'), (req, res, next) => {
  * @desc    Get all tickets for the company
  * @access  Private (API Key)
  */
-router.get('/tickets', authorizeApi('read'), (req, res, next) => {
+router.get('/tickets', authorizeApi('tickets', 'read'), (req, res, next) => {
     // Controller expects subdomain in req.user or req.query
     req.user = req.user || { subdomain: req.apiKey.subdomain };
     req.user.subdomain = req.apiKey.subdomain;
@@ -275,10 +350,129 @@ router.get('/tickets', authorizeApi('read'), (req, res, next) => {
  * @desc    Get company settings
  * @access  Private (API Key)
  */
-router.get('/settings', authorizeApi('read'), (req, res, next) => {
+router.get('/settings', authorizeApi('settings', 'read'), (req, res, next) => {
     // Controller expects subdomain in req.params
     req.params.subdomain = req.apiKey.subdomain;
     getSettings(req, res, next);
+});
+
+// --- Invoice Modules ---
+
+/**
+ * @route   GET /api/external/invoices
+ * @desc    Get all invoices for the subdomain associated with the API key
+ * @access  Private (API Key)
+ */
+router.get('/invoices', authorizeApi('invoices', 'read'), async (req, res) => {
+    try {
+        const subdomain = req.apiKey.subdomain;
+        const AdminModel = require('../models/Admin');
+        const WorkerModel = require('../models/Worker');
+        const InvoiceModel = require('../models/Invoice');
+        
+        const admins = await AdminModel.find({ subdomain }, '_id');
+        const workers = await WorkerModel.find({ subdomain }, '_id');
+        const userIds = [...admins.map(a => a._id), ...workers.map(w => w._id)];
+        
+        // Apply standard filters similar to getAllInvoices
+        const { filterType, startDate, endDate, gstFilter } = req.query;
+        let query = { createdBy: { $in: userIds } };
+        
+        const now = new Date();
+        const { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } = require('date-fns');
+        
+        if (filterType === 'today') {
+            query.actualDate = {
+                $gte: startOfDay(now),
+                $lte: endOfDay(now)
+            };
+        } else if (filterType === 'weekly') {
+            query.actualDate = {
+                $gte: startOfWeek(now, { weekStartsOn: 1 }),
+                $lte: endOfWeek(now, { weekStartsOn: 1 })
+            };
+        } else if (filterType === 'monthly') {
+            query.actualDate = {
+                $gte: startOfMonth(now),
+                $lte: endOfMonth(now)
+            };
+        } else if (filterType === 'custom' && startDate && endDate) {
+            query.actualDate = {
+                $gte: startOfDay(new Date(startDate)),
+                $lte: endOfDay(new Date(endDate))
+            };
+        }
+        
+        if (gstFilter === 'gst') {
+            query.gstEnabled = true;
+        } else if (gstFilter === 'non-gst') {
+            query.gstEnabled = false;
+        } else if (gstFilter === 'igst') {
+            query.gstEnabled = true;
+            query.saleType = 'Interstate';
+        } else if (gstFilter === 'cgst-sgst') {
+            query.gstEnabled = true;
+            query.saleType = 'Intrastate';
+        }
+        
+        const invoices = await InvoiceModel.find(query)
+            .populate({
+                path: 'createdBy',
+                select: 'name email department',
+                options: { strictPopulate: false },
+                populate: {
+                    path: 'department',
+                    select: 'name',
+                    model: 'Department',
+                    options: { strictPopulate: false }
+                }
+            })
+            .sort({ createdAt: -1 });
+            
+        res.status(200).json({
+            success: true,
+            message: 'Invoices retrieved successfully',
+            data: invoices
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+/**
+ * @route   GET /api/external/invoices/:id
+ * @desc    Get a single invoice by ID (subdomain scoped)
+ * @access  Private (API Key)
+ */
+router.get('/invoices/:id', authorizeApi('invoices', 'read'), verifyInvoiceSubdomain, mockUserFromSubdomain, (req, res, next) => {
+    getInvoiceById(req, res, next);
+});
+
+/**
+ * @route   POST /api/external/invoices
+ * @desc    Create a new invoice under the API key's subdomain
+ * @access  Private (API Key)
+ */
+router.post('/invoices', authorizeApi('invoices', 'write'), mockUserFromSubdomain, (req, res, next) => {
+    createInvoice(req, res, next);
+});
+
+/**
+ * @route   PUT /api/external/invoices/:id
+ * @desc    Update an invoice (subdomain scoped)
+ * @access  Private (API Key)
+ */
+router.put('/invoices/:id', authorizeApi('invoices', 'write'), verifyInvoiceSubdomain, mockUserFromSubdomain, (req, res, next) => {
+    updateInvoice(req, res, next);
+});
+
+/**
+ * @route   DELETE /api/external/invoices/:id
+ * @desc    Delete an invoice (subdomain scoped)
+ * @access  Private (API Key)
+ */
+router.delete('/invoices/:id', authorizeApi('invoices', 'write'), verifyInvoiceSubdomain, mockUserFromSubdomain, (req, res, next) => {
+    deleteInvoice(req, res, next);
 });
 
 module.exports = router;
