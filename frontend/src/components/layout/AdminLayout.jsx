@@ -21,6 +21,7 @@ import {
   FaChartBar,
   FaAsterisk,
   FaWhatsapp,
+  FaInstagram,
   FaAward,
   FaCommentDots,
   FaGithub,
@@ -79,6 +80,7 @@ const SalaryProjectManagement = React.lazy(() => import('../admin/SalaryProjectM
 const EmployeeCompensation = React.lazy(() => import('../admin/EmployeeCompensation'));
 const DeveloperCompensation = React.lazy(() => import('../admin/DeveloperCompensation'));
 const GoWhatsIntegration = React.lazy(() => import('../admin/GoWhatsIntegration'));
+const InstagramIntegration = React.lazy(() => import('../admin/InstagramIntegration'));
 const HolidayManagement = React.lazy(() => import('../admin/HolidayManagement'));
 const Communication = React.lazy(() => import('../../pages/Communication'));
 const Settings = React.lazy(() => import('../admin/Settings'));
@@ -224,6 +226,7 @@ const AdminLayout = () => {
         { to: '/admin/communication', label: 'Communication', icon: <FaComments /> },
         { to: '/admin/notifications', label: 'Notifications', icon: <FaRegBell /> },
         { to: '/admin/gowhats', label: 'GoWhats', icon: <FaWhatsapp /> },
+        { to: '/admin/instagram', label: 'Instagram Bot', icon: <FaInstagram /> },
         { to: '/admin/comments', label: 'Comments', icon: <FaCommentDots />, badge: newComments > 0 ? newComments : null },
         { to: '/admin/food-requests', label: 'Food Requests', icon: <FaPizzaSlice /> },
       ],
@@ -340,7 +343,7 @@ const AdminLayout = () => {
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
-            className="h-full w-full max-w-[1600px] mx-auto px-2 sm:px-6 md:px-8 pt-4 md:pt-6 pb-6 md:pb-8"
+            className="h-full w-full max-w-full mx-auto px-2 sm:px-6 md:px-8 pt-4 md:pt-6 pb-6 md:pb-8"
           >
             <Suspense fallback={<PageLoader />}>
             <Routes>
@@ -369,6 +372,7 @@ const AdminLayout = () => {
               <Route path="settings" element={<Settings />} />
               <Route path="profile" element={<AdminProfile />} />
               <Route path="gowhats" element={<GoWhatsIntegration />} />
+              <Route path="instagram" element={<InstagramIntegration />} />
               <Route path="communication" element={<Communication />} />
               <Route path="invoices" element={<InvoiceManagement />} />
               <Route path="intern-certificate" element={<InternCertificate />} />

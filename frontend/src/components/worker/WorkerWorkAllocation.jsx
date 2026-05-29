@@ -400,13 +400,13 @@ const WorkerWorkAllocation = () => {
             </div>
 
             {/* Kanban Board Area */}
-            <div className="flex-1 overflow-x-auto px-4 md:px-6 py-2 bg-white pb-6 scroll-smooth">
-                <div className="flex gap-4 md:gap-6 h-full min-h-[60vh] pb-4 w-max lg:w-full">
+            <div className="flex-1 p-3 lg:p-4 pt-3 bg-white scroll-smooth overflow-x-auto">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 min-h-[60vh] pb-4 w-full">
                     {columns.map(status => (
                         <div
                             key={status}
                             data-status={status}
-                            className={`flex flex-col bg-gray-50/70 border border-gray-100 rounded-2xl w-[280px] md:w-[300px] lg:flex-1 max-h-full transition-all ${dragOverCol === status ? 'bg-teal-50 border-teal-200 border-dashed' : ''}`}
+                            className={`flex flex-col bg-gray-50/70 border border-gray-100 rounded-2xl min-w-0 transition-all ${dragOverCol === status ? 'bg-teal-50 border-teal-200 border-dashed' : ''}`}
                             onDragOver={(e) => handleDragOver(e, status)}
                             onDragLeave={(e) => handleDragLeave(e, status)}
                             onDrop={(e) => handleDrop(e, status)}

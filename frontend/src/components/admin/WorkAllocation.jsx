@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useRef, useMemo } from 'react';
 import appContext from '../../context/AppContext';
 import { useSocket } from '../../context/SocketContextNew';
 import { getTickets, createTicket, updateTicket, deleteTicket, getTicketCompletions, uploadReference, uploadTicketReference, deleteTicketReference } from '../../services/ticketService';
@@ -8,7 +8,7 @@ import {
     Search, Plus, Trash2, CheckSquare,
     AlertCircle, Bookmark, Zap, ArrowUp, ArrowDown,
     Minus, X, User, AlignLeft, LayoutDashboard, Flag, List, ListOrdered,
-    Calendar, Clock, Check, ChevronDown, BarChart2, Users, Info, Eye, Paperclip, CheckCircle2, History, Tag, MessageSquare, Download, Maximize2, FileText, HelpCircle, ImagePlus
+    Calendar, Clock, Check, ChevronDown, BarChart2, Users, Info, Eye, Paperclip, CheckCircle2, History, Tag, MessageSquare, Download, Maximize2, FileText, HelpCircle, ImagePlus, Filter
 } from 'lucide-react';
 import { getFullFileUrl } from '../../utils/fileUtils';
 import { toast } from 'react-toastify';
@@ -154,6 +154,7 @@ const isOverdue = (endDate, status) => {
 
 const MultiSelect = ({ options, selected, onChange, placeholder }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [search, setSearch] = useState('');
     const containerRef = useRef(null);
 
     useEffect(() => {
@@ -172,7 +173,19 @@ const MultiSelect = ({ options, selected, onChange, placeholder }) => {
         }
     };
 
+    const filteredOptions = options.filter(opt => opt.status !== 'Relieved' && opt.name.toLowerCase().includes(search.toLowerCase()));
     const selectedOptions = options.filter(opt => selected.includes(opt.id));
+    const allFilteredIds = filteredOptions.map(o => o.id);
+    const allSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selected.includes(id));
+
+    const selectAll = () => {
+        const merged = [...new Set([...selected, ...allFilteredIds])];
+        onChange(merged);
+    };
+
+    const clearAll = () => {
+        onChange(selected.filter(id => !allFilteredIds.includes(id)));
+    };
 
     return (
         <div className="relative" ref={containerRef}>
@@ -196,20 +209,50 @@ const MultiSelect = ({ options, selected, onChange, placeholder }) => {
             </div>
 
             {isOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-100 rounded-xl shadow-xl z-[300] max-h-60 overflow-y-auto animate-in zoom-in-95 duration-200">
-                    <div className="p-2 space-y-1">
-                        {options.filter(opt => opt.status !== 'Relieved').map(opt => (
-                            <div
-                                key={opt.id}
-                                className={`flex items-center justify-between p-2.5 rounded-lg cursor-pointer transition-colors ${selected.includes(opt.id) ? 'bg-teal-50 text-teal-700' : 'hover:bg-gray-50 text-gray-700'}`}
-                                onClick={() => toggleOption(opt.id)}
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-100 rounded-xl shadow-xl z-[300] max-h-72 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col">
+                    {/* Search + Actions */}
+                    <div className="p-2 border-b border-gray-100 shrink-0">
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search..."
+                            className="w-full px-3 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-400/20"
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                        <div className="flex gap-2 mt-1.5">
+                            <button
+                                onClick={(e) => { e.stopPropagation(); selectAll(); }}
+                                className="flex-1 text-[9px] font-black uppercase tracking-wider text-teal-600 bg-teal-50 hover:bg-teal-100 px-2 py-1 rounded-md border border-teal-100 transition-colors"
                             >
-                                <div className="flex flex-col">
-                                    <span className="text-sm font-medium">{opt.name}</span>
+                                Select All ({filteredOptions.length})
+                            </button>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); clearAll(); }}
+                                className="flex-1 text-[9px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 hover:bg-rose-100 px-2 py-1 rounded-md border border-rose-100 transition-colors"
+                            >
+                                Clear All
+                            </button>
+                        </div>
+                    </div>
+                    {/* Options list */}
+                    <div className="p-2 space-y-1 overflow-y-auto custom-scrollbar">
+                        {filteredOptions.length === 0 ? (
+                            <div className="text-center py-3 text-gray-400 text-xs font-medium">No results</div>
+                        ) : (
+                            filteredOptions.map(opt => (
+                                <div
+                                    key={opt.id}
+                                    className={`flex items-center justify-between p-2.5 rounded-lg cursor-pointer transition-colors ${selected.includes(opt.id) ? 'bg-teal-50 text-teal-700' : 'hover:bg-gray-50 text-gray-700'}`}
+                                    onClick={(e) => { e.stopPropagation(); toggleOption(opt.id); }}
+                                >
+                                    <div className="flex flex-col">
+                                        <span className="text-sm font-medium">{opt.name}</span>
+                                    </div>
+                                    {selected.includes(opt.id) && <Check className="w-4 h-4" />}
                                 </div>
-                                {selected.includes(opt.id) && <Check className="w-4 h-4" />}
-                            </div>
-                        ))}
+                            ))
+                        )}
                     </div>
                 </div>
             )}
@@ -304,9 +347,17 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers }) =>
                         </SelectContent>
                     </Select>
                     {selectedTicket.team && (
-                        <div className="flex items-center gap-1.5 px-3 py-2 bg-teal-50 border border-teal-100 rounded-lg text-teal-700 text-[11px] font-bold mt-1">
-                            <Users className="w-3.5 h-3.5" />
-                            Team: {selectedTicket.team} ({teamMembersCount} members)
+                        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-teal-50 border border-teal-100 rounded-lg text-teal-700 text-[11px] font-bold mt-1">
+                            <div className="flex items-center gap-1.5">
+                                <Users className="w-3.5 h-3.5" />
+                                Team: {selectedTicket.team} ({teamMembersCount} members)
+                            </div>
+                            <button
+                                onClick={() => { updateSelectedTicket({ team: '', assignees: [] }); }}
+                                className="text-[9px] font-black text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2 py-0.5 rounded-md border border-rose-100 transition-colors flex items-center gap-1"
+                            >
+                                <X className="w-2.5 h-2.5" /> Clear
+                            </button>
                         </div>
                     )}
                 </div>
@@ -335,6 +386,7 @@ const WorkAllocation = () => {
     const [filterAssignee, setFilterAssignee] = useState('');
     const [filterTeam, setFilterTeam] = useState('');
     const [filterPriority, setFilterPriority] = useState('');
+    const [showFiltersMobile, setShowFiltersMobile] = useState(false);
     const [modalFilterTeam, setModalFilterTeam] = useState('');
     const { subdomain } = useContext(appContext);
     const { socket } = useSocket();
@@ -866,17 +918,34 @@ const WorkAllocation = () => {
     };
 
     const updateChecklistItemText = (index, newText) => {
-        const updatedChecklist = [...(selectedTicket.checklist || [])];
-        if (updatedChecklist[index]) {
-            updatedChecklist[index].text = newText;
-            // Use debounce for text updates
-            updateSelectedTicket({ checklist: updatedChecklist }, true);
-        }
+        setSelectedTicket(prev => {
+            if (!prev) return prev;
+            const updatedChecklist = [...(prev.checklist || [])];
+            if (updatedChecklist[index]) {
+                updatedChecklist[index] = { ...updatedChecklist[index], text: newText };
+            }
+            const updated = { ...prev, checklist: updatedChecklist };
+
+            // Debounced save to backend (don't block typing)
+            if (updated._id && updated._id !== 'new') {
+                if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = setTimeout(async () => {
+                    try {
+                        await updateTicket(updated._id, { checklist: updatedChecklist, subdomain });
+                    } catch (err) { console.error('Checklist save failed', err); }
+                }, 1000);
+                setTickets(prevTickets => prevTickets.map(t => t._id === updated._id ? updated : t));
+            }
+
+            return updated;
+        });
     };
+
+    const generateItemId = () => Math.random().toString(36).substring(2, 10);
 
     const addChecklistItem = (index) => {
         const updatedChecklist = [...(selectedTicket.checklist || [])];
-        const newItem = { text: '', completed: false };
+        const newItem = { text: '', completed: false, _id: generateItemId() };
         if (typeof index === 'number') {
             updatedChecklist.splice(index + 1, 0, newItem);
         } else {
@@ -1005,22 +1074,214 @@ const WorkAllocation = () => {
         return matchesSearch && matchesAssignee && matchesPriority && matchesTeam;
     });
 
+    // ─── Workload Engine (memoized for performance with large teams) ───────────
+    const activeStatuses = new Set(['To Do', 'In Progress', 'Review']);
+
+    const workerWorkloadMap = useMemo(() => {
+        const map = new Map(); // workerId -> { activeTasks, completedThisMonth }
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        tickets.forEach(t => {
+            const isActive = activeStatuses.has(t.status);
+            const isDoneThisMonth = t.status === 'Done' && t.updatedAt && new Date(t.updatedAt) >= startOfMonth;
+
+            const seen = new Set();
+
+            const addWorker = (wId) => {
+                if (!wId || seen.has(wId)) return;
+                seen.add(wId);
+                if (!map.has(wId)) map.set(wId, { activeTasks: 0, completedThisMonth: 0 });
+                const entry = map.get(wId);
+                if (isActive) entry.activeTasks += 1;
+                if (isDoneThisMonth) entry.completedThisMonth += 1;
+            };
+
+            // support single assignee (object or id string)
+            const aid = t.assignee?._id || (typeof t.assignee === 'string' ? t.assignee : null);
+            if (aid) addWorker(aid);
+
+            // support assignees array
+            if (t.assignees?.length) {
+                t.assignees.forEach(a => {
+                    const id = typeof a === 'object' ? a._id : a;
+                    if (id) addWorker(id);
+                });
+            }
+        });
+
+        return map;
+    }, [tickets]);
+
+    const activeWorkers = useMemo(() =>
+        workers.filter(w => w.status !== 'Relieved'),
+        [workers]
+    );
+
+    const getWorkerLoad = (workerId) => workerWorkloadMap.get(workerId) || { activeTasks: 0, completedThisMonth: 0 };
+
+    const workloadColor = (activeTasks) => {
+        if (activeTasks === 0) return { dot: 'bg-emerald-500', text: 'text-emerald-600', badge: 'bg-emerald-50 border-emerald-200 text-emerald-700', label: 'Available' };
+        if (activeTasks <= 3)  return { dot: 'bg-amber-400',   text: 'text-amber-600',   badge: 'bg-amber-50 border-amber-200 text-amber-700',   label: 'Normal' };
+        if (activeTasks <= 5)  return { dot: 'bg-orange-500',  text: 'text-orange-600',  badge: 'bg-orange-50 border-orange-200 text-orange-700',  label: 'Busy' };
+        return                        { dot: 'bg-rose-500',    text: 'text-rose-600',    badge: 'bg-rose-50 border-rose-200 text-rose-700',    label: 'Overloaded' };
+    };
+
+    const idleDevelopers = useMemo(() =>
+        activeWorkers.filter(w => (workerWorkloadMap.get(w._id)?.activeTasks || 0) === 0),
+        [activeWorkers, workerWorkloadMap]
+    );
+
+    const assignedDevelopers = useMemo(() =>
+        activeWorkers.filter(w => (workerWorkloadMap.get(w._id)?.activeTasks || 0) > 0),
+        [activeWorkers, workerWorkloadMap]
+    );
+
+    const overloadedDevelopers = useMemo(() =>
+        activeWorkers.filter(w => (workerWorkloadMap.get(w._id)?.activeTasks || 0) >= 5),
+        [activeWorkers, workerWorkloadMap]
+    );
+
+    const sortedByWorkload = useMemo(() =>
+        [...activeWorkers].sort((a, b) => {
+            const aLoad = workerWorkloadMap.get(a._id)?.activeTasks || 0;
+            const bLoad = workerWorkloadMap.get(b._id)?.activeTasks || 0;
+            if (aLoad !== bLoad) return aLoad - bLoad;
+            const aDone = workerWorkloadMap.get(a._id)?.completedThisMonth || 0;
+            const bDone = workerWorkloadMap.get(b._id)?.completedThisMonth || 0;
+            return bDone - aDone; // higher completed = recommended more
+        }),
+        [activeWorkers, workerWorkloadMap]
+    );
+
+    // ─── Drawer state ─────────────────────────────────────────────────────────
+    const [drawerFilter, setDrawerFilter] = useState(false); // false=closed, 'all'|'assigned'|'idle'|'overloaded'
+    const isIdleDrawerOpen = !!drawerFilter;
+    const setIsIdleDrawerOpen = (val) => setDrawerFilter(val ? 'idle' : false);
+
+    // Filtered developers for the drawer based on active tab
+    const drawerDevelopers = useMemo(() => {
+        if (!drawerFilter) return [];
+        switch (drawerFilter) {
+            case 'assigned': return assignedDevelopers;
+            case 'idle': return idleDevelopers;
+            case 'overloaded': return overloadedDevelopers;
+            case 'all':
+            default: return sortedByWorkload;
+        }
+    }, [drawerFilter, assignedDevelopers, idleDevelopers, overloadedDevelopers, sortedByWorkload]);
+
     if (loading) return <Spinner />;
+
 
     return (
         <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col">
             {/* Sticky Header Area - Handles Page-level context */}
             <div className="sticky top-0 z-[100] bg-white border-b border-slate-200/60 shadow-sm backdrop-blur-xl bg-white/95">
-                <div className="px-6 md:px-10 py-5">
-                    <div className="flex flex-col md:flex-row justify-between md:justify-end items-center gap-6 mb-4">
-                        <div className="md:hidden">
-                            <h1 className="text-2xl font-black text-slate-800 tracking-tight">Work Allocation</h1>
-                            <p className="text-slate-400 text-sm font-medium mt-1">Manage and assign tasks efficiently seamlessly.</p>
+                <div className="px-3 sm:px-6 md:px-10 py-3 sm:py-5">
+                    {/* Single Row Controls Container */}
+                    <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-2.5 lg:gap-4">
+                        
+                        {/* Left Group: Search input & Filter selects */}
+                        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-3 flex-1">
+                            {/* Search box and Mobile Filter Toggle */}
+                            <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+                                <div className="relative flex-1 md:w-64 border border-slate-200 rounded-xl bg-white shadow-sm focus-within:border-teal-500 transition-all h-10 flex items-center shrink-0">
+                                    <Search className="w-3.5 h-3.5 absolute left-3.5 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search tasks..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="w-full pl-10 pr-3 py-2 bg-transparent text-xs font-semibold text-slate-700 outline-none placeholder:text-slate-300"
+                                    />
+                                </div>
+                                <button
+                                    onClick={() => setShowFiltersMobile(!showFiltersMobile)}
+                                    className="md:hidden flex items-center justify-center h-10 w-10 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl border border-slate-200 transition-all active:scale-95 shrink-0"
+                                    title="Toggle Filters"
+                                >
+                                    <Filter className={`w-4 h-4 transition-transform ${showFiltersMobile ? 'text-teal-600' : 'text-slate-400'}`} />
+                                </button>
+                            </div>
+
+                            {/* Dropdowns - Collapsed by default on mobile, always visible on desktop */}
+                            <div className={`${showFiltersMobile ? 'flex' : 'hidden md:flex'} flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 w-full md:w-auto`}>
+                                <div className="w-full sm:w-[190px] shrink-0">
+                                    <Select value={filterAssignee} onValueChange={(val) => setFilterAssignee(val === "all_assignees" ? "" : val)}>
+                                        <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-10 text-xs font-semibold text-slate-600">
+                                            <SelectValue placeholder="All Employees" />
+                                        </SelectTrigger>
+                                        <SelectContent className="z-[200]">
+                                            <SelectItem value="all_assignees">All Employees</SelectItem>
+                                            <SelectItem value="unassigned">Unassigned</SelectItem>
+                                            {sortedByWorkload.map(w => {
+                                                const { activeTasks } = getWorkerLoad(w._id);
+                                                const { dot, text } = workloadColor(activeTasks);
+                                                return (
+                                                    <SelectItem key={w._id} value={w._id}>
+                                                        <span className="flex items-center gap-2">
+                                                            <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`}></span>
+                                                            <span>{w.name}</span>
+                                                            <span className={`text-[10px] font-bold ml-auto ${text}`}>({activeTasks})</span>
+                                                        </span>
+                                                    </SelectItem>
+                                                );
+                                            })}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+
+                                <div className="w-full sm:w-[140px] shrink-0">
+                                    <Select value={filterTeam} onValueChange={(val) => setFilterTeam(val === "all_teams" ? "" : val)}>
+                                        <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-10 text-xs font-semibold text-slate-600">
+                                            <SelectValue placeholder="All Teams" />
+                                        </SelectTrigger>
+                                        <SelectContent className="z-[200]">
+                                            <SelectItem value="all_teams">All Teams</SelectItem>
+                                            {[...new Set(workers.filter(w => w.status !== 'Relieved').map(w => w.department).filter(Boolean))].map(team => (
+                                                <SelectItem key={team} value={team}>{team}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="w-full sm:w-[120px] shrink-0">
+                                    <Select value={filterPriority} onValueChange={(val) => setFilterPriority(val === "all_priorities" ? "" : val)}>
+                                        <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-10 text-xs font-semibold text-slate-600">
+                                            <SelectValue placeholder="Priority" />
+                                        </SelectTrigger>
+                                        <SelectContent className="z-[200]">
+                                            <SelectItem value="all_priorities">Priority</SelectItem>
+                                            <SelectItem value="High">High</SelectItem>
+                                            <SelectItem value="Medium">Medium</SelectItem>
+                                            <SelectItem value="Low">Low</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {(filterAssignee || filterTeam || filterPriority || searchTerm) && (
+                                    <button
+                                        onClick={() => {
+                                            setFilterAssignee('');
+                                            setFilterTeam('');
+                                            setFilterPriority('');
+                                            setSearchTerm('');
+                                        }}
+                                        className="text-[10px] text-rose-500 hover:text-rose-600 font-bold uppercase tracking-wider px-2 py-2 sm:py-0 text-center sm:text-left"
+                                    >
+                                        Reset
+                                    </button>
+                                )}
+                            </div>
                         </div>
-                        <div className="flex items-center gap-3 w-full md:w-auto">
+
+                        {/* Right Group: Action buttons */}
+                        <div className="grid grid-cols-2 sm:flex sm:flex-row items-center gap-2 sm:gap-3 shrink-0 w-full lg:w-auto mt-1.5 lg:mt-0">
                             <button
                                 onClick={() => setIsStatsModalOpen(true)}
-                                className="flex-1 md:flex-none bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center text-xs transition-all border border-slate-200"
+                                className="order-2 sm:order-none bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold h-10 px-4 rounded-xl flex items-center justify-center text-xs transition-all border border-slate-200 w-full sm:w-auto"
                             >
                                 <BarChart2 className="w-4 h-4 mr-2 text-slate-400" />
                                 <span>Dashboard</span>
@@ -1036,7 +1297,7 @@ const WorkAllocation = () => {
                                     setModalFilterTeam('');
                                     setIsModalOpen(true);
                                 }}
-                                className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-xl flex items-center justify-center text-xs transition-all shadow-lg shadow-blue-100 active:scale-95"
+                                className="col-span-2 order-1 sm:order-none bg-blue-600 hover:bg-blue-700 text-white font-bold h-10 px-6 rounded-xl flex items-center justify-center text-xs transition-all shadow-lg shadow-blue-100 active:scale-95 w-full sm:w-auto"
                             >
                                 <Plus className="w-4 h-4 mr-2" /> New Task
                             </button>
@@ -1045,96 +1306,102 @@ const WorkAllocation = () => {
                                     fetchDeletedTickets();
                                     setIsDeletedModalOpen(true);
                                 }}
-                                className="flex-1 md:flex-none bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center text-xs transition-all border border-slate-200"
+                                className="order-3 sm:order-none bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold h-10 px-4 rounded-xl flex items-center justify-center text-xs transition-all border border-slate-200 w-full sm:w-auto"
                             >
                                 <History className="w-4 h-4 mr-2 text-slate-400" />
                                 <span>Deleted Tasks</span>
                             </button>
                         </div>
                     </div>
-
-                    <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
-                        <div className="relative w-full md:w-64 border border-slate-200 rounded-lg bg-white shadow-sm focus-within:border-teal-500 transition-all">
-                            <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <input
-                                type="text"
-                                placeholder="Search tasks..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-10 pr-3 py-2 bg-transparent text-xs font-medium text-slate-700 outline-none placeholder:text-slate-300"
-                            />
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2">
-                            <div className="flex-1 md:flex-none">
-                                <Select value={filterAssignee} onValueChange={(val) => setFilterAssignee(val === "all_assignees" ? "" : val)}>
-                                    <SelectTrigger className="w-full md:w-[160px] bg-white border-slate-200 rounded-lg shadow-sm h-9 text-xs font-medium text-slate-600">
-                                        <SelectValue placeholder="All Employees" />
-                                    </SelectTrigger>
-                                    <SelectContent className="z-[200]">
-                                        <SelectItem value="all_assignees">All Employees</SelectItem>
-                                        <SelectItem value="unassigned">Unassigned</SelectItem>
-                                        {workers.filter(w => w.status !== 'Relieved').map(w => (
-                                            <SelectItem key={w._id} value={w._id}>{w.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="flex-1 md:flex-none">
-                                <Select value={filterTeam} onValueChange={(val) => setFilterTeam(val === "all_teams" ? "" : val)}>
-                                    <SelectTrigger className="w-full md:w-[140px] bg-white border-slate-200 rounded-lg shadow-sm h-9 text-xs font-medium text-slate-600">
-                                        <SelectValue placeholder="All Teams" />
-                                    </SelectTrigger>
-                                    <SelectContent className="z-[200]">
-                                        <SelectItem value="all_teams">All Teams</SelectItem>
-                                        {[...new Set(workers.filter(w => w.status !== 'Relieved').map(w => w.department).filter(Boolean))].map(team => (
-                                            <SelectItem key={team} value={team}>{team}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="flex-1 md:flex-none">
-                                <Select value={filterPriority} onValueChange={(val) => setFilterPriority(val === "all_priorities" ? "" : val)}>
-                                    <SelectTrigger className="w-full md:w-[120px] bg-white border-slate-200 rounded-lg shadow-sm h-9 text-xs font-medium text-slate-600">
-                                        <SelectValue placeholder="Priority" />
-                                    </SelectTrigger>
-                                    <SelectContent className="z-[200]">
-                                        <SelectItem value="all_priorities">Priority</SelectItem>
-                                        <SelectItem value="High">High</SelectItem>
-                                        <SelectItem value="Medium">Medium</SelectItem>
-                                        <SelectItem value="Low">Low</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {(filterAssignee || filterTeam || filterPriority || searchTerm) && (
-                                <button
-                                    onClick={() => {
-                                        setFilterAssignee('');
-                                        setFilterTeam('');
-                                        setFilterPriority('');
-                                        setSearchTerm('');
-                                    }}
-                                    className="text-[10px] text-rose-500 hover:text-rose-600 font-bold uppercase tracking-wider px-2"
-                                >
-                                    Reset
-                                </button>
-                            )}
-                        </div>
-                    </div>
                 </div>
             </div>
 
-            {/* Kanban Board Area - Horizontal Scroll container for columns */}
-            <div className="flex-1 overflow-x-auto p-6 lg:p-8 pt-8 scroll-smooth">
-                <div className="flex gap-6 items-start h-full min-h-[calc(100vh-280px)] pb-12">
+            {/* ── Workforce Overview Bar ──────────────────────────────────────── */}
+            <div className="px-3 lg:px-4 pt-3 pb-1">
+                <div className="flex flex-wrap gap-3">
+
+                    {/* Stat: Total Employees */}
+                    <button onClick={() => setDrawerFilter('all')} className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-slate-200/60 shadow-sm min-w-[120px] hover:shadow-md hover:border-slate-300 transition-all cursor-pointer text-left">
+                        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                            <Users className="w-4 h-4 text-slate-500" />
+                        </div>
+                        <div>
+                            <div className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider leading-none">Total</div>
+                            <div className="text-lg font-black text-slate-800 leading-tight">{activeWorkers.length}</div>
+                        </div>
+                    </button>
+
+                    {/* Stat: Assigned */}
+                    <button onClick={() => setDrawerFilter('assigned')} className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-blue-100 shadow-sm min-w-[120px] hover:shadow-md hover:border-blue-300 transition-all cursor-pointer text-left">
+                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                            <CheckSquare className="w-4 h-4 text-blue-500" />
+                        </div>
+                        <div>
+                            <div className="text-[11px] text-blue-400 font-semibold uppercase tracking-wider leading-none">Assigned</div>
+                            <div className="text-lg font-black text-blue-700 leading-tight">{assignedDevelopers.length}</div>
+                        </div>
+                    </button>
+
+                    {/* Stat: Idle */}
+                    <button onClick={() => setDrawerFilter('idle')} className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-emerald-100 shadow-sm min-w-[120px] hover:shadow-md hover:border-emerald-300 transition-all cursor-pointer text-left">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
+                            <User className="w-4 h-4 text-emerald-500" />
+                        </div>
+                        <div>
+                            <div className="text-[11px] text-emerald-500 font-semibold uppercase tracking-wider leading-none">Idle</div>
+                            <div className="text-lg font-black text-emerald-700 leading-tight">{idleDevelopers.length}</div>
+                        </div>
+                    </button>
+
+                    {/* Stat: Overloaded */}
+                    <button onClick={() => setDrawerFilter('overloaded')} className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-rose-100 shadow-sm min-w-[120px] hover:shadow-md hover:border-rose-300 transition-all cursor-pointer text-left">
+                        <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center shrink-0">
+                            <AlertCircle className="w-4 h-4 text-rose-500" />
+                        </div>
+                        <div>
+                            <div className="text-[11px] text-rose-400 font-semibold uppercase tracking-wider leading-none">Overloaded</div>
+                            <div className="text-lg font-black text-rose-700 leading-tight">{overloadedDevelopers.length}</div>
+                        </div>
+                    </button>
+
+                    {/* Available Developers Card */}
+                    {idleDevelopers.length > 0 && (
+                        <button
+                            onClick={() => setDrawerFilter('idle')}
+
+                            className="flex items-center gap-3 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl px-4 py-2.5 border border-emerald-200/60 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all duration-200 group cursor-pointer text-left"
+                        >
+                            <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
+                                <Zap className="w-4 h-4 text-emerald-600" />
+                            </div>
+                            <div>
+                                <div className="text-[11px] text-emerald-600 font-bold uppercase tracking-wider leading-none mb-1">Available Now</div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                    {idleDevelopers.slice(0, 4).map(w => (
+                                        <span key={w._id} className="text-[10px] font-semibold text-emerald-700 bg-white/70 px-1.5 py-0.5 rounded-md border border-emerald-200/50">
+                                            {w.name.split(' ')[0]}
+                                        </span>
+                                    ))}
+                                    {idleDevelopers.length > 4 && (
+                                        <span className="text-[10px] font-bold text-emerald-600">+{idleDevelopers.length - 4} more</span>
+                                    )}
+                                </div>
+                            </div>
+                            <ChevronDown className="w-3.5 h-3.5 text-emerald-500 ml-1 -rotate-90 group-hover:translate-x-0.5 transition-transform" />
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Kanban Board Area - Grid layout for true equal-width columns */}
+            <div className="flex-1 p-3 lg:p-4 pt-3 scroll-smooth overflow-x-auto">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 min-h-[calc(100vh-280px)] pb-6 w-full">
+
                     {columns.map(status => (
                         <div
                             key={status}
                             data-status={status}
-                            className={`flex flex-col w-[320px] max-h-full bg-[#f1f5f9]/80 rounded-2xl border border-slate-200/50 transition-all duration-300 group/column ${dragOverCol === status ? 'bg-slate-200/50 ring-2 ring-teal-500/20' : ''}`}
+                            className={`flex flex-col min-w-0 bg-[#f1f5f9]/80 rounded-2xl border border-slate-200/50 transition-all duration-300 group/column ${dragOverCol === status ? 'bg-slate-200/50 ring-2 ring-teal-500/20' : ''}`}
                             onDragOver={(e) => handleDragOver(e, status)}
                             onDragLeave={(e) => handleDragLeave(e, status)}
                             onDrop={(e) => handleDrop(e, status)}
@@ -1157,7 +1424,7 @@ const WorkAllocation = () => {
                             </div>
 
                             {/* Column Content - Scrollable area for cards */}
-                            <div className="flex-1 overflow-y-auto p-3 space-y-4 custom-scrollbar min-h-0">
+                            <div className="flex-1 overflow-y-auto p-2 space-y-3 custom-scrollbar min-h-0">
                                 {filteredTickets.filter(t => t.status === status).map(ticket => (
                                     <div
                                         key={ticket._id}
@@ -1298,14 +1565,39 @@ const WorkAllocation = () => {
                                                         <span className="text-[10px] font-bold text-slate-400 tracking-tighter">#{getTicketKey(ticket._id).split('-')[1]}</span>
                                                     </div>
 
-                                                    <div className="flex items-center gap-1.5 bg-[#f0fdfa] px-2.5 py-1 rounded-full border border-[#ccfbf1]">
-                                                        <Users className="w-2.5 h-2.5 text-[#0d9488]" />
-                                                        <span className="text-[9px] font-bold text-[#0d9488] whitespace-nowrap">
-                                                            {ticket.assignees && ticket.assignees.length > 0
-                                                                ? `${ticket.assignees[0].name}${ticket.assignees.length > 1 ? ` +${ticket.assignees.length - 1}` : ''}`
-                                                                : ticket.assignee?.name || 'Unassigned'}
-                                                        </span>
-                                                    </div>
+                                                    {/* Assignee badge with tooltip */}
+                                                    {(() => {
+                                                        const primaryAssignee = ticket.assignees?.length > 0 ? ticket.assignees[0] : ticket.assignee;
+                                                        const primaryId = primaryAssignee?._id || primaryAssignee;
+                                                        const { activeTasks } = getWorkerLoad(primaryId);
+                                                        const { dot, badge, label } = workloadColor(activeTasks);
+                                                        const displayName = ticket.assignees?.length > 0
+                                                            ? `${ticket.assignees[0].name}${ticket.assignees.length > 1 ? ` +${ticket.assignees.length - 1}` : ''}`
+                                                            : ticket.assignee?.name || 'Unassigned';
+                                                        const workerObj = workers.find(w => w._id === primaryId);
+                                                        return (
+                                                            <div className="relative group/tooltip">
+                                                                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${primaryId ? badge : 'bg-slate-50 border-slate-200 text-slate-500'} cursor-default`}>
+                                                                    {primaryId && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`}></span>}
+                                                                    {!primaryId && <Users className="w-2.5 h-2.5 text-slate-400" />}
+                                                                    <span className="text-[9px] font-bold whitespace-nowrap">{displayName}</span>
+                                                                </div>
+                                                                {/* Tooltip */}
+                                                                {primaryId && workerObj && (
+                                                                    <div className="absolute bottom-full right-0 mb-2 w-44 bg-slate-900 text-white rounded-xl p-2.5 text-[10px] shadow-xl opacity-0 group-hover/tooltip:opacity-100 transition-opacity duration-150 pointer-events-none z-50">
+                                                                        <div className="font-bold text-[11px] mb-1">{workerObj.name}</div>
+                                                                        <div className="text-slate-400">{workerObj.department || 'No Department'}</div>
+                                                                        <div className="flex justify-between mt-1.5 pt-1.5 border-t border-slate-700">
+                                                                            <span className="text-slate-400">Active Tasks</span>
+                                                                            <span className="font-bold">{activeTasks}</span>
+                                                                        </div>
+                                                                        <div className={`mt-1 text-center py-0.5 rounded-md font-bold text-[9px] uppercase tracking-wider ${badge}`}>{label}</div>
+                                                                        <div className="absolute -bottom-1 right-4 w-2 h-2 bg-slate-900 rotate-45"></div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </div>
                                             </div>
                                         </div>
@@ -1314,6 +1606,7 @@ const WorkAllocation = () => {
 
                                 {/* Inline Create UI */}
                                 {inlineCreateStatus === status ? (
+
                                     <div className="bg-white p-3 rounded-xl shadow-xl border border-teal-400 animate-in zoom-in-95 duration-200">
                                         <div className="relative">
                                             <textarea
@@ -1426,7 +1719,7 @@ const WorkAllocation = () => {
 
                         {/* Body - Responsive Layout */}
                         <div className="flex-1 overflow-y-auto lg:overflow-hidden bg-white">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[38%_25%_37%] lg:h-full divide-y md:divide-y-0 lg:divide-x divide-gray-100">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[35%_30%_35%] lg:h-full divide-y md:divide-y-0 lg:divide-x divide-gray-100">
 
                                 {/* 🔹 COLUMN 1: Task Input & Checklist (LEFT) */}
                                 <div className="lg:h-full flex flex-col px-4 py-4 lg:px-6 lg:py-6 lg:overflow-hidden">
@@ -1465,8 +1758,8 @@ const WorkAllocation = () => {
                                         </div>
 
                                         <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3 pb-2">
-                                            {(selectedTicket.checklist && selectedTicket.checklist.length > 0 ? selectedTicket.checklist : [{ text: '', completed: false }]).map((item, idx) => (
-                                                <div key={idx} className="flex items-start gap-3 group p-3 bg-white hover:bg-slate-50/50 rounded-xl transition-all border border-slate-200 hover:border-slate-300 focus-within:border-teal-500 focus-within:ring-1 focus-within:ring-teal-500/20 shadow-sm relative min-h-[58px]">
+                                            {(selectedTicket.checklist && selectedTicket.checklist.length > 0 ? selectedTicket.checklist : [{ text: '', completed: false, _id: 'default-0' }]).map((item, idx) => (
+                                                <div key={item._id || `item-${idx}`} className="flex items-start gap-3 group p-3 bg-white hover:bg-slate-50/50 rounded-xl transition-all border border-slate-200 hover:border-slate-300 focus-within:border-teal-500 focus-within:ring-1 focus-within:ring-teal-500/20 shadow-sm relative min-h-[58px]">
                                                     <div className="flex items-center shrink-0 mt-1">
                                                         <div
                                                             onClick={() => toggleChecklistItem(idx)}
@@ -1609,6 +1902,76 @@ const WorkAllocation = () => {
 
                                         {/* Assignment Center */}
                                         <div className="bg-white rounded-2xl p-4 shadow-sm border border-white">
+                                            {/* Smart Recommendations */}
+                                            {sortedByWorkload.length > 0 && (() => {
+                                                const currentAssigneeIds = (selectedTicket.assignees || []).map(a => typeof a === 'object' ? a._id : a);
+                                                const toggleAssignee = (wId) => {
+                                                    if (currentAssigneeIds.includes(wId)) {
+                                                        updateSelectedTicket({ assignees: currentAssigneeIds.filter(id => id !== wId) });
+                                                    } else {
+                                                        updateSelectedTicket({ assignees: [...currentAssigneeIds, wId] });
+                                                    }
+                                                };
+                                                return (
+                                                <div className="mb-4 pb-4 border-b border-slate-100">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <Zap className="w-3 h-3 text-amber-500" />
+                                                            <span className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Quick Assign</span>
+                                                        </div>
+                                                        <span className="text-[9px] text-slate-400 font-semibold">Click to add/remove</span>
+                                                    </div>
+                                                    {/* Idle developers first */}
+                                                    {idleDevelopers.length > 0 && (
+                                                        <div className="mb-2">
+                                                            <div className="text-[8px] font-black text-emerald-600 uppercase tracking-wider mb-1">● Idle ({idleDevelopers.length})</div>
+                                                            <div className="flex flex-wrap gap-1.5">
+                                                                {idleDevelopers.slice(0, 6).map(w => {
+                                                                    const isSelected = currentAssigneeIds.includes(w._id);
+                                                                    return (
+                                                                        <button
+                                                                            key={w._id}
+                                                                            onClick={() => toggleAssignee(w._id)}
+                                                                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[10px] font-bold transition-all ${isSelected ? 'ring-2 ring-teal-500 bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-emerald-50/50 border-emerald-100 text-emerald-600 hover:shadow-sm hover:border-emerald-300'}`}
+                                                                        >
+                                                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                                                            {w.name.split(' ')[0]}
+                                                                            <span className="opacity-60">(0)</span>
+                                                                            {isSelected && <Check className="w-3 h-3 text-teal-600" />}
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    {/* Busy developers */}
+                                                    {assignedDevelopers.length > 0 && (
+                                                        <div>
+                                                            <div className="text-[8px] font-black text-amber-600 uppercase tracking-wider mb-1">● Busy ({assignedDevelopers.length})</div>
+                                                            <div className="flex flex-wrap gap-1.5">
+                                                                {assignedDevelopers.slice(0, 4).map(w => {
+                                                                    const { activeTasks } = getWorkerLoad(w._id);
+                                                                    const { dot, badge } = workloadColor(activeTasks);
+                                                                    const isSelected = currentAssigneeIds.includes(w._id);
+                                                                    return (
+                                                                        <button
+                                                                            key={w._id}
+                                                                            onClick={() => toggleAssignee(w._id)}
+                                                                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[10px] font-bold transition-all ${isSelected ? 'ring-2 ring-teal-500 ' + badge : badge + ' hover:shadow-sm'}`}
+                                                                        >
+                                                                            <span className={`w-1.5 h-1.5 rounded-full ${dot}`}></span>
+                                                                            {w.name.split(' ')[0]}
+                                                                            <span className="opacity-60">({activeTasks})</span>
+                                                                            {isSelected && <Check className="w-3 h-3 text-teal-600" />}
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                );
+                                            })()}
                                             <AssignmentSection
                                                 selectedTicket={selectedTicket}
                                                 updateSelectedTicket={updateSelectedTicket}
@@ -1677,8 +2040,8 @@ const WorkAllocation = () => {
                                 </div>
 
                                 {/* 🔹 COLUMN 3: Execution & Analytics (RIGHT - MOVED FROM CENTER) */}
-                                <div className="lg:h-full flex flex-col px-4 py-4 lg:px-6 lg:py-6 lg:overflow-hidden bg-gray-50/20">
-                                    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                                <div className="lg:h-full flex flex-col px-4 py-4 lg:px-6 lg:py-6 lg:overflow-y-auto custom-scrollbar bg-gray-50/20">
+                                    <div className="flex-1 flex flex-col min-h-0">
 
                                         {/* Progress Card & Shared Task References Grid */}
                                         {selectedTicket._id !== 'new' ? (
@@ -2351,6 +2714,174 @@ const WorkAllocation = () => {
                 </div>
             )}
 
+            {/* ── Workforce Developers Drawer ──────────────────────────────────── */}
+            {isIdleDrawerOpen && (
+                <div className="fixed inset-0 z-[500] flex justify-end" onClick={() => setDrawerFilter(false)}>
+                    <div
+                        className="w-full max-w-sm bg-white h-full shadow-2xl border-l border-slate-200 flex flex-col animate-in slide-in-from-right duration-300"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Drawer Header */}
+                        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-gradient-to-r from-slate-50 to-slate-100/50">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                                        drawerFilter === 'idle' ? 'bg-emerald-100' :
+                                        drawerFilter === 'assigned' ? 'bg-blue-100' :
+                                        drawerFilter === 'overloaded' ? 'bg-rose-100' : 'bg-slate-100'
+                                    }`}>
+                                        {drawerFilter === 'idle' ? <Zap className="w-3.5 h-3.5 text-emerald-600" /> :
+                                         drawerFilter === 'assigned' ? <CheckSquare className="w-3.5 h-3.5 text-blue-600" /> :
+                                         drawerFilter === 'overloaded' ? <AlertCircle className="w-3.5 h-3.5 text-rose-600" /> :
+                                         <Users className="w-3.5 h-3.5 text-slate-600" />}
+                                    </div>
+                                    <h3 className="text-sm font-black text-slate-800">
+                                        {drawerFilter === 'idle' ? 'Idle Developers' :
+                                         drawerFilter === 'assigned' ? 'Assigned Developers' :
+                                         drawerFilter === 'overloaded' ? 'Overloaded Developers' : 'All Developers'}
+                                    </h3>
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-0.5 ml-9">
+                                    {drawerDevelopers.length} developer{drawerDevelopers.length !== 1 ? 's' : ''}
+                                    {drawerFilter === 'idle' ? ' with no active tasks' :
+                                     drawerFilter === 'assigned' ? ' with active tasks' :
+                                     drawerFilter === 'overloaded' ? ' with 6+ active tasks' : ' in workforce'}
+                                </p>
+                            </div>
+                            <button onClick={() => setDrawerFilter(false)} className="p-1.5 hover:bg-white/70 rounded-lg transition-colors">
+                                <X className="w-4 h-4 text-slate-400" />
+                            </button>
+                        </div>
+
+                        {/* Filter Tabs */}
+                        <div className="px-3 py-2.5 border-b border-slate-100 bg-slate-50/30 shrink-0">
+                            <div className="flex gap-1.5">
+                                {[
+                                    { key: 'all', label: 'All', count: activeWorkers.length, color: 'slate' },
+                                    { key: 'assigned', label: 'Assigned', count: assignedDevelopers.length, color: 'blue' },
+                                    { key: 'idle', label: 'Idle', count: idleDevelopers.length, color: 'emerald' },
+                                    { key: 'overloaded', label: 'Overloaded', count: overloadedDevelopers.length, color: 'rose' },
+                                ].map(tab => {
+                                    const isActive = drawerFilter === tab.key;
+                                    const activeClasses = {
+                                        slate: 'bg-slate-800 text-white border-slate-800',
+                                        blue: 'bg-blue-600 text-white border-blue-600',
+                                        emerald: 'bg-emerald-600 text-white border-emerald-600',
+                                        rose: 'bg-rose-600 text-white border-rose-600',
+                                    };
+                                    const inactiveClasses = {
+                                        slate: 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50',
+                                        blue: 'bg-white text-blue-600 border-blue-100 hover:border-blue-300 hover:bg-blue-50',
+                                        emerald: 'bg-white text-emerald-600 border-emerald-100 hover:border-emerald-300 hover:bg-emerald-50',
+                                        rose: 'bg-white text-rose-600 border-rose-100 hover:border-rose-300 hover:bg-rose-50',
+                                    };
+                                    return (
+                                        <button
+                                            key={tab.key}
+                                            onClick={() => setDrawerFilter(tab.key)}
+                                            className={`flex-1 py-1.5 px-2 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all ${isActive ? activeClasses[tab.color] : inactiveClasses[tab.color]}`}
+                                        >
+                                            {tab.label} <span className={`ml-0.5 ${isActive ? 'opacity-80' : 'opacity-60'}`}>({tab.count})</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Column Headers */}
+                        <div className="px-5 py-2 grid grid-cols-[1fr_auto_auto] gap-3 bg-slate-50/50 border-b border-slate-100">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Developer</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider text-center">Tasks</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider text-center">Done/Mo</span>
+                        </div>
+
+                        {/* Developer List */}
+                        <div className="flex-1 overflow-y-auto custom-scrollbar">
+                            {drawerDevelopers.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3">
+                                    <Users className="w-10 h-10 text-slate-200" />
+                                    <p className="text-sm font-semibold">No {drawerFilter === 'all' ? '' : drawerFilter + ' '}developers</p>
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-slate-50">
+                                    {drawerDevelopers.map(w => {
+                                        const { activeTasks, completedThisMonth } = getWorkerLoad(w._id);
+                                        const { dot, badge, label } = workloadColor(activeTasks);
+                                        return (
+                                            <div key={w._id} className="px-5 py-3.5 hover:bg-slate-50/70 transition-colors">
+                                                <div className="grid grid-cols-[1fr_auto_auto] gap-3 items-center">
+                                                    <div className="min-w-0">
+                                                        <div className="font-bold text-[13px] text-slate-800 truncate">{w.name}</div>
+                                                        <div className="text-[10px] text-slate-400">{w.department || 'No Department'}</div>
+                                                    </div>
+                                                    <div className="text-center">
+                                                        <span className={`text-xs font-black px-2 py-1 rounded-lg border ${badge}`}>
+                                                            {activeTasks}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-center">
+                                                        <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded-lg">
+                                                            {completedThisMonth}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center justify-between mt-2">
+                                                    <span className={`text-[9px] font-black uppercase tracking-wider flex items-center gap-1`}>
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${dot}`}></span>
+                                                        <span className="text-slate-500">{label}</span>
+                                                    </span>
+                                                    <button
+                                                        onClick={() => {
+                                                            setDrawerFilter(false);
+                                                            setInlineCreateStatus(null);
+                                                            setSelectedTicket({
+                                                                _id: 'new', title: '', description: '', priority: 'Medium', status: 'To Do',
+                                                                issueType: 'Task', storyPoints: 0, labels: [], assignee: w, assignees: [],
+                                                                team: w.department || '', startDate: '', endDate: '',
+                                                                checklist: [{ text: '', completed: false }]
+                                                            });
+                                                            const tempId = Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+                                                            setTempTicketId(tempId);
+                                                            setModalFilterTeam(w.department || '');
+                                                            setIsModalOpen(true);
+                                                        }}
+                                                        className="text-[9px] font-black uppercase tracking-wider text-teal-600 hover:text-teal-700 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-lg border border-teal-200 transition-colors flex items-center gap-1"
+                                                    >
+                                                        <Plus className="w-3 h-3" />
+                                                        Assign Task
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Drawer Footer */}
+                        <div className="px-5 py-4 border-t border-slate-100 shrink-0 bg-slate-50/50">
+                            <div className="grid grid-cols-4 gap-2 text-center">
+                                <div>
+                                    <div className="text-lg font-black text-slate-800">{activeWorkers.length}</div>
+                                    <div className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">Total</div>
+                                </div>
+                                <div>
+                                    <div className="text-lg font-black text-blue-600">{assignedDevelopers.length}</div>
+                                    <div className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">Assigned</div>
+                                </div>
+                                <div>
+                                    <div className="text-lg font-black text-emerald-600">{idleDevelopers.length}</div>
+                                    <div className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">Idle</div>
+                                </div>
+                                <div>
+                                    <div className="text-lg font-black text-rose-600">{overloadedDevelopers.length}</div>
+                                    <div className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">Overloaded</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </div >
     );

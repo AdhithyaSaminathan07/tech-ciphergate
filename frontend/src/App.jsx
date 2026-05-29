@@ -31,6 +31,7 @@ const NotificationManagement = lazy(() => import('./components/admin/Notificatio
 const SalaryManagement = lazy(() => import('./components/admin/SalaryManagement'));
 const SalaryProjectManagement = lazy(() => import('./components/admin/SalaryProjectManagement'));
 const GoWhatsIntegration = lazy(() => import('./components/admin/GoWhatsIntegration'));
+const InstagramIntegration = lazy(() => import('./components/admin/InstagramIntegration'));
 const InternCertificate = lazy(() => import('./components/admin/InternCertificate'));
 const OfferLetter = lazy(() => import('./components/admin/OfferLetter'));
 const RenewalManagement = lazy(() => import('./components/admin/RenewalManagement'));
@@ -143,74 +144,75 @@ function App() {
           <div className="App w-full overflow-x-hidden bg-[#FFF3F2]">
 
 
-          <Suspense fallback={<MainLoader />}>
-            <Routes>
-              {/* Public routes */}
-              <Route path="/" element={<Home />} />
-              <Route path="/admin/login" element={<AdminLogin />} />
-              <Route path="/admin/register" element={<AdminRegister />} />
-              <Route path="/worker/login" element={<WorkerLogin />} />
-              <Route path="/quick-test" element={<QuickTest />} />
+            <Suspense fallback={<MainLoader />}>
+              <Routes>
+                {/* Public routes */}
+                <Route path="/" element={<Home />} />
+                <Route path="/admin/login" element={<AdminLogin />} />
+                <Route path="/admin/register" element={<AdminRegister />} />
+                <Route path="/worker/login" element={<WorkerLogin />} />
+                <Route path="/quick-test" element={<QuickTest />} />
 
-              {/* NEW PASSWORD ROUTES */}
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/reset-password/:token" element={<ResetPassword />} />
+                {/* NEW PASSWORD ROUTES */}
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password/:token" element={<ResetPassword />} />
 
-              {/* Protected Admin routes with Layout */}
-              <Route element={<PrivateRoute allowedRoles={['admin']} />}>
-                <Route path="/admin/*" element={<AdminLayout />}>
-                  <Route index element={<AdminDashboard />} />
-                  <Route path="workers" element={<WorkerManagement />} />
-                  <Route path="salary" element={<SalaryManagement />} />
-                  <Route path="salary-projects" element={<SalaryProjectManagement />} />
-                  <Route path="attendance" element={<AttendanceManagement />} />
-                  <Route path="attendance/:id" element={<WorkerAttendance />} />
-                  <Route path="departments" element={<DepartmentManagement />} />
-                  <Route path="columns" element={<ColumnManagement />} />
-                  <Route path="tasks" element={<TaskManagement />} />
-                  <Route path="leaves" element={<LeaveManagement />} />
-                  <Route path="holidays" element={<HolidayManagement />} />
-                  <Route path="comments" element={<CommentManagement />} />
-                  <Route path="topics" element={<TopicManagement />} />
-                  <Route path="food-requests" element={<FoodRequestManagement />} />
-                  <Route path="custom-tasks" element={<CustomTasks />} />
-                  <Route path="notifications" element={<NotificationManagement />} />
-                  <Route path="settings" element={<Settings />} />
-                  <Route path="profile" element={<AdminProfile />} />
-                  <Route path="gowhats" element={<GoWhatsIntegration />} />
-                  <Route path="communication" element={<Communication />} />
-                  <Route path="intern-certificate" element={<InternCertificate />} />
-                  <Route path="offer-letter" element={<OfferLetter />} />
-                  <Route path="acceptance-letter" element={<AcceptanceLetter />} />
-                  <Route path="renewals" element={<RenewalManagement />} />
+                {/* Protected Admin routes with Layout */}
+                <Route element={<PrivateRoute allowedRoles={['admin']} />}>
+                  <Route path="/admin/*" element={<AdminLayout />}>
+                    <Route index element={<AdminDashboard />} />
+                    <Route path="workers" element={<WorkerManagement />} />
+                    <Route path="salary" element={<SalaryManagement />} />
+                    <Route path="salary-projects" element={<SalaryProjectManagement />} />
+                    <Route path="attendance" element={<AttendanceManagement />} />
+                    <Route path="attendance/:id" element={<WorkerAttendance />} />
+                    <Route path="departments" element={<DepartmentManagement />} />
+                    <Route path="columns" element={<ColumnManagement />} />
+                    <Route path="tasks" element={<TaskManagement />} />
+                    <Route path="leaves" element={<LeaveManagement />} />
+                    <Route path="holidays" element={<HolidayManagement />} />
+                    <Route path="comments" element={<CommentManagement />} />
+                    <Route path="topics" element={<TopicManagement />} />
+                    <Route path="food-requests" element={<FoodRequestManagement />} />
+                    <Route path="custom-tasks" element={<CustomTasks />} />
+                    <Route path="notifications" element={<NotificationManagement />} />
+                    <Route path="settings" element={<Settings />} />
+                    <Route path="profile" element={<AdminProfile />} />
+                    <Route path="gowhats" element={<GoWhatsIntegration />} />
+                    <Route path="instagram" element={<InstagramIntegration />} />
+                    <Route path="communication" element={<Communication />} />
+                    <Route path="intern-certificate" element={<InternCertificate />} />
+                    <Route path="offer-letter" element={<OfferLetter />} />
+                    <Route path="acceptance-letter" element={<AcceptanceLetter />} />
+                    <Route path="renewals" element={<RenewalManagement />} />
 
-                  {/* Test Management Routes */}
-                  <Route path="test/generate-questions" element={<GenerateQuestions />} />
-                  <Route path="test/question-history" element={<QuestionHistory />} />
-                  <Route path="test/employee-scores" element={<EmployeeScores />} />
-                  <Route path="test/global-scoreboard" element={<GlobalScoreboard />} />
+                    {/* Test Management Routes */}
+                    <Route path="test/generate-questions" element={<GenerateQuestions />} />
+                    <Route path="test/question-history" element={<QuestionHistory />} />
+                    <Route path="test/employee-scores" element={<EmployeeScores />} />
+                    <Route path="test/global-scoreboard" element={<GlobalScoreboard />} />
 
-                  {/* Catch-all route for unknown admin paths */}
-                  <Route path="*" element={<Navigate to="/admin" replace />} />
+                    {/* Catch-all route for unknown admin paths */}
+                    <Route path="*" element={<Navigate to="/admin" replace />} />
+                  </Route>
                 </Route>
-              </Route>
 
-              {/* Protected Worker routes */}
-              <Route element={<PrivateRoute allowedRoles={['worker']} />}>
-                <Route path="/worker/rules-acceptance" element={<RulesAcceptance />} />
-                <Route path="worker/*" element={<WorkerDashboard />}>
-                  {/* Worker routes are handled inside WorkerDashboard component */}
-                  <Route path="*" element={<Navigate to="/worker" replace />} />
+                {/* Protected Worker routes */}
+                <Route element={<PrivateRoute allowedRoles={['worker']} />}>
+                  <Route path="/worker/rules-acceptance" element={<RulesAcceptance />} />
+                  <Route path="worker/*" element={<WorkerDashboard />}>
+                    {/* Worker routes are handled inside WorkerDashboard component */}
+                    <Route path="*" element={<Navigate to="/worker" replace />} />
+                  </Route>
                 </Route>
-              </Route>
 
-              {/* 404 Not Found Route */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Suspense>
+                {/* 404 Not Found Route */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
 
-          <InstallPrompt />
-        </div>
+            <InstallPrompt />
+          </div>
         </NotificationProvider>
       </SocketProvider>
     </appContext.Provider>

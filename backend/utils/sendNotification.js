@@ -56,8 +56,8 @@ const sendNotification = async ({ userId, userModel, subdomain, title, message, 
                 try {
                     await webPush.sendNotification(sub.subscription, payload);
                 } catch (error) {
-                    // If subscription is invalid/expired, remove it
-                    if (error.statusCode === 404 || error.statusCode === 410) {
+                    // If subscription is invalid/expired/unauthorized (e.g. VAPID key changed), remove it
+                    if (error.statusCode === 404 || error.statusCode === 410 || error.statusCode === 403) {
                         await PushSubscription.findByIdAndDelete(sub._id);
                     } else {
                         console.error('Error sending push notification:', error);

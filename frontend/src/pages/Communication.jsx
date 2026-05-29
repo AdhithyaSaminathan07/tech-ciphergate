@@ -1,12 +1,39 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { getActiveInstagramAccount } from '../services/instagramService';
 
 const SSO_KEY = 'ciphergate_gowhats_secure_sso_key_2024';
 
 const Communication = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [viewMode, setViewMode] = useState('chat'); // 'chat' or 'comments'
   const [activeTab, setActiveTab] = useState('gowhats');
+  
+  // Centralized active Instagram account details
+  const [activeInstagramAccount, setActiveInstagramAccount] = useState(null);
+  const [loadingActiveAccount, setLoadingActiveAccount] = useState(true);
+  
+  // Keys to force iframe-only reloads
+  const [messagesRefreshKey, setMessagesRefreshKey] = useState(0);
+  const [commentsRefreshKey, setCommentsRefreshKey] = useState(0);
+
+  const isAdmin = user?.role === 'admin';
+
+  useEffect(() => {
+    const fetchActiveAccount = async () => {
+      try {
+        const data = await getActiveInstagramAccount();
+        setActiveInstagramAccount(data);
+      } catch (err) {
+        console.error('Failed to fetch active Instagram account', err);
+      } finally {
+        setLoadingActiveAccount(false);
+      }
+    };
+    fetchActiveAccount();
+  }, []);
 
   const gowhatsUrl = useMemo(() => {
     if (!user?.username) return null;
@@ -14,7 +41,7 @@ const Communication = () => {
   }, [user?.username]);
 
   const instaxbotUrl = useMemo(() => {
-    const ssoUser = user?.email || user?.username;
+    const ssoUser = activeInstagramAccount?.username;
     if (!ssoUser) return null;
 
     // For local testing, change 3001 to the port your local Instaxbot is running on (e.g. 3001, 5173, etc.)
@@ -23,10 +50,10 @@ const Communication = () => {
       : 'https://app.instaxbot.com';
 
     return `${baseUrl}/login?sso_username=${encodeURIComponent(ssoUser)}&sso_key=${SSO_KEY}&embed=true&role=staff`;
-  }, [user?.email, user?.username]);
+  }, [activeInstagramAccount?.username]);
 
   const instaxbotCommentsUrl = useMemo(() => {
-    const ssoUser = user?.email || user?.username;
+    const ssoUser = activeInstagramAccount?.username;
     if (!ssoUser) return null;
 
     const baseUrl = window.location.hostname === 'localhost'
@@ -34,7 +61,7 @@ const Communication = () => {
       : 'https://app.instaxbot.com';
 
     return `${baseUrl}/login?sso_username=${encodeURIComponent(ssoUser)}&sso_key=${SSO_KEY}&embed=true&role=staff&redirect=comments`;
-  }, [user?.email, user?.username]);
+  }, [activeInstagramAccount?.username]);
 
   const youtubeCommentsUrl = useMemo(() => {
     const ssoUser = user?.email || user?.username;
@@ -47,7 +74,7 @@ const Communication = () => {
     return `${baseUrl}/?sso_username=${encodeURIComponent(ssoUser)}&sso_key=${SSO_KEY}&embed=true&role=staff&redirect=comments`;
   }, [user?.email, user?.username]);
 
-  if (!gowhatsUrl || !instaxbotUrl || !instaxbotCommentsUrl || !youtubeCommentsUrl) {
+  if (loadingActiveAccount || !gowhatsUrl || !youtubeCommentsUrl) {
     return (
       <div style={{
         height: 'calc(100vh - 65px)', display: 'flex',
@@ -121,6 +148,90 @@ const Communication = () => {
     }
   };
 
+  const handleRefresh = () => {
+    if (activeTab === 'instaxbot') {
+      setMessagesRefreshKey(prev => prev + 1);
+    } else if (activeTab === 'insta_comments') {
+      setCommentsRefreshKey(prev => prev + 1);
+    }
+  };
+
+  const showRefreshButton = activeTab === 'instaxbot' || activeTab === 'insta_comments';
+  const refreshButtonLabel = activeTab === 'instaxbot' ? 'Refresh Messages' : 'Refresh Comments';
+
+  const renderPlaceholder = () => {
+    return (
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '40px 20px',
+        background: '#f8fafc',
+        textAlign: 'center',
+      }}>
+        <div style={{
+          width: 80,
+          height: 80,
+          background: '#fdf2f8',
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#db2777',
+          marginBottom: 20,
+          boxShadow: '0 4px 6px -1px rgba(219, 39, 119, 0.1), 0 2px 4px -1px rgba(219, 39, 119, 0.06)'
+        }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+            <path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z" />
+            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+          </svg>
+        </div>
+
+        {isAdmin ? (
+          <div style={{ maxWidth: 460 }}>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 10 }}>
+              Instagram Connection Required
+            </h3>
+            <p style={{ fontSize: 14, color: '#64748b', lineHeight: '20px', marginBottom: 24 }}>
+              To view comments and messages directly, you need to connect and activate an Instagram account in the system settings.
+            </p>
+            <button
+              onClick={() => navigate('/admin/instagram')}
+              style={{
+                background: 'linear-gradient(135deg, #ec4899, #8b5cf6)',
+                color: '#fff',
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: '8px',
+                fontWeight: 600,
+                fontSize: 14,
+                cursor: 'pointer',
+                boxShadow: '0 4px 10px rgba(236, 72, 153, 0.3)',
+                transition: 'transform 0.2s',
+              }}
+              onMouseOver={e => e.currentTarget.style.transform = 'scale(1.03)'}
+              onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
+            >
+              Configure Instagram Bot
+            </button>
+          </div>
+        ) : (
+          <div style={{ maxWidth: 460 }}>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 10 }}>
+              Instagram Integration Unavailable
+            </h3>
+            <p style={{ fontSize: 14, color: '#64748b', lineHeight: '20px' }}>
+              No active Instagram account has been configured by the administrator. Please ask your administrator to connect an Instagram account in the Admin Panel.
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div style={{ height: 'calc(100vh - 65px)', display: 'flex', flexDirection: 'column', background: '#fff' }}>
 
@@ -158,62 +269,100 @@ const Communication = () => {
           })}
         </div>
 
-        {/* View Mode Toggle */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          background: '#e2e8f0',
-          borderRadius: '20px',
-          padding: '2px',
-          gap: '2px',
-          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.1)'
-        }}>
-          <button
-            onClick={() => handleModeChange('chat')}
-            style={{
-              padding: '6px 14px',
-              borderRadius: '18px',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '12px',
-              fontWeight: '600',
-              background: viewMode === 'chat' ? '#0d9488' : 'transparent',
-              color: viewMode === 'chat' ? '#fff' : '#64748b',
-              transition: 'all 0.2s ease',
-              outline: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-            Chats
-          </button>
-          <button
-            onClick={() => handleModeChange('comments')}
-            style={{
-              padding: '6px 14px',
-              borderRadius: '18px',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '12px',
-              fontWeight: '600',
-              background: viewMode === 'comments' ? '#0d9488' : 'transparent',
-              color: viewMode === 'comments' ? '#fff' : '#64748b',
-              transition: 'all 0.2s ease',
-              outline: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-            </svg>
-            Comments
-          </button>
+        {/* Right Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* Dedicated Isolated Iframe Refresh Button */}
+          {showRefreshButton && activeInstagramAccount && (
+            <button
+              onClick={handleRefresh}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: '1px solid #e2e8f0',
+                background: '#fff',
+                color: '#475569',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '600',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                transition: 'all 0.15s',
+              }}
+              onMouseOver={e => {
+                e.currentTarget.style.borderColor = '#cbd5e1';
+                e.currentTarget.style.background = '#f8fafc';
+              }}
+              onMouseOut={e => {
+                e.currentTarget.style.borderColor = '#e2e8f0';
+                e.currentTarget.style.background = '#fff';
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 4s linear infinite paused' }}>
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+              </svg>
+              {refreshButtonLabel}
+            </button>
+          )}
+
+          {/* View Mode Toggle */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            background: '#e2e8f0',
+            borderRadius: '20px',
+            padding: '2px',
+            gap: '2px',
+            boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.1)'
+          }}>
+            <button
+              onClick={() => handleModeChange('chat')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '18px',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '600',
+                background: viewMode === 'chat' ? '#0d9488' : 'transparent',
+                color: viewMode === 'chat' ? '#fff' : '#64748b',
+                transition: 'all 0.2s ease',
+                outline: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              Chats
+            </button>
+            <button
+              onClick={() => handleModeChange('comments')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '18px',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '600',
+                background: viewMode === 'comments' ? '#0d9488' : 'transparent',
+                color: viewMode === 'comments' ? '#fff' : '#64748b',
+                transition: 'all 0.2s ease',
+                outline: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+              </svg>
+              Comments
+            </button>
+          </div>
         </div>
       </div>
 
@@ -228,21 +377,31 @@ const Communication = () => {
       </div>
 
       <div style={{ flex: 1, overflow: 'hidden', display: activeTab === 'instaxbot' ? 'flex' : 'none', flexDirection: 'column' }}>
-        <iframe
-          src={instaxbotUrl}
-          style={{ width: '100%', height: '100%', border: 'none' }}
-          title="Instaxbot"
-          allow="microphone; camera; clipboard-read; clipboard-write; notifications"
-        />
+        {activeInstagramAccount ? (
+          <iframe
+            key={`instaxbot-messages-${messagesRefreshKey}`}
+            src={instaxbotUrl}
+            style={{ width: '100%', height: '100%', border: 'none' }}
+            title="Instaxbot"
+            allow="microphone; camera; clipboard-read; clipboard-write; notifications"
+          />
+        ) : (
+          renderPlaceholder()
+        )}
       </div>
 
       <div style={{ flex: 1, overflow: 'hidden', display: activeTab === 'insta_comments' ? 'flex' : 'none', flexDirection: 'column' }}>
-        <iframe
-          src={instaxbotCommentsUrl}
-          style={{ width: '100%', height: '100%', border: 'none' }}
-          title="Instagram Comments"
-          allow="microphone; camera; clipboard-read; clipboard-write; notifications"
-        />
+        {activeInstagramAccount ? (
+          <iframe
+            key={`instaxbot-comments-${commentsRefreshKey}`}
+            src={instaxbotCommentsUrl}
+            style={{ width: '100%', height: '100%', border: 'none' }}
+            title="Instagram Comments"
+            allow="microphone; camera; clipboard-read; clipboard-write; notifications"
+          />
+        ) : (
+          renderPlaceholder()
+        )}
       </div>
 
       <div style={{ flex: 1, overflow: 'hidden', display: activeTab === 'youtube_comments' ? 'flex' : 'none', flexDirection: 'column' }}>

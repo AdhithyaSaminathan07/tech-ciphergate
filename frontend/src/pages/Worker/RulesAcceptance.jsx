@@ -587,7 +587,7 @@ const RulesAcceptance = () => {
                 </div>
 
                 {/* ── LEFT: Navigation Panel (Desktop Only) ── */}
-                <div className="desktop-outline-panel" style={{
+                <div style={{
                     background: '#ffffff',
                     border: '1px solid #e2e8f0',
                     borderRadius: '16px',
