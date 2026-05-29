@@ -226,7 +226,7 @@ const AdminLayout = () => {
         { to: '/admin/communication', label: 'Communication', icon: <FaComments /> },
         { to: '/admin/notifications', label: 'Notifications', icon: <FaRegBell /> },
         { to: '/admin/gowhats', label: 'GoWhats', icon: <FaWhatsapp /> },
-        { to: '/admin/instagram', label: 'Instagram Bot', icon: <FaInstagram /> },
+        { to: '/admin/instagram', label: 'Instaxbot', icon: <FaInstagram /> },
         { to: '/admin/comments', label: 'Comments', icon: <FaCommentDots />, badge: newComments > 0 ? newComments : null },
         { to: '/admin/food-requests', label: 'Food Requests', icon: <FaPizzaSlice /> },
       ],

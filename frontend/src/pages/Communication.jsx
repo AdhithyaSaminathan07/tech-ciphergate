@@ -215,7 +215,7 @@ const Communication = () => {
               onMouseOver={e => e.currentTarget.style.transform = 'scale(1.03)'}
               onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
             >
-              Configure Instagram Bot
+              Configure Instaxbot
             </button>
           </div>
         ) : (
