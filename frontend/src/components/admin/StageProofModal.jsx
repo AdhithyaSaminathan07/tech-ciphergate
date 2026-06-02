@@ -254,6 +254,8 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage }) => {
             </button>
           </div>
         </form>
+      </div>
+
       {/* Image Preview Overlay Modal (Lightbox) */}
       {previewImage && (
         <div 
