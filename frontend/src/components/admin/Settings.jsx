@@ -137,6 +137,14 @@ const Settings = () => {
         paidLeaveConfig: {
             enabled: false,
             leavesPerMonth: 1
+        },
+        aiConfig: {
+            claudeApiKey: '',
+            aiMaxDailyRequests: 100,
+            aiMaxMonthlyRequests: 1000,
+            aiDailyRequestCount: 0,
+            aiMonthlyRequestCount: 0,
+            aiFeaturesEnabled: true
         }
     });
 
@@ -226,6 +234,14 @@ const Settings = () => {
                 paidLeaveConfig: {
                     enabled: fetchedSettings.paidLeaveConfig?.enabled ?? false,
                     leavesPerMonth: fetchedSettings.paidLeaveConfig?.leavesPerMonth || 1
+                },
+                aiConfig: {
+                    claudeApiKey: fetchedSettings.aiConfig?.claudeApiKey || '',
+                    aiMaxDailyRequests: fetchedSettings.aiConfig?.aiMaxDailyRequests ?? 100,
+                    aiMaxMonthlyRequests: fetchedSettings.aiConfig?.aiMaxMonthlyRequests ?? 1000,
+                    aiDailyRequestCount: fetchedSettings.aiConfig?.aiDailyRequestCount || 0,
+                    aiMonthlyRequestCount: fetchedSettings.aiConfig?.aiMonthlyRequestCount || 0,
+                    aiFeaturesEnabled: fetchedSettings.aiConfig?.aiFeaturesEnabled ?? true
                 }
             };
 
@@ -1685,6 +1701,138 @@ const Settings = () => {
                         </div>
                     </div>
                 </Card> */}
+                {/* AI Second Brain Configuration */}
+                <Card className="mb-8 hover:shadow-lg transition-shadow duration-200">
+                    <div className="h-2 bg-gradient-to-r from-blue-500 to-indigo-600" />
+                    <div className="p-6">
+                        <h3 className="text-lg font-semibold mb-6 flex items-center text-gray-900">
+                            <div className="p-2 bg-indigo-100 rounded-lg mr-3">
+                                <FiActivity className="h-5 w-5 text-indigo-600" />
+                            </div>
+                            AI & Second Brain Settings
+                        </h3>
+
+                        <div className="space-y-6">
+                            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                                <div>
+                                    <label className="text-sm font-medium text-gray-700">Enable AI Features</label>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Enable or disable Claude AI developer allocation & search features
+                                    </p>
+                                </div>
+                                <CustomToggle
+                                    checked={settings.aiConfig?.aiFeaturesEnabled ?? true}
+                                    onChange={() => {
+                                        const updated = {
+                                            ...settings,
+                                            aiConfig: {
+                                                ...(settings.aiConfig || {}),
+                                                aiFeaturesEnabled: !(settings.aiConfig?.aiFeaturesEnabled ?? true)
+                                            }
+                                        };
+                                        setSettings(updated);
+                                        checkForChanges(updated);
+                                    }}
+                                />
+                            </div>
+
+                            {(settings.aiConfig?.aiFeaturesEnabled !== false) && (
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Claude API Key
+                                        </label>
+                                        <input
+                                            type="password"
+                                            value={settings.aiConfig?.claudeApiKey || ''}
+                                            onChange={(e) => {
+                                                const updated = {
+                                                    ...settings,
+                                                    aiConfig: {
+                                                        ...(settings.aiConfig || {}),
+                                                        claudeApiKey: e.target.value
+                                                    }
+                                                };
+                                                setSettings(updated);
+                                                checkForChanges(updated);
+                                            }}
+                                            placeholder="sk-ant-..."
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                        />
+                                        <p className="text-xs text-gray-500">
+                                            Anthropic API Key used for task matching and second brain operations. If empty, falls back to server-side DeepSeek key.
+                                        </p>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-gray-700">
+                                                Max Daily AI Requests
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                value={settings.aiConfig?.aiMaxDailyRequests ?? 100}
+                                                onChange={(e) => {
+                                                    const updated = {
+                                                        ...settings,
+                                                        aiConfig: {
+                                                            ...(settings.aiConfig || {}),
+                                                            aiMaxDailyRequests: parseInt(e.target.value) || 0
+                                                        }
+                                                    };
+                                                    setSettings(updated);
+                                                    checkForChanges(updated);
+                                                }}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-gray-700">
+                                                Max Monthly AI Requests
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                value={settings.aiConfig?.aiMaxMonthlyRequests ?? 1000}
+                                                onChange={(e) => {
+                                                    const updated = {
+                                                        ...settings,
+                                                        aiConfig: {
+                                                            ...(settings.aiConfig || {}),
+                                                            aiMaxMonthlyRequests: parseInt(e.target.value) || 0
+                                                        }
+                                                    };
+                                                    setSettings(updated);
+                                                    checkForChanges(updated);
+                                                }}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Usage Stats counters */}
+                                    <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4 grid grid-cols-2 gap-4 text-center">
+                                        <div>
+                                            <div className="text-xl font-bold text-indigo-700">
+                                                {settings.aiConfig?.aiDailyRequestCount || 0} / {settings.aiConfig?.aiMaxDailyRequests ?? 100}
+                                            </div>
+                                            <div className="text-xs text-indigo-500 font-semibold uppercase">Daily Usage</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xl font-bold text-indigo-700">
+                                                {settings.aiConfig?.aiMonthlyRequestCount || 0} / {settings.aiConfig?.aiMaxMonthlyRequests ?? 1000}
+                                            </div>
+                                            <div className="text-xs text-indigo-500 font-semibold uppercase">Monthly Usage</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </Card>
+
                 {/* Holiday Management Modal */}
                 <Modal
                     isOpen={isHolidayModalOpen}

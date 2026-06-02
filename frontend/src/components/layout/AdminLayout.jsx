@@ -14,6 +14,7 @@ import {
   FaRegCalendarCheck,
   FaRegBell,
   FaBook,
+  FaBrain,
   FaDollarSign,
   FaQuestionCircle,
   FaHistory,
@@ -102,6 +103,7 @@ const AdminDeleteHistory = React.lazy(() => import('../admin/AdminDeleteHistory'
 const FaceAttendancePage = React.lazy(() => import('../admin/FaceAttendancePage'));
 const AdminRulesDashboard = React.lazy(() => import('../admin/AdminRulesDashboard'));
 const PerformanceRewards = React.lazy(() => import('../admin/PerformanceRewards'));
+const SecondBrainAdmin = React.lazy(() => import('../admin/SecondBrainAdmin'));
 
 // Lazy load test management components
 const GenerateQuestions = React.lazy(() => import('../admin/GenerateQuestions'));
@@ -216,6 +218,7 @@ const AdminLayout = () => {
         { to: '/admin/columns', label: 'Kanban Boards', icon: <FaColumns /> },
         { to: '/admin/github-tracker', label: 'GitHub Tracker', icon: <FaGithub /> },
         { to: '/admin/kpi-management', label: 'KPI Management', icon: <FaChartLine /> },
+        { to: '/admin/second-brain', label: 'AI Second Brain', icon: <FaBrain /> },
       ],
     },
     {
@@ -396,6 +399,7 @@ const AdminLayout = () => {
               <Route path="face-attendance" element={<FaceAttendancePage />} />
               <Route path="rules" element={<AdminRulesDashboard />} />
               <Route path="performance-rewards" element={<PerformanceRewards />} />
+              <Route path="second-brain" element={<SecondBrainAdmin />} />
 
               <Route path="*" element={<Navigate to="/admin" replace />} />
             </Routes>

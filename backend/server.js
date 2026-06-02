@@ -70,6 +70,8 @@ const startServer = async () => {
     const exitManagementRoutes = require('./routes/exitManagementRoutes');
     const salesVelocityRoutes = require('./routes/salesVelocityRoutes');
     const instaxbotRoutes = require('./routes/instaxbotRoutes');
+    const documentRoutes = require('./routes/documentRoutes');
+    const aiRoutes = require('./routes/aiRoutes');
 
     // Test App routes
     const testQuestionRoutes = require('./routes/testQuestionRoutes');
@@ -115,6 +117,8 @@ const startServer = async () => {
     app.use('/api/instaxbot', instaxbotRoutes);
     app.use('/api/rules', require('./routes/ruleRoutes'));
     app.use('/api/performance', require('./routes/performanceRoutes'));
+    app.use('/api/documents', documentRoutes);
+    app.use('/api/ai', aiRoutes);
 
 
     // Test App routes

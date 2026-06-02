@@ -4,7 +4,25 @@ const Attendance = require('../models/Attendance'); // Added import
 const asyncHandler = require('express-async-handler');
 
 const createDepartment = asyncHandler(async (req, res) => {
-  const { name, subdomain } = req.body;
+  const {
+    name,
+    subdomain,
+    departmentType,
+    description,
+    projectStatus,
+    projectPriority,
+    frontendStack,
+    backendStack,
+    database,
+    cloudProvider,
+    deploymentUrl,
+    primaryRepoUrl,
+    moduleRepos,
+    documentationRepoUrl,
+    projectLead,
+    projectManager,
+    assignedDevelopers
+  } = req.body;
 
   // Validate input
   if (!name || name.trim().length < 2) {
@@ -27,10 +45,34 @@ const createDepartment = asyncHandler(async (req, res) => {
       throw new Error('Department with this name already exists.');
     }
 
-    // Create department with exact case preservation
-    const department = new Department({ name, subdomain });
+    // Create department with project metadata
+    const department = new Department({
+      name: name.trim(),
+      subdomain,
+      departmentType: departmentType || 'Project',
+      description,
+      projectStatus: projectStatus || 'In Progress',
+      projectPriority: projectPriority || 'Medium',
+      frontendStack,
+      backendStack,
+      database,
+      cloudProvider,
+      deploymentUrl,
+      primaryRepoUrl,
+      moduleRepos: Array.isArray(moduleRepos) ? moduleRepos : [],
+      documentationRepoUrl,
+      projectLead: projectLead || undefined,
+      projectManager: projectManager || undefined,
+      assignedDevelopers: Array.isArray(assignedDevelopers) ? assignedDevelopers : []
+    });
 
     await department.save();
+
+    await department.populate([
+      { path: 'projectLead', select: 'name username photo' },
+      { path: 'projectManager', select: 'name username photo' },
+      { path: 'assignedDevelopers', select: 'name username photo' }
+    ]);
 
     // Get worker count
     const workerCount = await Worker.countDocuments({
@@ -43,6 +85,16 @@ const createDepartment = asyncHandler(async (req, res) => {
       ...department.toObject(),
       workerCount
     };
+
+    // Trigger Second Brain sync hook (non-blocking)
+    try {
+      const { syncBrainItem } = require('../services/secondBrainService');
+      syncBrainItem('project', department, subdomain).catch(err => 
+        console.error('[SecondBrainSync] Project sync error:', err.message)
+      );
+    } catch (e) {
+      // Service might not be created yet, will sync later
+    }
 
     res.status(201).json(departmentResponse);
   } catch (error) {
@@ -59,9 +111,14 @@ const getDepartments = asyncHandler(async (req, res) => {
   }
 
   try {
-    // 1. Load all departments for this subdomain
+    // 1. Load all departments for this subdomain with populated fields
     const departments = await Department
       .find({ subdomain })
+      .populate([
+        { path: 'projectLead', select: 'name username photo' },
+        { path: 'projectManager', select: 'name username photo' },
+        { path: 'assignedDevelopers', select: 'name username photo' }
+      ])
       .sort({ createdAt: -1 });
 
     // Get today's date in India Timezone
@@ -152,7 +209,24 @@ const deleteDepartment = asyncHandler(async (req, res) => {
 
 const updateDepartment = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { name } = req.body;
+  const {
+    name,
+    departmentType,
+    description,
+    projectStatus,
+    projectPriority,
+    frontendStack,
+    backendStack,
+    database,
+    cloudProvider,
+    deploymentUrl,
+    primaryRepoUrl,
+    moduleRepos,
+    documentationRepoUrl,
+    projectLead,
+    projectManager,
+    assignedDevelopers
+  } = req.body;
 
   // Validate input
   if (!name || name.trim().length < 2) {
@@ -181,7 +255,29 @@ const updateDepartment = asyncHandler(async (req, res) => {
     }
 
     department.name = name.trim();
+    if (departmentType) department.departmentType = departmentType;
+    if (description !== undefined) department.description = description;
+    if (projectStatus) department.projectStatus = projectStatus;
+    if (projectPriority) department.projectPriority = projectPriority;
+    if (frontendStack !== undefined) department.frontendStack = frontendStack;
+    if (backendStack !== undefined) department.backendStack = backendStack;
+    if (database !== undefined) department.database = database;
+    if (cloudProvider !== undefined) department.cloudProvider = cloudProvider;
+    if (deploymentUrl !== undefined) department.deploymentUrl = deploymentUrl;
+    if (primaryRepoUrl !== undefined) department.primaryRepoUrl = primaryRepoUrl;
+    if (moduleRepos !== undefined) department.moduleRepos = Array.isArray(moduleRepos) ? moduleRepos : [];
+    if (documentationRepoUrl !== undefined) department.documentationRepoUrl = documentationRepoUrl;
+    if (projectLead !== undefined) department.projectLead = projectLead || undefined;
+    if (projectManager !== undefined) department.projectManager = projectManager || undefined;
+    if (assignedDevelopers !== undefined) department.assignedDevelopers = Array.isArray(assignedDevelopers) ? assignedDevelopers : [];
+
     await department.save(); // Use save() to trigger validation
+
+    await department.populate([
+      { path: 'projectLead', select: 'name username photo' },
+      { path: 'projectManager', select: 'name username photo' },
+      { path: 'assignedDevelopers', select: 'name username photo' }
+    ]);
 
     // Get worker count
     const workerCount = await Worker.countDocuments({
@@ -194,6 +290,16 @@ const updateDepartment = asyncHandler(async (req, res) => {
       ...department.toObject(),
       workerCount
     };
+
+    // Trigger Second Brain sync hook (non-blocking)
+    try {
+      const { syncBrainItem } = require('../services/secondBrainService');
+      syncBrainItem('project', department, department.subdomain).catch(err => 
+        console.error('[SecondBrainSync] Project sync error:', err.message)
+      );
+    } catch (e) {
+      // Service might not be created yet, will sync later
+    }
 
     res.json(departmentResponse);
   } catch (error) {

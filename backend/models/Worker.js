@@ -180,7 +180,28 @@ const workerSchema = mongoose.Schema({
     type: String,
     default: '0'
   },
-  passwordChangedAt: Date
+  passwordChangedAt: Date,
+  // Developer Expertise Fields
+  skills: {
+    type: [String],
+    default: []
+  },
+  gitContributions: {
+    type: Number,
+    default: 0
+  },
+  completedTasksCount: {
+    type: Number,
+    default: 0
+  },
+  activeTasksCount: {
+    type: Number,
+    default: 0
+  },
+  expertiseProfile: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
+  }
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
@@ -192,5 +213,23 @@ workerSchema.virtual('faceEnrolled').get(function () {
 });
 
 workerSchema.index({ subdomain: 1, status: 1 });
+
+workerSchema.post('save', async function(doc) {
+  try {
+    const { syncBrainItem } = require('../services/secondBrainService');
+    await syncBrainItem('worker', doc, doc.subdomain);
+  } catch (err) {
+    console.error('[SecondBrain Sync] Failed to sync worker on save:', err.message);
+  }
+});
+
+workerSchema.post('remove', async function(doc) {
+  try {
+    const { deleteBrainItem } = require('../services/secondBrainService');
+    await deleteBrainItem('worker', doc._id, doc.subdomain);
+  } catch (err) {
+    console.error('[SecondBrain Sync] Failed to delete worker on remove:', err.message);
+  }
+});
 
 module.exports = mongoose.model('Worker', workerSchema);

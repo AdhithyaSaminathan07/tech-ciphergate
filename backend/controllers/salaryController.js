@@ -212,7 +212,7 @@ const calculateDailyAttendancePenalties = async (subdomain, fromDate, toDate, wo
     if (!attendanceByDate[att.date]) attendanceByDate[att.date] = { company: [], dept: [] };
     const wId = att.worker.toString();
     attendanceByDate[att.date].company.push(wId);
-    
+
     const attWorker = allCompanyWorkers.find(w => w._id.toString() === wId);
     if (attWorker) {
       const attWorkerDeptId = attWorker.department?._id?.toString() || attWorker.department?.toString();
@@ -233,7 +233,7 @@ const calculateDailyAttendancePenalties = async (subdomain, fromDate, toDate, wo
 
   dates.forEach(dateStr => {
     const dayData = attendanceByDate[dateStr] || { company: [], dept: [] };
-    
+
     if (companyEnabled) {
       const otherCompanyWorkers = Math.max(1, totalCompanyWorkers - 1);
       const presentOtherCompanyWorkers = dayData.company.filter(id => id !== workerIdStr).length;
@@ -545,7 +545,7 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
         const doneEntry = task.statusHistory
           .filter(h => h.status === 'Done')
           .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
-        
+
         if (doneEntry) {
           const doneDate = new Date(doneEntry.changedAt);
           doneDate.setHours(0, 0, 0, 0);
@@ -560,7 +560,7 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
       const doneEntry = task.statusHistory
         .filter(h => h.status === 'Done')
         .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
-      
+
       return {
         _id: task._id,
         title: task.title,
@@ -581,7 +581,7 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
     const projectBreakdown = enrichedProjects.map(p => {
       const pid = p._id.toString();
       const calcData = (report.summary?.projectBreakdownMap && report.summary.projectBreakdownMap[pid]) || { totalEarned: 0, totalDeduction: 0, daysCount: 0 };
-      
+
       return {
         projectId: p._id,
         projectName: p.projectName,
@@ -658,10 +658,10 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
-    
+
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
-    
+
     const formatDate = (d) => {
       let m = '' + (d.getMonth() + 1);
       let day = '' + d.getDate();
@@ -670,7 +670,7 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
       if (day.length < 2) day = '0' + day;
       return [y, m, day].join('-');
     };
-    
+
     start = formatDate(firstDay);
     end = formatDate(lastDay);
   } else {
@@ -761,7 +761,8 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
         companyPenaltyMap,
         deptPenaltyMap,
         includePermission: settings?.includePermission || false,
-        paidLeaveConfig: settings ? settings.paidLeaveConfig : null
+        paidLeaveConfig: settings ? settings.paidLeaveConfig : null,
+        isEmployeeDashboard: true
       }
     });
 
@@ -816,7 +817,7 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
         const doneEntry = task.statusHistory
           .filter(h => h.status === 'Done')
           .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
-        
+
         if (doneEntry) {
           const doneDate = new Date(doneEntry.changedAt);
           doneDate.setHours(0, 0, 0, 0);
@@ -830,7 +831,7 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
       const doneEntry = task.statusHistory
         .filter(h => h.status === 'Done')
         .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
-      
+
       return {
         _id: task._id,
         title: task.title,
@@ -851,7 +852,7 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
     const projectBreakdown = enrichedProjects.map(p => {
       const pid = p._id.toString();
       const calcData = (report.summary?.projectBreakdownMap && report.summary.projectBreakdownMap[pid]) || { totalEarned: 0, totalDeduction: 0, daysCount: 0 };
-      
+
       return {
         projectId: p._id,
         projectName: p.projectName,
@@ -1334,7 +1335,7 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
     const reportYear = fromDateObj.getFullYear();
 
     // Fetch all needed data for the subdomain once
-    const allAttendanceData = await Attendance.find({ 
+    const allAttendanceData = await Attendance.find({
       subdomain,
       date: { $gte: fromDate, $lte: toDate }
     });
@@ -1350,7 +1351,7 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
 
     const results = workers.map(worker => {
       const workerId = worker._id.toString();
-      
+
       // Filter data for this worker
       const workerAttendance = allAttendanceData.filter(record => {
         const recordDate = new Date(record.date);
@@ -1358,8 +1359,8 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
       });
 
       const workerLeaves = allLeaveData.filter(l => l.worker.toString() === workerId);
-      
-      const workerSalaryProjects = allSalaryProjects.filter(p => 
+
+      const workerSalaryProjects = allSalaryProjects.filter(p =>
         p.developers.some(dev => dev._id.toString() === workerId)
       );
 
@@ -1418,8 +1419,8 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
       // Task Penalty
       const delayedTasks = allTickets.filter(task => {
         if (!task.endDate) return false;
-        const isAssignee = task.assignee?.toString() === workerId || 
-                          (Array.isArray(task.assignees) && task.assignees.some(a => a.toString() === workerId));
+        const isAssignee = task.assignee?.toString() === workerId ||
+          (Array.isArray(task.assignees) && task.assignees.some(a => a.toString() === workerId));
         if (!isAssignee) return false;
 
         const deadline = new Date(task.endDate);
@@ -1429,7 +1430,7 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
           const doneEntry = (task.statusHistory || [])
             .filter(h => h.status === 'Done')
             .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
-          
+
           if (doneEntry) {
             const doneDate = new Date(doneEntry.changedAt);
             doneDate.setHours(0, 0, 0, 0);
@@ -1547,7 +1548,7 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
     const toDateObj = new Date(toDate);
     const reportYear = fromDateObj.getFullYear();
 
-    const allAttendanceData = await Attendance.find({ 
+    const allAttendanceData = await Attendance.find({
       subdomain,
       date: { $gte: fromDate, $lte: toDate }
     });
@@ -1570,7 +1571,7 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
         return record.worker.toString() === workerId && recordDate >= fromDateObj && recordDate <= toDateObj;
       });
       const workerLeaves = allLeaveData.filter(l => l.worker.toString() === workerId);
-      const workerSalaryProjects = allSalaryProjects.filter(p => 
+      const workerSalaryProjects = allSalaryProjects.filter(p =>
         p.developers.some(dev => dev._id.toString() === workerId)
       );
 
@@ -1624,8 +1625,8 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
 
       const delayedTasks = allTickets.filter(task => {
         if (!task.endDate) return false;
-        const isAssignee = task.assignee?.toString() === workerId || 
-                          (Array.isArray(task.assignees) && task.assignees.some(a => a.toString() === workerId));
+        const isAssignee = task.assignee?.toString() === workerId ||
+          (Array.isArray(task.assignees) && task.assignees.some(a => a.toString() === workerId));
         if (!isAssignee) return false;
         const deadline = new Date(task.endDate);
         deadline.setHours(0, 0, 0, 0);

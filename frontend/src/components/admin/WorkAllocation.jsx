@@ -8,10 +8,12 @@ import {
     Search, Plus, Trash2, CheckSquare,
     AlertCircle, Bookmark, Zap, ArrowUp, ArrowDown,
     Minus, X, User, AlignLeft, LayoutDashboard, Flag, List, ListOrdered,
-    Calendar, Clock, Check, ChevronDown, BarChart2, Users, Info, Eye, Paperclip, CheckCircle2, History, Tag, MessageSquare, Download, Maximize2, FileText, HelpCircle, ImagePlus, Filter
+    Calendar, Clock, Check, ChevronDown, BarChart2, Users, Info, Eye, Paperclip, CheckCircle2, History, Tag, MessageSquare, Download, Maximize2, FileText, HelpCircle, ImagePlus, Filter,
+    Cpu, Sparkles
 } from 'lucide-react';
 import { getFullFileUrl } from '../../utils/fileUtils';
 import { toast } from 'react-toastify';
+import { analyzeTask } from '../../services/aiService';
 import {
     Select,
     SelectContent,
@@ -396,6 +398,14 @@ const WorkAllocation = () => {
     const [selectedTicket, setSelectedTicket] = useState(null);
     const [tempTicketId, setTempTicketId] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [aiAnalysisResult, setAiAnalysisResult] = useState(null);
+
+    useEffect(() => {
+        setAiAnalysisResult(null);
+        setIsAnalyzing(false);
+    }, [selectedTicket?._id]);
+
     const [refManager, setRefManager] = useState({ isOpen: false, ticketId: '', subTaskId: '', workerId: '', files: [] });
     const [isDraggingRef, setIsDraggingRef] = useState(false);
 
@@ -994,6 +1004,81 @@ const WorkAllocation = () => {
                 fetchData();
             }
         }
+    };
+
+    const handleAnalyzeTask = async () => {
+        if (!selectedTicket.title) {
+            toast.error('Task title is required for AI analysis');
+            return;
+        }
+        setIsAnalyzing(true);
+        try {
+            const result = await analyzeTask(selectedTicket.title, selectedTicket.description || '', subdomain);
+            setAiAnalysisResult(result);
+            toast.success('AI task analysis completed!');
+        } catch (error) {
+            console.error('AI Analysis failed:', error);
+            toast.error(error.message || 'AI task analysis failed. Please verify AI settings/limits.');
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
+    const handleApplySpecs = () => {
+        if (!aiAnalysisResult) return;
+        
+        const updates = {};
+        if (aiAnalysisResult.priority) {
+            updates.priority = aiAnalysisResult.priority;
+        }
+        
+        if (aiAnalysisResult.estimatedHours) {
+            updates.estimatedDays = Math.ceil((aiAnalysisResult.estimatedHours / 8) * 100) / 100;
+            updates.storyPoints = Math.round(aiAnalysisResult.estimatedHours / 8);
+            
+            const baseDate = selectedTicket.startDate ? new Date(selectedTicket.startDate) : new Date();
+            const end = new Date(baseDate);
+            end.setDate(baseDate.getDate() + Math.max(1, Math.round(aiAnalysisResult.estimatedHours / 8)));
+            
+            updates.endDate = end.toISOString().split('T')[0];
+            if (!selectedTicket.startDate) {
+                updates.startDate = baseDate.toISOString().split('T')[0];
+            }
+        }
+        
+        updateSelectedTicket(updates, false);
+        toast.success('AI parameters applied successfully!');
+    };
+
+    const handleMergeSubtasks = () => {
+        if (!aiAnalysisResult || !aiAnalysisResult.subtasks) return;
+        
+        const existing = selectedTicket.checklist || [];
+        const cleanExisting = existing.filter(item => item.text && item.text.trim() !== '');
+        
+        const newItems = aiAnalysisResult.subtasks.map((text, idx) => ({
+            text,
+            completed: false,
+            _id: `ai-${Date.now()}-${idx}`
+        }));
+        
+        const mergedChecklist = [...cleanExisting, ...newItems];
+        if (mergedChecklist.length === 0) {
+            mergedChecklist.push({ text: '', completed: false, _id: `default-${Date.now()}` });
+        }
+        
+        updateSelectedTicket({ checklist: mergedChecklist }, false);
+        toast.success('AI subtasks merged into checklist!');
+    };
+
+    const handleAssignDev = (devId) => {
+        const currentAssigneeIds = (selectedTicket.assignees || []).map(a => typeof a === 'object' ? a._id : a);
+        if (currentAssigneeIds.includes(devId)) {
+            toast.info('Developer is already assigned');
+            return;
+        }
+        updateSelectedTicket({ assignees: [...currentAssigneeIds, devId] }, false);
+        toast.success('Developer assigned successfully!');
     };
 
     const handleDeleteTicket = (ticketToDelete = selectedTicket) => {
@@ -1898,6 +1983,148 @@ const WorkAllocation = () => {
                                                     ))}
                                                 </SelectContent>
                                             </Select>
+                                        </div>
+
+                                        {/* AI Task Optimizer / Assistant */}
+                                        <div className="bg-gradient-to-br from-indigo-50/60 to-teal-50/60 border border-teal-100 rounded-2xl p-4 shadow-sm relative overflow-hidden">
+                                            <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/5 rounded-full blur-2xl"></div>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="bg-teal-500 text-white p-1.5 rounded-lg shadow-sm">
+                                                        <Cpu className="w-4 h-4 animate-pulse" />
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                                                            AI Task Assistant
+                                                            <Sparkles className="w-3 h-3 text-amber-500 fill-amber-500" />
+                                                        </h3>
+                                                        <p className="text-[9px] font-semibold text-slate-400">Optimize priorities, subtasks, & assignments</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {!aiAnalysisResult ? (
+                                                <button
+                                                    disabled={isAnalyzing || !selectedTicket.title}
+                                                    onClick={handleAnalyzeTask}
+                                                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition-all shadow-md hover:shadow-teal-100 disabled:opacity-50 active:scale-[0.98]"
+                                                >
+                                                    {isAnalyzing ? (
+                                                        <>
+                                                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                            <span>Consulting Second Brain...</span>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Cpu className="w-3.5 h-3.5" />
+                                                            <span>Analyze with AI</span>
+                                                        </>
+                                                    )}
+                                                </button>
+                                            ) : (
+                                                <div className="space-y-4">
+                                                    <div className="grid grid-cols-2 gap-2 bg-white/70 p-2.5 rounded-xl border border-slate-100">
+                                                        <div className="text-[10px]">
+                                                            <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Priority</span>
+                                                            <span className={`font-extrabold uppercase ${
+                                                                aiAnalysisResult.priority === 'High' ? 'text-red-500' :
+                                                                aiAnalysisResult.priority === 'Medium' ? 'text-orange-500' : 'text-blue-500'
+                                                            }`}>{aiAnalysisResult.priority}</span>
+                                                        </div>
+                                                        <div className="text-[10px]">
+                                                            <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Complexity</span>
+                                                            <span className={`font-extrabold uppercase ${
+                                                                aiAnalysisResult.complexity === 'High' ? 'text-purple-600' :
+                                                                aiAnalysisResult.complexity === 'Medium' ? 'text-indigo-600' : 'text-slate-600'
+                                                            }`}>{aiAnalysisResult.complexity}</span>
+                                                        </div>
+                                                        <div className="text-[10px] col-span-2 mt-1.5 pt-1.5 border-t border-slate-100/60 flex justify-between items-center">
+                                                            <div>
+                                                                <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Est. Time</span>
+                                                                <span className="font-extrabold text-slate-700">{aiAnalysisResult.estimatedHours} hrs <span className="text-slate-400 font-normal">({(aiAnalysisResult.estimatedHours / 8).toFixed(1)} Days)</span></span>
+                                                            </div>
+                                                            <button
+                                                                onClick={handleApplySpecs}
+                                                                className="px-2.5 py-1 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-100 rounded-lg text-[9px] font-extrabold uppercase transition-colors"
+                                                            >
+                                                                Apply
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {aiAnalysisResult.subtasks && aiAnalysisResult.subtasks.length > 0 && (
+                                                        <div className="space-y-1.5 bg-white/70 p-2.5 rounded-xl border border-slate-100">
+                                                            <div className="flex items-center justify-between mb-1">
+                                                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Suggested Subtasks</span>
+                                                                <button
+                                                                    onClick={handleMergeSubtasks}
+                                                                    className="px-2.5 py-1 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-100 rounded-lg text-[9px] font-extrabold uppercase transition-colors"
+                                                                >
+                                                                    Merge
+                                                                </button>
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                {aiAnalysisResult.subtasks.map((sub, i) => (
+                                                                    <div key={i} className="flex items-start gap-1.5 text-[11px] text-slate-600 font-semibold leading-relaxed">
+                                                                        <span className="text-teal-500 shrink-0 mt-0.5">•</span>
+                                                                        <span>{sub}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {aiAnalysisResult.recommendations && aiAnalysisResult.recommendations.length > 0 && (
+                                                        <div className="space-y-2 bg-white/70 p-2.5 rounded-xl border border-slate-100">
+                                                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">AI Recommended Assignees</span>
+                                                            <div className="space-y-2">
+                                                                {aiAnalysisResult.recommendations.map((rec, i) => {
+                                                                    const isAssigned = (selectedTicket.assignees || []).some(a => (typeof a === 'object' ? a._id : a) === rec.developerId);
+                                                                    return (
+                                                                        <div key={i} className="bg-white p-2 rounded-lg border border-slate-100 flex flex-col gap-1.5 shadow-sm">
+                                                                            <div className="flex justify-between items-center">
+                                                                                <div className="flex items-center gap-1.5">
+                                                                                    <span className="text-xs font-bold text-slate-700">{rec.developerName}</span>
+                                                                                    <span className="text-[9px] font-extrabold px-1.5 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-full">{rec.matchScore}% Match</span>
+                                                                                </div>
+                                                                                <button
+                                                                                    onClick={() => handleAssignDev(rec.developerId)}
+                                                                                    className={`px-2.5 py-1 rounded-lg text-[9px] font-extrabold uppercase transition-colors ${
+                                                                                        isAssigned 
+                                                                                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                                                                                        : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm'
+                                                                                    }`}
+                                                                                    disabled={isAssigned}
+                                                                                >
+                                                                                    {isAssigned ? 'Assigned' : 'Assign'}
+                                                                                </button>
+                                                                            </div>
+                                                                            {rec.reasons && rec.reasons.length > 0 && (
+                                                                                <div className="space-y-0.5 pl-1">
+                                                                                    {rec.reasons.map((r, ri) => (
+                                                                                        <div key={ri} className="text-[10px] text-slate-500 font-medium leading-normal flex items-start gap-1">
+                                                                                            <span className="text-emerald-500 font-bold shrink-0">✓</span>
+                                                                                            <span>{r.startsWith('✓') ? r.slice(1).trim() : r}</span>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    <button
+                                                        onClick={handleAnalyzeTask}
+                                                        disabled={isAnalyzing}
+                                                        className="w-full text-center text-[10px] font-black text-teal-600 hover:text-teal-700 bg-transparent py-1 border border-dashed border-teal-200 hover:border-teal-400 rounded-xl transition-all"
+                                                    >
+                                                        {isAnalyzing ? 'Re-analyzing...' : '↻ Re-analyze with AI'}
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Assignment Center */}

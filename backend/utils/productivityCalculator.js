@@ -23,8 +23,18 @@ const calculateWorkerProductivity = (productivityParameters) => {
     isLunchConsider = false,
     holidays = [],
     advancedLeaveDeduction = null,
-    paidLeaveConfig = null
+    paidLeaveConfig = null,
+    isEmployeeDashboard = false
   } = options;
+
+  const now = new Date();
+  const indiaTimezoneDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  const todayStr = indiaTimezoneDate.format(now);
 
   let currentMonthMissedCount = 0;
   let currentMonthPaidLeaveCount = 0;
@@ -1596,11 +1606,8 @@ const calculateWorkerProductivity = (productivityParameters) => {
 
           // Attendance Rule
           if (!isPenaltyTriggered && advancedLeaveDeduction.attendanceRuleEnabled) {
-            const thresh = advancedLeaveDeduction.thresholds || {};
-            if (thresh.employee?.enabled ?? true) {
-              const empVal = thresh.employee?.value ?? thresh.employee ?? 90;
-              const currentRate = runningWorkingDays > 0 ? (runningPresentDays / runningWorkingDays) * 100 : 100;
-              if (currentRate < empVal) isPenaltyTriggered = true;
+            if (isEmployeeAttendancePenaltyActive) {
+              isPenaltyTriggered = true;
             }
             const dateKey = typeof date === 'string' ? date : date.toISOString().split('T')[0];
             const isCompanyPenaltyForDay = options.companyPenaltyMap ? options.companyPenaltyMap[dateKey] : options.isCompanyPenalty;
@@ -1676,6 +1683,134 @@ const calculateWorkerProductivity = (productivityParameters) => {
     }
   };
 
+  const processFutureDay = (date) => {
+    const dateString = date.toISOString().split('T')[0];
+    const isSundayDay = isSunday(date);
+
+    // Hybrid: determine workType for this future day
+    const futureActiveProject = getProjectForDate(date);
+    const futureWorkType = futureActiveProject ? 'PROJECT' : 'SAAS';
+    const futureProjectName = futureActiveProject ? futureActiveProject.projectName : null;
+    const futureProjectId = futureActiveProject ? futureActiveProject._id : null;
+
+    // effective per day salary for future day
+    const futureEffectivePerDaySalary = futureActiveProject && futureActiveProject.perDayValue !== undefined
+      ? futureActiveProject.perDayValue
+      : perDaySalary;
+
+    if (isSundayDay) {
+      totalSundayCount++;
+      const dayData = {
+        date: dateString,
+        punchTime: '-',
+        workingMinutes: 0,
+        permissionMinutes: 0,
+        salaryDeduction: 0,
+        issues: ['Sunday - Weekly off'],
+        detailedBreakdown: { intervals: [], deductions: [], permissionDetails: [] }
+      };
+      const reportEntry = {
+        date: formatDate(dateString),
+        outTime: '-',
+        inTime: '-',
+        delayTime: '-',
+        delayType: 'Sunday - Weekly off',
+        deductionAmount: formatCurrency(0),
+        totalSalary: formatCurrency(0),
+        status: 'Sunday',
+        workType: futureWorkType,
+        projectName: futureActiveProject ? futureActiveProject.projectName : null,
+        projectId: futureProjectId
+      };
+      report.push(reportEntry);
+      dailyBreakdown.push(dayData);
+    } else {
+      // Future working day or future holiday
+      const holidayInfo = isHolidayForWorker(date, worker._id);
+      
+      if (holidayInfo) {
+        totalHolidayCount++;
+        const dayData = {
+          date: dateString,
+          punchTime: '-',
+          workingMinutes: 0,
+          permissionMinutes: 0,
+          salaryDeduction: 0,
+          issues: [`Holiday - ${holidayInfo.holidayDesc || 'Public Holiday'}`],
+          detailedBreakdown: { intervals: [], deductions: [], permissionDetails: [] }
+        };
+        const reportEntry = {
+          date: formatDate(dateString),
+          outTime: '-',
+          inTime: '-',
+          delayTime: '-',
+          delayType: `Holiday - ${holidayInfo.holidayDesc || 'Public Holiday'}`,
+          deductionAmount: formatCurrency(0),
+          totalSalary: formatCurrency(futureEffectivePerDaySalary),
+          status: 'Holiday',
+          workType: futureWorkType,
+          projectId: futureProjectId
+        };
+        
+        if (futureActiveProject) {
+          grossProjectSalary += futureEffectivePerDaySalary;
+          const pid = futureActiveProject._id.toString();
+          if (!projectBreakdownMap[pid]) {
+            projectBreakdownMap[pid] = { grossEarned: 0, totalDeduction: 0, daysCount: 0 };
+          }
+          projectBreakdownMap[pid].grossEarned += futureEffectivePerDaySalary;
+          projectBreakdownMap[pid].totalDeduction += 0;
+          projectBreakdownMap[pid].daysCount += 1;
+        } else {
+          grossSaaSSalary += perDaySalary;
+        }
+        
+        report.push(reportEntry);
+        dailyBreakdown.push(dayData);
+      } else {
+        // Standard future working day: assume present (no deduction) for estimation
+        const dayData = {
+          date: dateString,
+          punchTime: '-',
+          workingMinutes: standardWorkingMinutes,
+          permissionMinutes: 0,
+          salaryDeduction: 0,
+          issues: ['Scheduled working day'],
+          detailedBreakdown: { intervals: [], deductions: [], permissionDetails: [] }
+        };
+        const reportEntry = {
+          date: formatDate(dateString),
+          outTime: '-',
+          inTime: '-',
+          delayTime: '-',
+          delayType: 'Scheduled',
+          deductionAmount: formatCurrency(0),
+          totalSalary: formatCurrency(futureEffectivePerDaySalary),
+          status: 'Scheduled',
+          workType: futureWorkType,
+          projectName: futureProjectName,
+          projectId: futureProjectId
+        };
+
+        if (futureActiveProject) {
+          grossProjectSalary += futureEffectivePerDaySalary;
+          const pid = futureActiveProject._id.toString();
+          if (!projectBreakdownMap[pid]) {
+            projectBreakdownMap[pid] = { grossEarned: 0, totalDeduction: 0, daysCount: 0 };
+          }
+          projectBreakdownMap[pid].grossEarned += futureEffectivePerDaySalary;
+          projectBreakdownMap[pid].totalDeduction += 0;
+          projectBreakdownMap[pid].daysCount += 1;
+        } else {
+          grossSaaSSalary += perDaySalary;
+        }
+
+        report.push(reportEntry);
+        dailyBreakdown.push(dayData);
+      }
+    }
+  };
+
   allDates.forEach(date => {
     // Check if month has changed to reset missed count
     const monthIdx = date.getMonth();
@@ -1693,6 +1828,8 @@ const calculateWorkerProductivity = (productivityParameters) => {
       if (punches.length > 0) {
         processDay(punches, dateString);
       }
+    } else if (isEmployeeDashboard && dateString > todayStr) {
+      processFutureDay(date);
     } else {
       processMissedDay(date);
       // Update running working days for missed days too (absent/leave/holiday)

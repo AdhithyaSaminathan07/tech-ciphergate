@@ -8,14 +8,15 @@ export const createDepartment = async (departmentData) => {
     }
 
     if (!departmentData.subdomain || departmentData.subdomain == 'main') {
-      res.status(400);
       throw new Error('Subdomain is missing, check the URL from server.');
     }
 
-    const trimmedName = departmentData.name.trim(); 
     const token = getAuthToken();
 
-    const response = await api.post('/departments', { name: trimmedName, subdomain: departmentData.subdomain }, {
+    const response = await api.post('/departments', { 
+      ...departmentData,
+      name: departmentData.name.trim() 
+    }, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -77,10 +78,12 @@ export const updateDepartment = async (id, departmentData) => {
       throw new Error('Department name must be at least 2 characters long');
     }
 
-    const trimmedName = departmentData.name.trim(); // Remove .toLowerCase()
     const token = getAuthToken();
 
-    const response = await api.put(`/departments/${id}`, { name: trimmedName }, {
+    const response = await api.put(`/departments/${id}`, { 
+      ...departmentData,
+      name: departmentData.name.trim()
+    }, {
       headers: { 
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'

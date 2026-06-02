@@ -170,4 +170,26 @@ ticketSchema.pre('save', function (next) {
 ticketSchema.index({ subdomain: 1, isDeleted: 1 });
 ticketSchema.index({ status: 1 });
 
+ticketSchema.post('save', async function(doc) {
+  try {
+    const { syncBrainItem, deleteBrainItem } = require('../services/secondBrainService');
+    if (doc.status === 'Done' && !doc.isDeleted) {
+      await syncBrainItem('ticket', doc, doc.subdomain);
+    } else {
+      await deleteBrainItem('ticket', doc._id, doc.subdomain);
+    }
+  } catch (err) {
+    console.error('[SecondBrain Sync] Failed to sync ticket on save:', err.message);
+  }
+});
+
+ticketSchema.post('remove', async function(doc) {
+  try {
+    const { deleteBrainItem } = require('../services/secondBrainService');
+    await deleteBrainItem('ticket', doc._id, doc.subdomain);
+  } catch (err) {
+    console.error('[SecondBrain Sync] Failed to delete ticket on remove:', err.message);
+  }
+});
+
 module.exports = mongoose.model('Ticket', ticketSchema);

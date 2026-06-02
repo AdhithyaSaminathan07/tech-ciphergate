@@ -371,6 +371,38 @@ const settingsSchema = mongoose.Schema({
       Story: { type: Number, default: 2 },
       Epic: { type: Number, default: 3 }
     }
+  },
+
+  // AI and Second Brain Configuration
+  aiConfig: {
+    claudeApiKey: {
+      type: String,
+      default: ''
+    },
+    aiMaxDailyRequests: {
+      type: Number,
+      default: 100
+    },
+    aiMaxMonthlyRequests: {
+      type: Number,
+      default: 1000
+    },
+    aiDailyRequestCount: {
+      type: Number,
+      default: 0
+    },
+    aiMonthlyRequestCount: {
+      type: Number,
+      default: 0
+    },
+    aiLastResetDate: {
+      type: Date,
+      default: Date.now
+    },
+    aiFeaturesEnabled: {
+      type: Boolean,
+      default: true
+    }
   }
 
 }, {

@@ -2,14 +2,52 @@ import React, { useState, useRef, useEffect, useContext, useMemo } from 'react';
 import { FaBell, FaCheckDouble, FaCog, FaBellSlash, FaCalendarCheck, FaFileInvoice, FaComments, FaCommentDots, FaHamburger, FaBookOpen } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../../context/NotificationContext';
-import { Bell, CheckCircle2, AlertCircle, Clock, MoreVertical, Settings2, Menu, X, ChevronRight, Search, Plus, LogOut, ChevronDown } from 'lucide-react';
+import { Bell, CheckCircle2, AlertCircle, Clock, MoreVertical, Settings2, Menu, X, ChevronRight, Search, Plus, LogOut, ChevronDown, Cpu, Sparkles, BrainCircuit } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getFullFileUrl } from '../../utils/fileUtils';
 import appContext from '../../context/AppContext';
 import { getWorkers } from '../../services/workerService';
 import { getAllTasks } from '../../services/taskService';
 import { getDepartments } from '../../services/departmentService';
+import { searchSecondBrain } from '../../services/aiService';
 import AdminMobileMenu from './AdminMobileMenu';
+
+const renderMarkdown = (text) => {
+  if (!text) return null;
+  
+  let html = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  
+  // Headings
+  html = html.replace(/^### (.*$)/gim, '<h3 class="text-xs font-bold text-slate-800 mt-2.5 mb-1">$1</h3>');
+  html = html.replace(/^## (.*$)/gim, '<h2 class="text-sm font-black text-slate-900 mt-3.5 mb-1.5">$1</h2>');
+  html = html.replace(/^# (.*$)/gim, '<h1 class="text-base font-black text-slate-900 mt-4.5 mb-2">$1</h1>');
+  
+  // Bold
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="font-extrabold text-slate-900">$1</strong>');
+  // Italic
+  html = html.replace(/\*(.*?)\*/g, '<em class="italic text-slate-700">$1</em>');
+  
+  // Bullet points
+  html = html.split('\n').map(line => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      return `<li class="ml-3 list-disc pl-0.5 text-slate-600 text-[11px] font-semibold leading-relaxed">${trimmed.substring(2)}</li>`;
+    }
+    if (trimmed.startsWith('✓ ')) {
+      return `<li class="ml-3 list-none pl-0.5 text-emerald-600 text-[11px] font-semibold leading-relaxed flex items-start gap-1"><span class="shrink-0">✓</span><span>${trimmed.substring(2)}</span></li>`;
+    }
+    if (!trimmed) {
+      return '<div class="h-1"></div>';
+    }
+    return `<p class="text-[11px] text-slate-600 font-medium leading-relaxed my-0.5">${line}</p>`;
+  }).join('');
+  
+  return <div className="space-y-1 select-text" dangerouslySetInnerHTML={{ __html: html }} />;
+};
+
 const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = false, onMenuClick, title }) => {
     const { notifications, unreadCount, markAsRead, settings, updateSettings } = useNotification();
     const { subdomain } = useContext(appContext);
@@ -19,6 +57,62 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [workers, setWorkers] = useState([]);
+    
+    const [isAnsweringBrain, setIsAnsweringBrain] = useState(false);
+    const [aiAnswer, setAiAnswer] = useState('');
+    const [aiAnswerResults, setAiAnswerResults] = useState([]);
+    const [typedAnswer, setTypedAnswer] = useState('');
+    const typingTimerRef = useRef(null);
+
+    // Reset AI search state when the search overlay is closed or query cleared
+    useEffect(() => {
+        if (!isSearchOpen || searchQuery === '') {
+            setIsAnsweringBrain(false);
+            setAiAnswer('');
+            setAiAnswerResults([]);
+            setTypedAnswer('');
+            if (typingTimerRef.current) clearInterval(typingTimerRef.current);
+        }
+    }, [isSearchOpen, searchQuery]);
+
+    const handleAskSecondBrain = async () => {
+        if (!searchQuery.trim()) return;
+        setIsAnsweringBrain(true);
+        setAiAnswer('');
+        setTypedAnswer('');
+        setAiAnswerResults([]);
+        if (typingTimerRef.current) clearInterval(typingTimerRef.current);
+
+        try {
+            const data = await searchSecondBrain(searchQuery, subdomain, true);
+            const rawAnswer = data.answer || 'No direct answer synthesized. Matched sources are listed below.';
+            setAiAnswer(rawAnswer);
+            setAiAnswerResults(data.results || []);
+            
+            // Trigger typing effect
+            let current = '';
+            let index = 0;
+            typingTimerRef.current = setInterval(() => {
+                if (index < rawAnswer.length) {
+                    current += rawAnswer.charAt(index);
+                    if (index + 1 < rawAnswer.length) {
+                        current += rawAnswer.charAt(index + 1);
+                    }
+                    setTypedAnswer(current);
+                    index += 2;
+                } else {
+                    clearInterval(typingTimerRef.current);
+                }
+            }, 10);
+        } catch (error) {
+            console.error('AI search failed:', error);
+            const errText = `*Failed to consult AI Second Brain:* ${error.message || 'Unknown error'}`;
+            setAiAnswer(errText);
+            setTypedAnswer(errText);
+        } finally {
+            setIsAnsweringBrain(false);
+        }
+    };
     const [tasks, setTasks] = useState([]);
     const [departments, setDepartments] = useState([]);
     const [isLoadingSearch, setIsLoadingSearch] = useState(false);
@@ -606,12 +700,78 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                 />
+                                {searchQuery.trim().length > 0 && !isAnsweringBrain && !typedAnswer && (
+                                    <button
+                                        onClick={handleAskSecondBrain}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-teal-500 to-indigo-600 text-white rounded-xl text-xs font-black shadow-md hover:opacity-90 active:scale-[0.98] transition-all shrink-0"
+                                    >
+                                        <Cpu size={14} className="animate-pulse" />
+                                        Ask AI
+                                    </button>
+                                )}
                                 <button onClick={() => { setIsSearchOpen(false); setSearchQuery(''); }} className="text-slate-400 hover:text-slate-600">
                                     <X size={20} />
                                 </button>
                             </div>
                             <div className="p-4 max-h-[400px] overflow-y-auto">
-                                {isLoadingSearch ? (
+                                {isAnsweringBrain ? (
+                                    <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                                        <div className="relative">
+                                            <div className="w-12 h-12 rounded-full bg-teal-50 flex items-center justify-center border border-teal-100 animate-pulse">
+                                                <BrainCircuit className="w-6 h-6 text-teal-600" />
+                                            </div>
+                                            <div className="absolute inset-0 rounded-full border-2 border-teal-500 border-t-transparent animate-spin"></div>
+                                        </div>
+                                        <div>
+                                            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-widest">Consulting AI Second Brain</h4>
+                                            <p className="text-[10px] text-slate-400 font-medium mt-1">Retrieving repository files, wikis, and historical tasks...</p>
+                                        </div>
+                                    </div>
+                                ) : typedAnswer ? (
+                                    <div className="space-y-4 animate-in fade-in duration-300">
+                                        {/* AI Answer Card */}
+                                        <div className="bg-gradient-to-br from-indigo-50/50 to-teal-50/50 border border-teal-100 rounded-2xl p-4 shadow-sm relative overflow-hidden">
+                                            <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/5 rounded-full blur-2xl"></div>
+                                            <div className="flex items-center justify-between border-b border-teal-100/50 pb-2.5 mb-3">
+                                                <div className="flex items-center gap-1.5">
+                                                    <Cpu size={16} className="text-teal-600" />
+                                                    <span className="text-xs font-black text-slate-700 uppercase tracking-wider">AI Second Brain Synthesis</span>
+                                                </div>
+                                                <button 
+                                                    onClick={() => {
+                                                        setTypedAnswer('');
+                                                        setAiAnswer('');
+                                                        setAiAnswerResults([]);
+                                                    }}
+                                                    className="text-[9px] font-black text-teal-600 hover:text-teal-700 uppercase tracking-widest"
+                                                >
+                                                    ← Back to Search
+                                                </button>
+                                            </div>
+                                            <div className="text-slate-800 text-xs font-medium prose max-w-none">
+                                                {renderMarkdown(typedAnswer)}
+                                            </div>
+                                        </div>
+
+                                        {/* Matches Sources */}
+                                        {aiAnswerResults.length > 0 && (
+                                            <div className="space-y-2">
+                                                <h4 className="text-[10px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1">📂 Matched Context Sources ({aiAnswerResults.length})</h4>
+                                                <div className="space-y-1.5">
+                                                    {aiAnswerResults.map((r, i) => (
+                                                        <div key={i} className="p-2.5 bg-white border border-slate-100 rounded-xl shadow-sm hover:border-slate-200 transition-all flex flex-col gap-1">
+                                                            <div className="flex justify-between items-center">
+                                                                <span className="text-[11px] font-bold text-slate-800">{r.title}</span>
+                                                                <span className="text-[8px] font-extrabold px-1.5 py-0.5 bg-slate-50 border border-slate-200 text-slate-500 rounded-full uppercase">{r.type}</span>
+                                                            </div>
+                                                            <p className="text-[10px] text-slate-500 line-clamp-2 leading-relaxed">{r.content}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : isLoadingSearch ? (
                                     <div className="flex justify-center py-4">
                                         <span className="text-sm text-slate-500">Loading data...</span>
                                     </div>

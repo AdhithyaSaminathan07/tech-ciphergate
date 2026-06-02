@@ -17,6 +17,8 @@ import FaceTest from '../../components/admin/FaceTest'; // Import FaceTest
 import NotificationManagement from '../../components/admin/NotificationManagement'; // Import NotificationManagement
 import WorkAllocation from '../../components/admin/WorkAllocation';
 import KpiManagement from '../../components/admin/KpiManagement';
+import SecondBrainAdmin from '../../components/admin/SecondBrainAdmin';
+
 const AdminDashboard = () => {
   return (
     <Routes>
@@ -37,6 +39,7 @@ const AdminDashboard = () => {
       <Route path="face-attendance" element={<FaceAttendancePage />} />
       <Route path="face-test" element={<FaceTest />} /> {/* Add FaceTest route */}
       <Route path="notifications" element={<NotificationManagement />} /> {/* Add NotificationManagement route */}
+      <Route path="second-brain" element={<SecondBrainAdmin />} />
       {/* Redirect to dashboard for unknown routes */}
       <Route path="*" element={<Navigate to="/admin" replace />} />
     </Routes>
