@@ -87,6 +87,29 @@ const githubService = {
             console.error('Error fetching repo chat repos:', error);
             throw error;
         }
+    },
+
+    // Trigger GitHub background sync
+    triggerSync: async () => {
+        try {
+            const response = await api.post('/github/sync');
+            return response.data;
+        } catch (error) {
+            console.error('Error triggering GitHub sync:', error);
+            throw error;
+        }
+    },
+
+    // Get GitHub sync job status
+    getSyncStatus: async (jobId) => {
+        try {
+            const params = jobId ? { jobId } : {};
+            const response = await api.get('/github/sync-status', { params });
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching GitHub sync status:', error);
+            throw error;
+        }
     }
 };
 

@@ -13,7 +13,7 @@ const secondBrainItemSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['project', 'worker', 'wiki', 'ticket'],
+    enum: ['project', 'worker', 'wiki', 'ticket', 'github_repo_intelligence', 'github_contributor_intelligence'],
     required: true
   },
   subdomain: {

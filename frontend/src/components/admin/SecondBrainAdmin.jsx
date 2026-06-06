@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { toast } from 'react-toastify';
-import { FaPlus, FaTrash, FaEdit, FaSearch, FaBook, FaBrain, FaSync, FaTags, FaStickyNote } from 'react-icons/fa';
+import { FaPlus, FaTrash, FaEdit, FaSearch, FaBook, FaBrain, FaSync, FaTags, FaStickyNote, FaHistory } from 'react-icons/fa';
 import { getDocuments, createDocument, updateDocument, deleteDocument } from '../../services/documentService';
-import { getBrainStats, reindexData, searchSecondBrain } from '../../services/aiService';
+import { getBrainStats, reindexData, searchSecondBrain, getAiAuditLogs } from '../../services/aiService';
 import Card from '../common/Card';
 import Button from '../common/Button';
 import Modal from '../common/Modal';
@@ -40,12 +40,29 @@ const SecondBrainAdmin = () => {
   const [testSearchResults, setTestSearchResults] = useState([]);
   const [isSearchingTest, setIsSearchingTest] = useState(false);
 
+  // AI Audit History logs state
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+
   useEffect(() => {
     if (subdomain && subdomain !== 'main') {
       loadDocuments();
       loadStats();
+      loadAuditLogs();
     }
   }, [subdomain]);
+
+  const loadAuditLogs = async () => {
+    setIsLoadingLogs(true);
+    try {
+      const data = await getAiAuditLogs();
+      setAuditLogs(data || []);
+    } catch (error) {
+      console.error('Failed to load AI audit logs:', error);
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
 
   const loadDocuments = async () => {
     setIsLoadingDocs(true);
@@ -59,6 +76,7 @@ const SecondBrainAdmin = () => {
       setIsLoadingDocs(false);
     }
   };
+
 
   const loadStats = async () => {
     try {
@@ -200,10 +218,19 @@ const SecondBrainAdmin = () => {
           >
             <FaBrain className="mr-2 inline" /> Brain Index Stats
           </Button>
+          <Button 
+            variant={activeMainTab === 'audit' ? 'primary' : 'outline'}
+            onClick={() => {
+              setActiveMainTab('audit');
+              loadAuditLogs();
+            }}
+          >
+            <FaHistory className="mr-2 inline" /> AI Audit History
+          </Button>
         </div>
       </div>
 
-      {activeMainTab === 'wikis' ? (
+      {activeMainTab === 'wikis' && (
         <Card>
           <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 mb-6">
             <div className="relative flex-1 max-w-md">
@@ -298,7 +325,9 @@ const SecondBrainAdmin = () => {
             </div>
           )}
         </Card>
-      ) : (
+      )}
+
+      {activeMainTab === 'index' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Index Stats */}
           <Card className="lg:col-span-1">
@@ -407,6 +436,115 @@ const SecondBrainAdmin = () => {
             </div>
           </Card>
         </div>
+      )}
+
+      {activeMainTab === 'audit' && (
+        <Card>
+          <div className="flex justify-between items-center mb-6 border-b pb-4 border-gray-100">
+            <h2 className="text-lg font-bold text-gray-800 flex items-center space-x-2">
+              <FaHistory className="text-indigo-600 animate-spin-slow" />
+              <span>AI Task Recommendation Audit Log</span>
+            </h2>
+            <Button variant="outline" onClick={loadAuditLogs} disabled={isLoadingLogs}>
+              {isLoadingLogs ? <Spinner size="sm" className="mr-2" /> : <FaSync className="mr-2" />} Refresh Logs
+            </Button>
+          </div>
+
+          {isLoadingLogs ? (
+            <div className="flex justify-center py-12">
+              <Spinner size="lg" />
+            </div>
+          ) : auditLogs.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              No audit logs recorded yet. AI recommendation decisions will be logged when manager approvals (Apply, Merge, or Assign) are made.
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50/70">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Task</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">AI Recommendation</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Match Scores &amp; Reasons</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Action Taken</th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Approved By</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100 text-sm">
+                  {auditLogs.map((log) => (
+                    <tr key={log._id} className="hover:bg-gray-50/55 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-xs">
+                        {new Date(log.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-gray-900 leading-snug">{log.taskTitle}</div>
+                        <div className="text-2xs text-gray-400 mt-0.5">Task ID: {log.taskId}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="space-y-1">
+                          <div className="text-xs">
+                            <span className="font-semibold text-gray-500 uppercase tracking-wider text-[10px]">Priority:</span>{' '}
+                            <span className={`font-extrabold uppercase ${log.recommendedPriority === 'High' ? 'text-red-500' : log.recommendedPriority === 'Medium' ? 'text-orange-500' : 'text-blue-500'}`}>
+                              {log.recommendedPriority}
+                            </span>
+                          </div>
+                          <div className="text-xs">
+                            <span className="font-semibold text-gray-500 uppercase tracking-wider text-[10px]">Complexity:</span>{' '}
+                            <span className="font-bold text-gray-800">{log.recommendedComplexity}</span>
+                          </div>
+                          <div className="text-xs">
+                            <span className="font-semibold text-gray-500 uppercase tracking-wider text-[10px]">Est. Time:</span>{' '}
+                            <span className="font-extrabold text-gray-700">{log.estimatedHours} hrs</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 max-w-xs">
+                        <div className="space-y-3">
+                          {log.recommendedDevelopers && log.recommendedDevelopers.map((rec, i) => (
+                            <div key={i} className="text-xs bg-slate-50/50 p-2 rounded-lg border border-slate-100">
+                              <div className="flex items-center justify-between font-bold text-gray-800 mb-1">
+                                <span>{rec.developerName}</span>
+                                <span className="text-[10px] font-extrabold px-1.5 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-full">{rec.matchScore}% Match</span>
+                              </div>
+                              {rec.reasons && rec.reasons.length > 0 && (
+                                <div className="space-y-0.5 pl-1 mt-1 border-l-2 border-indigo-200">
+                                  {rec.reasons.map((r, ri) => (
+                                    <div key={ri} className="text-[9px] text-gray-500 font-medium leading-normal flex items-start gap-1">
+                                      <span className="text-emerald-500 font-bold shrink-0">✓</span>
+                                      <span>{r.startsWith('✓') ? r.slice(1).trim() : r}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-block px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider ${
+                          log.actionTaken === 'Applied Specs' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
+                          log.actionTaken === 'Merged Subtasks' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
+                          log.actionTaken === 'Assigned Developer' ? 'bg-green-50 text-green-700 border border-green-100' :
+                          'bg-gray-50 text-gray-700 border border-gray-100'
+                        }`}>
+                          {log.actionTaken}
+                        </span>
+                        <div className="text-[11px] text-gray-600 font-medium mt-1.5 whitespace-pre-wrap leading-relaxed">
+                          {log.actionDetail}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="font-bold text-gray-800">{log.performedBy?.name || 'Manager'}</div>
+                        <div className="text-2xs text-gray-400">@{log.performedBy?.username || 'manager'}</div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
       )}
 
       {/* Add Wiki Modal */}

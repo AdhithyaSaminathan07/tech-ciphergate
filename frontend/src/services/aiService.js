@@ -62,3 +62,30 @@ export const reindexData = async (subdomainVal) => {
     throw error.response?.data || new Error('Reindexing failed');
   }
 };
+
+export const logAiDecision = async (payload) => {
+  try {
+    const token = getAuthToken();
+    const response = await api.post('/ai/audit-log', payload, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Log AI Decision error:', error);
+    throw error.response?.data || new Error('Failed to log AI decision');
+  }
+};
+
+export const getAiAuditLogs = async () => {
+  try {
+    const token = getAuthToken();
+    const response = await api.get('/ai/audit-logs', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Get AI Audit Logs error:', error);
+    throw error.response?.data || new Error('Failed to get AI audit logs');
+  }
+};
+

@@ -38,6 +38,19 @@ const startCronJobs = () => {
     timezone: "Asia/Kolkata"
   });
 
+  // Background GitHub Synchronization every 15 minutes
+  cron.schedule('*/15 * * * *', async () => {
+    try {
+      const { runBackgroundGitHubSync } = require('./githubSyncService');
+      await runBackgroundGitHubSync();
+    } catch (err) {
+      console.error('[Cron] Background GitHub sync failed:', err);
+    }
+  }, {
+    scheduled: true,
+    timezone: "Asia/Kolkata"
+  });
+
   console.log('Cron jobs started successfully');
 };
 

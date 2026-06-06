@@ -8,7 +8,9 @@ const {
     getEmployees,
     getLiveLeaderboard,
     getLiveRepositories,
-    clearGitHubCache
+    clearGitHubCache,
+    triggerSync,
+    getSyncStatus
 } = require('../controllers/githubController');
 const { protect, adminOnly } = require('../middleware/authMiddleware');
 
@@ -24,5 +26,7 @@ router.get('/employees', protect, adminOnly, getEmployees);
 router.get('/live-leaderboard', protect, adminOnly, getLiveLeaderboard);
 router.get('/live-repositories', protect, adminOnly, getLiveRepositories);
 router.post('/clear-cache', protect, adminOnly, clearGitHubCache);
+router.post('/sync', protect, adminOnly, triggerSync);
+router.get('/sync-status', protect, adminOnly, getSyncStatus);
 
 module.exports = router;

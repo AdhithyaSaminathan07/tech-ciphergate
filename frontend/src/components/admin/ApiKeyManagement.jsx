@@ -3,7 +3,7 @@ import axios from 'axios';
 import { 
     FiKey, FiPlus, FiTrash2, FiCopy, FiCheck, FiShield, 
     FiCalendar, FiActivity, FiToggleLeft, FiToggleRight,
-    FiAlertTriangle
+    FiAlertTriangle, FiChevronDown, FiTerminal, FiCode, FiGlobe, FiInfo
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
@@ -55,6 +55,49 @@ const ApiKeyManagement = () => {
     const [customPermissions, setCustomPermissions] = useState([]);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [keyToDelete, setKeyToDelete] = useState(null);
+    const [activeDropdownId, setActiveDropdownId] = useState(null);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [generatedKeyData, setGeneratedKeyData] = useState(null);
+    const [selectedEndpoint, setSelectedEndpoint] = useState('attendance');
+
+    const getBaseUrl = () => {
+        let url = import.meta.env.VITE_API_URL || window.location.origin;
+        if (url.endsWith('/api')) {
+            url = url.substring(0, url.length - 4);
+        }
+        if (!url.startsWith('http')) {
+            url = window.location.origin;
+        }
+        return url;
+    };
+
+    const copyCurlCommand = (key) => {
+        const baseUrl = getBaseUrl();
+        const curl = `curl -H "x-api-key: ${key}" "${baseUrl}/api/external/${selectedEndpoint}"`;
+        navigator.clipboard.writeText(curl);
+        toast.info('Copied curl command to clipboard!');
+    };
+
+    const copyAxiosRequest = (key) => {
+        const baseUrl = getBaseUrl();
+        const snippet = `const axios = require('axios');\n\naxios.get('${baseUrl}/api/external/${selectedEndpoint}', {\n  headers: { 'x-api-key': '${key}' }\n});`;
+        navigator.clipboard.writeText(snippet);
+        toast.info('Copied Axios snippet to clipboard!');
+    };
+    
+    const copyFetchRequest = (key) => {
+        const baseUrl = getBaseUrl();
+        const snippet = `fetch('${baseUrl}/api/external/${selectedEndpoint}', {\n  headers: {\n    'x-api-key': '${key}'\n  }\n});`;
+        navigator.clipboard.writeText(snippet);
+        toast.info('Copied Fetch snippet to clipboard!');
+    };
+
+    const copyEndpointUrl = () => {
+        const baseUrl = getBaseUrl();
+        const url = `${baseUrl}/api/external/${selectedEndpoint}`;
+        navigator.clipboard.writeText(url);
+        toast.info('Copied Endpoint URL to clipboard!');
+    };
     
     // Form state
     const [formData, setFormData] = useState({
@@ -102,6 +145,8 @@ const ApiKeyManagement = () => {
             toast.success('API Key generated successfully!');
             setKeys([res.data.data, ...keys]);
             setShowCreateModal(false);
+            setGeneratedKeyData(res.data.data);
+            setShowSuccessModal(true);
             setFormData({ ...formData, clientName: '' });
             setCustomPermissions([]);
             setPermissionType('read');
@@ -236,17 +281,117 @@ const ApiKeyManagement = () => {
                                         <p className="text-xs text-gray-500">{apiKey.subdomain}</p>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <div className="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-md border border-gray-200 group w-fit">
+                                        <div className="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-md border border-gray-200 group w-fit relative">
                                             <code className="text-xs font-mono text-blue-700">
                                                 {apiKey.key ? `${apiKey.key.substring(0, 8)}...${apiKey.key.substring(apiKey.key.length - 4)}` : 'N/A'}
                                             </code>
                                             {apiKey.key && (
-                                                <button 
-                                                    onClick={() => copyToClipboard(apiKey.key)}
-                                                    className="text-gray-400 hover:text-blue-600 transition-colors"
-                                                >
-                                                    {copiedKey === apiKey.key ? <FiCheck className="text-green-500" /> : <FiCopy size={14} />}
-                                                </button>
+                                                <div className="relative flex items-center">
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => copyToClipboard(apiKey.key)}
+                                                        className="text-gray-400 hover:text-blue-600 transition-colors mr-1"
+                                                        title="Copy API Key Only"
+                                                    >
+                                                        {copiedKey === apiKey.key ? <FiCheck className="text-green-500" /> : <FiCopy size={14} />}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setActiveDropdownId(activeDropdownId === apiKey._id ? null : apiKey._id)}
+                                                        className="text-gray-400 hover:text-slate-700 transition-colors p-0.5 border-l border-gray-300"
+                                                        title="Copy options (endpoints, code snippets)"
+                                                    >
+                                                        <FiChevronDown size={14} className={`transition-transform duration-200 ${activeDropdownId === apiKey._id ? 'rotate-180' : ''}`} />
+                                                    </button>
+
+                                                    {activeDropdownId === apiKey._id && (
+                                                        <>
+                                                            <div 
+                                                                className="fixed inset-0 z-40" 
+                                                                onClick={() => setActiveDropdownId(null)}
+                                                            />
+                                                            <div className="absolute right-0 mt-8 w-72 bg-white rounded-2xl border border-slate-200 shadow-xl z-50 p-2 text-left animate-in fade-in slide-in-from-top-2 duration-150">
+                                                                <div className="px-3 py-2 border-b border-slate-100 mb-1">
+                                                                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Target Endpoint</label>
+                                                                    <select 
+                                                                        value={selectedEndpoint} 
+                                                                        onChange={(e) => setSelectedEndpoint(e.target.value)}
+                                                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2.5 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer font-medium"
+                                                                    >
+                                                                        <option value="attendance">Attendance (/attendance)</option>
+                                                                        <option value="report">Attendance Summary (/report)</option>
+                                                                        <option value="invoices">Invoices (/invoices)</option>
+                                                                        <option value="workers">Workers List (/workers)</option>
+                                                                        <option value="tasks">Tasks (/tasks)</option>
+                                                                        <option value="leaves">Leaves (/leaves)</option>
+                                                                        <option value="fines">Fines (/fines)</option>
+                                                                        <option value="departments">Departments (/departments)</option>
+                                                                        <option value="holidays">Holidays (/holidays)</option>
+                                                                        <option value="tickets">Helpdesk Tickets (/tickets)</option>
+                                                                        <option value="settings">Settings (/settings)</option>
+                                                                    </select>
+                                                                </div>
+                                                                <div className="space-y-0.5">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            copyToClipboard(apiKey.key);
+                                                                            setActiveDropdownId(null);
+                                                                        }}
+                                                                        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-slate-50 rounded-xl transition-all"
+                                                                    >
+                                                                        <FiCopy size={13} className="text-slate-400" />
+                                                                        Copy Key Only (Without Endpoint)
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            copyCurlCommand(apiKey.key);
+                                                                            setActiveDropdownId(null);
+                                                                        }}
+                                                                        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-slate-50 rounded-xl transition-all"
+                                                                    >
+                                                                        <FiTerminal size={13} className="text-slate-400" />
+                                                                        Copy curl Command
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            copyEndpointUrl();
+                                                                            setActiveDropdownId(null);
+                                                                        }}
+                                                                        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-slate-50 rounded-xl transition-all"
+                                                                    >
+                                                                        <FiGlobe size={13} className="text-slate-400" />
+                                                                        Copy Endpoint URL Only
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            copyAxiosRequest(apiKey.key);
+                                                                            setActiveDropdownId(null);
+                                                                        }}
+                                                                        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-slate-50 rounded-xl transition-all"
+                                                                    >
+                                                                        <FiCode size={13} className="text-slate-400" />
+                                                                        Copy Axios Snippet
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            copyFetchRequest(apiKey.key);
+                                                                            setActiveDropdownId(null);
+                                                                        }}
+                                                                        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-slate-50 rounded-xl transition-all"
+                                                                    >
+                                                                        <FiCode size={13} className="text-slate-400" />
+                                                                        Copy Fetch Snippet
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
                                     </td>
@@ -505,6 +650,141 @@ const ApiKeyManagement = () => {
                                     Yes, Revoke
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Success Modal (Generated Key) */}
+            {showSuccessModal && generatedKeyData && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] border border-slate-100 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <div className="bg-gradient-to-br from-green-600 via-emerald-600 to-teal-800 p-6 text-white relative">
+                            <button 
+                                type="button"
+                                onClick={() => setShowSuccessModal(false)}
+                                className="absolute top-5 right-5 text-emerald-100 hover:text-white transition-colors p-1.5 hover:bg-white/10 rounded-xl"
+                            >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                            <h2 className="text-xl font-extrabold flex items-center gap-3">
+                                <div className="p-2.5 bg-white/10 rounded-xl text-green-300 border border-white/10 shadow-inner animate-bounce">
+                                    <FiCheck size={18} />
+                                </div>
+                                Key Generated Successfully!
+                            </h2>
+                            <p className="text-emerald-100 text-xs mt-2 font-normal leading-relaxed">
+                                Your API key for <strong className="text-white font-bold">{generatedKeyData.clientName}</strong> is ready. Please save it now.
+                            </p>
+                        </div>
+                        
+                        <div className="p-6 space-y-5">
+                            {/* Key display field */}
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Your Secret API Key</label>
+                                <div className="flex items-center justify-between gap-3 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-4 font-mono text-sm text-slate-800 break-all select-all font-semibold relative group">
+                                    <span className="text-blue-700">{generatedKeyData.key}</span>
+                                    <button 
+                                        type="button"
+                                        onClick={() => copyToClipboard(generatedKeyData.key)}
+                                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all shrink-0"
+                                        title="Copy API Key"
+                                    >
+                                        {copiedKey === generatedKeyData.key ? <FiCheck className="text-green-500" /> : <FiCopy size={16} />}
+                                    </button>
+                                </div>
+                                <p className="text-[11px] text-amber-600 font-medium flex items-center gap-1.5 mt-2 bg-amber-50 border border-amber-100 px-3 py-2 rounded-xl">
+                                    <FiInfo size={14} className="shrink-0" />
+                                    Make sure to copy this key now. You will not be able to see the full key here again for security.
+                                </p>
+                            </div>
+
+                            {/* Options to Copy with/without Endpoint */}
+                            <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-150 space-y-4">
+                                <div className="flex items-center justify-between border-b border-slate-150 pb-3">
+                                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Quick Integration Snippets</span>
+                                    <select 
+                                        value={selectedEndpoint} 
+                                        onChange={(e) => setSelectedEndpoint(e.target.value)}
+                                        className="bg-white border border-slate-200 rounded-lg py-1.5 px-2.5 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer font-medium shadow-sm"
+                                    >
+                                        <option value="attendance">Attendance (/attendance)</option>
+                                        <option value="report">Attendance Summary (/report)</option>
+                                        <option value="invoices">Invoices (/invoices)</option>
+                                        <option value="workers">Workers List (/workers)</option>
+                                        <option value="tasks">Tasks (/tasks)</option>
+                                        <option value="leaves">Leaves (/leaves)</option>
+                                        <option value="fines">Fines (/fines)</option>
+                                        <option value="departments">Departments (/departments)</option>
+                                        <option value="holidays">Holidays (/holidays)</option>
+                                        <option value="tickets">Helpdesk Tickets (/tickets)</option>
+                                        <option value="settings">Settings (/settings)</option>
+                                    </select>
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => copyCurlCommand(generatedKeyData.key)}
+                                        className="w-full flex items-center justify-between px-4 py-3 bg-white border border-slate-150 hover:border-blue-400 hover:shadow-md rounded-xl text-left transition-all group"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-slate-50 text-slate-600 rounded-lg group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                                                <FiTerminal size={15} />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-800">Copy curl Command</p>
+                                                <p className="text-[10px] text-slate-400 font-medium">For terminal testing and command-line usage</p>
+                                            </div>
+                                        </div>
+                                        <FiCopy size={14} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => copyEndpointUrl()}
+                                        className="w-full flex items-center justify-between px-4 py-3 bg-white border border-slate-150 hover:border-blue-400 hover:shadow-md rounded-xl text-left transition-all group"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-slate-50 text-slate-600 rounded-lg group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                                                <FiGlobe size={15} />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-800">Copy Endpoint URL Only</p>
+                                                <p className="text-[10px] text-slate-400 font-medium">Get the raw REST API target url</p>
+                                            </div>
+                                        </div>
+                                        <FiCopy size={14} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => copyAxiosRequest(generatedKeyData.key)}
+                                        className="w-full flex items-center justify-between px-4 py-3 bg-white border border-slate-150 hover:border-blue-400 hover:shadow-md rounded-xl text-left transition-all group"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-slate-50 text-slate-600 rounded-lg group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                                                <FiCode size={15} />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-800">Copy Axios Code Snippet</p>
+                                                <p className="text-[10px] text-slate-400 font-medium">Ready-to-use JavaScript Axios request snippet</p>
+                                            </div>
+                                        </div>
+                                        <FiCopy size={14} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <button 
+                                type="button"
+                                onClick={() => setShowSuccessModal(false)}
+                                className="w-full py-3 bg-slate-800 hover:bg-slate-900 text-white font-semibold rounded-xl shadow-md transition-all text-sm"
+                            >
+                                Done, I have saved the key
+                            </button>
                         </div>
                     </div>
                 </div>

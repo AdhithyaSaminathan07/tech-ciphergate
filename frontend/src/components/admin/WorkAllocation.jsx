@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { getFullFileUrl } from '../../utils/fileUtils';
 import { toast } from 'react-toastify';
-import { analyzeTask } from '../../services/aiService';
+import { analyzeTask, logAiDecision } from '../../services/aiService';
 import {
     Select,
     SelectContent,
@@ -400,6 +400,27 @@ const WorkAllocation = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [aiAnalysisResult, setAiAnalysisResult] = useState(null);
+    const [selectedSuggestedSubtasks, setSelectedSuggestedSubtasks] = useState({});
+    const [expandedRecs, setExpandedRecs] = useState({});
+
+    const toggleRecExpand = (devId) => {
+        setExpandedRecs(prev => ({
+            ...prev,
+            [devId]: !prev[devId]
+        }));
+    };
+
+    useEffect(() => {
+        if (aiAnalysisResult && aiAnalysisResult.subtasks) {
+            const initial = {};
+            aiAnalysisResult.subtasks.forEach((_, idx) => {
+                initial[idx] = true;
+            });
+            setSelectedSuggestedSubtasks(initial);
+        } else {
+            setSelectedSuggestedSubtasks({});
+        }
+    }, [aiAnalysisResult]);
 
     useEffect(() => {
         setAiAnalysisResult(null);
@@ -1024,54 +1045,141 @@ const WorkAllocation = () => {
         }
     };
 
-    const handleApplySpecs = () => {
+    const handleApplySpecs = async () => {
         if (!aiAnalysisResult) return;
-        
+
         const updates = {};
         if (aiAnalysisResult.priority) {
             updates.priority = aiAnalysisResult.priority;
         }
-        
+
         if (aiAnalysisResult.estimatedHours) {
             updates.estimatedDays = Math.ceil((aiAnalysisResult.estimatedHours / 8) * 100) / 100;
             updates.storyPoints = Math.round(aiAnalysisResult.estimatedHours / 8);
-            
+
             const baseDate = selectedTicket.startDate ? new Date(selectedTicket.startDate) : new Date();
             const end = new Date(baseDate);
             end.setDate(baseDate.getDate() + Math.max(1, Math.round(aiAnalysisResult.estimatedHours / 8)));
-            
+
             updates.endDate = end.toISOString().split('T')[0];
             if (!selectedTicket.startDate) {
                 updates.startDate = baseDate.toISOString().split('T')[0];
             }
         }
-        
+
         updateSelectedTicket(updates, false);
         toast.success('AI parameters applied successfully!');
+
+        if (selectedTicket && selectedTicket._id !== 'new') {
+            try {
+                await logAiDecision({
+                    taskId: selectedTicket._id,
+                    taskTitle: selectedTicket.title,
+                    recommendedPriority: aiAnalysisResult.priority || 'Medium',
+                    recommendedComplexity: aiAnalysisResult.complexity || 'Medium',
+                    estimatedHours: aiAnalysisResult.estimatedHours || 0,
+                    recommendedDevelopers: (aiAnalysisResult.recommendations || []).map(r => ({
+                        developerId: r.developerId,
+                        developerName: r.developerName,
+                        matchScore: r.matchScore,
+                        reasons: r.reasons
+                    })),
+                    actionTaken: 'Applied Specs',
+                    actionDetail: `Applied specs: priority=${aiAnalysisResult.priority}, complexity=${aiAnalysisResult.complexity}, hours=${aiAnalysisResult.estimatedHours}`
+                });
+            } catch (err) {
+                console.error("Failed to log AI decision:", err);
+            }
+        }
     };
 
-    const handleMergeSubtasks = () => {
+    const handleMergeSubtasks = async () => {
         if (!aiAnalysisResult || !aiAnalysisResult.subtasks) return;
-        
+
+        const selectedSubtasks = aiAnalysisResult.subtasks.filter((_, idx) => selectedSuggestedSubtasks[idx]);
+        if (selectedSubtasks.length === 0) {
+            toast.error('No subtasks selected to merge');
+            return;
+        }
+
         const existing = selectedTicket.checklist || [];
         const cleanExisting = existing.filter(item => item.text && item.text.trim() !== '');
-        
-        const newItems = aiAnalysisResult.subtasks.map((text, idx) => ({
+
+        const newItems = selectedSubtasks.map((text, idx) => ({
             text,
             completed: false,
             _id: `ai-${Date.now()}-${idx}`
         }));
-        
+
         const mergedChecklist = [...cleanExisting, ...newItems];
         if (mergedChecklist.length === 0) {
             mergedChecklist.push({ text: '', completed: false, _id: `default-${Date.now()}` });
         }
-        
+
         updateSelectedTicket({ checklist: mergedChecklist }, false);
-        toast.success('AI subtasks merged into checklist!');
+        toast.success('Selected AI subtasks merged into checklist!');
+
+        if (selectedTicket && selectedTicket._id !== 'new') {
+            try {
+                await logAiDecision({
+                    taskId: selectedTicket._id,
+                    taskTitle: selectedTicket.title,
+                    recommendedPriority: aiAnalysisResult.priority || 'Medium',
+                    recommendedComplexity: aiAnalysisResult.complexity || 'Medium',
+                    estimatedHours: aiAnalysisResult.estimatedHours || 0,
+                    recommendedDevelopers: (aiAnalysisResult.recommendations || []).map(r => ({
+                        developerId: r.developerId,
+                        developerName: r.developerName,
+                        matchScore: r.matchScore,
+                        reasons: r.reasons
+                    })),
+                    actionTaken: 'Merged Subtasks',
+                    actionDetail: `Merged ${newItems.length} suggested subtasks into checklist.`
+                });
+            } catch (err) {
+                console.error("Failed to log AI decision:", err);
+            }
+        }
     };
 
-    const handleAssignDev = (devId) => {
+    const handleMergeSingleSubtask = async (text, idx) => {
+        const existing = selectedTicket.checklist || [];
+        const cleanExisting = existing.filter(item => item.text && item.text.trim() !== '');
+
+        const newItem = {
+            text,
+            completed: false,
+            _id: `ai-${Date.now()}-${idx}`
+        };
+
+        const mergedChecklist = [...cleanExisting, newItem];
+        updateSelectedTicket({ checklist: mergedChecklist }, false);
+        toast.success('AI subtask added to checklist!');
+
+        if (selectedTicket && selectedTicket._id !== 'new') {
+            try {
+                await logAiDecision({
+                    taskId: selectedTicket._id,
+                    taskTitle: selectedTicket.title,
+                    recommendedPriority: aiAnalysisResult.priority || 'Medium',
+                    recommendedComplexity: aiAnalysisResult.complexity || 'Medium',
+                    estimatedHours: aiAnalysisResult.estimatedHours || 0,
+                    recommendedDevelopers: (aiAnalysisResult.recommendations || []).map(r => ({
+                        developerId: r.developerId,
+                        developerName: r.developerName,
+                        matchScore: r.matchScore,
+                        reasons: r.reasons
+                    })),
+                    actionTaken: 'Merged Subtasks',
+                    actionDetail: `Merged single suggested subtask: "${text}"`
+                });
+            } catch (err) {
+                console.error("Failed to log AI decision:", err);
+            }
+        }
+    };
+
+    const handleAssignDev = async (devId) => {
         const currentAssigneeIds = (selectedTicket.assignees || []).map(a => typeof a === 'object' ? a._id : a);
         if (currentAssigneeIds.includes(devId)) {
             toast.info('Developer is already assigned');
@@ -1079,6 +1187,30 @@ const WorkAllocation = () => {
         }
         updateSelectedTicket({ assignees: [...currentAssigneeIds, devId] }, false);
         toast.success('Developer assigned successfully!');
+
+        if (selectedTicket && selectedTicket._id !== 'new') {
+            const dev = workers.find(w => w._id === devId);
+            const devName = dev ? dev.name : devId;
+            try {
+                await logAiDecision({
+                    taskId: selectedTicket._id,
+                    taskTitle: selectedTicket.title,
+                    recommendedPriority: aiAnalysisResult.priority || 'Medium',
+                    recommendedComplexity: aiAnalysisResult.complexity || 'Medium',
+                    estimatedHours: aiAnalysisResult.estimatedHours || 0,
+                    recommendedDevelopers: (aiAnalysisResult.recommendations || []).map(r => ({
+                        developerId: r.developerId,
+                        developerName: r.developerName,
+                        matchScore: r.matchScore,
+                        reasons: r.reasons
+                    })),
+                    actionTaken: 'Assigned Developer',
+                    actionDetail: `Assigned recommended developer: ${devName}`
+                });
+            } catch (err) {
+                console.error("Failed to log AI decision:", err);
+            }
+        }
     };
 
     const handleDeleteTicket = (ticketToDelete = selectedTicket) => {
@@ -1207,9 +1339,9 @@ const WorkAllocation = () => {
 
     const workloadColor = (activeTasks) => {
         if (activeTasks === 0) return { dot: 'bg-emerald-500', text: 'text-emerald-600', badge: 'bg-emerald-50 border-emerald-200 text-emerald-700', label: 'Available' };
-        if (activeTasks <= 3)  return { dot: 'bg-amber-400',   text: 'text-amber-600',   badge: 'bg-amber-50 border-amber-200 text-amber-700',   label: 'Normal' };
-        if (activeTasks <= 5)  return { dot: 'bg-orange-500',  text: 'text-orange-600',  badge: 'bg-orange-50 border-orange-200 text-orange-700',  label: 'Busy' };
-        return                        { dot: 'bg-rose-500',    text: 'text-rose-600',    badge: 'bg-rose-50 border-rose-200 text-rose-700',    label: 'Overloaded' };
+        if (activeTasks <= 3) return { dot: 'bg-amber-400', text: 'text-amber-600', badge: 'bg-amber-50 border-amber-200 text-amber-700', label: 'Normal' };
+        if (activeTasks <= 5) return { dot: 'bg-orange-500', text: 'text-orange-600', badge: 'bg-orange-50 border-orange-200 text-orange-700', label: 'Busy' };
+        return { dot: 'bg-rose-500', text: 'text-rose-600', badge: 'bg-rose-50 border-rose-200 text-rose-700', label: 'Overloaded' };
     };
 
     const idleDevelopers = useMemo(() =>
@@ -1266,7 +1398,7 @@ const WorkAllocation = () => {
                 <div className="px-3 sm:px-6 md:px-10 py-3 sm:py-5">
                     {/* Single Row Controls Container */}
                     <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-2.5 lg:gap-4">
-                        
+
                         {/* Left Group: Search input & Filter selects */}
                         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-3 flex-1">
                             {/* Search box and Mobile Filter Toggle */}
@@ -1735,8 +1867,8 @@ const WorkAllocation = () => {
 
             {/* Full-Screen Workspace Task Modal */}
             {isModalOpen && selectedTicket && (
-                <div className="fixed inset-0 bg-black/60 z-[600] flex flex-col items-center justify-center backdrop-blur-sm transition-all duration-300 p-4">
-                    <div className="bg-white rounded-2xl lg:rounded-3xl shadow-2xl w-full max-w-[1400px] h-[95vh] lg:h-[92vh] flex flex-col animate-in zoom-in-95 duration-300 overflow-hidden border border-white/20">
+                <div className="fixed inset-0 bg-black/60 z-[600] flex flex-col items-center justify-center backdrop-blur-sm transition-all duration-300 p-2">
+                    <div className="bg-white rounded-2xl lg:rounded-3xl shadow-2xl w-full max-w-[97vw] h-[96vh] flex flex-col animate-in zoom-in-95 duration-300 overflow-hidden border border-white/20">
 
                         {/* Header */}
                         <div className="px-6 py-4 lg:px-8 lg:py-5 flex justify-between items-center text-gray-600 shrink-0 border-b border-gray-100 bg-gray-50/30">
@@ -1752,6 +1884,19 @@ const WorkAllocation = () => {
                                 )}
                             </div>
                             <div className="flex items-center space-x-3">
+                                <div className="flex items-center gap-2 mr-2">
+                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Phase Status:</span>
+                                    <Select value={selectedTicket.status} onValueChange={(val) => updateSelectedTicket({ status: val })}>
+                                        <SelectTrigger className="bg-white border border-gray-200 h-9 px-3 text-xs font-bold shadow-sm rounded-xl w-36 focus:ring-1 focus:ring-teal-500">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent className="z-[700]">
+                                            {columns.map(col => (
+                                                <SelectItem key={col} value={col}>{col.toUpperCase()}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                                 {selectedTicket._id === 'new' && (
                                     <button
                                         disabled={!selectedTicket.title}
@@ -1803,11 +1948,11 @@ const WorkAllocation = () => {
                         </div>
 
                         {/* Body - Responsive Layout */}
-                        <div className="flex-1 overflow-y-auto lg:overflow-hidden bg-white">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[35%_30%_35%] lg:h-full divide-y md:divide-y-0 lg:divide-x divide-gray-100">
+                        <div className="flex-1 overflow-hidden bg-white">
+                            <div className="grid grid-cols-1 md:grid-cols-[28%_44%_28%] md:h-full divide-y md:divide-y-0 md:divide-x divide-gray-100">
 
                                 {/* 🔹 COLUMN 1: Task Input & Checklist (LEFT) */}
-                                <div className="lg:h-full flex flex-col px-4 py-4 lg:px-6 lg:py-6 lg:overflow-hidden">
+                                <div className="md:h-full flex flex-col px-4 py-4 lg:px-6 lg:py-6 overflow-hidden">
                                     <div className="shrink-0 mb-3 lg:mb-4">
                                         <div className="flex items-center gap-2 mb-1.5">
                                             <AlignLeft className="w-3.5 h-3.5 text-teal-600" />
@@ -1815,7 +1960,21 @@ const WorkAllocation = () => {
                                         </div>
                                         <TitleInput
                                             initialValue={selectedTicket.title}
-                                            onUpdate={(newTitle) => updateSelectedTicket({ title: newTitle }, true)}
+                                            onUpdate={async (newTitle) => {
+                                                updateSelectedTicket({ title: newTitle }, true);
+                                                if (newTitle && newTitle.trim()) {
+                                                    setIsAnalyzing(true);
+                                                    try {
+                                                        const result = await analyzeTask(newTitle, selectedTicket.description || '', subdomain);
+                                                        setAiAnalysisResult(result);
+                                                        toast.success('AI task analysis completed!');
+                                                    } catch (error) {
+                                                        console.error('AI Auto-Analysis failed:', error);
+                                                    } finally {
+                                                        setIsAnalyzing(false);
+                                                    }
+                                                }
+                                            }}
                                         />
 
                                         {selectedTicket._id !== 'new' && selectedTicket.createdAt && (
@@ -1965,26 +2124,97 @@ const WorkAllocation = () => {
                                 </div>
 
                                 {/* 🔹 COLUMN 2: Phase Status & Controls (CENTER) */}
-                                <div className="lg:h-full flex flex-col p-4 lg:p-5 overflow-y-auto custom-scrollbar bg-gray-50/10 lg:border-r border-gray-100">
-                                    <div className="space-y-4">
-                                        {/* Status Control */}
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-2">
-                                                <History className="w-3.5 h-3.5 text-teal-600" />
-                                                <span className="text-gray-400 font-bold text-[9px] uppercase tracking-wider">Phase Status</span>
+                                <div className="md:h-full flex flex-col bg-gray-50/10 md:border-r border-gray-100 overflow-hidden">
+                                    {/* Fixed Top Part (Assignment & Quick Assign Side-by-Side) */}
+                                    <div className="shrink-0 p-4 lg:p-5 bg-white border-b border-gray-150 shadow-[0_4px_12px_rgba(0,0,0,0.02)]">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                                            {/* Left Column: Assignment Options */}
+                                            <div>
+                                                <AssignmentSection
+                                                    selectedTicket={selectedTicket}
+                                                    updateSelectedTicket={updateSelectedTicket}
+                                                    workers={workers}
+                                                />
                                             </div>
-                                            <Select value={selectedTicket.status} onValueChange={(val) => updateSelectedTicket({ status: val })}>
-                                                <SelectTrigger className="w-full bg-white border-gray-200 h-11 text-xs font-bold shadow-sm rounded-xl">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent className="z-[250]">
-                                                    {columns.map(col => (
-                                                        <SelectItem key={col} value={col}>{col.toUpperCase()}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
 
+                                            {/* Right Column: Quick Assign Options */}
+                                            <div className="border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-6">
+                                                {sortedByWorkload.length > 0 && (() => {
+                                                    const currentAssigneeIds = (selectedTicket.assignees || []).map(a => typeof a === 'object' ? a._id : a);
+                                                    const toggleAssignee = (wId) => {
+                                                        if (currentAssigneeIds.includes(wId)) {
+                                                            updateSelectedTicket({ assignees: currentAssigneeIds.filter(id => id !== wId) });
+                                                        } else {
+                                                            updateSelectedTicket({ assignees: [...currentAssigneeIds, wId] });
+                                                        }
+                                                    };
+                                                    return (
+                                                        <div className="space-y-3">
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                                                                    <span className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Quick Assign</span>
+                                                                </div>
+                                                                <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tight">Click to add/remove</span>
+                                                            </div>
+                                                            <div className="space-y-3 max-h-[140px] overflow-y-auto pr-1 custom-scrollbar">
+                                                                {/* Idle developers first */}
+                                                                {idleDevelopers.length > 0 && (
+                                                                    <div>
+                                                                        <div className="text-[8px] font-black text-emerald-600 uppercase tracking-wider mb-1">● Idle ({idleDevelopers.length})</div>
+                                                                        <div className="flex flex-wrap gap-1.5">
+                                                                            {idleDevelopers.slice(0, 6).map(w => {
+                                                                                const isSelected = currentAssigneeIds.includes(w._id);
+                                                                                return (
+                                                                                    <button
+                                                                                        key={w._id}
+                                                                                        onClick={() => toggleAssignee(w._id)}
+                                                                                        className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[9px] font-bold transition-all ${isSelected ? 'ring-2 ring-teal-500 bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-emerald-50/50 border-emerald-100 text-emerald-600 hover:shadow-sm hover:border-emerald-300'}`}
+                                                                                    >
+                                                                                        <span className="w-1 h-1 rounded-full bg-emerald-500"></span>
+                                                                                        {w.name.split(' ')[0]}
+                                                                                        {isSelected && <Check className="w-2.5 h-2.5 text-teal-600 ml-0.5" />}
+                                                                                    </button>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                {/* Busy developers */}
+                                                                {assignedDevelopers.length > 0 && (
+                                                                    <div>
+                                                                        <div className="text-[8px] font-black text-amber-600 uppercase tracking-wider mb-1">● Busy ({assignedDevelopers.length})</div>
+                                                                        <div className="flex flex-wrap gap-1.5">
+                                                                            {assignedDevelopers.slice(0, 6).map(w => {
+                                                                                const { activeTasks } = getWorkerLoad(w._id);
+                                                                                const { dot, badge } = workloadColor(activeTasks);
+                                                                                const isSelected = currentAssigneeIds.includes(w._id);
+                                                                                return (
+                                                                                    <button
+                                                                                        key={w._id}
+                                                                                        onClick={() => toggleAssignee(w._id)}
+                                                                                        className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[9px] font-bold transition-all ${isSelected ? 'ring-2 ring-teal-500 ' + badge : badge + ' hover:shadow-sm'}`}
+                                                                                    >
+                                                                                        <span className={`w-1 h-1 rounded-full ${dot}`}></span>
+                                                                                        {w.name.split(' ')[0]}
+                                                                                        <span className="opacity-60 text-[8px]">({activeTasks})</span>
+                                                                                        {isSelected && <Check className="w-2.5 h-2.5 text-teal-600 ml-0.5" />}
+                                                                                    </button>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Scrollable Bottom Content */}
+                                    <div className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-5 space-y-4">
                                         {/* AI Task Optimizer / Assistant */}
                                         <div className="bg-gradient-to-br from-indigo-50/60 to-teal-50/60 border border-teal-100 rounded-2xl p-4 shadow-sm relative overflow-hidden">
                                             <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/5 rounded-full blur-2xl"></div>
@@ -2026,17 +2256,15 @@ const WorkAllocation = () => {
                                                     <div className="grid grid-cols-2 gap-2 bg-white/70 p-2.5 rounded-xl border border-slate-100">
                                                         <div className="text-[10px]">
                                                             <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Priority</span>
-                                                            <span className={`font-extrabold uppercase ${
-                                                                aiAnalysisResult.priority === 'High' ? 'text-red-500' :
+                                                            <span className={`font-extrabold uppercase ${aiAnalysisResult.priority === 'High' ? 'text-red-500' :
                                                                 aiAnalysisResult.priority === 'Medium' ? 'text-orange-500' : 'text-blue-500'
-                                                            }`}>{aiAnalysisResult.priority}</span>
+                                                                }`}>{aiAnalysisResult.priority}</span>
                                                         </div>
                                                         <div className="text-[10px]">
                                                             <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Complexity</span>
-                                                            <span className={`font-extrabold uppercase ${
-                                                                aiAnalysisResult.complexity === 'High' ? 'text-purple-600' :
+                                                            <span className={`font-extrabold uppercase ${aiAnalysisResult.complexity === 'High' ? 'text-purple-600' :
                                                                 aiAnalysisResult.complexity === 'Medium' ? 'text-indigo-600' : 'text-slate-600'
-                                                            }`}>{aiAnalysisResult.complexity}</span>
+                                                                }`}>{aiAnalysisResult.complexity}</span>
                                                         </div>
                                                         <div className="text-[10px] col-span-2 mt-1.5 pt-1.5 border-t border-slate-100/60 flex justify-between items-center">
                                                             <div>
@@ -2064,12 +2292,43 @@ const WorkAllocation = () => {
                                                                 </button>
                                                             </div>
                                                             <div className="space-y-1">
-                                                                {aiAnalysisResult.subtasks.map((sub, i) => (
-                                                                    <div key={i} className="flex items-start gap-1.5 text-[11px] text-slate-600 font-semibold leading-relaxed">
-                                                                        <span className="text-teal-500 shrink-0 mt-0.5">•</span>
-                                                                        <span>{sub}</span>
-                                                                    </div>
-                                                                ))}
+                                                                {aiAnalysisResult.subtasks.map((sub, i) => {
+                                                                    const isChecked = !!selectedSuggestedSubtasks[i];
+                                                                    const toggleCheck = () => {
+                                                                        setSelectedSuggestedSubtasks(prev => ({
+                                                                            ...prev,
+                                                                            [i]: !prev[i]
+                                                                        }));
+                                                                    };
+
+                                                                    return (
+                                                                        <div key={i} className="flex items-center justify-between gap-1.5 p-1 hover:bg-slate-50 rounded-lg group/subtask transition-colors">
+                                                                            <div className="flex items-start gap-2 text-[11px] text-slate-600 font-semibold leading-relaxed min-w-0 flex-1">
+                                                                                <input
+                                                                                    type="checkbox"
+                                                                                    checked={isChecked}
+                                                                                    onChange={toggleCheck}
+                                                                                    className="w-3.5 h-3.5 mt-0.5 rounded text-teal-600 border-slate-350 focus:ring-teal-500 cursor-pointer shrink-0"
+                                                                                />
+                                                                                <span
+                                                                                    onClick={toggleCheck}
+                                                                                    className="cursor-pointer truncate flex-1"
+                                                                                    title={sub}
+                                                                                >
+                                                                                    {sub}
+                                                                                </span>
+                                                                            </div>
+                                                                            <button
+                                                                                onClick={() => handleMergeSingleSubtask(sub, i)}
+                                                                                className="opacity-0 group-hover/subtask:opacity-100 px-1.5 py-0.5 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded text-[9px] font-black uppercase transition-all shrink-0 ml-1 flex items-center gap-0.5 shadow-sm"
+                                                                                title="Add single subtask to checklist"
+                                                                            >
+                                                                                <Plus className="w-2.5 h-2.5" />
+                                                                                <span>Add</span>
+                                                                            </button>
+                                                                        </div>
+                                                                    );
+                                                                })}
                                                             </div>
                                                         </div>
                                                     )}
@@ -2089,24 +2348,34 @@ const WorkAllocation = () => {
                                                                                 </div>
                                                                                 <button
                                                                                     onClick={() => handleAssignDev(rec.developerId)}
-                                                                                    className={`px-2.5 py-1 rounded-lg text-[9px] font-extrabold uppercase transition-colors ${
-                                                                                        isAssigned 
+                                                                                    className={`px-2.5 py-1 rounded-lg text-[9px] font-extrabold uppercase transition-colors ${isAssigned
                                                                                         ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
                                                                                         : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm'
-                                                                                    }`}
+                                                                                        }`}
                                                                                     disabled={isAssigned}
                                                                                 >
                                                                                     {isAssigned ? 'Assigned' : 'Assign'}
                                                                                 </button>
                                                                             </div>
                                                                             {rec.reasons && rec.reasons.length > 0 && (
-                                                                                <div className="space-y-0.5 pl-1">
-                                                                                    {rec.reasons.map((r, ri) => (
-                                                                                        <div key={ri} className="text-[10px] text-slate-500 font-medium leading-normal flex items-start gap-1">
-                                                                                            <span className="text-emerald-500 font-bold shrink-0">✓</span>
-                                                                                            <span>{r.startsWith('✓') ? r.slice(1).trim() : r}</span>
+                                                                                <div className="space-y-1 pl-1">
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => toggleRecExpand(rec.developerId)}
+                                                                                        className="text-[9px] text-indigo-600 font-bold hover:underline flex items-center gap-0.5"
+                                                                                    >
+                                                                                        {expandedRecs[rec.developerId] ? 'Hide Details ▲' : 'Show Details ▾'}
+                                                                                    </button>
+                                                                                    {expandedRecs[rec.developerId] && (
+                                                                                        <div className="space-y-0.5 mt-0.5 animate-in slide-in-from-top-1 duration-150">
+                                                                                            {rec.reasons.map((r, ri) => (
+                                                                                                <div key={ri} className="text-[10px] text-slate-500 font-medium leading-normal flex items-start gap-1">
+                                                                                                    <span className="text-emerald-500 font-bold shrink-0">✓</span>
+                                                                                                    <span>{r.startsWith('✓') ? r.slice(1).trim() : r}</span>
+                                                                                                </div>
+                                                                                            ))}
                                                                                         </div>
-                                                                                    ))}
+                                                                                    )}
                                                                                 </div>
                                                                             )}
                                                                         </div>
@@ -2127,138 +2396,36 @@ const WorkAllocation = () => {
                                             )}
                                         </div>
 
-                                        {/* Assignment Center */}
-                                        <div className="bg-white rounded-2xl p-4 shadow-sm border border-white">
-                                            {/* Smart Recommendations */}
-                                            {sortedByWorkload.length > 0 && (() => {
-                                                const currentAssigneeIds = (selectedTicket.assignees || []).map(a => typeof a === 'object' ? a._id : a);
-                                                const toggleAssignee = (wId) => {
-                                                    if (currentAssigneeIds.includes(wId)) {
-                                                        updateSelectedTicket({ assignees: currentAssigneeIds.filter(id => id !== wId) });
-                                                    } else {
-                                                        updateSelectedTicket({ assignees: [...currentAssigneeIds, wId] });
-                                                    }
-                                                };
-                                                return (
-                                                <div className="mb-4 pb-4 border-b border-slate-100">
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <Zap className="w-3 h-3 text-amber-500" />
-                                                            <span className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Quick Assign</span>
-                                                        </div>
-                                                        <span className="text-[9px] text-slate-400 font-semibold">Click to add/remove</span>
-                                                    </div>
-                                                    {/* Idle developers first */}
-                                                    {idleDevelopers.length > 0 && (
-                                                        <div className="mb-2">
-                                                            <div className="text-[8px] font-black text-emerald-600 uppercase tracking-wider mb-1">● Idle ({idleDevelopers.length})</div>
-                                                            <div className="flex flex-wrap gap-1.5">
-                                                                {idleDevelopers.slice(0, 6).map(w => {
-                                                                    const isSelected = currentAssigneeIds.includes(w._id);
-                                                                    return (
-                                                                        <button
-                                                                            key={w._id}
-                                                                            onClick={() => toggleAssignee(w._id)}
-                                                                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[10px] font-bold transition-all ${isSelected ? 'ring-2 ring-teal-500 bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-emerald-50/50 border-emerald-100 text-emerald-600 hover:shadow-sm hover:border-emerald-300'}`}
-                                                                        >
-                                                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                                                            {w.name.split(' ')[0]}
-                                                                            <span className="opacity-60">(0)</span>
-                                                                            {isSelected && <Check className="w-3 h-3 text-teal-600" />}
-                                                                        </button>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                    {/* Busy developers */}
-                                                    {assignedDevelopers.length > 0 && (
-                                                        <div>
-                                                            <div className="text-[8px] font-black text-amber-600 uppercase tracking-wider mb-1">● Busy ({assignedDevelopers.length})</div>
-                                                            <div className="flex flex-wrap gap-1.5">
-                                                                {assignedDevelopers.slice(0, 4).map(w => {
-                                                                    const { activeTasks } = getWorkerLoad(w._id);
-                                                                    const { dot, badge } = workloadColor(activeTasks);
-                                                                    const isSelected = currentAssigneeIds.includes(w._id);
-                                                                    return (
-                                                                        <button
-                                                                            key={w._id}
-                                                                            onClick={() => toggleAssignee(w._id)}
-                                                                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[10px] font-bold transition-all ${isSelected ? 'ring-2 ring-teal-500 ' + badge : badge + ' hover:shadow-sm'}`}
-                                                                        >
-                                                                            <span className={`w-1.5 h-1.5 rounded-full ${dot}`}></span>
-                                                                            {w.name.split(' ')[0]}
-                                                                            <span className="opacity-60">({activeTasks})</span>
-                                                                            {isSelected && <Check className="w-3 h-3 text-teal-600" />}
-                                                                        </button>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        </div>
-                                                    )}
+                                        {/* Employee Query Display */}
+                                        {selectedTicket.workerQuery && (
+                                            <div className="flex flex-col gap-2 pt-1 mb-2 bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+                                                <div className="flex items-center gap-2">
+                                                    <HelpCircle className="w-3 h-3 text-teal-600" />
+                                                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Employee Query</span>
                                                 </div>
-                                                );
-                                            })()}
-                                            <AssignmentSection
-                                                selectedTicket={selectedTicket}
-                                                updateSelectedTicket={updateSelectedTicket}
-                                                workers={workers}
-                                            />
-
-                                            <div className="mt-4 pt-4 border-t border-gray-100 space-y-4">
-                                                <div className="flex flex-col gap-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <Flag className="w-3 h-3 text-teal-600" />
-                                                        <span className="text-gray-400 font-bold text-[9px] uppercase tracking-wider">Work Type</span>
-                                                    </div>
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        {['Task', 'Bug', 'Story', 'Epic'].map(type => (
-                                                            <button
-                                                                key={type}
-                                                                onClick={() => updateSelectedTicket({ issueType: type })}
-                                                                className={`px-3 py-2 rounded-xl text-[10px] font-extrabold uppercase transition-all flex items-center justify-center gap-1.5 border-2 ${selectedTicket.issueType === type
-                                                                    ? 'bg-teal-50 border-teal-500 text-teal-700 shadow-sm'
-                                                                    : 'bg-gray-50 border-transparent text-gray-400 hover:border-gray-200'}`}
-                                                            >
-                                                                <IssueIcon type={type} />
-                                                                {type}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-
-                                                {/* Employee Query Display */}
-                                                {selectedTicket.workerQuery && (
-                                                    <div className="flex flex-col gap-2 pt-1 mb-2">
-                                                        <div className="flex items-center gap-2">
-                                                            <HelpCircle className="w-3 h-3 text-teal-600" />
-                                                            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Employee Query</span>
-                                                        </div>
-                                                        <div className="w-full bg-teal-50 border border-teal-100 rounded-xl p-3 text-xs font-medium text-teal-800">
-                                                            {selectedTicket.workerQuery}
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                <div className="flex flex-col gap-2 pt-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <MessageSquare className="w-3 h-3 text-orange-500" />
-                                                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Resolution Feedback</span>
-                                                    </div>
-                                                    <AutoGrowingTextarea
-                                                        value={selectedTicket.feedback || ''}
-                                                        onChange={(newVal) => updateSelectedTicket({ feedback: newVal }, true)}
-                                                        className="w-full bg-orange-50/50 border-none rounded-xl p-3 text-xs font-medium text-orange-800 placeholder-orange-300 focus:ring-2 focus:ring-orange-200 transition-all"
-                                                        placeholder="Add review notes..."
-                                                    />
+                                                <div className="w-full bg-teal-50 border border-teal-100 rounded-xl p-3 text-xs font-medium text-teal-800">
+                                                    {selectedTicket.workerQuery}
                                                 </div>
                                             </div>
+                                        )}
+
+                                        <div className="flex flex-col gap-2 pt-1 bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+                                            <div className="flex items-center gap-2">
+                                                <MessageSquare className="w-3 h-3 text-orange-500" />
+                                                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Resolution Feedback</span>
+                                            </div>
+                                            <AutoGrowingTextarea
+                                                value={selectedTicket.feedback || ''}
+                                                onChange={(newVal) => updateSelectedTicket({ feedback: newVal }, true)}
+                                                className="w-full bg-orange-50/50 border-none rounded-xl p-3 text-xs font-medium text-orange-800 placeholder-orange-300 focus:ring-2 focus:ring-orange-200 transition-all"
+                                                placeholder="Add review notes..."
+                                            />
                                         </div>
 
                                         {selectedTicket._id !== 'new' && (
                                             <button
                                                 onClick={() => handleDeleteTicket(selectedTicket)}
-                                                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-red-100 bg-red-50/30 text-red-600 hover:bg-red-500 hover:text-white transition-all font-bold text-[9px] uppercase tracking-widest group shadow-sm active:scale-95"
+                                                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-red-100 bg-red-50/30 text-red-600 hover:bg-red-500 hover:text-white transition-all font-bold text-[9px] uppercase tracking-widest group shadow-sm active:scale-95 animate-in fade-in duration-200"
                                             >
                                                 <Trash2 className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" /> Permanently Delete
                                             </button>
@@ -2267,7 +2434,7 @@ const WorkAllocation = () => {
                                 </div>
 
                                 {/* 🔹 COLUMN 3: Execution & Analytics (RIGHT - MOVED FROM CENTER) */}
-                                <div className="lg:h-full flex flex-col px-4 py-4 lg:px-6 lg:py-6 lg:overflow-y-auto custom-scrollbar bg-gray-50/20">
+                                <div className="md:h-full flex flex-col px-4 py-4 lg:px-6 lg:py-6 overflow-y-auto custom-scrollbar bg-gray-50/20">
                                     <div className="flex-1 flex flex-col min-h-0">
 
                                         {/* Progress Card & Shared Task References Grid */}
@@ -2952,27 +3119,26 @@ const WorkAllocation = () => {
                         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-gradient-to-r from-slate-50 to-slate-100/50">
                             <div>
                                 <div className="flex items-center gap-2">
-                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-                                        drawerFilter === 'idle' ? 'bg-emerald-100' :
+                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${drawerFilter === 'idle' ? 'bg-emerald-100' :
                                         drawerFilter === 'assigned' ? 'bg-blue-100' :
-                                        drawerFilter === 'overloaded' ? 'bg-rose-100' : 'bg-slate-100'
-                                    }`}>
+                                            drawerFilter === 'overloaded' ? 'bg-rose-100' : 'bg-slate-100'
+                                        }`}>
                                         {drawerFilter === 'idle' ? <Zap className="w-3.5 h-3.5 text-emerald-600" /> :
-                                         drawerFilter === 'assigned' ? <CheckSquare className="w-3.5 h-3.5 text-blue-600" /> :
-                                         drawerFilter === 'overloaded' ? <AlertCircle className="w-3.5 h-3.5 text-rose-600" /> :
-                                         <Users className="w-3.5 h-3.5 text-slate-600" />}
+                                            drawerFilter === 'assigned' ? <CheckSquare className="w-3.5 h-3.5 text-blue-600" /> :
+                                                drawerFilter === 'overloaded' ? <AlertCircle className="w-3.5 h-3.5 text-rose-600" /> :
+                                                    <Users className="w-3.5 h-3.5 text-slate-600" />}
                                     </div>
                                     <h3 className="text-sm font-black text-slate-800">
                                         {drawerFilter === 'idle' ? 'Idle Developers' :
-                                         drawerFilter === 'assigned' ? 'Assigned Developers' :
-                                         drawerFilter === 'overloaded' ? 'Overloaded Developers' : 'All Developers'}
+                                            drawerFilter === 'assigned' ? 'Assigned Developers' :
+                                                drawerFilter === 'overloaded' ? 'Overloaded Developers' : 'All Developers'}
                                     </h3>
                                 </div>
                                 <p className="text-[10px] text-slate-400 mt-0.5 ml-9">
                                     {drawerDevelopers.length} developer{drawerDevelopers.length !== 1 ? 's' : ''}
                                     {drawerFilter === 'idle' ? ' with no active tasks' :
-                                     drawerFilter === 'assigned' ? ' with active tasks' :
-                                     drawerFilter === 'overloaded' ? ' with 6+ active tasks' : ' in workforce'}
+                                        drawerFilter === 'assigned' ? ' with active tasks' :
+                                            drawerFilter === 'overloaded' ? ' with 6+ active tasks' : ' in workforce'}
                                 </p>
                             </div>
                             <button onClick={() => setDrawerFilter(false)} className="p-1.5 hover:bg-white/70 rounded-lg transition-colors">

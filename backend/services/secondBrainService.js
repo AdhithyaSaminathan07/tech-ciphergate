@@ -115,6 +115,14 @@ const syncBrainItem = async (type, item, subdomain) => {
       storyPoints: item.storyPoints,
       labels: item.labels || []
     };
+
+    // Outcome tracking trigger for completed tickets
+    if (item.status === 'Done') {
+      // Run asynchronously
+      recordRecommendationOutcome(item).catch(err => {
+        console.error('[Outcome Tracking] Async trigger error:', err.message);
+      });
+    }
   }
   
   if (!refModel) return;
@@ -128,6 +136,92 @@ const syncBrainItem = async (type, item, subdomain) => {
     console.log(`[SecondBrain] Successfully indexed ${type} item: "${title}"`);
   } catch (error) {
     console.error(`[SecondBrain] Failed to index ${type} item ${item._id}:`, error.message);
+  }
+};
+
+/**
+ * Tracks AI recommendation accuracy when a ticket is completed
+ * @param {object} ticket - The completed ticket document
+ */
+const recordRecommendationOutcome = async (ticket) => {
+  try {
+    const AiAuditLog = require('../models/AiAuditLog');
+    const AiRecommendationOutcome = require('../models/AiRecommendationOutcome');
+    const Worker = require('../models/Worker');
+
+    // 1. Fetch latest AI Audit Log recommendation for this taskId
+    const auditLog = await AiAuditLog.findOne({
+      taskId: ticket._id,
+      subdomain: ticket.subdomain
+    }).sort({ createdAt: -1 });
+
+    if (!auditLog) {
+      console.log(`[Outcome Tracking] No AI audit log found for completed ticket: ${ticket.title}`);
+      return;
+    }
+
+    // 2. Identify assigned developer
+    const assignedDevId = ticket.assignee ? ticket.assignee.toString() : '';
+    let assignedDevName = '';
+    if (assignedDevId) {
+      const dev = await Worker.findById(assignedDevId);
+      assignedDevName = dev ? dev.name : '';
+    }
+
+    // Check match outcomes
+    const recommendedDevs = auditLog.recommendedDevelopers || [];
+    const matchedDev = recommendedDevs.find(d => d.developerId === assignedDevId);
+    const topRecommendedDev = recommendedDevs.length > 0 ? 
+      [...recommendedDevs].sort((a, b) => b.matchScore - a.matchScore)[0] : null;
+
+    const recommendationAccepted = topRecommendedDev ? topRecommendedDev.developerId === assignedDevId : false;
+    const success = matchedDev ? true : false;
+    const matchScore = matchedDev ? matchedDev.matchScore : (topRecommendedDev ? topRecommendedDev.matchScore : 0);
+
+    // Calculate days taken
+    const startDate = ticket.createdAt;
+    const endDate = ticket.actualCompletionDate || ticket.updatedAt || new Date();
+    const msDiff = endDate.getTime() - startDate.getTime();
+    const daysTaken = Math.max(1, Math.round(msDiff / (1000 * 60 * 60 * 24)));
+
+    // Manager info who triggered the AI analysis
+    const managerId = auditLog.performedBy;
+    let managerName = '';
+    if (managerId) {
+      const manager = await Worker.findById(managerId);
+      managerName = manager ? manager.name : 'System';
+    }
+
+    // Determine confidence level
+    const confidenceLevel = auditLog.confidenceLevel || (matchScore >= 85 ? 'High' : matchScore >= 60 ? 'Medium' : 'Low');
+
+    // 3. Upsert AiRecommendationOutcome log
+    await AiRecommendationOutcome.findOneAndUpdate(
+      { taskId: ticket._id, subdomain: ticket.subdomain },
+      {
+        subdomain: ticket.subdomain,
+        taskId: ticket._id,
+        taskTitle: ticket.title,
+        recommendedDeveloperId: topRecommendedDev ? topRecommendedDev.developerId : '',
+        recommendedDeveloperName: topRecommendedDev ? topRecommendedDev.developerName : 'None',
+        matchScore,
+        assignedDeveloperId: assignedDevId,
+        assignedDeveloperName: assignedDevName,
+        completed: true,
+        completedAt: endDate,
+        daysTaken,
+        success,
+        recommendationAccepted,
+        managerId,
+        managerName,
+        confidenceLevel
+      },
+      { upsert: true, new: true }
+    );
+
+    console.log(`[Outcome Tracking] Recorded accuracy outcome for "${ticket.title}". Success: ${success}`);
+  } catch (err) {
+    console.error('[Outcome Tracking] Error logging outcome:', err.message);
   }
 };
 
@@ -181,8 +275,30 @@ const calculateDeveloperExpertise = async (workerId) => {
       ]
     });
     
+    // 4. Implement weighted expertise scoring
+    const rawCommits = contributor ? (contributor.valid_commits || contributor.commits || 0) : 0;
+    const rawPRs = contributor ? (contributor.valid_prs || contributor.prs || 0) : 0;
+    const rawFilesChanged = contributor && contributor.recent_activities ? 
+      contributor.recent_activities.reduce((acc, act) => acc + (act.files ? act.files.length : 0), 0) : 0;
+    
+    const rawCodeReviews = contributor ? (
+      (contributor.recent_activities ? contributor.recent_activities.filter(act => act.type === 'review').length : 0) || contributor.merges || 0
+    ) : 0;
+    
+    const rawTasks = completedTickets.length;
+
+    // Cap & Normalize relative to expected maxima
+    const normCommits = Math.min(100, (rawCommits / 100) * 100);
+    const normPRs = Math.min(100, (rawPRs / 20) * 100);
+    const normFiles = Math.min(100, (rawFilesChanged / 200) * 100);
+    const normReviews = Math.min(100, (rawCodeReviews / 10) * 100);
+    const normTasks = Math.min(100, (rawTasks / 20) * 100);
+
+    // Weighted score formula: 40% Commits, 20% PRs, 20% Files, 10% Reviews, 10% Tasks
+    const weightedScore = (normCommits * 0.4) + (normPRs * 0.2) + (normFiles * 0.2) + (normReviews * 0.1) + (normTasks * 0.1);
+    const finalScore = Math.round(weightedScore);
+    
     const gitScore = contributor ? (contributor.score || contributor.total_contributions || 0) : 0;
-    const gitCommits = contributor ? (contributor.commits || contributor.valid_commits || 0) : 0;
     const gitRepos = contributor ? (contributor.repositories || []) : [];
     
     const completedProjectNames = [...new Set(completedTickets.map(t => t.team).filter(Boolean))];
@@ -193,7 +309,11 @@ const calculateDeveloperExpertise = async (workerId) => {
       completedTasksCount: completedTickets.length,
       activeTasksCount: activeTickets.length,
       gitScore,
-      gitCommitsCount: gitCommits,
+      gitCommitsCount: rawCommits,
+      gitPRsCount: rawPRs,
+      gitFilesChangedCount: rawFilesChanged,
+      gitCodeReviewsCount: rawCodeReviews,
+      weightedExpertiseScore: finalScore,
       gitReposCount: gitRepos.length,
       gitReposList: gitRepos,
       assignedProjectsCount: assignedProjects.length,
@@ -224,7 +344,7 @@ const calculateDeveloperExpertise = async (workerId) => {
     };
     
     await syncBrainItem('worker', updatedWorker, worker.subdomain);
-    console.log(`[SecondBrain] Computed and sync'd expertise profile for worker: ${worker.name}`);
+    console.log(`[SecondBrain] Computed and sync'd expertise profile for worker: ${worker.name}. Weighted Score: ${finalScore}`);
     return updatedWorker;
   } catch (error) {
     console.error(`[SecondBrain] Failed to compute developer expertise for ${workerId}:`, error.message);
@@ -251,5 +371,6 @@ const deleteBrainItem = async (type, itemId, subdomain) => {
 module.exports = {
   syncBrainItem,
   calculateDeveloperExpertise,
-  deleteBrainItem
+  deleteBrainItem,
+  recordRecommendationOutcome
 };

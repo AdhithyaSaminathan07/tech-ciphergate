@@ -1,330 +1,199 @@
-const { Octokit } = require("@octokit/rest");
 const Contributor = require('../models/Contributor');
 const GitHubCache = require('../models/GitHubCache');
-const { analyzeGitHubContributions } = require('../utils/github-quality-analyzer');
+const GitHubSyncJob = require('../models/GitHubSyncJob');
 
-// Initialize Octokit with the token from environment variables
-const getOctokit = () => {
-    const token = process.env.GITHUB_TOKEN || process.env.NEXT_PUBLIC_GITHUB_TOKEN;
-    if (!token) {
-        console.error("GITHUB_TOKEN is missing in environment variables");
-        throw new Error("GitHub Token not configured");
-    }
-    return new Octokit({
-        auth: token,
-        request: {
-            timeout: 30000, // 30 second timeout for requests
-        }
-    });
-};
-
-// Helper for concurrency control
-async function processWithConcurrency(items, concurrency, fn) {
-    const results = [];
-    const executing = new Set();
-
-    for (const item of items) {
-        const p = Promise.resolve().then(() => fn(item));
-        results.push(p);
-        executing.add(p);
-
-        const clean = () => executing.delete(p);
-        p.then(clean).catch(clean);
-
-        if (executing.size >= concurrency) {
-            await Promise.race(executing);
-        }
-    }
-
-    return Promise.all(results);
-}
-
-// Function to fetch repositories for authenticated user with affiliation
-const fetchUserRepositories = async (octokit) => {
-    // 1. Get user's own repositories (including those executed as collaborator)
-    // Using listForAuthenticatedUser to get all repos the user has access to
-    const userRepos = await octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-        affiliation: 'owner,collaborator,organization_member',
-        visibility: 'all',
-        sort: 'updated',
-        per_page: 100
-    });
-
-    // 2. Get organizations
-    const { data: orgs } = await octokit.rest.orgs.listForAuthenticatedUser();
-
-    // 3. Fetch repositories for each organization explicitly to miss nothing
-    const orgRepos = [];
-    for (const org of orgs) {
-        try {
-            const repos = await octokit.paginate(octokit.rest.repos.listForOrg, {
-                org: org.login,
-                type: 'all',
-                sort: 'updated',
-                per_page: 100
-            });
-            orgRepos.push(...repos);
-        } catch (error) {
-            console.warn(`Error fetching repos for org ${org.login}:`, error.message);
-        }
-    }
-
-    // 4. Merge and Deduplicate
-    const allReposMap = new Map();
-    [...userRepos, ...orgRepos].forEach(repo => {
-        allReposMap.set(repo.full_name, repo);
-    });
-
-    const uniqueRepos = Array.from(allReposMap.values());
-    console.log(`[GitHub] Fetched ${uniqueRepos.length} unique repositories.`);
-    return uniqueRepos;
-};
-
-// Helper functions for caching
-const getCacheKey = (username, dataType) => {
-    return `${username}:${dataType}`;
-};
-
-const getCachedData = async (username, dataType) => {
-    try {
-        const cacheKey = getCacheKey(username, dataType);
-        const cached = await GitHubCache.findOne({
-            cache_key: cacheKey,
-            data_type: dataType,
-            username: username,
-            expires_at: { $gte: new Date() } // Not expired
-        });
-
-        return cached ? cached.data : null;
-    } catch (error) {
-        console.error('Error getting cached data:', error);
-        return null;
-    }
-};
-
-const setCachedData = async (username, dataType, data, ttlMinutes = 15) => {
-    try {
-        const cacheKey = getCacheKey(username, dataType);
-        const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000); // Convert minutes to milliseconds
-
-        // Upsert the cache entry
-        await GitHubCache.updateOne(
-            { cache_key: cacheKey },
-            {
-                cache_key: cacheKey,
-                username: username,
-                data_type: dataType,
-                data: data,
-                expires_at: expiresAt,
-                last_fetched: new Date()
-            },
-            { upsert: true, runValidators: true }
-        );
-    } catch (error) {
-        console.error('Error setting cached data:', error);
-    }
-};
-
-const clearUserCache = async (username) => {
-    try {
-        await GitHubCache.deleteMany({ username: username });
-    } catch (error) {
-        console.error('Error clearing user cache:', error);
-    }
-};
-
-// @desc    Get GitHub Dashboard Data (Aggregated Stats)
+// @desc    Get GitHub Dashboard Data (Aggregated Stats from Cache)
 // @route   GET /api/github/dashboard
 // @access  Private (Admin)
 const getDashboardData = async (req, res) => {
     try {
-        const username = req.query.username || process.env.NEXT_PUBLIC_GITHUB_USERNAME;
-        if (!username) {
-            return res.status(400).json({ success: false, message: 'GitHub username is required' });
+        const subdomain = req.user?.subdomain || req.query.subdomain;
+        if (!subdomain) {
+            return res.status(400).json({ success: false, message: 'Subdomain is required' });
         }
 
-        const octokit = getOctokit();
+        const username = process.env.NEXT_PUBLIC_GITHUB_USERNAME || 'techvaseegrah';
+        // Try both the env-var username AND 'TechVaseegrahHub' (actual GitHub login)
+        // so the cache key always resolves regardless of casing
+        const cacheKeyVariants = [...new Set([`${username}:dashboard_data`, 'TechVaseegrahHub:dashboard_data'])];
 
-        // 1. Fetch Authenticated User Data
-        const { data: authenticatedUser } = await octokit.rest.users.getAuthenticated();
+        console.log(`[DEBUG ENDPOINT] getDashboardData called!`);
+        console.log(`- subdomain resolved: "${subdomain}"`);
+        console.log(`- cacheKey variants: ${cacheKeyVariants.join(', ')}`);
 
-        // 2. Fetch Public User Profile
-        const { data: userData } = await octokit.rest.users.getByUsername({ username });
-
-        // Combine user data
-        const combinedUserData = {
-            ...userData,
-            total_private_repos: authenticatedUser.total_private_repos ?? 0,
-            private_repos: authenticatedUser.total_private_repos || 0,
-            owned_private_repos: authenticatedUser.owned_private_repos ?? 0
-        };
-
-        // 3. Fetch ALL repositories for the specified user
-        // Requirement: "Fetch ALL repositories related to the authenticated GitHub user"
-        // We use the comprehensive fetch which includes Personal + Collaborator + Org repos
-        let userRepos = await fetchUserRepositories(octokit);
-
-        console.log(`[Dashboard] Processing ${userRepos.length} repos (All related to authenticated user)`);
-
-        // 4. Fetch Commits - per Repo
-        const fetchRepoCommits = async (repo) => {
-            if (repo.size === 0) return [];
-            try {
-                // Fetch Commits (Limit 50 per repo for performance, but valid enough for stats)
-                const { data: commits } = await octokit.rest.repos.listCommits({
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    author: username, // Filter by the requested username (usually the auth user)
-                    per_page: 5
-                });
-
-                return commits.map(commit => ({
-                    ...commit,
-                    repository: repo.name,
-                    repo_url: repo.html_url,
-                    repo_private: repo.private,
-                    stats: {
-                        // Note: listCommits doesn't return stats by default. 
-                        // We provide default values that meet the "Meaningful Commit" threshold (5 changes)
-                        // to ensure they are not marked as spam unless the message is spammy.
-                        additions: 5, deletions: 3, total: 8
-                    },
-                    files: [{ filename: 'mock.js' }]
-                }));
-            } catch (e) {
-                console.error(`GET /repos/${repo.owner.login}/${repo.name}/commits - ${e.status || 'unknown'} with id ${e.headers?.['x-github-request-id'] || 'unknown'} in ${e.request?.requestMs || 'unknown'}ms`);
-                console.error(`[GitHub API Error] Status: ${e.status}, Message: ${e.message}, Repo: ${repo.owner.login}/${repo.name}`);
-                
-                // Handle specific GitHub API errors
-                if (e.status === 409) {
-                    console.warn(`[GitHub API] Repository ${repo.owner.login}/${repo.name} is empty or has no commits, skipping.`);
-                    return [];
-                } else if (e.status === 403) {
-                    console.warn(`[GitHub API] Forbidden access to ${repo.owner.login}/${repo.name}, may need additional permissions.`);
-                    return [];
-                } else if (e.status === 404) {
-                    console.warn(`[GitHub API] Repository ${repo.owner.login}/${repo.name} not found or inaccessible.`);
-                    return [];
-                }
-                return [];
-            }
-        };
-
-        // Execute commit fetch with concurrency
-        const commitResults = await processWithConcurrency(userRepos, 10, fetchRepoCommits);
-        const flatCommits = commitResults.flat().sort((a, b) =>
-            new Date(b.commit.author.date).getTime() - new Date(a.commit.author.date).getTime()
-        );
-
-        // 5. Fetch Pull Requests - using Search API (Global for User)
-        // This is much better than iterating repos for PRs
-        let flatPullRequests = [];
-        try {
-            console.log(`[Dashboard] Searching PRs for ${username}...`);
-            const prSearch = await octokit.paginate(octokit.rest.search.issuesAndPullRequests, {
-                q: `is:pr author:${username}`,
-                per_page: 100
+        // Try each cache key variant until one is found
+        let cached = null;
+        for (const cacheKey of cacheKeyVariants) {
+            cached = await GitHubCache.findOne({
+                subdomain,
+                cache_key: cacheKey,
+                data_type: 'dashboard_data'
             });
-
-            flatPullRequests = prSearch.map(item => ({
-                ...item,
-                user: { login: username }, // Standardize
-                repository: item.repository_url.split('/').pop(), // Extract repo name
-                repo_url: item.html_url.split('/pull')[0],
-                state: item.state,
-                merged_at: item.pull_request?.merged_at || (item.state === 'closed' && item.pull_request?.merged_at !== null ? new Date() : null), // Heuristic
-                created_at: item.created_at
-            }));
-
-            console.log(`[Dashboard] Found ${flatPullRequests.length} PRs via Search.`);
-        } catch (e) {
-            console.error("[Dashboard] Search API failed for PRs, falling back to per-repo fetch", e.message);
-            // Fallback: iterate repos (slower/limited)
-            const fetchRepoPRs = async (repo) => {
-                try {
-                    const { data: prs } = await octokit.rest.pulls.list({
-                        owner: repo.owner.login,
-                        repo: repo.name,
-                        state: 'all',
-                        per_page: 20
-                    });
-                    return prs.filter(pr => pr.user.login === username).map(pr => ({
-                        ...pr,
-                        repository: repo.name,
-                        repo_url: repo.html_url
-                    }));
-                } catch { return []; }
-            };
-            const prResults = await processWithConcurrency(userRepos, 10, fetchRepoPRs);
-            flatPullRequests = prResults.flat();
+            if (cached) { console.log(`[GitHub Controller] Found dashboard cache with key: "${cacheKey}"`); break; }
         }
 
-        // Calculate statistics
-        // Hack: estimating additions/deletions from random metrics if not available, OR 
-        // we accept that without checking individual commits, we might have 0 stats.
-        // Requirement said "Valid Commits... always 0". 
-        // AnalyzeGitHubContributions calculates 'validCommits' based on filtering.
-        // We ensure we pass data.
+        if (cached && cached.data) {
+            const data = cached.data;
 
-        const totalAdditions = flatCommits.length * 10; // Placeholder estimation if stats missing
-        const totalDeletions = flatCommits.length * 5;
-
-        // Analyze contributions
-        const analyzedData = analyzeGitHubContributions(
-            userRepos,
-            flatCommits,
-            flatPullRequests,
-            []
-        );
-
-        const responseData = {
-            user: combinedUserData,
-            repositories: userRepos, // Return all repos metadata
-            commits: flatCommits.slice(0, 100),
-            pullRequests: flatPullRequests.slice(0, 50),
-            analyzedData: {
-                validCommits: analyzedData.validCommits,
-                spamCommits: analyzedData.spamCommits,
-                validPRs: analyzedData.validPRs,
-                spamPRs: analyzedData.spamPRs,
-                qualityMetrics: analyzedData.qualityMetrics
-            },
-            stats: {
-                totalAdditions,
-                totalDeletions,
-                mergedPRs: flatPullRequests.filter(pr => pr.state === 'closed' || pr.merged_at).length,
-                openPRs: flatPullRequests.filter(pr => pr.state === 'open').length,
-                totalCommits: flatCommits.length,
-                totalPRs: flatPullRequests.length,
-                validCommits: analyzedData.validCommits.length,
-                spamCommits: analyzedData.spamCommits.length,
-                validPRs: analyzedData.validPRs.length,
-                spamPRs: analyzedData.spamPRs.length,
-                publicRepos: userRepos.filter((repo) => !repo.private).length,
-                privateRepos: userRepos.filter((repo) => repo.private).length,
-                totalRepos: userRepos.length
+            // Resolve repositories list from repositories cache
+            let repos = [];
+            for (const variant of cacheKeyVariants) {
+                const reposCache = await GitHubCache.findOne({
+                    subdomain,
+                    cache_key: variant.replace('dashboard_data', 'repositories'),
+                    data_type: 'repositories'
+                });
+                if (reposCache && reposCache.data) {
+                    repos = reposCache.data;
+                    break;
+                }
             }
-        };
 
-        // Cache
-        if (responseData.repositories && responseData.repositories.length > 0) {
-            await setCachedData(username, 'dashboard_data', responseData, 15);
+            return res.json({
+                ...data,
+                repositories: repos,
+                // Aliases for frontend backward compatibility
+                commits: data.recentCommits || data.commits || [],
+                pullRequests: data.recentPRs || data.pullRequests || [],
+                showingCached: true,
+                lastSuccessfulSync: cached.last_fetched || cached.updatedAt
+            });
         }
 
-        res.json(responseData);
+        // Fast lightweight fallback: use MongoDB $count aggregation on repo_details
+        // DO NOT read repo_details documents (each is ~130KB, 134 docs = 17MB network transfer = timeout).
+        // Just count them and return stats so the UI shows something instantly.
+        const repoCount = await GitHubCache.countDocuments({ subdomain, data_type: 'repo_details' });
+        const repoCaches = []; // intentionally empty — skip the slow fetch
 
+        if (repoCaches && repoCaches.length > 0) {
+            console.log(`[GitHub Controller] Rebuilding dashboard_data on-the-fly (lightweight) from ${repoCaches.length} repo_details caches.`);
+            const syncedReposDetails = repoCaches.map(c => c.data).filter(Boolean);
+
+            // Lightweight O(n) aggregation — no quality analysis pass
+            let totalCommits = 0, totalPRs = 0, mergedPRs = 0, openPRs = 0;
+            let publicRepos = 0, privateRepos = 0;
+            const sampleCommits = [];
+            const samplePRs = [];
+
+            for (const repo of syncedReposDetails) {
+                if (!repo.private) publicRepos++; else privateRepos++;
+                totalCommits += (repo.commits || []).length;
+                totalPRs += (repo.pullRequests || []).length;
+                mergedPRs += (repo.pullRequests || []).filter(p => p.merged_at || p.state === 'closed').length;
+                openPRs += (repo.pullRequests || []).filter(p => p.state === 'open').length;
+                if (sampleCommits.length < 100) {
+                    for (const c of (repo.commits || [])) {
+                        if (c.author && sampleCommits.length < 100) {
+                            sampleCommits.push({ ...c, repository: repo.name, repo_url: repo.html_url });
+                        }
+                    }
+                }
+                if (samplePRs.length < 50) {
+                    for (const p of (repo.pullRequests || [])) {
+                        if (samplePRs.length < 50) samplePRs.push({ ...p, repository: repo.name, repo_url: repo.html_url });
+                    }
+                }
+            }
+
+            const dashboardPayload = {
+                user: { login: username, name: username, public_repos: syncedReposDetails.length },
+                repositories: syncedReposDetails,
+                commits: sampleCommits,
+                pullRequests: samplePRs,
+                analyzedData: {
+                    validCommits: sampleCommits,
+                    spamCommits: [],
+                    validPRs: samplePRs,
+                    spamPRs: [],
+                    qualityMetrics: { totalCommits, totalPRs }
+                },
+                stats: {
+                    totalAdditions: totalCommits * 10,
+                    totalDeletions: totalCommits * 5,
+                    mergedPRs,
+                    openPRs,
+                    totalCommits,
+                    totalPRs,
+                    validCommits: totalCommits,
+                    spamCommits: 0,
+                    validPRs: mergedPRs,
+                    spamPRs: 0,
+                    publicRepos,
+                    privateRepos,
+                    totalRepos: syncedReposDetails.length
+                }
+            };
+
+            const latestTimestamp = repoCaches.reduce((latest, c) => {
+                const fetched = new Date(c.last_fetched || c.updatedAt);
+                return fetched > latest ? fetched : latest;
+            }, new Date(0));
+
+            return res.json({
+                ...dashboardPayload,
+                showingCached: true,
+                lastSuccessfulSync: latestTimestamp.getTime() > 0 ? latestTimestamp : new Date()
+            });
+        }
+
+        // repoCaches is always [] (we skip the slow fetch), so this block never runs.
+        // We still have repoCount from countDocuments above for the fallback response.
+
+        // Check if a sync job is currently running
+        const activeJob = await GitHubSyncJob.findOne({
+            subdomain,
+            status: { $in: ['Pending', 'Running'] }
+        }).sort({ createdAt: -1 });
+
+        // Auto-trigger a background sync if no cache and no active sync
+        if (!activeJob && repoCount > 0) {
+            console.log(`[GitHub Controller] No dashboard cache but ${repoCount} repo_details exist. Auto-triggering background sync to build slim cache...`);
+            try {
+                const { triggerAsyncSync } = require('../services/githubSyncService');
+                triggerAsyncSync(subdomain).catch(err => {
+                    console.error('[GitHub Controller] Auto-sync trigger failed:', err.message);
+                });
+            } catch (syncErr) {
+                console.error('[GitHub Controller] Could not load sync service:', syncErr.message);
+            }
+        }
+
+        // Return a fast response immediately — the background sync will build the cache
+        const emptyStats = {
+            totalAdditions: 0, totalDeletions: 0, mergedPRs: 0, openPRs: 0,
+            totalCommits: 0, totalPRs: 0, validCommits: 0, spamCommits: 0,
+            validPRs: 0, spamPRs: 0, publicRepos: 0, privateRepos: 0,
+            totalRepos: repoCount  // at least show how many repos we have cached
+        };
+        const message = activeJob
+            ? 'Sync in progress — data will appear shortly'
+            : (repoCount > 0
+                ? `Building dashboard from ${repoCount} cached repositories. Refresh in 30 seconds.`
+                : 'Synchronizing initial GitHub data. Please refresh in a moment.');
+
+        console.warn(`[GitHub Controller] No dashboard_data cache for subdomain "${subdomain}" (repoCount=${repoCount}). Returning fast fallback.`);
+        return res.json({
+            user: { login: username, name: username },
+            repositories: [], commits: [], pullRequests: [],
+            analyzedData: { validCommits: [], spamCommits: [], validPRs: [], spamPRs: [], qualityMetrics: {} },
+            stats: emptyStats,
+            showingCached: false,
+            syncInProgress: !!activeJob,
+            message
+        });
     } catch (error) {
         console.error("Error in getDashboardData:", error);
         res.status(500).json({ success: false, message: error.message });
     }
 };
 
-
 // @desc    Get Contributors (Leaderboard)
 // @route   GET /api/github/contributors
 // @access  Private (Admin)
 const getContributors = async (req, res) => {
     try {
+        const subdomain = req.user?.subdomain || req.query.subdomain;
         const {
             github_username,
             page = 1,
@@ -348,7 +217,6 @@ const getContributors = async (req, res) => {
         const sort = {};
         sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
 
-        // Default to last 30 days logic if needed, but for now strict DB query
         const contributors = await Contributor.find(query)
             .sort(sort)
             .limit(parseInt(limit))
@@ -396,18 +264,16 @@ const saveContributors = async (req, res) => {
         const savedContributors = [];
         const errors = [];
 
-        // Process contributors in batches to avoid memory issues
         const batchSize = 10;
         for (let i = 0; i < contributors.length; i += batchSize) {
             const batch = contributors.slice(i, i + batchSize);
 
-            await Promise.all(batch.map(async (contributorData, index) => {
+            await Promise.all(batch.map(async (contributorData) => {
                 try {
                     if (!contributorData.login) {
                         throw new Error(`Missing login field`);
                     }
 
-                    // Clean and validate data
                     const cleanContributorData = {
                         ...contributorData,
                         github_username,
@@ -490,273 +356,209 @@ const clearContributors = async (req, res) => {
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
-}
+};
 
-// @desc    Get Employees from GitHub Org (Mock/Actual)
+// @desc    Get Employees from GitHub Org
 // @route   GET /api/github/employees
 // @access  Private (Admin)
 const getEmployees = async (req, res) => {
     try {
-        // This endpoint was in source server.js to fetch org members. 
-        // Keeping it for compatibility if needed.
-        const octokit = getOctokit();
-        // Using the username parameter from the request
-        const username = req.query.username || process.env.NEXT_PUBLIC_GITHUB_USERNAME;
-
-        const members = await octokit.paginate(octokit.rest.orgs.listMembers, {
-            org: username, // Assuming username is org
-            per_page: 100,
-        });
-
-        const employees = members.map((member) => ({
-            id: member.id,
-            githubUsername: member.login,
-            name: member.login,
-            avatar: member.avatar_url,
-            email: null,
-            points: 0
+        const subdomain = req.user?.subdomain;
+        const activeWorkers = await require('../models/Worker').find({ subdomain, status: 'Active' });
+        const employees = activeWorkers.map(w => ({
+            id: w._id,
+            githubUsername: w.username,
+            name: w.name,
+            avatar: w.photo || '',
+            email: w.email || null,
+            points: w.totalPoints || 0
         }));
-
         res.json(employees);
     } catch (error) {
-        // console.error("Error fetching employees:", error);
-        // It might fail if username is not an org, return empty
         res.json([]);
     }
-}
+};
 
-// @desc    Get Live Leaderboard Data (Proxy logic from frontend)
+// @desc    Get Live Leaderboard Data (Read from Cache)
 // @route   GET /api/github/live-leaderboard
 // @access  Private (Admin)
 const getLiveLeaderboard = async (req, res) => {
     try {
-        const username = req.query.username || process.env.NEXT_PUBLIC_GITHUB_USERNAME;
-        if (!username) return res.status(400).json({ message: "Username required" });
-
-        // Try to get cached data first
-        const cachedData = await getCachedData(username, 'leaderboard_data');
-        if (cachedData) {
-            return res.json(cachedData);
+        const subdomain = req.user?.subdomain || req.query.subdomain;
+        if (!subdomain) {
+            return res.status(400).json({ success: false, message: 'Subdomain is required' });
         }
 
-        const octokit = getOctokit();
+        const username = process.env.NEXT_PUBLIC_GITHUB_USERNAME || 'techvaseegrah';
+        const cacheKey = `${username}:leaderboard_data`;
 
-        // 1. Fetch all repositories
-        let repositories = await fetchUserRepositories(octokit);
-
-        // 2. Fetch details concurrenty
-        const fetchDetails = async (repo) => {
-            const owner = repo.owner.login;
-            const repoName = repo.name;
-
-            try {
-                const [branchesRes, contributorsRes, commitsRes, pullsRes] = await Promise.all([
-                    octokit.rest.repos.listBranches({ owner, repo: repoName, per_page: 20 }).catch(() => ({ data: [] })),
-                    octokit.rest.repos.listContributors({ owner, repo: repoName, per_page: 10 }).catch(() => ({ data: [] })),
-                    octokit.rest.repos.listCommits({ owner, repo: repoName, per_page: 5 }).catch((e) => {
-                        console.error(`GET /repos/${owner}/${repoName}/commits - ${e.status || 'unknown'} with id ${e.headers?.['x-github-request-id'] || 'unknown'} in ${e.request?.requestMs || 'unknown'}ms`);
-                        console.error(`[GitHub API Error] Status: ${e.status}, Message: ${e.message}, Repo: ${owner}/${repoName}`);
-                        
-                        // Handle specific GitHub API errors
-                        if (e.status === 409) {
-                            console.warn(`[GitHub API] Repository ${owner}/${repoName} is empty or has no commits, skipping.`);
-                        } else if (e.status === 403) {
-                            console.warn(`[GitHub API] Forbidden access to ${owner}/${repoName}, may need additional permissions.`);
-                        } else if (e.status === 404) {
-                            console.warn(`[GitHub API] Repository ${owner}/${repoName} not found or inaccessible.`);
-                        }
-                        return { data: [] };
-                    }), // Reduced per_page
-                    octokit.rest.pulls.list({ owner, repo: repoName, state: 'all', per_page: 5 }).catch(() => ({ data: [] }))
-                ]);
-
-                return {
-                    ...repo,
-                    branches: branchesRes.data || [],
-                    contributors: contributorsRes.data || [],
-                    commits: commitsRes.data || [],
-                    pullRequests: pullsRes.data || []
-                };
-            } catch (error) {
-                return { ...repo, branches: [], contributors: [], commits: [], pullRequests: [] };
-            }
-        };
-
-        const reposWithDetails = await processWithConcurrency(repositories, 5, fetchDetails);
-
-        // 3. Process data
-        const allBranchContributors = [];
-        const allCommits = [];
-        const allPullRequests = [];
-        const processedUsers = new Set();
-        const usersToFetch = new Set();
-
-        for (const repo of reposWithDetails) {
-            for (const commit of repo.commits) {
-                if (commit.author) {
-                    allCommits.push({
-                        ...commit,
-                        repository: repo.name,
-                        repo_url: repo.html_url,
-                        repo_private: repo.private,
-                        // Add default stats and mock files for quality analysis
-                        stats: { additions: 5, deletions: 3, total: 8 },
-                        files: [{ filename: 'leaderboard_mock.js' }]
-                    });
-                }
-            }
-            for (const pr of repo.pullRequests) {
-                allPullRequests.push({
-                    ...pr,
-                    repository: repo.name,
-                    repo_url: repo.html_url,
-                    repo_private: repo.private
-                });
-            }
-            for (const contributor of repo.contributors) {
-                if (!processedUsers.has(contributor.login)) {
-                    allBranchContributors.push(contributor);
-                    processedUsers.add(contributor.login);
-                    usersToFetch.add(contributor.login);
-                }
-            }
-        }
-
-        // Fetch User Details concurrently
-        const fetchUser = async (login) => {
-            try {
-                const { data: userDetails } = await octokit.rest.users.getByUsername({ username: login });
-                return { login, details: userDetails };
-            } catch (e) {
-                return { login, details: null };
-            }
-        };
-
-        const userDetailsResults = await processWithConcurrency(Array.from(usersToFetch), 5, fetchUser);
-        const userDetailsMap = new Map();
-        userDetailsResults.forEach(r => {
-            if (r.details) userDetailsMap.set(r.login, r.details);
+        const cached = await GitHubCache.findOne({
+            subdomain,
+            cache_key: cacheKey,
+            data_type: 'leaderboard_data'
         });
 
-        const finalContributors = allBranchContributors.map(c => ({
-            ...c,
-            user_details: userDetailsMap.get(c.login)
-        }));
-
-        // Analyze contributions
-        const analyzedData = analyzeGitHubContributions(
-            repositories,
-            allCommits,
-            allPullRequests,
-            reposWithDetails.flatMap(repo =>
-                repo.branches.map(branch => ({
-                    ...branch,
-                    repository: repo.name
-                }))
-            )
-        );
-
-        const responsePayload = {
-            repositories: reposWithDetails,
-            contributors: finalContributors,
-            commits: allCommits,
-            pullRequests: allPullRequests,
-            analyzedData: {
-                validCommits: analyzedData.validCommits,
-                spamCommits: analyzedData.spamCommits,
-                validPRs: analyzedData.validPRs,
-                spamPRs: analyzedData.spamPRs,
-                qualityMetrics: analyzedData.qualityMetrics
-            },
-            stats: {
-                totalRepos: repositories.length,
-                totalBranches: reposWithDetails.reduce((acc, r) => acc + r.branches.length, 0),
-                totalCommits: allCommits.length,
-                totalPRs: allPullRequests.length,
-                validCommits: analyzedData.validCommits.length,
-                spamCommits: analyzedData.spamCommits.length,
-                validPRs: analyzedData.validPRs.length,
-                spamPRs: analyzedData.spamPRs.length
-            }
-        };
-
-        if (responsePayload.repositories && responsePayload.repositories.length > 0) {
-            await setCachedData(username, 'leaderboard_data', responsePayload, 15);
+        if (cached && cached.data) {
+            const data = cached.data;
+            return res.json({
+                ...data,
+                commits: data.recentCommits || data.commits || [],
+                pullRequests: data.recentPRs || data.pullRequests || [],
+                showingCached: true,
+                lastSuccessfulSync: cached.last_fetched || cached.updatedAt
+            });
         }
 
-        res.json(responsePayload);
+        // Try on-the-fly reconstruction from persistent repo_details caches.
+        // Lightweight O(n) path — no analyzeGitHubContributions() to avoid event loop blocking.
+        const repoCaches = await GitHubCache.find({
+            subdomain,
+            data_type: 'repo_details'
+        }).select('data last_fetched updatedAt').lean();
 
+        if (repoCaches && repoCaches.length > 0) {
+            console.log(`[GitHub Controller] Rebuilding leaderboard_data on-the-fly (lightweight) from ${repoCaches.length} repo_details caches.`);
+            const syncedReposDetails = repoCaches.map(c => c.data).filter(Boolean);
+
+            const allContributorsMap = new Map();
+            let totalCommits = 0, totalPRs = 0, totalBranches = 0;
+            const sampleCommits = [], samplePRs = [];
+
+            for (const repo of syncedReposDetails) {
+                totalCommits += (repo.commits || []).length;
+                totalPRs += (repo.pullRequests || []).length;
+                totalBranches += (repo.branches || []).length;
+                for (const cont of repo.contributors || []) {
+                    if (cont.login && !allContributorsMap.has(cont.login)) {
+                        allContributorsMap.set(cont.login, { ...cont });
+                    }
+                }
+                if (sampleCommits.length < 100) {
+                    for (const c of (repo.commits || [])) {
+                        if (c.author && sampleCommits.length < 100) sampleCommits.push({ ...c, repository: repo.name });
+                    }
+                }
+                if (samplePRs.length < 50) {
+                    for (const p of (repo.pullRequests || [])) {
+                        if (samplePRs.length < 50) samplePRs.push({ ...p, repository: repo.name });
+                    }
+                }
+            }
+
+            // Enrich contributors from DB
+            const finalContributors = Array.from(allContributorsMap.values());
+            const contributorsDb = await Contributor.find({ subdomain }).lean();
+            const contributorsDbMap = new Map(contributorsDb.map(c => [c.login, c]));
+            finalContributors.forEach(c => {
+                const dbCont = contributorsDbMap.get(c.login);
+                if (dbCont) c.user_details = dbCont.user_details;
+            });
+
+            const leaderboardPayload = {
+                repositories: syncedReposDetails,
+                contributors: finalContributors,
+                commits: sampleCommits,
+                pullRequests: samplePRs,
+                analyzedData: {
+                    validCommits: sampleCommits,
+                    spamCommits: [],
+                    validPRs: samplePRs,
+                    spamPRs: [],
+                    qualityMetrics: { totalCommits, totalPRs }
+                },
+                stats: {
+                    totalRepos: syncedReposDetails.length,
+                    totalBranches,
+                    totalCommits,
+                    totalPRs,
+                    validCommits: totalCommits,
+                    spamCommits: 0,
+                    validPRs: totalPRs,
+                    spamPRs: 0
+                }
+            };
+
+            const latestTimestamp = repoCaches.reduce((latest, c) => {
+                const fetched = new Date(c.last_fetched || c.updatedAt);
+                return fetched > latest ? fetched : latest;
+            }, new Date(0));
+
+            return res.json({
+                ...leaderboardPayload,
+                showingCached: true,
+                lastSuccessfulSync: latestTimestamp.getTime() > 0 ? latestTimestamp : new Date()
+            });
+        }
+
+        console.warn(`[GitHub Controller] No cached leaderboard found for subdomain: ${subdomain}. Returning fallback.`);
+        return res.json({
+            repositories: [],
+            contributors: [],
+            commits: [],
+            pullRequests: [],
+            analyzedData: {
+                validCommits: [],
+                spamCommits: [],
+                validPRs: [],
+                spamPRs: [],
+                qualityMetrics: {}
+            },
+            stats: {
+                totalRepos: 0,
+                totalBranches: 0,
+                totalCommits: 0,
+                totalPRs: 0,
+                validCommits: 0,
+                spamCommits: 0,
+                validPRs: 0,
+                spamPRs: 0
+            },
+            showingCached: false,
+            message: 'Synchronizing initial GitHub data. Please refresh in a moment.'
+        });
     } catch (error) {
         console.error("Error in getLiveLeaderboard:", error);
         res.status(500).json({ message: error.message });
     }
 };
 
-// @desc    Get Live Repositories with Contributors
+// @desc    Get Live Repositories (Read from Cache)
 // @route   GET /api/github/live-repositories
 // @access  Private (Admin)
 const getLiveRepositories = async (req, res) => {
     try {
-        const username = req.query.username || process.env.NEXT_PUBLIC_GITHUB_USERNAME;
-        if (!username) return res.status(400).json({ message: "Username required" });
-
-        // Try to get cached data first
-        const cachedData = await getCachedData(username, 'repositories');
-        if (cachedData) {
-            return res.json(cachedData);
+        const subdomain = req.user?.subdomain || req.query.subdomain;
+        if (!subdomain) {
+            return res.status(400).json({ success: false, message: 'Subdomain is required' });
         }
 
-        const octokit = getOctokit();
+        const username = process.env.NEXT_PUBLIC_GITHUB_USERNAME || 'techvaseegrah';
+        const cacheKey = `${username}:repositories`;
 
-        const repositories = await fetchUserRepositories(octokit);
+        const cached = await GitHubCache.findOne({
+            subdomain,
+            cache_key: cacheKey,
+            data_type: 'repositories'
+        });
 
-        // Optimize: Only fetch contributors for count. 
-        // No branches, no commits, no complex user details unless absolutely needed.
-        const fetchRepoEnrichment = async (repo) => {
-            const owner = repo.owner.login;
-            const repoName = repo.name;
-
-            let contributor_count = 0;
-            let contributors = [];
-
-            try {
-                // Just get contributors to count them. limit 10 is enough for preview.
-                // NOTE: contributors url is often in repo object, but we need the count.
-                // repo.contributors_url is a link.
-                const { data: contributorsData } = await octokit.rest.repos.listContributors({
-                    owner,
-                    repo: repoName,
-                    per_page: 10
-                });
-                contributor_count = contributorsData ? contributorsData.length : 0;
-                contributors = contributorsData || [];
-            } catch (e) {
-                // If it fails (empty repo, etc), just 0
-            }
-
-            return {
-                ...repo,
-                contributors,
-                contributor_count,
-                // Add default stats for robustness
-                stats: { additions: 5, deletions: 3, total: 8 },
-                recent_commits_count: 0,
-                branches: []
-            };
-        };
-
-        const repositoriesWithDetails = await processWithConcurrency(repositories, 10, fetchRepoEnrichment);
-
-        // Sort
-        repositoriesWithDetails.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
-
-        // Cache
-        if (repositoriesWithDetails.length > 0) {
-            await setCachedData(username, 'repositories', repositoriesWithDetails, 15);
+        if (cached && cached.data) {
+            return res.json(cached.data);
         }
 
-        res.json(repositoriesWithDetails);
+        // Try on-the-fly reconstruction from persistent repo_details caches
+        const repoCaches = await GitHubCache.find({
+            subdomain,
+            data_type: 'repo_details'
+        });
 
+        if (repoCaches && repoCaches.length > 0) {
+            console.log(`[GitHub Controller] Rebuilding repositories list on-the-fly from ${repoCaches.length} repo_details caches.`);
+            const syncedReposDetails = repoCaches.map(c => c.data).filter(Boolean);
+            return res.json(syncedReposDetails);
+        }
+
+        console.warn(`[GitHub Controller] No cached repositories found for subdomain: ${subdomain}. Returning fallback.`);
+        return res.json([]);
     } catch (error) {
         console.error("Error in getLiveRepositories:", error);
         res.status(500).json({ message: error.message });
@@ -768,19 +570,16 @@ const getLiveRepositories = async (req, res) => {
 // @access  Private (Admin)
 const clearGitHubCache = async (req, res) => {
     try {
-        const username = req.body.username || req.query.username || process.env.NEXT_PUBLIC_GITHUB_USERNAME;
-        if (!username) {
-            return res.status(400).json({
-                success: false,
-                message: 'Username required to clear cache'
-            });
+        const subdomain = req.user?.subdomain;
+        if (!subdomain) {
+            return res.status(400).json({ success: false, message: 'Subdomain required' });
         }
 
-        await clearUserCache(username);
+        await GitHubCache.deleteMany({ subdomain });
 
         res.json({
             success: true,
-            message: `GitHub cache cleared for user: ${username}`
+            message: `GitHub cache cleared successfully for subdomain: ${subdomain}`
         });
     } catch (error) {
         console.error('Error clearing GitHub cache:', error);
@@ -792,6 +591,76 @@ const clearGitHubCache = async (req, res) => {
     }
 };
 
+// @desc    Trigger asynchronous background GitHub Sync
+// @route   POST /api/github/sync
+// @access  Private (Admin)
+const triggerSync = async (req, res) => {
+    try {
+        const subdomain = req.user?.subdomain;
+        if (!subdomain) {
+            return res.status(400).json({ success: false, message: 'Subdomain required to trigger sync' });
+        }
+
+        const { triggerAsyncSync } = require('../services/githubSyncService');
+        const jobId = await triggerAsyncSync(subdomain);
+
+        res.json({
+            success: true,
+            message: 'Background synchronization job started.',
+            jobId
+        });
+    } catch (error) {
+        console.error('[githubController] triggerSync error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc    Get status of synchronization jobs
+// @route   GET /api/github/sync-status
+// @access  Private (Admin)
+const getSyncStatus = async (req, res) => {
+    try {
+        const subdomain = req.user?.subdomain;
+        if (!subdomain) {
+            return res.status(400).json({ success: false, message: 'Subdomain required' });
+        }
+
+        const { jobId } = req.query;
+        let job;
+
+        if (jobId) {
+            job = await GitHubSyncJob.findOne({ _id: jobId, subdomain });
+        } else {
+            // Retrieve latest sync job for this subdomain
+            job = await GitHubSyncJob.findOne({ subdomain }).sort({ createdAt: -1 });
+        }
+
+        if (!job) {
+            return res.json({
+                success: true,
+                status: 'None',
+                progress: '0 / 0',
+                message: 'No sync jobs found for this subdomain.'
+            });
+        }
+
+        res.json({
+            success: true,
+            jobId: job._id,
+            status: job.status,
+            progress: job.progress,
+            startedAt: job.startedAt,
+            completedAt: job.completedAt,
+            repositoriesProcessed: job.repositoriesProcessed,
+            repositoriesFailed: job.repositoriesFailed,
+            syncErrors: job.syncErrors
+        });
+    } catch (error) {
+        console.error('[githubController] getSyncStatus error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 module.exports = {
     getDashboardData,
     getContributors,
@@ -800,5 +669,7 @@ module.exports = {
     getEmployees,
     getLiveLeaderboard,
     getLiveRepositories,
-    clearGitHubCache
+    clearGitHubCache,
+    triggerSync,
+    getSyncStatus
 };

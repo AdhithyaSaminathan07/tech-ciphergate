@@ -4,9 +4,11 @@ const Department = require('../models/Department');
 const Ticket = require('../models/ticketModel');
 const InternalDocument = require('../models/InternalDocument');
 const SecondBrainItem = require('../models/SecondBrainItem');
+const GitHubCache = require('../models/GitHubCache');
 const { generateCompletion } = require('../services/claudeService');
 const { syncBrainItem, calculateDeveloperExpertise } = require('../services/secondBrainService');
 const asyncHandler = require('express-async-handler');
+const crypto = require('crypto');
 
 // Helper to extract JSON from text safely
 const extractJson = (text) => {
@@ -39,17 +41,56 @@ const analyzeTask = asyncHandler(async (req, res) => {
     throw new Error('Subdomain is missing or invalid');
   }
 
-  // 1. Retrieve all projects for subdomain
+  // 1. Claude Request Cache Look-up
+  const taskHash = crypto.createHash('md5').update(title + '|' + (description || '')).digest('hex');
+  const cacheKey = `ai_task_rec:${subdomain}:${taskHash}`;
+
+  try {
+    const cachedResponse = await GitHubCache.findOne({
+      subdomain,
+      cache_key: cacheKey,
+      data_type: 'ai_request_cache',
+      expires_at: { $gte: new Date() }
+    });
+
+    if (cachedResponse && cachedResponse.data) {
+      console.log(`[AI Caching] Serving cached recommendation for task hash: ${taskHash}`);
+      return res.json(cachedResponse.data);
+    }
+  } catch (cacheErr) {
+    console.error('[AI Caching] Cache read error:', cacheErr.message);
+  }
+
+  // 2. Retrieve all projects for subdomain
   const projects = await Department.find({ subdomain }).lean();
   
-  // 2. Retrieve all active workers (developers) with expertise profiles
+  // 3. Retrieve all active workers (developers) with expertise profiles
   const workers = await Worker.find({ subdomain, status: 'Active' }).lean();
 
-  // 3. Search Second Brain for context (Hybrid retrieval search)
+  // 4. Retrieve Repository Intelligence Context from Second Brain
+  let repoIntellList = [];
+  try {
+    repoIntellList = await SecondBrainItem.find({
+      subdomain,
+      type: 'github_repo_intelligence'
+    }).lean();
+  } catch (err) {
+    console.log('[AI Search] Repository intelligence retrieval failed.');
+  }
+
+  const repoIntelStr = repoIntellList.map((r, i) =>
+    `Repo ${i + 1} [Name: ${r.metadata?.repoName || r.title}]:
+   - Primary Maintainer: ${r.metadata?.primaryMaintainer?.name || 'None'}
+   - Primary Tech Stack: ${(r.metadata?.primaryStack || []).join(', ') || 'Unknown'}
+   - Health Score: ${r.metadata?.healthScore || 'N/A'}/100
+   - Stats: ${r.metadata?.stats?.totalCommits || 0} commits, ${r.metadata?.stats?.totalPRs || 0} PRs, ${r.metadata?.stats?.openIssues || 0} open issues`
+  ).join('\n\n');
+
+  // 5. Search Second Brain for context (Hybrid retrieval search)
   let searchResults = [];
   try {
     searchResults = await SecondBrainItem.find(
-      { $text: { $search: title }, subdomain },
+      { $text: { $search: title }, subdomain, type: { $ne: 'github_repo_intelligence' } },
       { score: { $meta: "textScore" } }
     )
     .sort({ score: { $meta: "textScore" } })
@@ -60,11 +101,11 @@ const analyzeTask = asyncHandler(async (req, res) => {
   }
 
   if (searchResults.length === 0) {
-    // Regex keyword fallback if text index is empty or throws error
     const words = title.split(/\s+/).filter(w => w.length > 3);
     if (words.length > 0) {
       searchResults = await SecondBrainItem.find({
         subdomain,
+        type: { $ne: 'github_repo_intelligence' },
         $or: words.map(w => ({ content: { $regex: new RegExp(w, 'i') } }))
       })
       .limit(5)
@@ -77,14 +118,18 @@ const analyzeTask = asyncHandler(async (req, res) => {
     `Context Block ${i + 1} [Type: ${r.type}]:\nTitle: ${r.title}\nContent: ${r.content}`
   ).join('\n\n');
 
-  // Format developer profiles list
+  // Format developer profiles list with weighted scores
   const devProfilesStr = workers.map(w => {
     const exp = w.expertiseProfile || {};
     return `- ID: ${w._id}
   Name: ${w.name}
   Username: ${w.username}
   Skills: ${(w.skills || []).join(', ') || 'None listed'}
-  GitHub Contributions Score: ${w.gitContributions || 0}
+  Weighted Expertise Score: ${exp.weightedExpertiseScore || 0}/100
+  GitHub Commits Count: ${exp.gitCommitsCount || 0}
+  GitHub PRs Count: ${exp.gitPRsCount || 0}
+  GitHub Files Changed: ${exp.gitFilesChangedCount || 0}
+  GitHub Code Reviews: ${exp.gitCodeReviewsCount || 0}
   Completed Tasks: ${w.completedTasksCount || 0}
   Active Task Load: ${w.activeTasksCount || 0}
   Project History: ${(exp.assignedProjectsList || []).join(', ') || 'None'}`;
@@ -99,10 +144,15 @@ Analyze the user's task and output:
 4. A concrete subtask checklist (array of 3-5 subtask step strings)
 5. Developer Recommendations:
    Match the top 3 best-suited developers from the provided developer profiles list.
-   For each developer, you MUST provide:
+   For each developer recommendation, you MUST calculate a Match Confidence Level ('High', 'Medium', 'Low') based on:
+   - Match Score & Task History
+   - Direct Stack Matches with the repository intelligence
+   - Workload & Active Task Load
+   You MUST provide:
    - developerId
    - developerName
    - matchScore (percentage score integer, e.g. 96)
+   - confidenceLevel ('High', 'Medium', 'Low')
    - reasons (array of 3-5 bullet point justifications prefix with a checkmark "✓").
      Example reasons:
      ✓ Expert in Node.js and AWS (tech stack match)
@@ -125,6 +175,7 @@ You MUST respond ONLY with a JSON object in this exact format, with no preamble 
       "developerId": "mongodb_developer_id",
       "developerName": "Developer Name",
       "matchScore": 95,
+      "confidenceLevel": "High",
       "reasons": [
         "✓ Worked on InstaxBot (Primary Repo)",
         "✓ Expert in Node.js and AWS",
@@ -139,6 +190,9 @@ You MUST respond ONLY with a JSON object in this exact format, with no preamble 
 Title: ${title}
 Description: ${description || 'No description provided'}
 
+RETIREVED REPOSITORY INTELLIGENCE CONTEXT:
+${repoIntelStr || 'No repository summaries indexed.'}
+
 RETIREVED COMPANY CONTEXT:
 ${contextStr || 'No specific context retrieved.'}
 
@@ -148,6 +202,25 @@ ${devProfilesStr || 'No developers found.'}`;
   try {
     const aiResponseText = await generateCompletion(subdomain, systemPrompt, userPrompt);
     const parsedRecommendation = extractJson(aiResponseText);
+
+    // Save output to Claude Request Cache (24 hours TTL)
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await GitHubCache.updateOne(
+      { subdomain, cache_key: cacheKey },
+      {
+        subdomain,
+        cache_key: cacheKey,
+        username: subdomain,
+        data_type: 'ai_request_cache',
+        data: parsedRecommendation,
+        expires_at: expiresAt,
+        last_fetched: new Date()
+      },
+      { upsert: true }
+    ).catch(err => {
+      console.error('[AI Caching] Cache write error:', err.message);
+    });
+
     res.json(parsedRecommendation);
   } catch (error) {
     console.error('[AI Controller] Analysis Error:', error.message);
@@ -328,9 +401,56 @@ const reindexData = asyncHandler(async (req, res) => {
   }
 });
 
+// @desc    Log AI decision (Applied details, specs, merges, etc)
+// @route   POST /api/ai/audit-log
+// @access  Private
+const logAiDecision = asyncHandler(async (req, res) => {
+  const { taskId, taskTitle, recommendedPriority, recommendedComplexity, estimatedHours, recommendedDevelopers, actionTaken, actionDetail } = req.body;
+  const subdomain = req.user?.subdomain;
+
+  if (!taskId || !taskTitle || !actionTaken) {
+    res.status(400);
+    throw new Error('Task details and action taken are required');
+  }
+
+  const AiAuditLog = require('../models/AiAuditLog');
+  const log = new AiAuditLog({
+    subdomain,
+    taskId,
+    taskTitle,
+    recommendedPriority: recommendedPriority || 'Medium',
+    recommendedComplexity: recommendedComplexity || 'Medium',
+    estimatedHours: estimatedHours || 0,
+    recommendedDevelopers: recommendedDevelopers || [],
+    actionTaken,
+    actionDetail: actionDetail || '',
+    performedBy: req.user._id
+  });
+
+  await log.save();
+  res.status(201).json({ success: true, log });
+});
+
+// @desc    Get AI Audit Logs history
+// @route   GET /api/ai/audit-logs
+// @access  Private
+const getAiAuditLogs = asyncHandler(async (req, res) => {
+  const subdomain = req.user?.subdomain;
+  const AiAuditLog = require('../models/AiAuditLog');
+  
+  const logs = await AiAuditLog.find({ subdomain })
+    .populate('performedBy', 'name username')
+    .sort({ createdAt: -1 });
+    
+  res.json(logs);
+});
+
 module.exports = {
   analyzeTask,
   searchSecondBrain,
   getBrainStats,
-  reindexData
+  reindexData,
+  logAiDecision,
+  getAiAuditLogs
 };
+

@@ -29,6 +29,7 @@ export default function LiveGitHubStats() {
     const [error, setError] = useState(null)
     const [refreshing, setRefreshing] = useState(false)
     const [clearingCache, setClearingCache] = useState(false)
+    const [syncJob, setSyncJob] = useState(null)
 
     const loadData = async () => {
         try {
@@ -48,10 +49,58 @@ export default function LiveGitHubStats() {
         }
     }
 
+    const pollSyncStatus = (jobId) => {
+        const interval = setInterval(async () => {
+            try {
+                const res = await githubService.getSyncStatus(jobId);
+                if (res && res.success) {
+                    setSyncJob(res);
+                    if (res.status === 'Completed' || res.status === 'Failed') {
+                        clearInterval(interval);
+                        loadData();
+                    }
+                }
+            } catch (err) {
+                console.error("Error polling sync status:", err);
+                clearInterval(interval);
+            }
+        }, 3000);
+    };
+
     useEffect(() => {
-        setLoading(true)
-        loadData()
-    }, [])
+        const checkInitialSyncStatus = async () => {
+            try {
+                const res = await githubService.getSyncStatus();
+                if (res && res.success && (res.status === 'Pending' || res.status === 'Running')) {
+                    setSyncJob(res);
+                    pollSyncStatus(res.jobId);
+                } else if (res && res.success) {
+                    setSyncJob(res);
+                }
+            } catch (err) {
+                console.error("Error checking initial sync status:", err);
+            }
+        };
+        checkInitialSyncStatus();
+        setLoading(true);
+        loadData();
+    }, []);
+
+    const handleSyncNow = async () => {
+        try {
+            const res = await githubService.triggerSync();
+            if (res && res.success && res.jobId) {
+                setSyncJob({
+                    jobId: res.jobId,
+                    status: 'Pending',
+                    progress: '0 / 0'
+                });
+                pollSyncStatus(res.jobId);
+            }
+        } catch (err) {
+            console.error("Error triggering sync:", err);
+        }
+    };
 
     const clearGitHubCache = async () => {
         setClearingCache(true);
@@ -112,6 +161,46 @@ export default function LiveGitHubStats() {
 
     return (
         <div className="space-y-4">
+            {/* Sync Job Status Banner */}
+            {syncJob && (syncJob.status === 'Pending' || syncJob.status === 'Running') && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between animate-pulse">
+                    <div className="flex items-center space-x-3">
+                        <Activity className="h-5 w-5 text-blue-500 animate-spin" />
+                        <div>
+                            <p className="text-sm font-semibold text-blue-800">GitHub Background Sync Running</p>
+                            <p className="text-xs text-blue-600">Progress: {syncJob.progress} Repositories</p>
+                        </div>
+                    </div>
+                    <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">
+                        {syncJob.status}
+                    </Badge>
+                </div>
+            )}
+
+            {/* Showing Cached Banner */}
+            {data && data.showingCached && (
+                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                        <Clock className="h-5 w-5 text-yellow-600" />
+                        <div>
+                            <p className="text-sm font-semibold text-yellow-800">Showing Cached Data</p>
+                            <p className="text-xs text-yellow-600">
+                                Last successful sync: {new Date(data.lastSuccessfulSync).toLocaleTimeString()} ({new Date(data.lastSuccessfulSync).toLocaleDateString()})
+                            </p>
+                        </div>
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSyncNow}
+                        disabled={syncJob && (syncJob.status === 'Pending' || syncJob.status === 'Running')}
+                        className="bg-yellow-100 border-yellow-300 hover:bg-yellow-200 text-yellow-800"
+                    >
+                        Sync Now
+                    </Button>
+                </div>
+            )}
+
             {/* Enhanced Stats Cards */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card>

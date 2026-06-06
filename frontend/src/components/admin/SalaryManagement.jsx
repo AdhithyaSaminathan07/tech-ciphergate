@@ -2,8 +2,25 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { FaDonate, FaFileInvoiceDollar, FaFilePdf, FaTrash, FaCalendarAlt, FaList, FaChevronLeft } from 'react-icons/fa';
-import { FiRefreshCcw, FiFilter, FiX, FiChevronDown, FiChevronUp, FiSliders } from "react-icons/fi";
+import { 
+    Coins, 
+    Eye, 
+    FileDown, 
+    Trash2, 
+    Calendar, 
+    List, 
+    ChevronLeft, 
+    ChevronDown, 
+    ChevronUp, 
+    RefreshCw, 
+    X, 
+    Sliders, 
+    FileText, 
+    Receipt, 
+    Wallet, 
+    Filter,
+    AlertTriangle
+} from 'lucide-react';
 import { getWorkers } from '../../services/workerService';
 import { getDepartments } from '../../services/departmentService';
 import Card from '../common/Card';
@@ -12,7 +29,7 @@ import Table from '../common/Table';
 import Modal from '../common/Modal';
 import Spinner from '../common/Spinner';
 import appContext from '../../context/AppContext';
-import { giveBonusAmount, removeBonusAmount, resetSalaryAmount, getSalaryReport } from '../../services/salaryService';
+import { giveBonusAmount, removeBonusAmount, resetSalaryAmount, getSalaryReport, getBulkSalaryReport } from '../../services/salaryService';
 import { deleteFine, getAllFines } from '../../services/fineService';
 import { getAllHolidays } from '../../services/holidayService';
 import jsPDF from 'jspdf';
@@ -56,6 +73,33 @@ const calculateTaskDelayPenalty = (reportData, reportYear) => {
     });
 
     return parseFloat(totalPenalty.toFixed(4));
+};
+
+const WorkerAvatar = ({ record }) => {
+    const [imgFailed, setImgFailed] = React.useState(false);
+    const photoUrl = record?.photo;
+    const hasPhoto = photoUrl && photoUrl !== 'null' && photoUrl !== 'undefined' && photoUrl !== '';
+    
+    if (hasPhoto && !imgFailed) {
+        return (
+            <img
+                src={photoUrl}
+                alt={record.name || 'Employee'}
+                className="w-9 h-9 rounded-full object-cover border border-slate-100 shadow-sm mr-3 flex-none"
+                onError={() => setImgFailed(true)}
+            />
+        );
+    }
+    
+    const initials = record?.name 
+        ? record.name.trim().split(/\s+/).map(n => n[0]).slice(0, 2).join('').toUpperCase() 
+        : '??';
+        
+    return (
+        <div className="w-9 h-9 rounded-full bg-teal-50 border border-teal-100/80 flex items-center justify-center text-teal-700 font-extrabold text-xs mr-3 flex-none">
+            {initials}
+        </div>
+    );
 };
 
 const SalaryManagement = () => {
@@ -113,10 +157,11 @@ const SalaryManagement = () => {
     const [individualReportData, setIndividualReportData] = useState(null);
     const [deductionView, setDeductionView] = useState(() => {
         const saved = localStorage.getItem('deductionView');
-        return saved === 'true';
+        return saved === null ? true : saved === 'true';
     });
     const [showDetailedBreakdown, setShowDetailedBreakdown] = useState(false);
     const [showTaskDeductionBreakdown, setShowTaskDeductionBreakdown] = useState(false);
+    const [penaltyExplanation, setPenaltyExplanation] = useState(null);
 
     const [bulkSearchTerm, setBulkSearchTerm] = useState('');
     const [bulkDepartmentFilter, setBulkDepartmentFilter] = useState('All');
@@ -217,13 +262,61 @@ const SalaryManagement = () => {
         setIsLoadingDepartments(true);
 
         try {
-            const [workersData, departmentsData] = await Promise.all([
+            const year = new Date().getFullYear();
+            const month = new Date().getMonth() + 1;
+
+            const formatDateStr = (date) => {
+                const d = new Date(date);
+                let m = '' + (d.getMonth() + 1);
+                let day = '' + d.getDate();
+                const yr = d.getFullYear();
+
+                if (m.length < 2) m = '0' + m;
+                if (day.length < 2) day = '0' + day;
+
+                return [yr, m, day].join('-');
+            };
+
+            const firstDay = new Date(year, month - 1, 1);
+            const lastDay = new Date(year, month, 0);
+
+            const fromDate = formatDateStr(firstDay);
+            const toDate = formatDateStr(lastDay);
+
+            const [workersData, departmentsData, bulkReportResponse] = await Promise.all([
                 getWorkers({ subdomain }),
-                getDepartments({ subdomain })
+                getDepartments({ subdomain }),
+                getBulkSalaryReport(subdomain, fromDate, toDate).catch(err => {
+                    console.error("Failed to fetch real-time salary reports for main list:", err);
+                    return null;
+                })
             ]);
+
             const safeWorkersData = Array.isArray(workersData) ? workersData : [];
             const safeDepartmentsData = Array.isArray(departmentsData) ? departmentsData : [];
-            setWorkers(safeWorkersData);
+
+            let enrichedWorkers = safeWorkersData;
+            if (bulkReportResponse && bulkReportResponse.reports) {
+                const reportsMap = {};
+                bulkReportResponse.reports.forEach(r => {
+                    reportsMap[r.workerId] = r;
+                });
+
+                enrichedWorkers = safeWorkersData.map(worker => {
+                    const report = reportsMap[worker._id];
+                    if (report) {
+                        const taskPenalty = report.taskPenalty || 0;
+                        const finalSalary = Math.max(0, report.totalFinalSalary - taskPenalty);
+                        return {
+                            ...worker,
+                            finalSalary: finalSalary
+                        };
+                    }
+                    return worker;
+                });
+            }
+
+            setWorkers(enrichedWorkers);
             setDepartments(safeDepartmentsData);
         } catch (error) {
             toast.error('Failed to load data');
@@ -493,7 +586,8 @@ const SalaryManagement = () => {
         setIsReportModalOpen(true);
         // Set default date range to current month when opening report
         setMonthDateRange();
-        // Keep deductionView persistent as per user requirement
+        // Default deductionView to true when opening individual reports
+        setDeductionView(true);
         setShowDetailedBreakdown(false);
         setShowTaskDeductionBreakdown(false);
     };
@@ -520,15 +614,11 @@ const SalaryManagement = () => {
         }
     };
 
-    const downloadPDF = () => {
-        if (!reportData || !selectedWorker) {
-            toast.error("No report data available to download.");
-            return;
-        }
+    const generatePDFReport = (worker, data, fromDate) => {
         const doc = new jsPDF();
         const startY = 20;
         doc.setFontSize(18);
-        doc.text(`Salary Report for ${selectedWorker.name}`, 14, startY);
+        doc.text(`Salary Report for ${worker.name}`, 14, startY);
         doc.setFontSize(12);
         doc.text('Summary', 14, startY + 15);
 
@@ -550,55 +640,55 @@ const SalaryManagement = () => {
         };
 
         const summaryData = [
-            ['Employee Name', selectedWorker?.name], // Added Employee Name to match UI
-            ['Employee ID', selectedWorker?.rfid],
-            ['Monthly Base Salary', formatCurrencyForPDF(reportData.report.summary?.originalSalary || 0)],
-            ['Base Salary (SaaS Only)', formatCurrencyForPDF(reportData.report.summary?.expectedSaaSSalary || reportData.report.summary?.originalSalary || 0)],
-            ['Total Deductions', formatCurrencyForPDF(reportData.report.totalSalaryDeduction || 0)],
-            ['Net Base Salary', formatCurrencyForPDF(reportData.report.summary?.netBaseSalary || 0)],
-            ['Project Earnings', formatCurrencyForPDF(reportData.report.summary?.totalProjectSalary || 0)],
-            ...(reportData.projectAdjustment && reportData.projectAdjustment !== 0 ? [
-                ['Project Adjustment', `${reportData.projectAdjustment > 0 ? '+' : ''}${formatCurrencyForPDF(reportData.projectAdjustment)}`],
-                ['Final Project Pay', formatCurrencyForPDF(Math.max(0, (reportData.report.summary?.totalProjectSalary || 0) + (reportData.projectAdjustment || 0)))]
+            ['Employee Name', worker?.name], // Added Employee Name to match UI
+            ['Employee ID', worker?.rfid],
+            ['Monthly Base Salary', formatCurrencyForPDF(data.report.summary?.originalSalary || 0)],
+            ['Base Salary (SaaS Only)', formatCurrencyForPDF(data.report.summary?.expectedSaaSSalary || data.report.summary?.originalSalary || 0)],
+            ['Total Deductions', formatCurrencyForPDF(data.report.totalSalaryDeduction || 0)],
+            ['Net Base Salary', formatCurrencyForPDF(data.report.summary?.netBaseSalary || 0)],
+            ['Project Earnings', formatCurrencyForPDF(data.report.summary?.totalProjectSalary || 0)],
+            ...(data.projectAdjustment && data.projectAdjustment !== 0 ? [
+                ['Project Adjustment', `${data.projectAdjustment > 0 ? '+' : ''}${formatCurrencyForPDF(data.projectAdjustment)}`],
+                ['Final Project Pay', formatCurrencyForPDF(Math.max(0, (data.report.summary?.totalProjectSalary || 0) + (data.projectAdjustment || 0)))]
             ] : []),
             // ADD FINE INFORMATION TO THE SUMMARY
-            ...(reportData.totalFinesAmount > 0 ? [
-                ['Total Fines', formatCurrencyForPDF(reportData.totalFinesAmount)]
+            ...(data.totalFinesAmount > 0 ? [
+                ['Total Fines', formatCurrencyForPDF(data.totalFinesAmount)]
             ] : []),
-            ...(deductionView && reportData.delayedTasks?.length > 0 ? (() => {
-                const reportYear = reportDateRange.fromDate ? new Date(reportDateRange.fromDate).getFullYear() : new Date().getFullYear();
-                const totalDeducted = calculateTaskDelayPenalty(reportData, reportYear);
+            ...(deductionView && data.delayedTasks?.length > 0 ? (() => {
+                const reportYear = fromDate ? new Date(fromDate).getFullYear() : new Date().getFullYear();
+                const totalDeducted = calculateTaskDelayPenalty(data, reportYear);
 
                 return [
                     ['Task Delay Deduction Applied', 'YES'],
                     ['Permanent Delay Penalty', formatCurrencyForPDF(totalDeducted)],
-                    ['Total Final Salary', formatCurrencyForPDF((reportData.finalSalaryWithFines || 0) - totalDeducted)]
+                    ['Total Final Salary', formatCurrencyForPDF((data.finalSalaryWithFines || 0) - totalDeducted)]
                 ];
             })() : [
-                ['Total Final Salary', formatCurrencyForPDF(reportData.finalSalaryWithFines || 0)]
+                ['Total Final Salary', formatCurrencyForPDF(data.finalSalaryWithFines || 0)]
             ]),
-            ['Total Days in Period', reportData.report.summary?.totalDaysInPeriod || 0],
-            ['Total Working Days', reportData.report.summary?.totalWorkingDaysInPeriod || 0],
-            ['Total Absent Days', reportData.report.summary?.totalAbsentDays || 0],
-            ['Total Leave Days', reportData.report.summary?.totalLeaveDays || 0],
-            ['Total Holidays', reportData.report.summary?.totalHolidaysInPeriod || 0],
-            ['Total Sundays', reportData.report.summary?.totalSundaysInPeriod || 0],
-            ['Actual Working Days', reportData.report.summary?.actualWorkingDays || 0],
-            ['Total Working Hours', `${Number(reportData.report.totalWorkingHours || 0).toFixed(2)} hrs`],
-            ['Total Permission Time', `${reportData.report.totalPermissionTime || 0} mins`],
-            ['Absent Deduction', formatCurrencyForPDF(reportData.report.summary?.absentDeduction || 0)],
-            ['Leave Deduction', formatCurrencyForPDF(reportData.report.summary?.leaveDeduction || 0)],
-            ['Permission Deduction', formatCurrencyForPDF(reportData.report.summary?.permissionDeduction || 0)],
-            ['Attendance Rate', `${Number(reportData.report.summary?.attendanceRate || 0).toFixed(2)}%`],
-            ['Per Minute Salary', `Rs. ${Number(reportData.report.summary?.perMinuteSalary || 0).toFixed(4)}`],
+            ['Total Days in Period', data.report.summary?.totalDaysInPeriod || 0],
+            ['Total Working Days', data.report.summary?.totalWorkingDaysInPeriod || 0],
+            ['Total Absent Days', data.report.summary?.totalAbsentDays || 0],
+            ['Total Leave Days', data.report.summary?.totalLeaveDays || 0],
+            ['Total Holidays', data.report.summary?.totalHolidaysInPeriod || 0],
+            ['Total Sundays', data.report.summary?.totalSundaysInPeriod || 0],
+            ['Actual Working Days', data.report.summary?.actualWorkingDays || 0],
+            ['Total Working Hours', `${Number(data.report.totalWorkingHours || 0).toFixed(2)} hrs`],
+            ['Total Permission Time', `${data.report.totalPermissionTime || 0} mins`],
+            ['Absent Deduction', formatCurrencyForPDF(data.report.summary?.absentDeduction || 0)],
+            ['Leave Deduction', formatCurrencyForPDF(data.report.summary?.leaveDeduction || 0)],
+            ['Permission Deduction', formatCurrencyForPDF(data.report.summary?.permissionDeduction || 0)],
+            ['Attendance Rate', `${Number(data.report.summary?.attendanceRate || 0).toFixed(2)}%`],
+            ['Per Minute Salary', `Rs. ${Number(data.report.summary?.perMinuteSalary || 0).toFixed(4)}`],
         ];
 
         // Add bonus information if available
-        if (reportData.totalBonusAmount > 0) {
-            summaryData.push(['Bonus Amount Applied', formatCurrencyForPDF(reportData.totalBonusAmount)]);
+        if (data.totalBonusAmount > 0) {
+            summaryData.push(['Bonus Amount Applied', formatCurrencyForPDF(data.totalBonusAmount)]);
 
             // Add details of each bonus
-            reportData.bonuses.forEach((bonus, index) => {
+            data.bonuses.forEach((bonus, index) => {
                 summaryData.push([`Bonus Period ${index + 1}`, `${new Date(bonus.fromDate).toLocaleDateString()} to ${new Date(bonus.toDate).toLocaleDateString()}`]);
             });
         }
@@ -624,13 +714,13 @@ const SalaryManagement = () => {
         });
 
         // Add bonus period details if there are bonuses
-        if (reportData.totalBonusAmount > 0 && reportData.bonuses && reportData.bonuses.length > 0) {
+        if (data.totalBonusAmount > 0 && data.bonuses && data.bonuses.length > 0) {
             doc.addPage();
             doc.setFontSize(18);
             doc.text('Bonus Details', 14, 20);
 
             const bonusColumns = ['Period', 'From Date', 'To Date', 'Amount'];
-            const bonusRows = reportData.bonuses.map((bonus, index) => [
+            const bonusRows = data.bonuses.map((bonus, index) => [
                 `Bonus Period ${index + 1}`,
                 new Date(bonus.fromDate).toLocaleDateString(),
                 new Date(bonus.toDate).toLocaleDateString(),
@@ -653,8 +743,8 @@ const SalaryManagement = () => {
         }
 
         // Add detailed fines table if there are fines
-        if (reportData.worker?.fines && reportData.worker.fines.length > 0) {
-            const filteredFines = reportData.worker.fines.filter(fine => {
+        if (data.worker?.fines && data.worker.fines.length > 0) {
+            const filteredFines = data.worker.fines.filter(fine => {
                 const fineDate = new Date(fine.date);
                 const fromDate = new Date(reportDateRange.fromDate);
                 const toDate = new Date(reportDateRange.toDate);
@@ -700,7 +790,7 @@ const SalaryManagement = () => {
 
         // Fix formatting for daily breakdown table
         // Format Delay Deduction and Total Salary with "Rs" instead of "₹" for PDF
-        const tableRows = reportData.report.report.map(row => [
+        const tableRows = data.report.report.map(row => [
             row.date,
             row.status,
             row.inTime,
@@ -730,7 +820,49 @@ const SalaryManagement = () => {
                 6: { cellWidth: 30 }  // Fixed width for total salary column
             }
         });
-        doc.save(`salary_report_${selectedWorker.name}.pdf`);
+        doc.save(`salary_report_${worker.name}.pdf`);
+    };
+
+    const downloadPDF = () => {
+        if (!reportData || !selectedWorker) {
+            toast.error("No report data available to download.");
+            return;
+        }
+        generatePDFReport(selectedWorker, reportData, reportDateRange.fromDate);
+    };
+
+    const handleDownloadPDF = async (worker) => {
+        toast.info(`Generating PDF report for ${worker.name}...`);
+        try {
+            // Get date range for the current month
+            const year = selectedYear;
+            const month = selectedMonth;
+
+            const formatDate = (date) => {
+                const d = new Date(date);
+                let m = '' + (d.getMonth() + 1);
+                let day = '' + d.getDate();
+                const yr = d.getFullYear();
+                if (m.length < 2) m = '0' + m;
+                if (day.length < 2) day = '0' + day;
+                return [yr, m, day].join('-');
+            };
+
+            const firstDay = new Date(year, month - 1, 1);
+            const lastDay = new Date(year, month, 0);
+
+            const fromDate = formatDate(firstDay);
+            const toDate = formatDate(lastDay);
+
+            const data = await getSalaryReport(worker._id, fromDate, toDate);
+            if (!data) throw new Error("No data returned from API");
+
+            generatePDFReport(worker, data, fromDate);
+            toast.success(`PDF downloaded for ${worker.name}`);
+        } catch (error) {
+            console.error('Error generating PDF:', error);
+            toast.error(error.message || 'Failed to generate PDF');
+        }
     };
 
     const handleRemoveBonus = async (worker) => {
@@ -848,60 +980,38 @@ const SalaryManagement = () => {
 
         setIsBulkReportLoading(true);
         try {
-            const reportPromises = selectedWorkersForReport.map(async (workerId) => {
-                const worker = workers.find(w => w._id === workerId);
-                if (!worker) return null;
+            // Calculate the date range for the selected month
+            const year = selectedYear;
+            const month = selectedMonth;
 
-                // Calculate the date range for the selected month
-                const year = selectedYear;
-                const month = selectedMonth;
+            const formatDate = (date) => {
+                const d = new Date(date);
+                let m = '' + (d.getMonth() + 1);
+                let day = '' + d.getDate();
+                const yr = d.getFullYear();
 
-                const formatDate = (date) => {
-                    const d = new Date(date);
-                    let month = '' + (d.getMonth() + 1);
-                    let day = '' + d.getDate();
-                    const year = d.getFullYear();
+                if (m.length < 2) m = '0' + m;
+                if (day.length < 2) day = '0' + day;
 
-                    if (month.length < 2) month = '0' + month;
-                    if (day.length < 2) day = '0' + day;
+                return [yr, m, day].join('-');
+            };
 
-                    return [year, month, day].join('-');
-                };
+            // Create first day of the month
+            const firstDay = new Date(year, month - 1, 1);
+            // Create last day of the month
+            const lastDay = new Date(year, month, 0);
 
-                // Create first day of the month
-                const firstDay = new Date(year, month - 1, 1);
+            const fromDate = formatDate(firstDay);
+            const toDate = formatDate(lastDay);
 
-                // Create last day of the month
-                const lastDay = new Date(year, month, 0);
-
-                const fromDate = formatDate(firstDay);
-                const toDate = formatDate(lastDay);
-
-                try {
-                    const report = await getSalaryReport(workerId, fromDate, toDate);
-                    const reportYear = new Date(fromDate).getFullYear();
-                    const taskPenalty = calculateTaskDelayPenalty(report, reportYear);
-
-                    return {
-                        workerId: worker._id,
-                        name: worker.name,
-                        department: worker.department?.name || worker.department || 'N/A',
-                        totalWorkingDays: report.report.summary?.totalWorkingDaysInPeriod || 0,
-                        totalAbsentDays: report.report.summary?.totalAbsentDays || 0,
-                        totalLeaveDays: report.report.summary?.totalLeaveDays || 0,
-                        totalFinalSalary: report.finalSalaryWithFines || 0,
-                        taskPenalty: taskPenalty,
-                        fullReport: report // Store full report for bulk downloading
-                    };
-                } catch (error) {
-                    console.error(`Failed to fetch report for worker ${workerId}:`, error);
-                    return null;
-                }
-            });
-
-            const reports = await Promise.all(reportPromises);
-            const validReports = reports.filter(r => r !== null);
-            setBulkReportData(validReports);
+            const response = await getBulkSalaryReport(subdomain, fromDate, toDate);
+            if (response && response.reports) {
+                // Filter to only include the selected workers
+                const filteredReports = response.reports.filter(r => selectedWorkersForReport.includes(r.workerId));
+                setBulkReportData(filteredReports);
+            } else {
+                setBulkReportData([]);
+            }
         } catch (error) {
             toast.error('Failed to generate bulk report');
             console.error(error);
@@ -914,6 +1024,8 @@ const SalaryManagement = () => {
         setSelectedIndividualWorker(worker);
         setIsIndividualReportModalOpen(true);
         setIsIndividualReportLoading(true);
+        // Default deductionView to true when opening individual reports
+        setDeductionView(true);
 
         try {
             // Calculate the date range for the selected month
@@ -1167,90 +1279,116 @@ const SalaryManagement = () => {
         {
             header: 'Name',
             accessor: 'name',
+            align: 'text-left',
+            headerAlign: 'text-left',
             render: (record) => (
                 <div className="flex items-center">
-                    {record?.photo && (
-                        <img
-                            src={record.photo
-                                ? record.photo
-                                : `https://ui-avatars.com/api/?name=${encodeURIComponent(record.name)}`}
-                            alt="Employee"
-                            className="w-8 h-8 rounded-full mr-2"
-                        />
-                    )}
-                    {record?.name || 'Unknown'}
+                    <WorkerAvatar record={record} />
+                    <span className="font-semibold text-slate-800">{record?.name || 'Unknown'}</span>
                 </div>
             )
         },
         {
             header: 'Salary',
             accessor: 'salary',
-            render: (record) => record?.salary?.toFixed(2)
+            align: 'text-center',
+            headerAlign: 'text-center',
+            render: (record) => (
+                <span className="font-bold text-slate-700">
+                    ₹{(record?.salary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+            )
         },
         {
             header: 'Salary (this month)',
             accessor: 'finalSalary',
-            render: (record) => record?.finalSalary?.toFixed(2)
+            align: 'text-center',
+            headerAlign: 'text-center',
+            render: (record) => (
+                <span className="font-extrabold text-[#0d9488]">
+                    ₹{(record?.finalSalary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+            )
         },
         // ADD NEW COLUMN FOR FINE AMOUNT
         {
             header: 'Fine for this month',
             accessor: 'fineAmount',
+            align: 'text-center',
+            headerAlign: 'text-center',
             render: (record) => {
                 const currentMonth = new Date().getMonth() + 1;
                 const currentYear = new Date().getFullYear();
                 const fineAmount = calculateMonthlyFines(record, currentMonth, currentYear);
                 return fineAmount > 0 ? (
-                    <span className="text-red-600 font-medium">₹{fineAmount.toFixed(2)}</span>
+                    <span className="text-rose-600 font-bold">
+                        ₹{fineAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
                 ) : (
-                    <span className="text-gray-400">₹0.00</span>
+                    <span className="text-slate-400">₹0.00</span>
                 );
             }
         },
         {
             header: 'Employee ID',
-            accessor: 'rfid'
+            accessor: 'rfid',
+            align: 'text-center',
+            headerAlign: 'text-center',
+            render: (record) => (
+                <span className="font-mono text-xs font-bold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100/80">
+                    {record?.rfid || 'N/A'}
+                </span>
+            )
         },
         {
             header: 'Department',
             accessor: 'department',
+            align: 'text-center',
+            headerAlign: 'text-center',
             render: (record) => {
-                if (!record?.department) return 'N/A';
-                return typeof record.department === 'object' ? record.department.name : record.department;
+                if (!record?.department) return <span className="text-slate-400">N/A</span>;
+                const deptName = typeof record.department === 'object' ? record.department.name : record.department;
+                return (
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-50/50 text-[#0d9488] border border-teal-100/30 uppercase tracking-wider">
+                        {deptName}
+                    </span>
+                );
             }
         },
         {
             header: 'Actions',
             accessor: 'actions',
+            align: 'text-center',
+            headerAlign: 'text-center',
             render: (worker) => (
-                <div className="flex space-x-2">
+                <div className="flex items-center justify-center gap-1">
                     <button
                         onClick={() => openEditModal(worker)}
-                        className="p-1 text-blue-600 hover:text-blue-800"
+                        className="p-2 rounded-lg text-[#0d9488] hover:text-[#0f766e] hover:bg-teal-50/50 transition-all duration-150 active:scale-95"
                         title="Give Bonus"
                     >
-                        <FaDonate className='text-xl' />
+                        <Coins size={18} />
                     </button>
                     <button
                         onClick={() => handleViewReport(worker)}
-                        className="p-1 text-green-600 hover:text-green-800"
+                        className="p-2 rounded-lg text-[#0d9488] hover:text-[#0f766e] hover:bg-teal-50/50 transition-all duration-150 active:scale-95"
                         title="View Report"
                     >
-                        <FaFileInvoiceDollar className='text-xl' />
+                        <Eye size={18} />
                     </button>
                     <button
-                        onClick={() => downloadPDF()}
-                        className="p-1 text-slate-600 hover:text-slate-900"
+                        onClick={() => handleDownloadPDF(worker)}
+                        className="p-2 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-all duration-150 active:scale-95"
                         title="Download PDF"
                     >
-                        <FaFilePdf className='text-xl' />
+                        <FileDown size={18} />
                     </button>
                     <button
                         onClick={() => handleRemoveBonus(worker)}
-                        className="p-1 text-red-600 hover:text-red-800"
+                        className="p-2 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-all duration-150 active:scale-95"
                         title="Remove Bonus"
                     >
-                        <FaTrash className='text-xl' />
+                        <Trash2 size={18} />
                     </button>
                 </div>
             )
@@ -1298,11 +1436,12 @@ const SalaryManagement = () => {
         doc.text(`Total Payout: Rs. ${totalPayout.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, pageWidth - 60, 33);
 
         // Table
-        const tableColumn = ['Employee', 'Department', 'Working', 'Absent', 'Project Adj', 'Net Salary'];
+        const tableColumn = ['Employee', 'Department', 'Working', 'Actual Worked', 'Absent', 'Project Adj', 'Net Salary'];
         const tableRows = bulkReportData.map(r => [
             r.name,
             r.department,
             `${r.totalWorkingDays} Days`,
+            `${r.actualWorkingDays} Days`,
             `${r.totalAbsentDays} Days`,
             r.projectAdjustment ? `${r.projectAdjustment > 0 ? '+' : ''}Rs. ${r.projectAdjustment.toFixed(2)}` : 'Rs. 0.00',
             `Rs. ${Math.max(0, r.totalFinalSalary - (deductionView ? (r.taskPenalty || 0) : 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
@@ -1391,6 +1530,192 @@ const SalaryManagement = () => {
 
         doc.save(`detailed_reports_${monthName}_${selectedYear}.pdf`);
         toast.success("Detailed bulk report downloaded!");
+    };
+
+    const downloadAllIndividualPDFs = () => {
+        if (bulkReportData.length === 0) {
+            toast.error("No report data available to download.");
+            return;
+        }
+
+        toast.info(`Downloading separate PDFs for ${bulkReportData.length} employees...`);
+        bulkReportData.forEach((data, index) => {
+            const worker = workers.find(w => w._id === data.workerId);
+            if (worker && data.fullReport) {
+                // Delay each download slightly to prevent browser queue blocking
+                setTimeout(() => {
+                    generatePDFReport(worker, data.fullReport, reportDateRange.fromDate);
+                }, index * 300);
+            }
+        });
+        toast.success("Separate PDF downloads triggered!");
+    };
+
+    // ── NEW: Merge all employees into a SINGLE PDF ──────────────────────────
+    const downloadAllAsSinglePDF = () => {
+        if (bulkReportData.length === 0) {
+            toast.error("No report data available to download.");
+            return;
+        }
+
+        const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May',
+            'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const monthName = MONTH_NAMES[selectedMonth - 1];
+
+        const formatCurrencyForPDF = (amount) => {
+            if (typeof amount === 'string') {
+                const numericValue = parseFloat(amount.replace(/[₹Rs,\s]/g, ''));
+                return isNaN(numericValue) ? 'Rs. 0.00' : `Rs. ${numericValue.toFixed(2)}`;
+            }
+            return `Rs. ${Number(amount).toFixed(2)}`;
+        };
+
+        const doc = new jsPDF();
+        let isFirstEmployee = true;
+
+        const validReports = bulkReportData.filter(data => {
+            const worker = workers.find(w => w._id === data.workerId);
+            return worker && data.fullReport;
+        });
+
+        if (validReports.length === 0) {
+            toast.error("No detailed report data found. Please regenerate the report.");
+            return;
+        }
+
+        toast.info(`Building single PDF for ${validReports.length} employees...`);
+
+        validReports.forEach((data, empIndex) => {
+            const worker = workers.find(w => w._id === data.workerId);
+            const reportObj = data.fullReport;
+
+            // ── Page separator (except first employee) ──
+            if (!isFirstEmployee) {
+                doc.addPage();
+            }
+            isFirstEmployee = false;
+
+            // ── Employee header ──
+            const pageWidth = doc.internal.pageSize.getWidth();
+            doc.setFillColor(52, 73, 94);
+            doc.rect(0, 0, pageWidth, 18, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(13);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`${empIndex + 1}. Salary Report — ${worker.name}`, 14, 12);
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`${monthName} ${selectedYear}  |  Dept: ${data.department || '—'}  |  ID: ${worker.rfid || '—'}`, 14, 16);
+            doc.setTextColor(0, 0, 0);
+
+            const startY = 25;
+
+            // ── Summary table ──
+            const summaryData = [
+                ['Employee Name', worker?.name],
+                ['Employee ID', worker?.rfid],
+                ['Monthly Base Salary', formatCurrencyForPDF(reportObj.report.summary?.originalSalary || 0)],
+                ['Base Salary (SaaS Only)', formatCurrencyForPDF(reportObj.report.summary?.expectedSaaSSalary || reportObj.report.summary?.originalSalary || 0)],
+                ['Total Deductions', formatCurrencyForPDF(reportObj.report.totalSalaryDeduction || 0)],
+                ['Net Base Salary', formatCurrencyForPDF(reportObj.report.summary?.netBaseSalary || 0)],
+                ['Project Earnings', formatCurrencyForPDF(reportObj.report.summary?.totalProjectSalary || 0)],
+                ...(reportObj.projectAdjustment && reportObj.projectAdjustment !== 0 ? [
+                    ['Project Adjustment', `${reportObj.projectAdjustment > 0 ? '+' : ''}${formatCurrencyForPDF(reportObj.projectAdjustment)}`],
+                    ['Final Project Pay', formatCurrencyForPDF(Math.max(0, (reportObj.report.summary?.totalProjectSalary || 0) + (reportObj.projectAdjustment || 0)))]
+                ] : []),
+                ...(reportObj.totalFinesAmount > 0 ? [['Total Fines', formatCurrencyForPDF(reportObj.totalFinesAmount)]] : []),
+                ...(deductionView && reportObj.delayedTasks?.length > 0 ? (() => {
+                    const reportYear = reportDateRange.fromDate ? new Date(reportDateRange.fromDate).getFullYear() : new Date().getFullYear();
+                    const totalDeducted = calculateTaskDelayPenalty(reportObj, reportYear);
+                    return [
+                        ['Task Delay Deduction Applied', 'YES'],
+                        ['Permanent Delay Penalty', formatCurrencyForPDF(totalDeducted)],
+                        ['Total Final Salary', formatCurrencyForPDF((reportObj.finalSalaryWithFines || 0) - totalDeducted)]
+                    ];
+                })() : [['Total Final Salary', formatCurrencyForPDF(reportObj.finalSalaryWithFines || 0)]]),
+                ['Total Days in Period', reportObj.report.summary?.totalDaysInPeriod || 0],
+                ['Total Working Days', reportObj.report.summary?.totalWorkingDaysInPeriod || 0],
+                ['Total Absent Days', reportObj.report.summary?.totalAbsentDays || 0],
+                ['Total Leave Days', reportObj.report.summary?.totalLeaveDays || 0],
+                ['Total Holidays', reportObj.report.summary?.totalHolidaysInPeriod || 0],
+                ['Total Sundays', reportObj.report.summary?.totalSundaysInPeriod || 0],
+                ['Actual Working Days', reportObj.report.summary?.actualWorkingDays || 0],
+                ['Total Working Hours', `${Number(reportObj.report.totalWorkingHours || 0).toFixed(2)} hrs`],
+                ['Total Permission Time', `${reportObj.report.totalPermissionTime || 0} mins`],
+                ['Absent Deduction', formatCurrencyForPDF(reportObj.report.summary?.absentDeduction || 0)],
+                ['Leave Deduction', formatCurrencyForPDF(reportObj.report.summary?.leaveDeduction || 0)],
+                ['Permission Deduction', formatCurrencyForPDF(reportObj.report.summary?.permissionDeduction || 0)],
+                ['Attendance Rate', `${Number(reportObj.report.summary?.attendanceRate || 0).toFixed(2)}%`],
+                ['Per Minute Salary', `Rs. ${Number(reportObj.report.summary?.perMinuteSalary || 0).toFixed(4)}`],
+            ];
+
+            if (reportObj.totalBonusAmount > 0) {
+                summaryData.push(['Bonus Amount Applied', formatCurrencyForPDF(reportObj.totalBonusAmount)]);
+                (reportObj.bonuses || []).forEach((bonus, i) => {
+                    summaryData.push([`Bonus Period ${i + 1}`, `${new Date(bonus.fromDate).toLocaleDateString()} to ${new Date(bonus.toDate).toLocaleDateString()}`]);
+                });
+            }
+
+            autoTable(doc, {
+                startY,
+                head: [['Metric', 'Value']],
+                body: summaryData,
+                theme: 'striped',
+                headStyles: { fillColor: [52, 73, 94] },
+                styles: { fontSize: 8, font: 'helvetica', cellPadding: 2 },
+                columnStyles: { 1: { cellWidth: 50 } }
+            });
+
+            // ── Fines table ──
+            if (reportObj.worker?.fines && reportObj.worker.fines.length > 0) {
+                const filteredFines = reportObj.worker.fines.filter(fine => {
+                    const fineDate = new Date(fine.date);
+                    const from = new Date(reportDateRange.fromDate);
+                    const to = new Date(reportDateRange.toDate);
+                    return fineDate >= from && fineDate <= to;
+                });
+                if (filteredFines.length > 0) {
+                    doc.addPage();
+                    doc.setFontSize(13);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(`Fines — ${worker.name}`, 14, 20);
+                    autoTable(doc, {
+                        startY: 28,
+                        head: [['Date', 'Amount', 'Reason']],
+                        body: filteredFines.map(f => [
+                            new Date(f.date).toLocaleDateString(),
+                            formatCurrencyForPDF(f.amount),
+                            f.reason
+                        ]),
+                        theme: 'striped',
+                        headStyles: { fillColor: [52, 73, 94] },
+                        styles: { fontSize: 8, font: 'helvetica', cellPadding: 2 }
+                    });
+                }
+            }
+
+            // ── Daily breakdown ──
+            doc.addPage();
+            doc.setFontSize(13);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`Daily Breakdown — ${worker.name}`, 14, 20);
+            autoTable(doc, {
+                startY: 28,
+                head: [['Date', 'Status', 'In Time', 'Out Time', 'Delay Time', 'Delay Deduction', 'Total Salary']],
+                body: (reportObj.report.report || []).map(row => [
+                    row.date, row.status, row.inTime, row.outTime, row.delayTime,
+                    row.deductionAmount.replace('₹', 'Rs '),
+                    row.totalSalary.replace('₹', 'Rs ')
+                ]),
+                theme: 'striped',
+                headStyles: { fillColor: [52, 73, 94] },
+                styles: { fontSize: 7, font: 'helvetica', cellPadding: 1.5 },
+                columnStyles: { 5: { cellWidth: 28 }, 6: { cellWidth: 28 } }
+            });
+        });
+
+        doc.save(`all_employees_salary_report_${monthName}_${selectedYear}.pdf`);
+        toast.success(`✅ Single PDF downloaded with ${validReports.length} employees!`);
     };
 
     const downloadBankStatementXLSX = async () => {
@@ -1514,8 +1839,8 @@ const SalaryManagement = () => {
         const monthName = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][selectedMonth - 1];
 
         const headers = [
-            'Employee', 'Department', 'Working Days', 'Absent Days', 'Project Adj', 'Final Salary',
-            'Bank Status', 'Payment Mode', 'Report Status'
+            'Employee', 'Department', 'Working Days', 'Actual Worked', 'Absent Days', 'Project Adj', 'Final Salary',
+            'Bank Status'
         ];
 
         const rows = bulkReportData.map(report => {
@@ -1527,12 +1852,11 @@ const SalaryManagement = () => {
                 report.name,
                 report.department,
                 report.totalWorkingDays,
+                report.actualWorkingDays,
                 report.totalAbsentDays,
                 (report.projectAdjustment || 0).toFixed(2),
                 finalSalary.toFixed(2),
-                hasBankDetails ? 'Added' : 'Pending',
-                hasBankDetails ? 'Bank Transfer' : 'Cash',
-                'Generated'
+                hasBankDetails ? 'Added' : 'Pending'
             ];
         });
 
@@ -1547,80 +1871,73 @@ const SalaryManagement = () => {
 
     return (
         <div>
-            <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-6 gap-4 md:hidden">
-                <h1 className="text-2xl font-bold">Salary Management</h1>
-                {/* MOBILE BUTTONS: Show only on mobile */}
-                <div className="md:hidden flex flex-col space-y-2">
-                    <Button
-                        variant="secondary"
-                        className='flex items-center justify-center'
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                <div className="min-w-0">
+                    <h1 className="text-2xl font-black text-slate-800 tracking-tight">Payroll Overview</h1>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Manage employee base pay, bonuses, and fines</p>
+                </div>
+                
+                {/* Header Actions */}
+                <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-start sm:justify-end">
+                    <button
+                        className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl font-bold transition-all duration-150 active:scale-95 flex items-center gap-2 text-xs shadow-sm"
                         onClick={openBulkReportModal}
                     >
-                        <FaList className="mr-2" /> View All Reports
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        className='flex items-center justify-center'
+                        <List size={16} className="text-slate-400" /> View All Reports
+                    </button>
+                    <button
+                        className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl font-bold transition-all duration-150 active:scale-95 flex items-center gap-2 text-xs shadow-sm"
                         onClick={() => setIsFineModalOpen(true)}
                     >
-                        Fine
-                    </Button>
-                    <Button
-                        variant="primary"
-                        className='flex items-center justify-center'
+                        <Coins size={16} className="text-slate-400" /> Fine
+                    </button>
+                    <button
+                        className={`px-4 py-2.5 border rounded-xl font-bold transition-all duration-150 active:scale-95 flex items-center gap-2 text-xs shadow-sm ${
+                            isFineFilterOpen 
+                            ? 'border-teal-200 bg-teal-50 text-teal-700' 
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+                        }`}
+                        onClick={() => {
+                            const nextState = !isFineFilterOpen;
+                            setIsFineFilterOpen(nextState);
+                            if (nextState) {
+                                fetchFinesData();
+                            }
+                        }}
+                    >
+                        <Sliders size={16} className={isFineFilterOpen ? 'text-teal-600' : 'text-slate-400'} /> Fine History
+                    </button>
+                    <button
+                        className="px-4 py-2.5 bg-rose-50 border border-rose-100 text-rose-600 hover:bg-rose-100/50 rounded-xl font-bold transition-all duration-150 active:scale-95 flex items-center gap-2 text-xs shadow-sm"
                         onClick={handleSalaryReset}
                     >
-                        <FiRefreshCcw className="mr-2" /> Reset Salary
-                    </Button>
-                </div>
-            </div>
-
-            {/* DESKTOP BUTTONS: Show only on desktop */}
-            <div className="hidden md:flex justify-end items-center mb-6 space-x-2">
-                <Button
-                    variant="secondary"
-                    className='flex items-center'
-                    onClick={openBulkReportModal}
-                >
-                    <FaList className="mr-2" /> View All Reports
-                </Button>
-                <Button
-                    variant="secondary"
-                    className='flex items-center'
-                    onClick={() => setIsFineModalOpen(true)}
-                >
-                    Fine
-                </Button>
-                <Button
-                    variant="primary"
-                    className='flex items-center'
-                    onClick={handleSalaryReset}
-                >
-                    <FiRefreshCcw className="mr-2" /> Reset Salary
-                </Button>
-            </div>
-            {/* FINE FILTER PANEL */}
-            <Card className="mb-4">
-                <div className="flex justify-between items-center mb-2">
-                    <h3 className="text-lg font-semibold">Fine Filter</h3>
-                    <button
-                        onClick={toggleFineFilterPanel}
-                        className="text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                        {isFineFilterOpen ? 'Hide Fine Filter' : 'Show Fine Filter'}
+                        <RefreshCw size={16} className="text-rose-500" /> Reset Salary
                     </button>
                 </div>
+            </div>
+            {/* FINE FILTER PANEL */}
+            {isFineFilterOpen && (
+                <Card className="mb-4">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Fine History & Filter</h3>
+                        <button
+                            onClick={() => setIsFineFilterOpen(false)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all active:scale-95"
+                            title="Close Fine History"
+                        >
+                            <X size={16} />
+                        </button>
+                    </div>
 
-                {isFineFilterOpen && (
-                    <div className="mt-4">
+                    <div className="border-t border-slate-100 pt-4">
                         <form onSubmit={handleFineFilterSubmit}>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Month</label>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Month</label>
                                     <select
                                         value={selectedFineMonth}
                                         onChange={(e) => setSelectedFineMonth(e.target.value)}
-                                        className="form-input"
+                                        className="form-input bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-slate-700 font-bold cursor-pointer shadow-sm w-full"
                                     >
                                         <option value="">All Months</option>
                                         <option value={1}>January</option>
@@ -1638,11 +1955,11 @@ const SalaryManagement = () => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Year</label>
                                     <select
                                         value={selectedFineYear}
                                         onChange={(e) => setSelectedFineYear(e.target.value)}
-                                        className="form-input"
+                                        className="form-input bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-slate-700 font-bold cursor-pointer shadow-sm w-full"
                                     >
                                         <option value="">All Years</option>
                                         {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(year => (
@@ -1653,7 +1970,7 @@ const SalaryManagement = () => {
                                 <div className="flex items-end">
                                     <button
                                         type="submit"
-                                        className="btn btn-primary w-full"
+                                        className="btn btn-primary w-full text-xs py-2.5 rounded-xl font-bold tracking-wider uppercase active:scale-95 shadow-md shadow-teal-500/10"
                                         disabled={isLoadingFines}
                                     >
                                         {isLoadingFines ? 'Loading...' : 'Apply Filter'}
@@ -1663,22 +1980,22 @@ const SalaryManagement = () => {
                         </form>
 
                         {finesData.length > 0 && (
-                            <div className="mt-4">
-                                <h4 className="text-md font-medium mb-2">Fines Summary</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                                    <div className="bg-blue-50 p-3 rounded">
-                                        <p className="text-sm text-gray-600">Total Fines</p>
-                                        <p className="text-xl font-bold text-blue-700">{finesData.length}</p>
+                            <div className="mt-6 border-t border-slate-100 pt-4">
+                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Fines Summary</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                                    <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-4 shadow-sm">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total Fines</p>
+                                        <p className="text-xl font-black text-slate-700">{finesData.length}</p>
                                     </div>
-                                    <div className="bg-red-50 p-3 rounded">
-                                        <p className="text-sm text-gray-600">Total Amount</p>
-                                        <p className="text-xl font-bold text-red-700">
+                                    <div className="bg-rose-50/30 border border-rose-100/50 rounded-2xl p-4 shadow-sm">
+                                        <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-0.5">Total Amount</p>
+                                        <p className="text-xl font-black text-rose-600">
                                             ₹{finesData.reduce((sum, fine) => sum + fine.amount, 0).toFixed(2)}
                                         </p>
                                     </div>
-                                    <div className="bg-yellow-50 p-3 rounded">
-                                        <p className="text-sm text-gray-600">Unique Workers</p>
-                                        <p className="text-xl font-bold text-yellow-700">
+                                    <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-4 shadow-sm">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Unique Workers</p>
+                                        <p className="text-xl font-black text-slate-700">
                                             {[...new Set(finesData.map(fine => fine.workerId))].length}
                                         </p>
                                     </div>
@@ -1731,7 +2048,7 @@ const SalaryManagement = () => {
                                                             className="text-red-600 hover:text-red-900"
                                                             title="Delete Fine"
                                                         >
-                                                            <FaTrash />
+                                                            <Trash2 size={16} />
                                                         </button>
                                                     </td>
                                                 </tr>
@@ -1749,8 +2066,8 @@ const SalaryManagement = () => {
                             <p className="text-gray-500 text-center py-4">No fines found for the selected criteria.</p>
                         )}
                     </div>
-                )}
-            </Card>
+                </Card>
+            )}
             <Card>
                 <div className="flex flex-col gap-4 mb-4">
                     {/* Search & Toggle Row */}
@@ -1772,7 +2089,7 @@ const SalaryManagement = () => {
                                     onClick={() => setSearchTerm('')}
                                     className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
                                 >
-                                    <FiX size={16} />
+                                    <X size={16} />
                                 </button>
                             )}
                         </div>
@@ -1787,14 +2104,14 @@ const SalaryManagement = () => {
                                     : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
                                 }`}
                             >
-                                <FiSliders size={14} className="text-slate-500" />
+                                <Sliders size={14} className="text-slate-500" />
                                 <span>Filters</span>
                                 {getActiveFilterCount() > 0 && (
                                     <span className="flex-none flex items-center justify-center w-5 h-5 rounded-full bg-teal-500 text-white text-[10px] font-black leading-none">
                                         {getActiveFilterCount()}
                                     </span>
                                 )}
-                                {isSalaryFilterOpen ? <FiChevronUp size={14} className="ml-1 text-slate-500" /> : <FiChevronDown size={14} className="ml-1 text-slate-500" />}
+                                {isSalaryFilterOpen ? <ChevronUp size={14} className="ml-1 text-slate-500" /> : <ChevronDown size={14} className="ml-1 text-slate-500" />}
                             </button>
 
                             {getActiveFilterCount() > 0 && (
@@ -1804,7 +2121,7 @@ const SalaryManagement = () => {
                                     className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 transition-all font-bold text-xs active:scale-95 shadow-sm"
                                     title="Reset All Filters"
                                 >
-                                    <FiX size={14} />
+                                    <X size={14} />
                                     <span>Reset</span>
                                 </button>
                             )}
@@ -2012,7 +2329,7 @@ const SalaryManagement = () => {
                                     onClick={() => { setIsBulkReportModalOpen(false); setBulkReportData([]); }}
                                     className="w-10 h-10 flex-none flex items-center justify-center rounded-2xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all active:scale-90"
                                 >
-                                    <FaChevronLeft size={13} />
+                                    <ChevronLeft size={13} />
                                 </button>
                                 <div className="min-w-0">
                                     <h1 className="text-lg font-black text-slate-900 tracking-tight leading-tight">Bulk Salary Reports</h1>
@@ -2023,7 +2340,7 @@ const SalaryManagement = () => {
                             {/* Right: Month/Year + Generate */}
                             <div className="flex items-center gap-3 flex-none">
                                 <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 px-4 py-2.5 rounded-2xl">
-                                    <FaCalendarAlt size={12} className="text-teal-500 flex-none" />
+                                    <Calendar size={12} className="text-teal-500 flex-none" />
                                     <select
                                         value={selectedMonth}
                                         onChange={handleMonthChange}
@@ -2060,7 +2377,7 @@ const SalaryManagement = () => {
                                 >
                                     {isBulkReportLoading ? <Spinner size="sm" /> : (
                                         <>
-                                            <FiRefreshCcw size={13} className={isBulkReportLoading ? 'animate-spin' : ''} />
+                                            <RefreshCw size={13} className={isBulkReportLoading ? 'animate-spin' : ''} />
                                             <span>Generate · {selectedWorkersForReport.length}</span>
                                         </>
                                     )}
@@ -2170,7 +2487,7 @@ const SalaryManagement = () => {
                                 {!bulkReportData.length && !isBulkReportLoading && (
                                     <div className="flex flex-col items-center justify-center h-full text-center px-8 py-20">
                                         <div className="w-20 h-20 rounded-3xl bg-slate-100 flex items-center justify-center mb-5">
-                                            <FaFileInvoiceDollar size={32} className="text-slate-300" />
+                                            <FileText size={32} className="text-slate-300" />
                                         </div>
                                         <h3 className="text-lg font-black text-slate-400 mb-1">No Report Generated Yet</h3>
                                         <p className="text-xs font-bold text-slate-300 uppercase tracking-widest">Select employees on the left, then click Generate</p>
@@ -2237,13 +2554,6 @@ const SalaryManagement = () => {
                                                         <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 z-[1000] overflow-hidden">
                                                             <div className="py-2">
                                                                 <button
-                                                                    onClick={() => { setIsExportDropdownOpen(false); /* Handle Preview */ }}
-                                                                    className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                                                                >
-                                                                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
-                                                                    Preview Mode
-                                                                </button>
-                                                                <button
                                                                     onClick={() => { setIsExportDropdownOpen(false); downloadGeneralXLSX(); }}
                                                                     className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
                                                                 >
@@ -2255,14 +2565,28 @@ const SalaryManagement = () => {
                                                                     className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
                                                                 >
                                                                     <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                                                                    Export PDF
+                                                                    Export Consolidated PDF
                                                                 </button>
                                                                 <button
                                                                     onClick={() => { setIsExportDropdownOpen(false); downloadAllDetailedReportsPDF(); }}
                                                                     className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
                                                                 >
                                                                     <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 012-2h10a2 2 0 012 2M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg>
-                                                                    Download All PDFs (.zip)
+                                                                    Consolidated Detailed PDF
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => { setIsExportDropdownOpen(false); downloadAllIndividualPDFs(); }}
+                                                                    className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                                                >
+                                                                    <svg className="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                                                    Download Separate PDFs
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => { setIsExportDropdownOpen(false); downloadAllAsSinglePDF(); }}
+                                                                    className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                                                >
+                                                                    <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                                                    All Employees — Single PDF
                                                                 </button>
                                                                 <button
                                                                     onClick={() => { setIsExportDropdownOpen(false); downloadBankStatementXLSX(); }}
@@ -2283,7 +2607,7 @@ const SalaryManagement = () => {
                                                     <table className="min-w-full divide-y divide-slate-100 text-xs">
                                                         <thead className="bg-slate-50/80 sticky top-0 backdrop-blur-sm z-10">
                                                             <tr>
-                                                                {['Employee', 'Department', 'Working Days', 'Absent Days', 'Final Salary', 'Bank Status', 'Payment Mode', 'Report Status', 'Actions'].map(h => (
+                                                                {['Employee', 'Department', 'Working Days', 'Actual Worked', 'Absent Days', 'Final Salary', 'Bank Status', 'Actions'].map(h => (
                                                                     <th key={h} className="px-4 py-4 text-left font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 text-[10px]">{h}</th>
                                                                 ))}
                                                             </tr>
@@ -2306,6 +2630,9 @@ const SalaryManagement = () => {
                                                                         <td className="px-4 py-4 font-bold text-slate-600">
                                                                             {report.totalWorkingDays} <span className="text-[9px] text-slate-400 font-medium">Days</span>
                                                                         </td>
+                                                                        <td className="px-4 py-4 font-bold text-teal-600">
+                                                                            {report.actualWorkingDays} <span className="text-[9px] text-teal-500 font-medium">Days</span>
+                                                                        </td>
                                                                         <td className="px-4 py-4 font-bold text-rose-500">
                                                                             {report.totalAbsentDays} <span className="text-[9px] text-rose-400 font-medium">Days</span>
                                                                         </td>
@@ -2320,14 +2647,6 @@ const SalaryManagement = () => {
                                                                         <td className="px-4 py-4">
                                                                             <span className={`inline-flex items-center px-2 py-1 rounded-lg font-bold text-[9px] uppercase tracking-wider ${hasBankDetails ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
                                                                                 {hasBankDetails ? 'Added' : 'Pending'}
-                                                                            </span>
-                                                                        </td>
-                                                                        <td className="px-4 py-4 text-xs font-bold text-slate-600">
-                                                                            {hasBankDetails ? 'Bank Transfer' : 'Cash'}
-                                                                        </td>
-                                                                        <td className="px-4 py-4">
-                                                                            <span className="inline-flex items-center px-2 py-1 rounded-lg bg-teal-50 text-teal-600 font-bold text-[9px] uppercase tracking-wider">
-                                                                                Generated
                                                                             </span>
                                                                         </td>
                                                                         <td className="px-4 py-4">
@@ -2365,7 +2684,7 @@ const SalaryManagement = () => {
                                                                                     className="p-1.5 rounded-lg bg-slate-100 text-slate-400 hover:bg-slate-900 hover:text-white transition-all"
                                                                                     title="Download PDF"
                                                                                 >
-                                                                                    <FaFilePdf size={12} />
+                                                                                    <FileDown size={12} />
                                                                                 </button>
                                                                             </div>
                                                                         </td>
@@ -2443,10 +2762,10 @@ const SalaryManagement = () => {
 
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 pt-6 border-t border-white/5">
                                 {[
-                                    { label: 'Working Days', value: selectedIndividualWorker?.totalWorkingDays, sub: 'Total Scheduled', icon: <FaCalendarAlt size={14} />, color: 'text-teal-400' },
-                                    { label: 'Absent Days', value: selectedIndividualWorker?.totalAbsentDays, sub: 'Deductions Applied', icon: <FaCalendarAlt size={14} />, color: 'text-rose-400' },
-                                    { label: 'Base Earnings', value: `₹${individualReportData?.report?.summary?.netBaseSalary?.toLocaleString('en-IN', { minimumFractionDigits: 0 })}`, sub: 'After Attendance', icon: <FaDonate size={14} />, color: 'text-white' },
-                                    { label: 'Final Settlement', value: `₹${Math.max(0, (selectedIndividualWorker?.totalFinalSalary || 0) - (deductionView ? (calculateTaskDelayPenalty(individualReportData, selectedYear)) : 0))?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: 'Current Balance', icon: <FaFileInvoiceDollar size={14} />, color: 'text-teal-400' }
+                                    { label: 'Working Days', value: selectedIndividualWorker?.totalWorkingDays, sub: 'Total Scheduled', icon: <Calendar size={14} />, color: 'text-teal-400' },
+                                    { label: 'Absent Days', value: selectedIndividualWorker?.totalAbsentDays, sub: 'Deductions Applied', icon: <Calendar size={14} />, color: 'text-rose-400' },
+                                    { label: 'Base Earnings', value: `₹${individualReportData?.report?.summary?.netBaseSalary?.toLocaleString('en-IN', { minimumFractionDigits: 0 })}`, sub: 'After Attendance', icon: <Coins size={14} />, color: 'text-white' },
+                                    { label: 'Final Settlement', value: `₹${Math.max(0, (selectedIndividualWorker?.totalFinalSalary || 0) - (deductionView ? (calculateTaskDelayPenalty(individualReportData, selectedYear)) : 0))?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: 'Current Balance', icon: <Wallet size={14} />, color: 'text-teal-400' }
                                 ].map((stat, i) => (
                                     <div key={i} className="space-y-1">
                                         <div className="flex items-center gap-2 text-slate-400">
@@ -2479,7 +2798,7 @@ const SalaryManagement = () => {
                                             onClick={() => setShowTaskDeductionBreakdown(!showTaskDeductionBreakdown)}
                                             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${showTaskDeductionBreakdown ? 'bg-rose-600 text-white shadow-lg shadow-rose-200' : 'bg-rose-50 text-rose-600 hover:bg-rose-100'}`}
                                         >
-                                            <FaList size={10} />
+                                            <List size={10} />
                                             <span>Task Penalty Details</span>
                                         </button>
                                     </div>
@@ -2494,9 +2813,21 @@ const SalaryManagement = () => {
                                                     <span className="text-xs font-bold text-slate-600">Base Salary</span>
                                                     <span className="text-xs font-black text-slate-900">₹{individualReportData.report.summary.originalSalary?.toLocaleString()}</span>
                                                 </div>
-                                                <div className="flex justify-between items-center bg-teal-50/50 p-3 px-4 rounded-2xl border border-teal-100/50">
-                                                    <span className="text-xs font-bold text-teal-700">Project Bonus</span>
-                                                    <span className="text-xs font-black text-teal-600">+ ₹{individualReportData.report.summary.totalProjectSalary?.toLocaleString()}</span>
+                                                <div className="bg-teal-50/50 p-3 px-4 rounded-2xl border border-teal-100/50 space-y-1.5">
+                                                    <div className="flex justify-between items-center text-xs font-bold text-teal-700">
+                                                        <span>Project Earnings (Gross)</span>
+                                                        <span className="font-black">₹{(individualReportData.report.summary.grossProjectSalary !== undefined ? individualReportData.report.summary.grossProjectSalary : individualReportData.report.summary.totalProjectSalary)?.toLocaleString()}</span>
+                                                    </div>
+                                                    {individualReportData.report.summary.totalProjectDeductions > 0 && (
+                                                        <div className="flex justify-between items-center text-[10px] text-rose-600 border-t border-teal-100/50 pt-1">
+                                                            <span className="font-bold">Project Deductions</span>
+                                                            <span className="font-black">- ₹{individualReportData.report.summary.totalProjectDeductions?.toLocaleString()}</span>
+                                                        </div>
+                                                    )}
+                                                    <div className="flex justify-between items-center text-xs font-bold text-teal-800 border-t border-teal-100/50 pt-1">
+                                                        <span>Net Project Earnings</span>
+                                                        <span className="font-black">₹{individualReportData.report.summary.totalProjectSalary?.toLocaleString()}</span>
+                                                    </div>
                                                 </div>
                                                 {individualReportData.projectAdjustment !== undefined && individualReportData.projectAdjustment !== 0 && (
                                                     <div className={`flex justify-between items-center p-3 px-4 rounded-2xl border ${individualReportData.projectAdjustment < 0 ? 'bg-rose-50/50 border-rose-100/50' : 'bg-emerald-50/50 border-emerald-100/50'}`}>
@@ -2738,7 +3069,27 @@ const SalaryManagement = () => {
                                             <tbody className="divide-y divide-slate-50">
                                                 {(individualReportData.report.report || []).map((row, idx) => (
                                                     <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                                                        <td className="px-6 py-4 font-bold text-slate-700">{row.date}</td>
+                                                        <td className="px-6 py-4 font-bold text-slate-700">
+                                                            {row.penaltyFactor > 1 ? (
+                                                                <button
+                                                                    onClick={() => setPenaltyExplanation({
+                                                                        date: row.date,
+                                                                        status: row.status,
+                                                                        penaltyFactor: row.penaltyFactor,
+                                                                        penaltyReason: row.penaltyReason
+                                                                    })}
+                                                                    className="flex items-center gap-1.5 hover:text-rose-600 transition-colors group text-left"
+                                                                    title="Click to view 2X penalty details"
+                                                                >
+                                                                    <span>{row.date}</span>
+                                                                    <span className="inline-flex items-center px-1 rounded bg-rose-50 text-rose-600 text-[8px] font-black uppercase tracking-tighter border border-rose-100 group-hover:bg-rose-100 transition-all cursor-pointer">
+                                                                        {row.penaltyFactor}X Penalty
+                                                                    </span>
+                                                                </button>
+                                                            ) : (
+                                                                row.date
+                                                            )}
+                                                        </td>
                                                         <td className="px-6 py-4">
                                                             <span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[9px] uppercase tracking-tighter
                                                                 ${row.status === 'Present' ? 'bg-emerald-50 text-emerald-600' :
@@ -2901,11 +3252,23 @@ const SalaryManagement = () => {
                                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2">Net Base Salary</p>
                                                 <p className="text-xl font-bold text-slate-800 tracking-tight">₹{reportData.report.summary.netBaseSalary?.toFixed(2) || '0.00'}</p>
                                             </div>
-                                            {reportData.report.summary.totalProjectSalary > 0 && (
-                                                <div>
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2">Project Earnings</p>
-                                                    <p className="text-xl font-bold text-teal-600 tracking-tight">+ ₹{reportData.report.summary.totalProjectSalary?.toFixed(2) || '0.00'}</p>
-                                                </div>
+                                            {(reportData.report.summary.grossProjectSalary > 0 || reportData.report.summary.totalProjectSalary > 0) && (
+                                                <>
+                                                    <div>
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2">Gross Project Earnings</p>
+                                                        <p className="text-xl font-bold text-teal-600 tracking-tight">₹{(reportData.report.summary.grossProjectSalary !== undefined ? reportData.report.summary.grossProjectSalary : reportData.report.summary.totalProjectSalary)?.toFixed(2) || '0.00'}</p>
+                                                    </div>
+                                                    {reportData.report.summary.totalProjectDeductions > 0 && (
+                                                        <div>
+                                                            <p className="text-[10px] font-black text-rose-400 uppercase tracking-[0.15em] mb-2">Project Deductions</p>
+                                                            <p className="text-xl font-bold text-rose-500 tracking-tight">- ₹{reportData.report.summary.totalProjectDeductions?.toFixed(2) || '0.00'}</p>
+                                                        </div>
+                                                    )}
+                                                    <div>
+                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2">Net Project Earnings</p>
+                                                        <p className="text-xl font-bold text-teal-600 tracking-tight">₹{reportData.report.summary.totalProjectSalary?.toFixed(2) || '0.00'}</p>
+                                                    </div>
+                                                </>
                                             )}
                                             {reportData.projectAdjustment !== undefined && reportData.projectAdjustment !== 0 && (
                                                 <div>
@@ -3069,7 +3432,7 @@ const SalaryManagement = () => {
                                             animate={{ rotate: showTaskDeductionBreakdown ? 180 : 0 }}
                                             transition={{ duration: 0.2 }}
                                         >
-                                            <FaList size={10} />
+                                            <List size={10} />
                                         </motion.span>
                                         {showTaskDeductionBreakdown ? 'Hide Task Deduction Breakdown' : 'Show Task Deduction Breakdown'}
                                     </button>
@@ -3172,7 +3535,7 @@ const SalaryManagement = () => {
                                                     <div className="space-y-4">
                                                         <div className="flex items-center gap-3">
                                                             <div className="w-10 h-10 rounded-2xl bg-white border border-rose-100 flex items-center justify-center text-rose-500 shadow-sm">
-                                                                <FaDonate size={18} />
+                                                                <Coins size={18} />
                                                             </div>
                                                             <div>
                                                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Salary Before Deduction</p>
@@ -3211,7 +3574,7 @@ const SalaryManagement = () => {
                                         animate={{ rotate: showDetailedBreakdown ? 180 : 0 }}
                                         transition={{ duration: 0.2 }}
                                     >
-                                        <FaList size={10} />
+                                        <List size={10} />
                                     </motion.span>
                                     {showDetailedBreakdown ? 'Hide Detailed Breakdown' : 'Show Detailed Breakdown'}
                                 </button>
@@ -3287,7 +3650,27 @@ const SalaryManagement = () => {
                                             <tbody className="divide-y divide-slate-50 bg-white">
                                                 {(reportData.report.report || []).map((row, idx) => (
                                                     <tr key={idx} className="hover:bg-slate-50/50 transition-colors group">
-                                                        <td className="px-4 py-3 font-bold text-slate-700 whitespace-nowrap">{row.date}</td>
+                                                        <td className="px-4 py-3 font-bold text-slate-700 whitespace-nowrap">
+                                                            {row.penaltyFactor > 1 ? (
+                                                                <button
+                                                                    onClick={() => setPenaltyExplanation({
+                                                                        date: row.date,
+                                                                        status: row.status,
+                                                                        penaltyFactor: row.penaltyFactor,
+                                                                        penaltyReason: row.penaltyReason
+                                                                    })}
+                                                                    className="flex items-center gap-1.5 hover:text-rose-600 transition-colors group text-left"
+                                                                    title="Click to view 2X penalty details"
+                                                                >
+                                                                    <span>{row.date}</span>
+                                                                    <span className="inline-flex items-center px-1 rounded bg-rose-50 text-rose-600 text-[8px] font-black uppercase tracking-tighter border border-rose-100 group-hover:bg-rose-100 transition-all cursor-pointer">
+                                                                        {row.penaltyFactor}X Penalty
+                                                                    </span>
+                                                                </button>
+                                                            ) : (
+                                                                row.date
+                                                            )}
+                                                        </td>
                                                         <td className="px-4 py-3">
                                                             <span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-bold text-[10px] uppercase tracking-tight
                                                                 ${row.status === 'Present' ? 'bg-emerald-50 text-emerald-600' :
@@ -3324,7 +3707,7 @@ const SalaryManagement = () => {
                                     onClick={downloadPDF}
                                     className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-slate-900 text-white hover:bg-slate-800 transition-all text-sm font-bold shadow-lg shadow-slate-200 active:scale-95"
                                 >
-                                    <FaFilePdf size={16} />
+                                    <FileDown size={16} />
                                     <span>Download PDF Report</span>
                                 </button>
                             </div>
@@ -3359,6 +3742,62 @@ const SalaryManagement = () => {
                         </Button>
                     </div>
                 </div>
+            </Modal>
+
+            <Modal
+                isOpen={!!penaltyExplanation}
+                onClose={() => setPenaltyExplanation(null)}
+                title={
+                    <div className="flex items-center gap-2 text-rose-600">
+                        <AlertTriangle size={18} />
+                        <span className="font-black uppercase tracking-wider text-xs">Penalty Explanation</span>
+                    </div>
+                }
+                size="sm"
+            >
+                {penaltyExplanation && (
+                    <div className="space-y-4 p-1">
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Date</p>
+                            <p className="text-sm font-bold text-slate-800">{penaltyExplanation.date}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</p>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-bold text-[10px] uppercase tracking-tight
+                                    ${penaltyExplanation.status === 'Present' ? 'bg-emerald-50 text-emerald-600' :
+                                        penaltyExplanation.status === 'Absent' ? 'bg-rose-50 text-rose-500' :
+                                            penaltyExplanation.status === 'Sunday' ? 'bg-slate-50 text-slate-400' :
+                                                penaltyExplanation.status === 'Holiday' ? 'bg-amber-50 text-amber-600' :
+                                                    'bg-sky-50 text-sky-600'}`}>
+                                    {penaltyExplanation.status}
+                                </span>
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Deduction Penalty</p>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[10px] uppercase tracking-tight bg-rose-50 text-rose-600">
+                                    {penaltyExplanation.penaltyFactor}X Applied
+                                </span>
+                            </div>
+                        </div>
+                        <div className="pt-2 border-t border-slate-100">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Reason for Multiplier Penalty</p>
+                            <div className="bg-rose-50/50 border border-rose-100/50 rounded-xl p-3">
+                                <p className="text-xs font-semibold text-rose-700 leading-relaxed">
+                                    {penaltyExplanation.penaltyReason || "Deduction policy rules applied."}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex justify-end pt-2">
+                            <button
+                                onClick={() => setPenaltyExplanation(null)}
+                                className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 active:scale-95 transition-all"
+                            >
+                                Close Details
+                            </button>
+                        </div>
+                    </div>
+                )}
             </Modal>
         </div>
     );

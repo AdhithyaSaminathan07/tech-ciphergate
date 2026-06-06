@@ -1404,6 +1404,13 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         .filter(b => new Date(b.fromDate) <= toDateObj && new Date(b.toDate) >= fromDateObj)
         .reduce((sum, b) => sum + b.amount, 0);
 
+      const bonusesForPeriod = worker.bonuses.filter(bonus => {
+        return (
+          (new Date(bonus.fromDate) <= toDateObj) &&
+          (new Date(bonus.toDate) >= fromDateObj)
+        );
+      });
+
       let finalSalaryWithBonus = (report.summary.finalSalary || 0) + totalBonusAmount;
 
       // Fines
@@ -1447,8 +1454,11 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
           .filter(h => h.status === 'Done')
           .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
         return {
+          _id: task._id,
+          title: task.title,
           endDate: task.endDate,
-          doneDate: doneEntry ? doneEntry.changedAt : null
+          doneDate: doneEntry ? doneEntry.changedAt : null,
+          status: task.status
         };
       });
 
@@ -1487,10 +1497,30 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         workerId,
         name: worker.name,
         department: worker.department?.name || 'N/A',
+        totalWorkingDays: report.summary?.totalWorkingDaysInPeriod || 0,
+        actualWorkingDays: report.summary?.actualWorkingDays || 0,
+        totalAbsentDays: report.summary?.totalAbsentDays || 0,
+        totalLeaveDays: report.summary?.totalLeaveDays || 0,
         grossFinalSalary: finalSalaryWithFines,
         taskPenalty: taskPenalty,
         totalFinalSalary: finalSalaryWithFines,
-        subdomain: worker.subdomain
+        subdomain: worker.subdomain,
+        fullReport: {
+          report,
+          bonuses: bonusesForPeriod,
+          totalBonusAmount,
+          totalFinesAmount,
+          finalSalaryWithBonus,
+          finalSalaryWithFines,
+          delayedTasks,
+          worker: {
+            name: worker.name,
+            salary: worker.salary,
+            finalSalary: worker.finalSalary,
+            perDaySalary: worker.perDaySalary,
+            fines: worker.fines
+          }
+        }
       };
     });
 
@@ -1510,17 +1540,33 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         if (isPastMonth) {
           await autoRecordProjectPaymentsHelper(result.workerId, result.subdomain || subdomain, bulkMonth, bulkYear);
         }
-        const { totalAdjustment } = await calculateProjectAdjustments(
+        const { totalAdjustment, adjustmentDetails } = await calculateProjectAdjustments(
           result.workerId, result.subdomain || subdomain, bulkMonth, bulkYear
         );
+        const finalSalaryWithAdjustment = Math.max(0, result.totalFinalSalary + totalAdjustment);
         return {
           ...result,
           projectAdjustment: totalAdjustment,
-          totalFinalSalary: Math.max(0, result.totalFinalSalary + totalAdjustment)
+          totalFinalSalary: finalSalaryWithAdjustment,
+          fullReport: {
+            ...result.fullReport,
+            projectAdjustment: totalAdjustment,
+            projectAdjustmentDetails: adjustmentDetails,
+            finalSalaryWithFines: finalSalaryWithAdjustment
+          }
         };
       } catch (err) {
         // If adjustment calculation fails, return original result
-        return { ...result, projectAdjustment: 0 };
+        return {
+          ...result,
+          projectAdjustment: 0,
+          fullReport: {
+            ...result.fullReport,
+            projectAdjustment: 0,
+            projectAdjustmentDetails: [],
+            finalSalaryWithFines: result.totalFinalSalary
+          }
+        };
       }
     }));
 

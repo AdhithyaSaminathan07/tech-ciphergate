@@ -1058,6 +1058,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
     });
 
     // Apply Advanced Leave Deduction Penalty to permissions if enabled
+    let penaltyReasons = [];
     if (tempDayPermissionMinutes > 0 && advancedLeaveDeduction && (advancedLeaveDeduction.includePermissionPenalty || options.includePermission)) {
       let isPenaltyTriggered = false;
 
@@ -1066,6 +1067,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
         if (currentMonthMissedCount > (advancedLeaveDeduction.monthlyLimit || 0)) {
           isPenaltyTriggered = true;
           dayData.issues.push(`Monthly Limit Exceeded`);
+          penaltyReasons.push(`Monthly Limit Exceeded`);
         }
       }
 
@@ -1075,6 +1077,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
         if (isEmployeeAttendancePenaltyActive) {
           isPenaltyTriggered = true;
           dayData.issues.push(`Personal Attendance Low (${Math.round(monthlyAttendanceRate)}%)`);
+          penaltyReasons.push(`Personal Attendance Low (${Math.round(monthlyAttendanceRate)}%)`);
         }
 
         // External Thresholds (Company/Dept)
@@ -1085,6 +1088,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
         if (!isPenaltyTriggered && (isCompanyPenaltyForDay || isDeptPenaltyForDay)) {
           isPenaltyTriggered = true;
           dayData.issues.push(isCompanyPenaltyForDay ? 'Company Attendance Low' : 'Dept Attendance Low');
+          penaltyReasons.push(isCompanyPenaltyForDay ? 'Company Attendance Low' : 'Dept Attendance Low');
         }
       }
 
@@ -1222,7 +1226,9 @@ const calculateWorkerProductivity = (productivityParameters) => {
         status: 'Absent',
         workType: 'SAAS',
         projectName: null,
-        projectId: null
+        projectId: null,
+        penaltyFactor,
+        penaltyReason: penaltyFactor > 1 ? penaltyReasons.join(', ') : null
       }];
     }
 
@@ -1362,7 +1368,9 @@ const calculateWorkerProductivity = (productivityParameters) => {
           // ── NEW ──
           workType,
           projectName: isProjectDayFlag ? activeProject.projectName : null,
-          projectId: isProjectDayFlag ? activeProject._id : null
+          projectId: isProjectDayFlag ? activeProject._id : null,
+          penaltyFactor,
+          penaltyReason: penaltyFactor > 1 ? penaltyReasons.join(', ') : null
         });
       }
     });
@@ -1481,6 +1489,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
         currentMonthMissedCount++;
 
         let dynamicFactor = 1;
+        let penaltyReasons = [];
         // Apply penalties for leaves if rules are triggered
         if (advancedLeaveDeduction) {
           let isPenaltyTriggered = false;
@@ -1489,6 +1498,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
           if (advancedLeaveDeduction.monthlyLimitRuleEnabled) {
             if (currentMonthMissedCount > (advancedLeaveDeduction.monthlyLimit || 0)) {
               isPenaltyTriggered = true;
+              penaltyReasons.push(`Monthly Limit Exceeded`);
             }
           }
 
@@ -1546,7 +1556,9 @@ const calculateWorkerProductivity = (productivityParameters) => {
           totalSalary: formatCurrency(isActuallyPaid ? (missedActiveProject ? missedActiveProject.perDayValue : perDaySalary) : Math.max(0, (missedActiveProject ? missedActiveProject.perDayValue : 0) - deductionAmount)),
           status: isActuallyPaid ? 'Paid Leave' : 'Leave',
           workType: missedWorkType,
-          projectId: missedProjectId
+          projectId: missedProjectId,
+          penaltyFactor: isActuallyPaid ? 1 : factor,
+          penaltyReason: (!isActuallyPaid && factor > 1) ? (penaltyReasons.join(', ') || (baseDeductionFactor > 1 ? 'Leave Policy base deduction factor' : 'Leave policy rules')) : null
         };
 
         // Aggregate hybrid totals — gross and deductions SEPARATE
@@ -1593,6 +1605,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
         currentMonthMissedCount++;
 
         let factor = 1;
+        let penaltyReasons = [];
         // Apply penalties for absences if rules are triggered
         if (advancedLeaveDeduction) {
           let isPenaltyTriggered = false;
@@ -1601,6 +1614,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
           if (advancedLeaveDeduction.monthlyLimitRuleEnabled) {
             if (currentMonthMissedCount > (advancedLeaveDeduction.monthlyLimit || 0)) {
               isPenaltyTriggered = true;
+              penaltyReasons.push(`Monthly Limit Exceeded`);
             }
           }
 
@@ -1608,6 +1622,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
           if (!isPenaltyTriggered && advancedLeaveDeduction.attendanceRuleEnabled) {
             if (isEmployeeAttendancePenaltyActive) {
               isPenaltyTriggered = true;
+              penaltyReasons.push(`Personal Attendance Low (${Math.round(monthlyAttendanceRate)}%)`);
             }
             const dateKey = typeof date === 'string' ? date : date.toISOString().split('T')[0];
             const isCompanyPenaltyForDay = options.companyPenaltyMap ? options.companyPenaltyMap[dateKey] : options.isCompanyPenalty;
@@ -1615,6 +1630,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
 
             if (!isPenaltyTriggered && (isCompanyPenaltyForDay || isDeptPenaltyForDay)) {
               isPenaltyTriggered = true;
+              penaltyReasons.push(isCompanyPenaltyForDay ? 'Company Attendance Low' : 'Dept Attendance Low');
             }
           }
 
@@ -1652,7 +1668,9 @@ const calculateWorkerProductivity = (productivityParameters) => {
           status: 'Absent',
           workType: missedWorkType,
           projectName: missedProjectName,
-          projectId: missedProjectId
+          projectId: missedProjectId,
+          penaltyFactor: factor,
+          penaltyReason: factor > 1 ? (penaltyReasons.join(', ') || 'Absent policy rules') : null
         };
 
         // Aggregate hybrid totals — keep gross and deductions SEPARATE
@@ -1979,6 +1997,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
       totalProjectSalary,      // actual project pool (deductions already applied)
       totalSaaSDeductions,     // display only
       totalProjectDeductions,  // display only
+      grossProjectSalary,      // actual project gross earnings (no deductions)
       projectBreakdownMap,
       originalSalary,
       expectedSaaSSalary,
