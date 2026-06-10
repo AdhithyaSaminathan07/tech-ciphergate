@@ -123,6 +123,21 @@ const syncBrainItem = async (type, item, subdomain) => {
         console.error('[Outcome Tracking] Async trigger error:', err.message);
       });
     }
+  } else if (type === 'personal_note') {
+    refModel = 'PersonalNote';
+    title = item.title || item.originalFilename;
+    content = [
+      `[Manager Personal Note] File: ${item.originalFilename}`,
+      `Type: ${item.fileType?.toUpperCase() || 'TXT'}`,
+      `Content:\n${item.content}`
+    ].filter(Boolean).join('\n');
+    tags = Array.isArray(item.tags) ? item.tags.map(t => t.toLowerCase()) : [];
+    metadata = {
+      fileType: item.fileType,
+      originalFilename: item.originalFilename,
+      fileSize: item.fileSize,
+      uploadedBy: item.uploadedBy
+    };
   }
   
   if (!refModel) return;

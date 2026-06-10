@@ -147,8 +147,9 @@ const getDashboardData = async (req, res) => {
         }).sort({ createdAt: -1 });
 
         // Auto-trigger a background sync if no cache and no active sync
-        if (!activeJob && repoCount > 0) {
-            console.log(`[GitHub Controller] No dashboard cache but ${repoCount} repo_details exist. Auto-triggering background sync to build slim cache...`);
+        // NOTE: We always trigger — even on a fresh DB (repoCount=0) so the live server initializes automatically.
+        if (!activeJob) {
+            console.log(`[GitHub Controller] No dashboard cache for subdomain "${subdomain}". Auto-triggering background sync (repoCount=${repoCount})...`);
             try {
                 const { triggerAsyncSync } = require('../services/githubSyncService');
                 triggerAsyncSync(subdomain).catch(err => {

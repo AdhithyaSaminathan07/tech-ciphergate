@@ -4,11 +4,13 @@ const Department = require('../models/Department');
 const Ticket = require('../models/ticketModel');
 const InternalDocument = require('../models/InternalDocument');
 const SecondBrainItem = require('../models/SecondBrainItem');
+const PersonalNote = require('../models/PersonalNote');
 const GitHubCache = require('../models/GitHubCache');
 const { generateCompletion } = require('../services/claudeService');
-const { syncBrainItem, calculateDeveloperExpertise } = require('../services/secondBrainService');
+const { syncBrainItem, calculateDeveloperExpertise, deleteBrainItem } = require('../services/secondBrainService');
 const asyncHandler = require('express-async-handler');
 const crypto = require('crypto');
+const pdfParse = require('pdf-parse');
 
 // Helper to extract JSON from text safely
 const extractJson = (text) => {
@@ -159,6 +161,8 @@ Analyze the user's task and output:
      ✓ Completed 12 similar tasks (historical task match)
      ✓ Active workload: 1 task (workload check)
      ✓ High Git contributions score: 95 (git commits check)
+
+IMPORTANT: The retrieved company context may include [Manager Personal Note] entries — these are the manager's own saved discussions and decisions with LLMs. Give these notes HIGH weight when they are relevant to the task, as they represent the manager's direct knowledge, design decisions, and preferences for this team.
 
 You MUST respond ONLY with a JSON object in this exact format, with no preamble or codeblock formatting:
 {
@@ -343,6 +347,7 @@ const getBrainStats = asyncHandler(async (req, res) => {
   const workerCount = await SecondBrainItem.countDocuments({ subdomain, type: 'worker' });
   const wikiCount = await SecondBrainItem.countDocuments({ subdomain, type: 'wiki' });
   const ticketCount = await SecondBrainItem.countDocuments({ subdomain, type: 'ticket' });
+  const personalNoteCount = await SecondBrainItem.countDocuments({ subdomain, type: 'personal_note' });
 
   res.json({
     totalItems,
@@ -350,7 +355,8 @@ const getBrainStats = asyncHandler(async (req, res) => {
       project: projectCount,
       worker: workerCount,
       wiki: wikiCount,
-      ticket: ticketCount
+      ticket: ticketCount,
+      personal_note: personalNoteCount
     }
   });
 });
@@ -445,12 +451,164 @@ const getAiAuditLogs = asyncHandler(async (req, res) => {
   res.json(logs);
 });
 
+// =============================================================================
+// PERSONAL BRAIN — Manager's Second Brain Folder Integration
+// =============================================================================
+
+/**
+ * @desc    Upload personal brain files (txt, md, pdf) from manager's desktop folder
+ * @route   POST /api/ai/personal-brain/upload
+ * @access  Private — Admin Only
+ */
+const uploadPersonalBrainFiles = asyncHandler(async (req, res) => {
+  const subdomain = req.user?.subdomain;
+
+  if (!subdomain || subdomain === 'main') {
+    res.status(400);
+    throw new Error('Subdomain is missing or invalid');
+  }
+
+  if (!req.files || req.files.length === 0) {
+    res.status(400);
+    throw new Error('No files were uploaded');
+  }
+
+  const results = [];
+  const errors = [];
+
+  for (const file of req.files) {
+    try {
+      const originalFilename = file.originalname;
+      const ext = originalFilename.split('.').pop().toLowerCase();
+
+      if (!['txt', 'md', 'pdf', 'json'].includes(ext)) {
+        errors.push({ filename: originalFilename, error: 'Unsupported file type. Only .txt, .md, .pdf, .json allowed.' });
+        continue;
+      }
+
+      // Extract text content
+      let textContent = '';
+      if (ext === 'pdf') {
+        const pdfData = await pdfParse(file.buffer);
+        textContent = pdfData.text;
+      } else {
+        textContent = file.buffer.toString('utf-8');
+      }
+
+      if (!textContent || !textContent.trim()) {
+        errors.push({ filename: originalFilename, error: 'File appears to be empty or could not be read.' });
+        continue;
+      }
+
+      // Derive title from filename (strip extension)
+      const title = originalFilename.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+
+      // ✅ Change 3: Duplicate protection — upsert by subdomain + originalFilename
+      const noteData = {
+        subdomain,
+        title,
+        content: textContent.trim(),
+        fileType: ext,
+        originalFilename,
+        fileSize: file.size,
+        uploadedBy: req.user._id,
+        tags: [ext, 'personal-note', 'manager-brain']
+      };
+
+      const savedNote = await PersonalNote.findOneAndUpdate(
+        { subdomain, originalFilename },
+        noteData,
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+
+      // Sync into SecondBrainItem index
+      await syncBrainItem('personal_note', savedNote, subdomain);
+
+      results.push({
+        _id: savedNote._id,
+        title: savedNote.title,
+        originalFilename: savedNote.originalFilename,
+        fileType: savedNote.fileType,
+        fileSize: savedNote.fileSize,
+        createdAt: savedNote.createdAt,
+        updatedAt: savedNote.updatedAt,
+        isUpdate: true // always upsert
+      });
+
+      console.log(`[PersonalBrain] Indexed file: "${originalFilename}" for subdomain: ${subdomain}`);
+    } catch (fileErr) {
+      console.error(`[PersonalBrain] Failed to process file: ${file.originalname}`, fileErr.message);
+      errors.push({ filename: file.originalname, error: fileErr.message });
+    }
+  }
+
+  res.status(201).json({
+    message: `${results.length} file(s) indexed into Second Brain.`,
+    indexed: results,
+    errors
+  });
+});
+
+/**
+ * @desc    Get all personal brain files for this subdomain
+ * @route   GET /api/ai/personal-brain
+ * @access  Private — Admin Only
+ */
+const getPersonalBrainFiles = asyncHandler(async (req, res) => {
+  const subdomain = req.user?.subdomain;
+
+  if (!subdomain || subdomain === 'main') {
+    res.status(400);
+    throw new Error('Subdomain is missing or invalid');
+  }
+
+  const notes = await PersonalNote.find({ subdomain })
+    .select('title originalFilename fileType fileSize tags createdAt updatedAt')
+    .sort({ updatedAt: -1 })
+    .lean();
+
+  res.json(notes);
+});
+
+/**
+ * @desc    Delete a personal brain file and remove from Second Brain index
+ * @route   DELETE /api/ai/personal-brain/:id
+ * @access  Private — Admin Only
+ */
+const deletePersonalBrainFile = asyncHandler(async (req, res) => {
+  const subdomain = req.user?.subdomain;
+  const { id } = req.params;
+
+  if (!subdomain || subdomain === 'main') {
+    res.status(400);
+    throw new Error('Subdomain is missing or invalid');
+  }
+
+  const note = await PersonalNote.findOne({ _id: id, subdomain });
+  if (!note) {
+    res.status(404);
+    throw new Error('Personal note not found');
+  }
+
+  // Remove from Second Brain index
+  await SecondBrainItem.deleteOne({ itemRef: note._id, subdomain });
+
+  // Remove the note itself
+  await PersonalNote.deleteOne({ _id: id, subdomain });
+
+  console.log(`[PersonalBrain] Deleted file: "${note.originalFilename}" for subdomain: ${subdomain}`);
+
+  res.json({ message: `"${note.originalFilename}" removed from Second Brain.`, deletedId: id });
+});
+
 module.exports = {
   analyzeTask,
   searchSecondBrain,
   getBrainStats,
   reindexData,
   logAiDecision,
-  getAiAuditLogs
+  getAiAuditLogs,
+  uploadPersonalBrainFiles,
+  getPersonalBrainFiles,
+  deletePersonalBrainFile
 };
-

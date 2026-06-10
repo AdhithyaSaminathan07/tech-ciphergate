@@ -8,7 +8,7 @@ import {
     Search, Plus, Trash2, CheckSquare,
     AlertCircle, Bookmark, Zap, ArrowUp, ArrowDown,
     Minus, X, User, AlignLeft, LayoutDashboard, Flag, List, ListOrdered,
-    Calendar, Clock, Check, ChevronDown, BarChart2, Users, Info, Eye, Paperclip, CheckCircle2, History, Tag, MessageSquare, Download, Maximize2, FileText, HelpCircle, ImagePlus, Filter,
+    Calendar, Clock, Check, Brain, ChevronDown, BarChart2, Users, Info, Eye, Paperclip, CheckCircle2, History, Tag, MessageSquare, Download, Maximize2, FileText, HelpCircle, ImagePlus, Filter,
     Cpu, Sparkles
 } from 'lucide-react';
 import { getFullFileUrl } from '../../utils/fileUtils';
@@ -21,6 +21,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import Modal from '../common/Modal';
+import PersonalBrainManager from './PersonalBrainManager';
 
 // 🔹 Optimized Title Input to prevent lag/cursor jump
 const TitleInput = ({ initialValue, onUpdate }) => {
@@ -455,6 +457,7 @@ const WorkAllocation = () => {
     const taskRefFileInputRef = useRef(null);
     const [isDraggingTaskRef, setIsDraggingTaskRef] = useState(false);
     const [expandedSubTasks, setExpandedSubTasks] = useState({});
+    const [showBrainModal, setShowBrainModal] = useState(false);
 
     const columns = ['To Do', 'In Progress', 'Review', 'Done'];
 
@@ -1897,6 +1900,15 @@ const WorkAllocation = () => {
                                         </SelectContent>
                                     </Select>
                                 </div>
+                                {/* AI Second Brain Button */}
+                                <button
+                                    onClick={() => setShowBrainModal(true)}
+                                    className="flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:from-violet-700 hover:to-indigo-700 transition-all shadow-md shadow-violet-100 active:scale-95 mr-1"
+                                    title="Upload chat files to AI Second Brain"
+                                >
+                                    <Brain className="w-3.5 h-3.5" />
+                                    <span>AI Second Brain</span>
+                                </button>
                                 {selectedTicket._id === 'new' && (
                                     <button
                                         disabled={!selectedTicket.title}
@@ -1945,6 +1957,32 @@ const WorkAllocation = () => {
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
+
+                            {/* AI Second Brain Upload Modal */}
+                            {showBrainModal && (
+                                <div
+                                    className="fixed inset-0 bg-black/50 z-[800] flex items-center justify-center backdrop-blur-sm p-4"
+                                    onClick={(e) => { if (e.target === e.currentTarget) setShowBrainModal(false); }}
+                                >
+                                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+                                        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                                            <div className="flex items-center gap-2">
+                                                <Brain className="w-5 h-5 text-violet-600" />
+                                                <span className="font-bold text-gray-800">AI Second Brain — Upload Files</span>
+                                            </div>
+                                            <button
+                                                onClick={() => setShowBrainModal(false)}
+                                                className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-gray-600 transition-colors"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                        <div className="p-5">
+                                            <PersonalBrainManager />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Body - Responsive Layout */}
@@ -1962,18 +2000,8 @@ const WorkAllocation = () => {
                                             initialValue={selectedTicket.title}
                                             onUpdate={async (newTitle) => {
                                                 updateSelectedTicket({ title: newTitle }, true);
-                                                if (newTitle && newTitle.trim()) {
-                                                    setIsAnalyzing(true);
-                                                    try {
-                                                        const result = await analyzeTask(newTitle, selectedTicket.description || '', subdomain);
-                                                        setAiAnalysisResult(result);
-                                                        toast.success('AI task analysis completed!');
-                                                    } catch (error) {
-                                                        console.error('AI Auto-Analysis failed:', error);
-                                                    } finally {
-                                                        setIsAnalyzing(false);
-                                                    }
-                                                }
+                                                // AI analysis is no longer triggered automatically.
+                                                // Use the "Analyze with AI" button to run analysis on demand.
                                             }}
                                         />
 

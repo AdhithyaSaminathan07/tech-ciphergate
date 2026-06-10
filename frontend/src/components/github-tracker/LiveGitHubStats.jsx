@@ -67,6 +67,22 @@ export default function LiveGitHubStats() {
         }, 3000);
     };
 
+    const handleSyncNow = async () => {
+        try {
+            const res = await githubService.triggerSync();
+            if (res && res.success && res.jobId) {
+                setSyncJob({
+                    jobId: res.jobId,
+                    status: 'Pending',
+                    progress: '0 / 0'
+                });
+                pollSyncStatus(res.jobId);
+            }
+        } catch (err) {
+            console.error("Error triggering sync:", err);
+        }
+    };
+
     useEffect(() => {
         const checkInitialSyncStatus = async () => {
             try {
@@ -86,21 +102,19 @@ export default function LiveGitHubStats() {
         loadData();
     }, []);
 
-    const handleSyncNow = async () => {
-        try {
-            const res = await githubService.triggerSync();
-            if (res && res.success && res.jobId) {
-                setSyncJob({
-                    jobId: res.jobId,
-                    status: 'Pending',
-                    progress: '0 / 0'
-                });
-                pollSyncStatus(res.jobId);
-            }
-        } catch (err) {
-            console.error("Error triggering sync:", err);
+    // Auto-trigger sync when data loads but all stats are zero (fresh live DB)
+    useEffect(() => {
+        if (!data) return;
+        const stats = data.stats || {};
+        const isEmpty = !stats.totalRepos && !stats.totalCommits && !stats.totalPRs;
+        const noSyncRunning = !syncJob || (syncJob.status !== 'Pending' && syncJob.status !== 'Running');
+        if (isEmpty && noSyncRunning && !data.showingCached) {
+            console.log('[GitHub Tracker] Fresh DB detected — auto-triggering initial sync...');
+            handleSyncNow();
         }
-    };
+    }, [data]);
+
+
 
     const clearGitHubCache = async () => {
         setClearingCache(true);
@@ -161,8 +175,37 @@ export default function LiveGitHubStats() {
 
     return (
         <div className="space-y-4">
+            {/* First-Time Setup Banner — shown on fresh live DB with all zeros */}
+            {data && !data.showingCached && !data.stats?.totalRepos && (
+                <div className="p-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
+                    <div className="flex items-center space-x-3">
+                        <Database className="h-6 w-6 text-blue-200 shrink-0" />
+                        <div>
+                            <p className="font-bold text-base">GitHub Data Not Yet Synced</p>
+                            <p className="text-sm text-blue-200 mt-0.5">
+                                {syncJob && (syncJob.status === 'Pending' || syncJob.status === 'Running')
+                                    ? `Syncing repositories... ${syncJob.progress || '0 / 0'} done. This takes 2–5 minutes.`
+                                    : 'This is the first time loading GitHub data on this server. Click Sync to initialize.'}
+                            </p>
+                        </div>
+                    </div>
+                    <Button
+                        onClick={handleSyncNow}
+                        disabled={syncJob && (syncJob.status === 'Pending' || syncJob.status === 'Running')}
+                        className="bg-white text-blue-700 hover:bg-blue-50 font-bold shrink-0"
+                        size="sm"
+                    >
+                        {syncJob && (syncJob.status === 'Pending' || syncJob.status === 'Running') ? (
+                            <><Activity className="h-4 w-4 mr-2 animate-spin" /> Syncing...</>
+                        ) : (
+                            <><Activity className="h-4 w-4 mr-2" /> Start Initial Sync</>
+                        )}
+                    </Button>
+                </div>
+            )}
+
             {/* Sync Job Status Banner */}
-            {syncJob && (syncJob.status === 'Pending' || syncJob.status === 'Running') && (
+            {syncJob && (syncJob.status === 'Pending' || syncJob.status === 'Running') && data?.stats?.totalRepos > 0 && (
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between animate-pulse">
                     <div className="flex items-center space-x-3">
                         <Activity className="h-5 w-5 text-blue-500 animate-spin" />
@@ -272,7 +315,7 @@ export default function LiveGitHubStats() {
                                 Low-quality or repetitive commits
                             </div>
                         </div>
-                        
+
                         <div className="flex flex-col items-center p-4 bg-red-50 rounded-lg border border-red-200">
                             <AlertTriangle className="h-8 w-8 text-red-500 mb-2" />
                             <div className="text-2xl font-bold text-red-700">{stats.spamPRs || 0}</div>
@@ -281,7 +324,7 @@ export default function LiveGitHubStats() {
                                 Low-quality or tiny PRs
                             </div>
                         </div>
-                        
+
                         <div className="flex flex-col items-center p-4 bg-green-50 rounded-lg border border-green-200">
                             <GitCommit className="h-8 w-8 text-green-500 mb-2" />
                             <div className="text-2xl font-bold text-green-700">{stats.validCommits ? Math.round((stats.validCommits / (stats.totalCommits || 1)) * 100) : 0}%</div>
@@ -290,7 +333,7 @@ export default function LiveGitHubStats() {
                                 Valid commits ratio
                             </div>
                         </div>
-                        
+
                         <div className="flex flex-col items-center p-4 bg-blue-50 rounded-lg border border-blue-200">
                             <GitPullRequest className="h-8 w-8 text-blue-500 mb-2" />
                             <div className="text-2xl font-bold text-blue-700">{stats.validPRs ? Math.round((stats.validPRs / (stats.totalPRs || 1)) * 100) : 0}%</div>

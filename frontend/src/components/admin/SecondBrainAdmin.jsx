@@ -8,6 +8,7 @@ import Button from '../common/Button';
 import Modal from '../common/Modal';
 import Spinner from '../common/Spinner';
 import appContext from '../../context/AppContext';
+import PersonalBrainManager from './PersonalBrainManager';
 
 const SecondBrainAdmin = () => {
   const { subdomain } = useContext(appContext);
@@ -33,7 +34,7 @@ const SecondBrainAdmin = () => {
   // Second Brain Stats & Search Testing State
   const [stats, setStats] = useState({
     totalItems: 0,
-    byType: { project: 0, worker: 0, wiki: 0, ticket: 0 }
+    byType: { project: 0, worker: 0, wiki: 0, ticket: 0, personal_note: 0 }
   });
   const [isSyncing, setIsSyncing] = useState(false);
   const [testSearchQuery, setTestSearchQuery] = useState('');
@@ -328,7 +329,11 @@ const SecondBrainAdmin = () => {
       )}
 
       {activeMainTab === 'index' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <>
+          <div className="mb-6">
+            <PersonalBrainManager onIndexChange={loadStats} />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Index Stats */}
           <Card className="lg:col-span-1">
             <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center space-x-2">
@@ -357,6 +362,10 @@ const SecondBrainAdmin = () => {
                 <div className="flex justify-between p-2 hover:bg-gray-50 rounded border-b">
                   <span className="text-gray-600 font-semibold">Completed Tickets</span>
                   <span className="font-bold text-gray-800">{stats.byType?.ticket || 0}</span>
+                </div>
+                <div className="flex justify-between p-2 hover:bg-gray-50 rounded border-b">
+                  <span className="text-gray-600 font-semibold">Manager Personal Notes</span>
+                  <span className="font-bold text-gray-800">{stats.byType?.personal_note || 0}</span>
                 </div>
               </div>
 
@@ -418,6 +427,7 @@ const SecondBrainAdmin = () => {
                           result.type === 'wiki' ? 'bg-indigo-100 text-indigo-700' :
                           result.type === 'worker' ? 'bg-green-100 text-green-700' :
                           result.type === 'project' ? 'bg-blue-100 text-blue-700' :
+                          result.type === 'personal_note' ? 'bg-purple-100 text-purple-700' :
                           'bg-amber-100 text-amber-700'
                         }`}>
                           {result.type}
@@ -436,6 +446,7 @@ const SecondBrainAdmin = () => {
             </div>
           </Card>
         </div>
+        </>
       )}
 
       {activeMainTab === 'audit' && (

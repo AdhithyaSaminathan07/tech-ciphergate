@@ -13,7 +13,7 @@ const secondBrainItemSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['project', 'worker', 'wiki', 'ticket', 'github_repo_intelligence', 'github_contributor_intelligence'],
+    enum: ['project', 'worker', 'wiki', 'ticket', 'github_repo_intelligence', 'github_contributor_intelligence', 'personal_note'],
     required: true
   },
   subdomain: {
@@ -28,7 +28,7 @@ const secondBrainItemSchema = new mongoose.Schema({
   refModel: {
     type: String,
     required: true,
-    enum: ['Department', 'Worker', 'InternalDocument', 'Ticket']
+    enum: ['Department', 'Worker', 'InternalDocument', 'Ticket', 'PersonalNote']
   },
   tags: {
     type: [String],
