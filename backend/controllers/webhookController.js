@@ -2,6 +2,7 @@
 
 const asyncHandler = require('express-async-handler');
 const axios = require('axios');
+const crypto = require('crypto');
 const Leave = require('../models/Leave');
 const Worker = require('../models/Worker');
 const GowhatsConfig = require('../models/GowhatsConfig');
@@ -21,6 +22,108 @@ const getButtonPayload = (message) => {
     return message.interactive?.button_reply?.id || message.interactive?.button_reply?.title;
   }
   return null;
+};
+
+const safeCompare = (left = '', right = '') => {
+  const leftBuffer = Buffer.from(String(left));
+  const rightBuffer = Buffer.from(String(right));
+  return leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer);
+};
+
+const parseLeaveActionPayload = (payload = '') => {
+  if (payload.startsWith('ACCEPT_LEAVE_')) {
+    return {
+      action: 'Approved',
+      leaveId: payload.replace('ACCEPT_LEAVE_', '')
+    };
+  }
+
+  if (payload.startsWith('REJECT_LEAVE_')) {
+    return {
+      action: 'Rejected',
+      leaveId: payload.replace('REJECT_LEAVE_', '')
+    };
+  }
+
+  return null;
+};
+
+const emitLeaveUpdate = (updatedLeave, subdomain) => {
+  try {
+    const io = getIO();
+    io.to(subdomain).emit('leave:updated', updatedLeave);
+    if (updatedLeave.worker?._id) {
+      io.to(updatedLeave.worker._id.toString()).emit('leave:updated', updatedLeave);
+    }
+  } catch (socketError) {
+    console.error('[Webhook] Socket emission error:', socketError.message);
+  }
+};
+
+const applyLeaveAction = async ({ leaveId, action, subdomain, actorNumber, source = 'whatsapp' }) => {
+  const query = { _id: leaveId };
+  if (subdomain) query.subdomain = subdomain;
+
+  const leave = await Leave.findOne(query).populate('worker', 'name perDaySalary');
+
+  if (!leave) {
+    return {
+      success: false,
+      statusCode: 404,
+      message: 'Leave application not found or it does not belong to this organization.'
+    };
+  }
+
+  if (leave.status !== 'Pending') {
+    return {
+      success: true,
+      alreadyProcessed: true,
+      leave,
+      message: `This leave request has already been ${leave.status.toLowerCase()}.`
+    };
+  }
+
+  const normalizedActorNumber = actorNumber ? normalizePhoneNumber(actorNumber) : source;
+  const updatedLeave = await Leave.findByIdAndUpdate(leaveId, {
+    status: action,
+    workerViewed: false,
+    processedViaWhatsApp: true,
+    processedBy: normalizedActorNumber,
+    processedAt: new Date()
+  }, { new: true }).populate('worker', 'name department');
+
+  if (action === 'Approved' && !leave.isPaidLeave) {
+    const worker = await Worker.findById(leave.worker._id);
+    if (worker && worker.perDaySalary > 0) {
+      let deduction = 0;
+      if (leave.leaveType === 'Permission' && leave.startTime && leave.endTime) {
+        const start = new Date(`1970-01-01T${leave.startTime}:00`);
+        const end = new Date(`1970-01-01T${leave.endTime}:00`);
+        const durationHours = (end - start) / (1000 * 60 * 60);
+        const perHourSalary = worker.perDaySalary / 8;
+        deduction = Math.max(0, durationHours * perHourSalary);
+      } else {
+        deduction = leave.totalDays * worker.perDaySalary * (leave.deductionFactor || 1);
+      }
+
+      const updatedFinalSalary = Math.max(0, worker.finalSalary - deduction);
+      await Worker.updateOne(
+        { _id: leave.worker._id },
+        { $set: { finalSalary: updatedFinalSalary } }
+      );
+
+      console.log(`[Webhook] Salary updated for worker ${worker.name}: deducted ${deduction}`);
+    }
+  }
+
+  emitLeaveUpdate(updatedLeave, leave.subdomain);
+
+  return {
+    success: true,
+    leave,
+    updatedLeave,
+    message: `Leave ${leaveId} successfully ${action.toLowerCase()}.`
+  };
 };
 
 /**
@@ -189,6 +292,77 @@ const handleWhatsAppWebhook = asyncHandler(async (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
+// @desc    Handle leave actions forwarded from GoWhats production webhook
+// @route   POST /api/webhook/gowhats/leave-action
+// @access  Private (shared secret)
+const handleGowhatsLeaveAction = asyncHandler(async (req, res) => {
+  const configuredSecret = process.env.GOWHATS_WEBHOOK_SECRET || process.env.WHATSAPP_VERIFY_TOKEN;
+  const providedSecret = req.header('x-gowhats-secret') || req.header('x-webhook-secret');
+
+  if (!configuredSecret) {
+    console.error('[GoWhats Bridge] GOWHATS_WEBHOOK_SECRET or WHATSAPP_VERIFY_TOKEN is not set.');
+    return res.status(500).json({
+      success: false,
+      message: 'GoWhats bridge secret is not configured'
+    });
+  }
+
+  if (!providedSecret || !safeCompare(providedSecret, configuredSecret)) {
+    console.warn('[GoWhats Bridge] Invalid or missing webhook secret.');
+    return res.status(401).json({
+      success: false,
+      message: 'Unauthorized'
+    });
+  }
+
+  const { payload, action, leaveId, subdomain, from, adminNumber } = req.body || {};
+  let parsedAction = payload ? parseLeaveActionPayload(payload) : null;
+
+  if (!parsedAction && action && leaveId) {
+    const normalizedAction = String(action).toLowerCase();
+    if (normalizedAction === 'approve' || normalizedAction === 'approved') {
+      parsedAction = { action: 'Approved', leaveId };
+    } else if (normalizedAction === 'reject' || normalizedAction === 'rejected') {
+      parsedAction = { action: 'Rejected', leaveId };
+    }
+  }
+
+  if (!parsedAction) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid leave action payload'
+    });
+  }
+
+  console.log('[GoWhats Bridge] Processing forwarded leave action:', {
+    action: parsedAction.action,
+    leaveId: parsedAction.leaveId,
+    subdomain: subdomain || 'auto'
+  });
+
+  const result = await applyLeaveAction({
+    leaveId: parsedAction.leaveId,
+    action: parsedAction.action,
+    subdomain,
+    actorNumber: adminNumber || from,
+    source: 'gowhats-bridge'
+  });
+
+  if (!result.success) {
+    return res.status(result.statusCode || 400).json({
+      success: false,
+      message: result.message
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    alreadyProcessed: !!result.alreadyProcessed,
+    message: result.message,
+    leave: result.updatedLeave || result.leave
+  });
+});
+
 
 // @desc    Verify webhook subscription for WhatsApp
 // @route   GET /api/webhook/whatsapp
@@ -217,5 +391,6 @@ const verifyWebhook = asyncHandler(async (req, res) => {
 
 module.exports = {
   handleWhatsAppWebhook,
+  handleGowhatsLeaveAction,
   verifyWebhook
 };

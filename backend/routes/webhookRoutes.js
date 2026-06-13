@@ -2,7 +2,11 @@
 
 const express = require('express');
 const router = express.Router();
-const { handleWhatsAppWebhook, verifyWebhook } = require('../controllers/webhookController');
+const {
+  handleWhatsAppWebhook,
+  handleGowhatsLeaveAction,
+  verifyWebhook
+} = require('../controllers/webhookController');
 
 /**
  * @swagger
@@ -41,5 +45,7 @@ const { handleWhatsAppWebhook, verifyWebhook } = require('../controllers/webhook
 router.route('/whatsapp')
   .get(verifyWebhook)
   .post(handleWhatsAppWebhook);
+
+router.post('/gowhats/leave-action', handleGowhatsLeaveAction);
 
 module.exports = router;
