@@ -5,6 +5,7 @@ import { FaChevronDown, FaChevronUp, FaSearch, FaBusinessTime } from 'react-icon
 import { FiDollarSign } from 'react-icons/fi';
 import { getAllLeaves, markLeavesAsViewedByAdmin, updateLeaveStatus } from '../../services/leaveService';
 import appContext from '../../context/AppContext';
+import { useSocket } from '../../context/SocketContextNew';
 import Spinner from '../common/Spinner';
 import Card from '../common/Card';
 
@@ -17,6 +18,7 @@ const LeaveManagement = () => {
   const [activeView, setActiveView] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const { subdomain } = useContext(appContext);
+  const { socket } = useSocket();
 
   useEffect(() => {
     const fetchLeaves = async () => {
@@ -38,6 +40,32 @@ const LeaveManagement = () => {
   useEffect(() => {
     applyFilters();
   }, [searchTerm, activeView, leaves]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleLeaveUpdated = (updatedLeave) => {
+      if (!updatedLeave?._id) return;
+
+      setLeaves(prevLeaves =>
+        prevLeaves.map(leave =>
+          leave._id === updatedLeave._id
+            ? { ...leave, ...updatedLeave, worker: updatedLeave.worker || leave.worker }
+            : leave
+        )
+      );
+
+      if (updatedLeave.processedViaWhatsApp) {
+        toast.info(`Leave ${updatedLeave.status.toLowerCase()} from WhatsApp`);
+      }
+    };
+
+    socket.on('leave:updated', handleLeaveUpdated);
+
+    return () => {
+      socket.off('leave:updated', handleLeaveUpdated);
+    };
+  }, [socket]);
 
   const applyFilters = () => {
     let result = [...leaves];

@@ -12,9 +12,10 @@ const Worker = require('../models/Worker');
  * @param {string} recipientNumber - The recipient's phone number in international format (e.g., 919876543210).
  * @param {Array|null} headerParams - An array of parameter objects for the template header.
  * @param {Array|null} bodyParams - An array of parameter objects for the template body.
+ * @param {Array|null} buttonParams - Quick reply button payloads for the template.
  * @returns {Promise<Object>} - A promise that resolves to an object indicating success or failure.
  */
-const sendWhatsAppTemplateMessage = async (subdomain, templateName, recipientNumber, headerParams, bodyParams) => {
+const sendWhatsAppTemplateMessage = async (subdomain, templateName, recipientNumber, headerParams, bodyParams, buttonParams) => {
   try {
     const config = await GowhatsConfig.findOne({ subdomain });
 
@@ -47,6 +48,22 @@ const sendWhatsAppTemplateMessage = async (subdomain, templateName, recipientNum
       templateComponents.push({
         type: 'body',
         parameters: bodyParams
+      });
+    }
+
+    if (buttonParams && buttonParams.length > 0) {
+      buttonParams.forEach((button, index) => {
+        templateComponents.push({
+          type: 'button',
+          sub_type: button.subType || 'quick_reply',
+          index: String(button.index ?? index),
+          parameters: [
+            {
+              type: 'payload',
+              payload: button.payload
+            }
+          ]
+        });
       });
     }
 
@@ -162,7 +179,7 @@ const formatPhoneNumber = (phoneNumber) => {
 
 // Helper function to format fallback text message
 const formatFallbackMessage = (templateName, headerParams, bodyParams) => {
-  if (templateName === 'leave_request' && bodyParams && bodyParams.length >= 8) {
+  if (templateName === 'leave_request1' && bodyParams && bodyParams.length >= 8) {
     // Format the leave request message as a readable text
     return `🔔 NEW LEAVE REQUEST ALERT 🔔\n\n` +
            `Employee: ${bodyParams[0]?.text || 'N/A'}\n` +
@@ -183,7 +200,7 @@ const formatFallbackMessage = (templateName, headerParams, bodyParams) => {
 
 
 /**
- * Specifically handles sending the "leave_request" notification to all configured admin numbers.
+ * Specifically handles sending the "leave_request1" notification to all configured admin numbers.
  * It fetches the leave details, formats them, and calls the generic message sender.
  * @param {Object} leave - The Mongoose leave document containing all details of the leave application.
  * @returns {Promise<Object>} - A promise that resolves to an object summarizing the notification results.
@@ -239,6 +256,17 @@ const sendNewLeaveRequestNotification = async (leave) => {
       { type: 'text', text: reason }                                                        // {{8}} Reason
     ];
 
+    const buttonParameters = [
+      {
+        index: 0,
+        payload: `ACCEPT_LEAVE_${leave._id}`
+      },
+      {
+        index: 1,
+        payload: `REJECT_LEAVE_${leave._id}`
+      }
+    ];
+
     // Send the notification to all configured admin numbers
     console.log(`[WhatsApp] Attempting to send notifications to ${config.adminWhatsappNumbers.length} admin numbers`);
     const results = [];
@@ -246,10 +274,11 @@ const sendNewLeaveRequestNotification = async (leave) => {
       console.log(`[WhatsApp] Sending notification to admin number: ${adminNumber}`);
       const result = await sendWhatsAppTemplateMessage(
         subdomain,
-        'leave_request', // Ensure this matches your template name in WhatsApp Manager
+        process.env.WHATSAPP_LEAVE_TEMPLATE_NAME || 'leave_request1',
         adminNumber,
         null, // No header parameters
-        bodyParameters
+        bodyParameters,
+        buttonParameters
       );
       console.log(`[WhatsApp] Result for ${adminNumber}:`, result);
       results.push({ number: adminNumber, ...result });

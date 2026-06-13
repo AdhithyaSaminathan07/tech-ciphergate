@@ -5,6 +5,23 @@ const axios = require('axios');
 const Leave = require('../models/Leave');
 const Worker = require('../models/Worker');
 const GowhatsConfig = require('../models/GowhatsConfig');
+const { getIO } = require('../utils/socket');
+
+const normalizePhoneNumber = (phoneNumber = '') => {
+  const cleaned = String(phoneNumber).replace(/\D/g, '');
+  if (cleaned.startsWith('91') && cleaned.length === 12) return cleaned;
+  if (cleaned.startsWith('0') && cleaned.length === 11) return `91${cleaned.substring(1)}`;
+  if (cleaned.length === 10) return `91${cleaned}`;
+  return cleaned;
+};
+
+const getButtonPayload = (message) => {
+  if (message.type === 'button') return message.button?.payload || message.button?.text;
+  if (message.type === 'interactive') {
+    return message.interactive?.button_reply?.id || message.interactive?.button_reply?.title;
+  }
+  return null;
+};
 
 /**
  * Helper function to send a confirmation or error message via WhatsApp.
@@ -61,11 +78,13 @@ const handleWhatsAppWebhook = asyncHandler(async (req, res) => {
 
   const message = entry[0].changes[0].value.messages[0];
   const fromNumber = message.from;
+  const normalizedFromNumber = normalizePhoneNumber(fromNumber);
 
   // Find which tenant this admin number belongs to
-  const config = await GowhatsConfig.findOne({
-    adminWhatsappNumbers: { $in: [fromNumber] }
-  });
+  const configs = await GowhatsConfig.find({ adminWhatsappNumbers: { $exists: true, $ne: [] } });
+  const config = configs.find(item =>
+    item.adminWhatsappNumbers.some(number => normalizePhoneNumber(number) === normalizedFromNumber)
+  );
 
   if (!config) {
     console.log(`[Webhook] No tenant found for admin number: ${fromNumber}. Ignoring.`);
@@ -75,8 +94,8 @@ const handleWhatsAppWebhook = asyncHandler(async (req, res) => {
   console.log(`[Webhook] Message received from a valid admin of tenant: ${config.subdomain}`);
   
   // Process only if it's a button response with a specific payload
-  if (message.type === 'button' && message.button?.payload) {
-    const payload = message.button.payload;
+  const payload = getButtonPayload(message);
+  if (payload) {
     
     // Check if the button payload is for leave management
     if (payload.startsWith('ACCEPT_LEAVE_') || payload.startsWith('REJECT_LEAVE_')) {
@@ -107,19 +126,28 @@ const handleWhatsAppWebhook = asyncHandler(async (req, res) => {
         }
 
         // Update leave status and log who processed it
-        await Leave.findByIdAndUpdate(leaveId, { 
+        const updatedLeave = await Leave.findByIdAndUpdate(leaveId, { 
           status: action,
           workerViewed: false, // Notify worker
           processedViaWhatsApp: true,
-          processedBy: fromNumber,
+          processedBy: normalizedFromNumber,
           processedAt: new Date()
-        });
+        }, { new: true }).populate('worker', 'name department');
 
         // If approved and the leave is unpaid, handle salary deduction
-        if (action === 'Approved' && leave.isPaid === false) {
+        if (action === 'Approved' && !leave.isPaidLeave) {
           const worker = await Worker.findById(leave.worker._id);
           if (worker && worker.perDaySalary > 0) {
-            const deduction = leave.totalDays * worker.perDaySalary;
+            let deduction = 0;
+            if (leave.leaveType === 'Permission' && leave.startTime && leave.endTime) {
+              const start = new Date(`1970-01-01T${leave.startTime}:00`);
+              const end = new Date(`1970-01-01T${leave.endTime}:00`);
+              const durationHours = (end - start) / (1000 * 60 * 60);
+              const perHourSalary = worker.perDaySalary / 8;
+              deduction = Math.max(0, durationHours * perHourSalary);
+            } else {
+              deduction = leave.totalDays * worker.perDaySalary * (leave.deductionFactor || 1);
+            }
             const updatedFinalSalary = Math.max(0, worker.finalSalary - deduction);
             
             await Worker.updateOne(
@@ -129,6 +157,16 @@ const handleWhatsAppWebhook = asyncHandler(async (req, res) => {
             
             console.log(`[Webhook] Salary updated for worker ${worker.name}: deducted ${deduction}`);
           }
+        }
+
+        try {
+          const io = getIO();
+          io.to(config.subdomain).emit('leave:updated', updatedLeave);
+          if (updatedLeave.worker?._id) {
+            io.to(updatedLeave.worker._id.toString()).emit('leave:updated', updatedLeave);
+          }
+        } catch (socketError) {
+          console.error('[Webhook] Socket emission error:', socketError.message);
         }
 
         console.log(`[Webhook] Leave ${leaveId} successfully ${action.toLowerCase()} by ${fromNumber} for worker ${leave.worker.name}`);

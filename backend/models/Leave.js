@@ -68,6 +68,16 @@ const leaveSchema = mongoose.Schema({
       type: Boolean,
       default: false
     }
+  },
+  processedViaWhatsApp: {
+    type: Boolean,
+    default: false
+  },
+  processedBy: {
+    type: String
+  },
+  processedAt: {
+    type: Date
   }
 }, {
   timestamps: true

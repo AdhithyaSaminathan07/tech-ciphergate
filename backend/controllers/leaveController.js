@@ -6,6 +6,7 @@ const Attendance = require('../models/Attendance');
 const Settings = require('../models/Settings');
 const Department = require('../models/Department');
 const Holiday = require('../models/Holiday');
+const { getIO } = require('../utils/socket');
 
 // Make sure to import the notification service
 const { sendNewLeaveRequestNotification } = require('../services/notificationService');
@@ -333,7 +334,7 @@ const updateLeaveStatus = asyncHandler(async (req, res) => {
     leaveId,
     { status: status, workerViewed: false }, // Mark as unread for the worker
     { new: true }
-  ).populate('worker', 'name');
+  ).populate('worker', 'name department');
 
   // Optional: Handle salary deduction for approved leaves if applicable
   if (status === 'Approved') {
@@ -355,6 +356,16 @@ const updateLeaveStatus = asyncHandler(async (req, res) => {
       worker.finalSalary = Math.max(0, worker.finalSalary - deduction);
       await worker.save();
     }
+  }
+
+  try {
+    const io = getIO();
+    io.to(leave.subdomain).emit('leave:updated', updatedLeave);
+    if (leave.worker) {
+      io.to(leave.worker.toString()).emit('leave:updated', updatedLeave);
+    }
+  } catch (socketError) {
+    console.error('Socket emission error:', socketError.message);
   }
 
   res.status(200).json(updatedLeave);
