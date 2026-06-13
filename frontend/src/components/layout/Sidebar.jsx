@@ -1,6 +1,6 @@
 import { useContext, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { FaChevronDown, FaRegQuestionCircle } from 'react-icons/fa';
+import { FaChevronDown, FaChevronRight, FaRegQuestionCircle } from 'react-icons/fa';
 import { FiLogOut, FiMenu, FiX } from 'react-icons/fi';
 import appContext from '../../context/AppContext';
 import ShatteredLogo from '../common/ShatteredLogo';
@@ -13,6 +13,7 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
   const setIsOpen = setMobileOpen !== undefined ? setMobileOpen : setIsOpenInternal;
   
   const [expandedDropdowns, setExpandedDropdowns] = useState({});
+  const [expandedSubHeaders, setExpandedSubHeaders] = useState({});
   const location = useLocation();
 
   useEffect(() => {
@@ -201,32 +202,96 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                       >
-                        <div className="ml-[28px] pl-4 border-l border-slate-200 space-y-1 mt-1 mb-2">
-                          {link.children?.map((child, idx) => {
-                            if (child.isSubHeader) {
+                        <div className="ml-[28px] pl-3 border-l border-slate-100 space-y-1.5 mt-1 mb-2">
+                          {(() => {
+                            // Group child links by sub-headers dynamically
+                            const sections = [];
+                            let currentSection = null;
+
+                            link.children?.forEach(child => {
+                              if (child.isSubHeader) {
+                                currentSection = {
+                                  header: child,
+                                  items: []
+                                };
+                                sections.push(currentSection);
+                              } else {
+                                if (!currentSection) {
+                                  currentSection = {
+                                    header: null,
+                                    items: []
+                                  };
+                                  sections.push(currentSection);
+                                }
+                                currentSection.items.push(child);
+                              }
+                            });
+
+                            return sections.map((sec, secIdx) => {
+                              const headerKey = `${link.label}-${sec.header?.label || 'default'}-${secIdx}`;
+                              // Section starts expanded if it has no header, or if an item inside is active, or if user expanded it
+                              const hasActiveChild = sec.items.some(c => location.pathname === c.to);
+                              const isSecExpanded = expandedSubHeaders[headerKey] !== undefined
+                                ? expandedSubHeaders[headerKey]
+                                : hasActiveChild;
+
+                              const toggleSec = (e) => {
+                                e.stopPropagation();
+                                setExpandedSubHeaders(prev => ({
+                                  ...prev,
+                                  [headerKey]: !isSecExpanded
+                                }));
+                              };
+
                               return (
-                                <div key={`subheader-${idx}`} className="pt-3 pb-1 pl-2">
-                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.15em]">{child.label}</span>
+                                <div key={headerKey} className="space-y-1">
+                                  {sec.header && (
+                                    <button
+                                      type="button"
+                                      onClick={toggleSec}
+                                      className="flex items-center justify-between w-full pt-3 pb-1 pl-2 pr-2 hover:bg-slate-50 rounded-lg text-left transition-colors select-none group/sub"
+                                    >
+                                      <span className="text-[9px] font-black text-slate-400 group-hover/sub:text-slate-600 uppercase tracking-[0.12em] transition-colors">
+                                        {sec.header.label}
+                                      </span>
+                                      <span className="text-slate-400 group-hover/sub:text-slate-600 transition-colors">
+                                        {isSecExpanded ? <FaChevronDown size={8} /> : <FaChevronRight size={8} />}
+                                      </span>
+                                    </button>
+                                  )}
+                                  <AnimatePresence initial={false}>
+                                    {(!sec.header || isSecExpanded) && (
+                                      <motion.div
+                                        initial={sec.header ? { height: 0, opacity: 0 } : false}
+                                        animate={sec.header ? { height: 'auto', opacity: 1 } : false}
+                                        exit={sec.header ? { height: 0, opacity: 0 } : false}
+                                        transition={{ duration: 0.15 }}
+                                        className="space-y-1 overflow-hidden"
+                                      >
+                                        {sec.items.map((child) => {
+                                          const active = location.pathname === child.to;
+                                          return (
+                                            <Link
+                                              key={child.to}
+                                              to={child.to}
+                                              onClick={() => {
+                                                if (window.innerWidth < 768) setIsOpen(false);
+                                              }}
+                                              className={`flex items-center justify-between w-full h-[38px] rounded-lg transition-all duration-200 px-3 ${active ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900'}`}
+                                            >
+                                              <span className={`text-[13px] tracking-tight ${active ? 'font-bold' : 'font-medium'}`}>
+                                                {child.label}
+                                              </span>
+                                            </Link>
+                                          );
+                                        })}
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
                                 </div>
                               );
-                            }
-
-                            const active = location.pathname === child.to;
-                            return (
-                              <Link
-                                key={child.to}
-                                to={child.to}
-                                onClick={() => {
-                                  if (window.innerWidth < 768) setIsOpen(false);
-                                }}
-                                className={`flex items-center justify-between w-full h-[40px] rounded-lg transition-all duration-200 px-3 ${active ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900'}`}
-                              >
-                                <span className={`text-[13px] tracking-tight ${active ? 'font-bold' : 'font-medium'}`}>
-                                  {child.label}
-                                </span>
-                              </Link>
-                            );
-                          })}
+                            });
+                          })()}
                         </div>
                       </motion.div>
                     )}

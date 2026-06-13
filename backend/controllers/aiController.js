@@ -501,7 +501,7 @@ const uploadPersonalBrainFiles = asyncHandler(async (req, res) => {
       }
 
       // Derive title from filename (strip extension)
-      const title = originalFilename.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+      const title = originalFilename.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
 
       // ✅ Change 3: Duplicate protection — upsert by subdomain + originalFilename
       const noteData = {

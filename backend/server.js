@@ -72,6 +72,8 @@ const startServer = async () => {
     const instaxbotRoutes = require('./routes/instaxbotRoutes');
     const documentRoutes = require('./routes/documentRoutes');
     const aiRoutes = require('./routes/aiRoutes');
+    const serverRoutes = require('./routes/serverRoutes');
+    const webhookRoutes = require('./routes/webhookRoutes');
 
     // Test App routes
     const testQuestionRoutes = require('./routes/testQuestionRoutes');
@@ -119,6 +121,8 @@ const startServer = async () => {
     app.use('/api/performance', require('./routes/performanceRoutes'));
     app.use('/api/documents', documentRoutes);
     app.use('/api/ai', aiRoutes);
+    app.use('/api/server', serverRoutes);
+    app.use('/api/webhook', webhookRoutes);
 
 
     // Test App routes
@@ -139,20 +143,35 @@ const startServer = async () => {
       res.json({ message: 'Task Tracker API is running' });
     });
 
-    // Initialize schedulers and cron jobs
-    if (process.env.NODE_ENV === 'production' || process.env.ENABLE_SCHEDULERS === 'true') {
-      console.log('🚀 Starting production schedulers...');
+if (
+  process.env.NODE_ENV === 'production' ||
+  process.env.ENABLE_SCHEDULERS === 'true'
+) {
+  console.log('🚀 Starting production schedulers...');
 
-      // Initialize food request schedulers
-      const { initializeFoodRequestSchedulers } = require('./schedulers/foodRequestScheduler');
-      initializeFoodRequestSchedulers();
+  // Food scheduler
+  const {
+    initializeFoodRequestSchedulers,
+  } = require('./schedulers/foodRequestScheduler');
 
-      // Initialize other cron jobs if they exist
-      const { startCronJobs } = require('./services/cronJobs');
-      startCronJobs();
-    } else {
-      console.log('⚠️ Schedulers disabled. Set NODE_ENV=production or ENABLE_SCHEDULERS=true to enable');
-    }
+  initializeFoodRequestSchedulers();
+
+  // Existing cron jobs
+  const { startCronJobs } = require('./services/cronJobs');
+  startCronJobs();
+
+  // Server cron jobs (Developer 2)
+  const {
+    initializeServerCronJobs,
+  } = require('./services/serverCronJobs');
+
+  initializeServerCronJobs();
+
+} else {
+  console.log(
+    '⚠️ Schedulers disabled. Set NODE_ENV=production or ENABLE_SCHEDULERS=true to enable'
+  );
+}webhookRoutes.js
 
     // Error handler (should be last)
     app.use(errorHandler);

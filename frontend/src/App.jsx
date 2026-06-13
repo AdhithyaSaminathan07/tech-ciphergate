@@ -59,6 +59,26 @@ const ForgotPassword = lazy(() => import('./components/admin/ForgotPassword'));
 const ResetPassword = lazy(() => import('./components/admin/ResetPassword'));
 const HolidayManagement = lazy(() => import('./components/admin/HolidayManagement'));
 const AcceptanceLetter = lazy(() => import('./components/admin/AcceptanceLetter'));
+
+// Server Module Components
+const ServerOverview = lazy(() => import('./components/server/ServerOverview'));
+const TechnicalDashboard = lazy(() => import('./components/server/TechnicalDashboard'));
+const AwsOrganizations = lazy(() => import('./components/server/AwsOrganizations'));
+const AwsAccounts = lazy(() => import('./components/server/AwsAccounts'));
+const CostLake = lazy(() => import('./components/server/CostLake'));
+const ResourceInventory = lazy(() => import('./components/server/ResourceInventory'));
+const ResourceRelationships = lazy(() => import('./components/server/ResourceRelationships'));
+const CostAnalytics = lazy(() => import('./components/server/CostAnalytics'));
+const CostAttribution = lazy(() => import('./components/server/CostAttribution'));
+const TagCompliance = lazy(() => import('./components/server/TagCompliance'));
+const OptimizationCenter = lazy(() => import('./components/server/OptimizationCenter'));
+const SavingsOpportunities = lazy(() => import('./components/server/SavingsOpportunities'));
+const AnomalyDetection = lazy(() => import('./components/server/AnomalyDetection'));
+const Forecasting = lazy(() => import('./components/server/Forecasting'));
+const AiFinOpsChat = lazy(() => import('./components/server/AiFinOpsChat'));
+const Reports = lazy(() => import('./components/server/Reports'));
+const AuditLogs = lazy(() => import('./components/server/AuditLogs'));
+const ServerSettings = lazy(() => import('./components/server/Settings'));
 import { SocketProvider } from './context/SocketContextNew';
 import { NotificationProvider } from './context/NotificationContext';
 
@@ -185,6 +205,26 @@ function App() {
                     <Route path="offer-letter" element={<OfferLetter />} />
                     <Route path="acceptance-letter" element={<AcceptanceLetter />} />
                     <Route path="renewals" element={<RenewalManagement />} />
+
+                    {/* AWS FinOps Server Module routes */}
+                    <Route path="server/dashboard/executive" element={<ServerOverview />} />
+                    <Route path="server/dashboard/technical" element={<TechnicalDashboard />} />
+                    <Route path="server/organizations" element={<AwsOrganizations />} />
+                    <Route path="server/accounts" element={<AwsAccounts />} />
+                    <Route path="server/cost-lake" element={<CostLake />} />
+                    <Route path="server/resource-inventory" element={<ResourceInventory />} />
+                    <Route path="server/resource-relationships" element={<ResourceRelationships />} />
+                    <Route path="server/cost-analytics" element={<CostAnalytics />} />
+                    <Route path="server/cost-attribution" element={<CostAttribution />} />
+                    <Route path="server/tag-compliance" element={<TagCompliance />} />
+                    <Route path="server/optimization" element={<OptimizationCenter />} />
+                    <Route path="server/savings-plans" element={<SavingsOpportunities />} />
+                    <Route path="server/anomalies" element={<AnomalyDetection />} />
+                    <Route path="server/forecasting" element={<Forecasting />} />
+                    <Route path="server/chat" element={<AiFinOpsChat />} />
+                    <Route path="server/reports" element={<Reports />} />
+                    <Route path="server/audit-logs" element={<AuditLogs />} />
+                    <Route path="server/settings" element={<ServerSettings />} />
 
                     {/* Test Management Routes */}
                     <Route path="test/generate-questions" element={<GenerateQuestions />} />

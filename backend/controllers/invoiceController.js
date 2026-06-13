@@ -601,6 +601,54 @@ const getDeletedInvoiceById = async (req, res) => {
   }
 };
 
+// Get the next available invoice number (auto-increment from highest TV* number)
+const getNextInvoiceNo = async (req, res) => {
+  try {
+    // Find all invoices with TV-prefixed numbers
+    const lastInvoice = await Invoice.findOne(
+      { invoiceNo: { $regex: /^TV\d+$/ } },
+      { invoiceNo: 1 }
+    ).sort({ invoiceNo: -1 });
+
+    let nextNumber = 1;
+    if (lastInvoice && lastInvoice.invoiceNo) {
+      const match = lastInvoice.invoiceNo.match(/^TV(\d+)$/);
+      if (match) {
+        nextNumber = parseInt(match[1], 10) + 1;
+      }
+    }
+
+    // Also check delete history to avoid reusing deleted invoice numbers
+    const lastDeleted = await DeleteHistory.findOne(
+      { invoiceNo: { $regex: /^TV\d+$/ } },
+      { invoiceNo: 1 }
+    ).sort({ invoiceNo: -1 });
+
+    if (lastDeleted && lastDeleted.invoiceNo) {
+      const match = lastDeleted.invoiceNo.match(/^TV(\d+)$/);
+      if (match) {
+        const deletedNum = parseInt(match[1], 10) + 1;
+        if (deletedNum > nextNumber) nextNumber = deletedNum;
+      }
+    }
+
+    const padded = String(nextNumber).padStart(6, '0');
+    const nextInvoiceNo = `TV${padded}`;
+
+    res.status(200).json({
+      success: true,
+      data: { nextInvoiceNo }
+    });
+  } catch (error) {
+    console.error('Error generating next invoice number:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error generating next invoice number',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   createInvoice,
   updateInvoice,
@@ -614,5 +662,6 @@ module.exports = {
   // Add the new export functions
   getDeleteHistoryForAdmin,
   getDeleteHistoryForWorker,
-  getDeletedInvoiceById
+  getDeletedInvoiceById,
+  getNextInvoiceNo
 };

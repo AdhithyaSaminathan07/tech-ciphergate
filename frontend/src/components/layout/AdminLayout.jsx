@@ -48,7 +48,17 @@ import {
   FaEnvelopeOpenText,
   FaFileSignature,
   FaFileAlt,
-  FaCog
+  FaCog,
+  FaServer,
+  FaCloud,
+  FaSitemap,
+  FaBoxes,
+  FaChartPie,
+  FaFolderOpen,
+  FaLightbulb,
+  FaPiggyBank,
+  FaExclamationTriangle,
+  FaRobot
 } from 'react-icons/fa';
 import { IoMdSettings } from 'react-icons/io';
 import { FiKey, FiGrid, FiUsers, FiDollarSign, FiLayers, FiMessageSquare, FiBookOpen, FiSettings } from 'react-icons/fi';
@@ -104,6 +114,26 @@ const FaceAttendancePage = React.lazy(() => import('../admin/FaceAttendancePage'
 const AdminRulesDashboard = React.lazy(() => import('../admin/AdminRulesDashboard'));
 const PerformanceRewards = React.lazy(() => import('../admin/PerformanceRewards'));
 const SecondBrainAdmin = React.lazy(() => import('../admin/SecondBrainAdmin'));
+
+// Server Module Components
+const ServerOverview = React.lazy(() => import('../server/ServerOverview'));
+const TechnicalDashboard = React.lazy(() => import('../server/TechnicalDashboard'));
+const AwsOrganizations = React.lazy(() => import('../server/AwsOrganizations'));
+const AwsAccounts = React.lazy(() => import('../server/AwsAccounts'));
+const CostLake = React.lazy(() => import('../server/CostLake'));
+const ResourceInventory = React.lazy(() => import('../server/ResourceInventory'));
+const ResourceRelationships = React.lazy(() => import('../server/ResourceRelationships'));
+const CostAnalytics = React.lazy(() => import('../server/CostAnalytics'));
+const CostAttribution = React.lazy(() => import('../server/CostAttribution'));
+const TagCompliance = React.lazy(() => import('../server/TagCompliance'));
+const OptimizationCenter = React.lazy(() => import('../server/OptimizationCenter'));
+const SavingsOpportunities = React.lazy(() => import('../server/SavingsOpportunities'));
+const AnomalyDetection = React.lazy(() => import('../server/AnomalyDetection'));
+const Forecasting = React.lazy(() => import('../server/Forecasting'));
+const AiFinOpsChat = React.lazy(() => import('../server/AiFinOpsChat'));
+const Reports = React.lazy(() => import('../server/Reports'));
+const AuditLogs = React.lazy(() => import('../server/AuditLogs'));
+const ServerSettings = React.lazy(() => import('../server/Settings'));
 
 // Lazy load test management components
 const GenerateQuestions = React.lazy(() => import('../admin/GenerateQuestions'));
@@ -220,6 +250,50 @@ const AdminLayout = () => {
         { to: '/admin/kpi-management', label: 'KPI Management', icon: <FaChartLine /> },
         { to: '/admin/second-brain', label: 'AI Second Brain', icon: <FaBrain /> },
       ],
+    },
+    {
+      label: 'Server Module',
+      icon: <FaServer />,
+      isDropdown: true,
+      children: (() => {
+        // Feature flag: controls which sidebar items are visible
+        // Set VITE_SERVER_MODULE_PHASE=1 in .env to show Phase 1 items only
+        const phase = Number(import.meta.env.VITE_SERVER_MODULE_PHASE || 99);
+
+        const allItems = [
+          // ── Phase 1: AWS Data Foundation ──────────────────────────────────────
+          { isSubHeader: true, label: 'Phase 1: Foundation', phase: 1 },
+          { to: '/admin/server/dashboard/executive', label: 'Executive Dashboard', icon: <FaChartPie />,       phase: 1 },
+          { to: '/admin/server/dashboard/technical', label: 'Technical Dashboard', icon: <FaChartLine />,     phase: 1 },
+          { to: '/admin/server/organizations',       label: 'AWS Organizations',   icon: <FaSitemap />,       phase: 1 },
+          { to: '/admin/server/accounts',            label: 'AWS Accounts',         icon: <FaCloud />,         phase: 1 },
+          { to: '/admin/server/cost-lake',           label: 'Cost Lake',            icon: <FaFolderOpen />,   phase: 1 },
+          { to: '/admin/server/settings',            label: 'Settings',             icon: <FaCog />,          phase: 1 },
+
+          // ── Phase 2-3: Resource & Cost Analytics ─────────────────────────────
+          { isSubHeader: true, label: 'Phase 2: Analytics', phase: 2 },
+          { to: '/admin/server/resource-inventory',   label: 'Resource Inventory',   icon: <FaBoxes />,        phase: 2 },
+          { to: '/admin/server/resource-relationships',label: 'Resource Relationships',icon: <FaNetworkWired />,phase: 2 },
+          { to: '/admin/server/cost-analytics',       label: 'Cost Explorer',        icon: <FaChartLine />,    phase: 2 },
+          { to: '/admin/server/cost-attribution',     label: 'Cost Attribution',     icon: <FaFolderOpen />,   phase: 2 },
+          { to: '/admin/server/tag-compliance',       label: 'Tag Compliance',       icon: <FaClipboardList />,phase: 2 },
+
+          // ── Phase 5-6: Optimization & Intelligence ──────────────────────────
+          { isSubHeader: true, label: 'Phase 3: Intelligence', phase: 5 },
+          { to: '/admin/server/optimization',  label: 'Optimization Center', icon: <FaLightbulb />,       phase: 5 },
+          { to: '/admin/server/savings-plans', label: 'Savings Plans',       icon: <FaPiggyBank />,       phase: 5 },
+          { to: '/admin/server/anomalies',     label: 'Anomaly Detection',   icon: <FaExclamationTriangle />, phase: 6 },
+          { to: '/admin/server/forecasting',   label: 'Forecasting',         icon: <FaChartBar />,            phase: 6 },
+
+          // ── Phase 7-8: AI & Reports ───────────────────────────────────────────
+          { isSubHeader: true, label: 'Phase 4: AI & Reports', phase: 7 },
+          { to: '/admin/server/chat',          label: 'AI FinOps Chat',      icon: <FaRobot />, phase: 7 },
+          { to: '/admin/server/reports',       label: 'Reports',             icon: <FaFileAlt />,      phase: 8 },
+          { to: '/admin/server/audit-logs',    label: 'Audit Logs',          icon: <FaClipboardList />,phase: 8 },
+        ];
+
+        return allItems.filter(item => item.phase <= phase);
+      })(),
     },
     {
       label: 'Comms & Requests',
@@ -385,6 +459,26 @@ const AdminLayout = () => {
               <Route path="experience-certificate" element={<ExperienceCertificate />} />
               <Route path="monthly-payslip" element={<MonthlyPayslip />} />
               <Route path="renewals" element={<RenewalManagement />} />
+
+              {/* AWS FinOps Server Module subroutes */}
+              <Route path="server/dashboard/executive" element={<ServerOverview />} />
+              <Route path="server/dashboard/technical" element={<TechnicalDashboard />} />
+              <Route path="server/organizations" element={<AwsOrganizations />} />
+              <Route path="server/accounts" element={<AwsAccounts />} />
+              <Route path="server/cost-lake" element={<CostLake />} />
+              <Route path="server/resource-inventory" element={<ResourceInventory />} />
+              <Route path="server/resource-relationships" element={<ResourceRelationships />} />
+              <Route path="server/cost-analytics" element={<CostAnalytics />} />
+              <Route path="server/cost-attribution" element={<CostAttribution />} />
+              <Route path="server/tag-compliance" element={<TagCompliance />} />
+              <Route path="server/optimization" element={<OptimizationCenter />} />
+              <Route path="server/savings-plans" element={<SavingsOpportunities />} />
+              <Route path="server/anomalies" element={<AnomalyDetection />} />
+              <Route path="server/forecasting" element={<Forecasting />} />
+              <Route path="server/chat" element={<AiFinOpsChat />} />
+              <Route path="server/reports" element={<Reports />} />
+              <Route path="server/audit-logs" element={<AuditLogs />} />
+              <Route path="server/settings" element={<ServerSettings />} />
 
 
               {/* Test Management Routes */}

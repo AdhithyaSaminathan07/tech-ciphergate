@@ -33,6 +33,10 @@ router.route('/delete-history/worker')
 router.route('/delete-history/:id')
   .get(adminOrWorker, invoiceController.getDeletedInvoiceById);
 
+// Route to get next auto-incremented invoice number
+router.route('/next-number')
+  .get(adminOrWorker, invoiceController.getNextInvoiceNo);
+
 // Individual invoice routes (allow both admin and worker for their own invoices)
 router.route('/:id')
   .get(adminOrWorker, invoiceController.getInvoiceById)

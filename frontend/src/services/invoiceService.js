@@ -129,3 +129,13 @@ export const getDeletedInvoiceById = async (id) => {
     throw error.response?.data || { message: 'Error fetching deleted invoice' };
   }
 };
+
+// Get the next auto-generated invoice number
+export const getNextInvoiceNo = async () => {
+  try {
+    const response = await api.get('/invoices/next-number');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: 'Error fetching next invoice number' };
+  }
+};

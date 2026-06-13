@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -30,6 +30,8 @@ export default function LiveGitHubStats() {
     const [refreshing, setRefreshing] = useState(false)
     const [clearingCache, setClearingCache] = useState(false)
     const [syncJob, setSyncJob] = useState(null)
+    // Prevent infinite auto-sync loop: only trigger ONCE per page load
+    const hasTriggeredInitialSync = useRef(false)
 
     const loadData = async () => {
         try {
@@ -57,7 +59,8 @@ export default function LiveGitHubStats() {
                     setSyncJob(res);
                     if (res.status === 'Completed' || res.status === 'Failed') {
                         clearInterval(interval);
-                        loadData();
+                        // Wait 3s for MongoDB to commit the cache write before reading
+                        setTimeout(() => loadData(), 3000);
                     }
                 }
             } catch (err) {
@@ -102,14 +105,16 @@ export default function LiveGitHubStats() {
         loadData();
     }, []);
 
-    // Auto-trigger sync when data loads but all stats are zero (fresh live DB)
+    // Auto-trigger sync ONCE when data loads with all zeros on a fresh DB
     useEffect(() => {
         if (!data) return;
+        if (hasTriggeredInitialSync.current) return; // only trigger once per page load
         const stats = data.stats || {};
         const isEmpty = !stats.totalRepos && !stats.totalCommits && !stats.totalPRs;
         const noSyncRunning = !syncJob || (syncJob.status !== 'Pending' && syncJob.status !== 'Running');
         if (isEmpty && noSyncRunning && !data.showingCached) {
-            console.log('[GitHub Tracker] Fresh DB detected — auto-triggering initial sync...');
+            hasTriggeredInitialSync.current = true;
+            console.log('[GitHub Tracker] Fresh DB — triggering initial sync (once)...');
             handleSyncNow();
         }
     }, [data]);
@@ -204,21 +209,28 @@ export default function LiveGitHubStats() {
                 </div>
             )}
 
-            {/* Sync Job Status Banner */}
+            {/* Sync Job Status Banner — shown even when repos = 0 (full sync view is in the "not yet synced" banner above) */}
             {syncJob && (syncJob.status === 'Pending' || syncJob.status === 'Running') && data?.stats?.totalRepos > 0 && (
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between animate-pulse">
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
                     <div className="flex items-center space-x-3">
                         <Activity className="h-5 w-5 text-blue-500 animate-spin" />
                         <div>
-                            <p className="text-sm font-semibold text-blue-800">GitHub Background Sync Running</p>
-                            <p className="text-xs text-blue-600">Progress: {syncJob.progress} Repositories</p>
+                            <p className="text-sm font-semibold text-blue-800">Syncing GitHub Data ({syncJob.progress} repos done)</p>
+                            <p className="text-xs text-blue-600">Showing partial data — more repos will appear as sync progresses</p>
                         </div>
                     </div>
-                    <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">
-                        {syncJob.status}
-                    </Badge>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRefresh}
+                        disabled={refreshing}
+                        className="bg-blue-100 border-blue-300 hover:bg-blue-200 text-blue-800 ml-2"
+                    >
+                        {refreshing ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-800" /> : '↻ Refresh'}
+                    </Button>
                 </div>
             )}
+
 
             {/* Showing Cached Banner */}
             {data && data.showingCached && (

@@ -121,7 +121,7 @@ const PersonalBrainManager = ({ onIndexChange }) => {
       >
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-sm">
-            <Brain className="w-4.5 h-4.5 text-white w-5 h-5" />
+            <Brain className="w-5 h-5 text-white" />
           </div>
           <div>
             <h3 className="text-sm font-bold text-slate-800">Personal Second Brain</h3>

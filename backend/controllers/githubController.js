@@ -60,11 +60,21 @@ const getDashboardData = async (req, res) => {
             });
         }
 
-        // Fast lightweight fallback: use MongoDB $count aggregation on repo_details
-        // DO NOT read repo_details documents (each is ~130KB, 134 docs = 17MB network transfer = timeout).
-        // Just count them and return stats so the UI shows something instantly.
-        const repoCount = await GitHubCache.countDocuments({ subdomain, data_type: 'repo_details' });
-        const repoCaches = []; // intentionally empty — skip the slow fetch
+        // Fast lightweight fallback: read up to 20 recently-synced repo_details to serve preview data.
+        // Each doc is ~5-15KB so 20 docs = max ~300KB — fast and safe.
+        // This means the dashboard shows REAL data immediately as repos are synced (5/135, 10/135, etc.)
+        // instead of showing zeros the entire time.
+        const previewRepoCaches = await GitHubCache.find({
+            subdomain,
+            data_type: 'repo_details'
+        })
+            .select('data last_fetched updatedAt')
+            .sort({ last_fetched: -1 })
+            .limit(20)
+            .lean();
+
+        const repoCaches = previewRepoCaches; // use preview results
+
 
         if (repoCaches && repoCaches.length > 0) {
             console.log(`[GitHub Controller] Rebuilding dashboard_data on-the-fly (lightweight) from ${repoCaches.length} repo_details caches.`);
@@ -137,19 +147,16 @@ const getDashboardData = async (req, res) => {
             });
         }
 
-        // repoCaches is always [] (we skip the slow fetch), so this block never runs.
-        // We still have repoCount from countDocuments above for the fallback response.
-
         // Check if a sync job is currently running
         const activeJob = await GitHubSyncJob.findOne({
             subdomain,
             status: { $in: ['Pending', 'Running'] }
         }).sort({ createdAt: -1 });
 
-        // Auto-trigger a background sync if no cache and no active sync
-        // NOTE: We always trigger — even on a fresh DB (repoCount=0) so the live server initializes automatically.
+        // No repo_details found at all — this is a truly fresh DB with no sync yet.
+        // Auto-trigger a background sync so data starts flowing automatically.
         if (!activeJob) {
-            console.log(`[GitHub Controller] No dashboard cache for subdomain "${subdomain}". Auto-triggering background sync (repoCount=${repoCount})...`);
+            console.log(`[GitHub Controller] No dashboard cache for subdomain "${subdomain}". Auto-triggering background sync.`);
             try {
                 const { triggerAsyncSync } = require('../services/githubSyncService');
                 triggerAsyncSync(subdomain).catch(err => {
@@ -165,15 +172,13 @@ const getDashboardData = async (req, res) => {
             totalAdditions: 0, totalDeletions: 0, mergedPRs: 0, openPRs: 0,
             totalCommits: 0, totalPRs: 0, validCommits: 0, spamCommits: 0,
             validPRs: 0, spamPRs: 0, publicRepos: 0, privateRepos: 0,
-            totalRepos: repoCount  // at least show how many repos we have cached
+            totalRepos: 0
         };
         const message = activeJob
             ? 'Sync in progress — data will appear shortly'
-            : (repoCount > 0
-                ? `Building dashboard from ${repoCount} cached repositories. Refresh in 30 seconds.`
-                : 'Synchronizing initial GitHub data. Please refresh in a moment.');
+            : 'Synchronizing initial GitHub data. Please refresh in a moment.';
 
-        console.warn(`[GitHub Controller] No dashboard_data cache for subdomain "${subdomain}" (repoCount=${repoCount}). Returning fast fallback.`);
+        console.warn(`[GitHub Controller] No dashboard_data or repo_details cache for subdomain "${subdomain}". Returning fallback.`);
         return res.json({
             user: { login: username, name: username },
             repositories: [], commits: [], pullRequests: [],
@@ -600,6 +605,22 @@ const triggerSync = async (req, res) => {
         const subdomain = req.user?.subdomain;
         if (!subdomain) {
             return res.status(400).json({ success: false, message: 'Subdomain required to trigger sync' });
+        }
+
+        // Idempotent: return existing running job instead of creating a duplicate
+        const existingJob = await GitHubSyncJob.findOne({
+            subdomain,
+            status: { $in: ['Pending', 'Running'] }
+        }).sort({ createdAt: -1 });
+
+        if (existingJob) {
+            console.log(`[githubController] Sync already running for ${subdomain} (job: ${existingJob._id}). Returning existing job.`);
+            return res.json({
+                success: true,
+                message: 'Sync already in progress.',
+                jobId: existingJob._id,
+                alreadyRunning: true
+            });
         }
 
         const { triggerAsyncSync } = require('../services/githubSyncService');

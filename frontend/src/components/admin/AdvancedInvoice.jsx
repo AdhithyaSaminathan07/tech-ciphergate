@@ -3,6 +3,7 @@ import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
+import { getNextInvoiceNo } from '../../services/invoiceService';
 
 const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) => {
   // Auto-generate invoice number and date
@@ -115,6 +116,22 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
       });
     }
   }, [initialData]);
+
+  // Auto-fetch next invoice number when creating a new invoice (not editing)
+  useEffect(() => {
+    if (!initialData) {
+      getNextInvoiceNo()
+        .then((res) => {
+          if (res.success && res.data?.nextInvoiceNo) {
+            setInvoiceData(prev => ({ ...prev, invoiceNo: res.data.nextInvoiceNo }));
+          }
+        })
+        .catch((err) => {
+          console.error('Could not fetch next invoice number:', err);
+        });
+    }
+  }, []);
+
 
   const numberToWords = (num) => {
     const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
