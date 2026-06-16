@@ -1,4 +1,61 @@
 const { v4: uuidv4 } = require('uuid');
+const { STSClient, GetCallerIdentityCommand } = require('@aws-sdk/client-sts');
+
+let awsHealthStatus = {
+  success: false,
+  credentialsLoaded: false,
+  accountId: null,
+  region: null,
+  error: 'Not checked yet'
+};
+
+const checkAwsHealth = async () => {
+  const region = process.env.AWS_REGION || 'us-east-1';
+
+  try {
+    const stsClient = new STSClient({ region });
+    const response = await stsClient.send(new GetCallerIdentityCommand({}));
+    
+    awsHealthStatus = {
+      success: true,
+      credentialsLoaded: true,
+      accountId: response.Account,
+      region: region,
+      error: null
+    };
+  } catch (err) {
+    awsHealthStatus = {
+      success: false,
+      credentialsLoaded: false,
+      accountId: 'Failed to resolve via STS',
+      region: region,
+      error: err.message
+    };
+  }
+
+  console.log('\n=========================================');
+  console.log('      AWS CREDENTIALS STARTUP CHECK      ');
+  console.log('=========================================');
+  console.log(`AWS Credentials Loaded : ${awsHealthStatus.credentialsLoaded ? 'Yes ✅' : 'No ❌'}`);
+  console.log(`AWS Account ID         : ${awsHealthStatus.accountId}`);
+  console.log(`AWS Region             : ${awsHealthStatus.region}`);
+  
+  if (!awsHealthStatus.success) {
+    console.log('-----------------------------------------');
+    console.log(`❌ AWS CONFIGURATION ERROR: ${awsHealthStatus.error}`);
+    console.log('Please ensure one of the following AWS auth mechanisms is configured:');
+    console.log('  1. Environment variables (AWS_ACCESS_KEY_ID & AWS_SECRET_ACCESS_KEY in .env)');
+    console.log('  2. IAM Instance Profile role attached to the server hosting CipherGate');
+    console.log('  3. Shared credentials file configured on your machine (~/.aws/credentials)');
+  }
+  console.log('=========================================\n');
+
+  return awsHealthStatus;
+};
+
+const getAwsHealthStatus = () => {
+  return awsHealthStatus;
+};
 
 /**
  * Generates a cryptographically secure ExternalID UUID
@@ -20,30 +77,6 @@ const generateExternalId = () => {
 const verifyCredentials = async (iamRoleArn, externalId, awsAccountId) => {
   console.log(`[AWS STS] Verifying assume-role access for Account: ${awsAccountId}, Role: ${iamRoleArn}`);
 
-  // Checks for mock connection trigger
-  const isMock = process.env.AWS_MOCKED === 'true' || 
-                 awsAccountId.startsWith('1111') || 
-                 awsAccountId.startsWith('1234') || 
-                 !iamRoleArn;
-
-  if (isMock) {
-    console.log(`[AWS STS] Mock validation triggered for sandbox testing.`);
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Simulate common sandbox config errors for testing
-    if (awsAccountId === '111122223334') {
-      throw new Error('STS:AssumeRole AccessDenied - The trust relationship policy is missing or misconfigured.');
-    }
-
-    return {
-      success: true,
-      status: 'Connected',
-      validatedAt: new Date(),
-      detectedRegions: ['us-east-1', 'us-west-2', 'eu-west-1', 'ap-southeast-1']
-    };
-  }
-
   // Real AWS SDK AssumeRole logic
   try {
     // Dynamically require to avoid missing module errors in dev
@@ -63,7 +96,12 @@ const verifyCredentials = async (iamRoleArn, externalId, awsAccountId) => {
         success: true,
         status: 'Connected',
         validatedAt: new Date(),
-        detectedRegions: ['us-east-1', 'us-west-2', 'eu-west-1'] // Default scanned regions
+        detectedRegions: ['us-east-1', 'us-west-2', 'eu-west-1'], // Default scanned regions
+        credentials: {
+          accessKeyId: response.Credentials.AccessKeyId,
+          secretAccessKey: response.Credentials.SecretAccessKey,
+          sessionToken: response.Credentials.SessionToken
+        }
       };
     }
     throw new Error('Assumed role credentials missing in response');
@@ -83,22 +121,6 @@ const verifyCredentials = async (iamRoleArn, externalId, awsAccountId) => {
  */
 const discoverOrganizationAccounts = async (masterAccountId, iamRoleArn, externalId) => {
   console.log(`[AWS Org] Scanning linked accounts under Org Master: ${masterAccountId}`);
-
-  const isMock = process.env.AWS_MOCKED === 'true' || 
-                 masterAccountId.startsWith('1111') || 
-                 masterAccountId.startsWith('1234') || 
-                 !iamRoleArn;
-
-  if (isMock) {
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    return [
-      { awsAccountId: masterAccountId, name: 'Root Master Billing', orgId: 'o-cgate88888', isMaster: true },
-      { awsAccountId: '111122223333', name: 'CipherGate Prod AWS', orgId: 'o-cgate88888', isMaster: false },
-      { awsAccountId: '111122224444', name: 'CipherGate Dev AWS', orgId: 'o-cgate88888', isMaster: false },
-      { awsAccountId: '111122225555', name: 'CipherGate QA AWS', orgId: 'o-cgate88888', isMaster: false },
-      { awsAccountId: '111122226666', name: 'CipherGate Client AWS', orgId: 'o-cgate88888', isMaster: false }
-    ];
-  }
 
   try {
     const { OrganizationsClient, ListAccountsCommand } = require('@aws-sdk/client-organizations');
@@ -146,31 +168,6 @@ const discoverOrganizationAccounts = async (masterAccountId, iamRoleArn, externa
  */
 const queryAthenaBilling = async (awsAccountId, querySql, credentials) => {
   console.log(`[AWS Athena] Querying billing data for account ${awsAccountId}...`);
-
-  const isMock = process.env.AWS_MOCKED === 'true' || 
-                 awsAccountId.startsWith('1111') || 
-                 awsAccountId.startsWith('1234') || 
-                 !credentials;
-
-  if (isMock) {
-    // Return mock row results depending on query contents
-    if (querySql.includes('resource_tags_user_project') || querySql.includes('attribution')) {
-      return [
-        { project: 'Alpha-Web', team: 'Backend', environment: 'Production', service: 'AmazonEC2', cost: 4120.00 },
-        { project: 'Beta-ETL', team: 'DataScience', environment: 'Staging', service: 'AmazonRDS', cost: 2310.00 },
-        { project: 'Infra-VPN', team: 'DevOps', environment: 'Production', service: 'AmazonEC2', cost: 1150.00 },
-        { project: 'AI-Chat', team: 'AI', environment: 'Development', service: 'AmazonLambda', cost: 890.00 },
-        { project: 'Web-CDN', team: 'Frontend', environment: 'Production', service: 'AmazonCloudFront', cost: 1200.00 }
-      ];
-    }
-    return [
-      { service: 'AmazonEC2', usage_date: '2026-06-11', total_cost: 145.20 },
-      { service: 'AmazonRDS', usage_date: '2026-06-11', total_cost: 212.14 },
-      { service: 'AmazonS3', usage_date: '2026-06-11', total_cost: 18.04 },
-      { service: 'AmazonEC2', usage_date: '2026-06-10', total_cost: 138.50 },
-      { service: 'AmazonRDS', usage_date: '2026-06-10', total_cost: 208.90 }
-    ];
-  }
 
   try {
     const { AthenaClient, StartQueryExecutionCommand, GetQueryExecutionCommand, GetQueryResultsCommand } = require('@aws-sdk/client-athena');
@@ -227,78 +224,111 @@ const queryAthenaBilling = async (awsAccountId, querySql, credentials) => {
  * @param {string} awsAccountId - Target account
  */
 const simulateBillingSync = async (subdomain, awsAccountId) => {
-  console.log(`[Simulator] Starting mock billing sync pipeline for account: ${awsAccountId}`);
+  console.log(`[Billing Ingestion] Starting dynamic billing sync pipeline for account: ${awsAccountId}`);
   
   const ResourceCost = require('../models/ResourceCost');
   const CostHistory = require('../models/CostHistory');
+  const AwsAccount = require('../models/AwsAccount');
 
-  // Purge previous records
-  await ResourceCost.deleteMany({ subdomain, awsAccountId });
-  await CostHistory.deleteMany({ subdomain, awsAccountId });
-
-  const services = [
-    { name: 'AmazonEC2', defaultDaily: 120, tag: { Project: 'Alpha-Web', Team: 'Backend', Environment: 'Production', Owner: 'BackendTeam', Application: 'Storefront', CostCenter: 'CC100' } },
-    { name: 'AmazonRDS', defaultDaily: 180, tag: { Project: 'Orders-DB', Team: 'Backend', Environment: 'Production', Owner: 'DatabaseTeam', Application: 'OrderAPI', CostCenter: 'CC100' } },
-    { name: 'AmazonS3', defaultDaily: 35, tag: { Project: 'Assets-Lake', Team: 'DevOps', Environment: 'Production', Owner: 'DevOpsTeam', Application: 'MediaStore', CostCenter: 'CC200' } },
-    { name: 'AmazonLambda', defaultDaily: 12, tag: { Project: 'AI-Chat', Team: 'AI', Environment: 'Development', Owner: 'AiTeam', Application: 'ChatBot', CostCenter: 'CC300' } },
-    { name: 'AmazonCloudFront', defaultDaily: 40, tag: { Project: 'Web-CDN', Team: 'Frontend', Environment: 'Production', Owner: 'FrontendTeam', Application: 'UI-Host', CostCenter: 'CC200' } }
-  ];
-
-  const now = new Date();
-  const historyEntries = [];
-  const costEntries = [];
-
-  // Generate cost data for last 90 days
-  for (let i = 90; i >= 0; i--) {
-    const targetDate = new Date();
-    targetDate.setDate(now.getDate() - i);
-    targetDate.setHours(0, 0, 0, 0);
-
-    services.forEach(svc => {
-      // Add random variation to cost (-15% to +25%)
-      const variation = 0.85 + Math.random() * 0.4;
-      let finalCost = svc.defaultDaily * variation;
-
-      // Simulate a major cost spike on June 11, 2026 for RDS
-      const dateStr = targetDate.toISOString().split('T')[0];
-      if (dateStr === '2026-06-11' && svc.name === 'AmazonRDS') {
-        finalCost = svc.defaultDaily * 2.8; // +180% Spike
-      }
-
-      // 1. Rollup Service Cost History
-      historyEntries.push({
-        subdomain,
-        awsAccountId,
-        date: targetDate,
-        service: svc.name,
-        cost: Number(finalCost.toFixed(2)),
-        tags: svc.tag
-      });
-
-      // 2. Resource-level costs
-      const resourceId = svc.name === 'AmazonEC2' 
-        ? 'i-09281a827bc19a82f' 
-        : svc.name === 'AmazonRDS' 
-        ? 'db-orders-prod-primary' 
-        : `arn:aws:${svc.name.toLowerCase()}::${awsAccountId}:resource`;
-
-      costEntries.push({
-        subdomain,
-        resourceId,
-        awsAccountId,
-        date: targetDate,
-        cost: Number(finalCost.toFixed(2)),
-        service: svc.name,
-        usageAmount: Math.round(24 * variation),
-        usageUnit: svc.name === 'AmazonS3' ? 'GB-Mo' : 'Hrs'
-      });
-    });
+  const account = await AwsAccount.findOne({ subdomain, awsAccountId });
+  if (!account || !account.iamRoleArn) {
+    throw new Error('Account credentials or IAM Role ARN is missing. Verification required.');
   }
 
-  // Batch insert
-  await CostHistory.insertMany(historyEntries);
-  await ResourceCost.insertMany(costEntries);
-  console.log(`[Simulator] Inserted ${historyEntries.length} CostHistory and ${costEntries.length} ResourceCost records.`);
+  // 1. Assume IAM Role to get credentials
+  const verification = await verifyCredentials(account.iamRoleArn, account.externalId, awsAccountId);
+  if (!verification.success) {
+    throw new Error('STS verification failed. Update role permissions.');
+  }
+
+  const credentials = verification.credentials;
+  let historyEntries = [];
+
+  // Try to call AWS Cost Explorer first (Primary billing source)
+  try {
+    console.log(`[Billing Ingestion] Querying AWS Cost Explorer live for account: ${awsAccountId}`);
+    const { CostExplorerClient, GetCostAndUsageCommand } = require('@aws-sdk/client-cost-explorer');
+    const ce = new CostExplorerClient({ region: 'us-east-1', credentials });
+
+    const today = new Date();
+    const ninetyDaysAgo = new Date(today);
+    ninetyDaysAgo.setDate(today.getDate() - 90);
+
+    const startStr = ninetyDaysAgo.toISOString().split('T')[0];
+    const endStr = today.toISOString().split('T')[0];
+
+    const ceResponse = await ce.send(new GetCostAndUsageCommand({
+      TimePeriod: { Start: startStr, End: endStr },
+      Granularity: 'DAILY',
+      Metrics: ['UnblendedCost'],
+      GroupBy: [
+        { Type: 'DIMENSION', Key: 'SERVICE' }
+      ]
+    }));
+
+    (ceResponse.ResultsByTime || []).forEach(dayResult => {
+      const usageDate = dayResult.TimePeriod.Start;
+      (dayResult.Groups || []).forEach(group => {
+        const service = group.Keys[0] || 'Unknown';
+        const cost = parseFloat(group.Metrics.UnblendedCost.Amount || 0);
+        
+        historyEntries.push({
+          subdomain,
+          awsAccountId,
+          date: new Date(usageDate),
+          service,
+          cost: Number(cost.toFixed(2)),
+          tags: {}
+        });
+      });
+    });
+
+    console.log(`[Billing Ingestion] Successfully retrieved ${historyEntries.length} Cost Explorer entries.`);
+  } catch (ceError) {
+    console.warn(`[Billing Ingestion] AWS Cost Explorer query failed: ${ceError.message}. Falling back to Athena query...`);
+    
+    // Fallback: Query Athena if Glue DB & Athena are configured
+    try {
+      // 2. Query Athena for service-level daily cost totals
+      const serviceQuery = `
+        SELECT 
+          line_item_product_code as service,
+          DATE(line_item_usage_start_date) as usage_date,
+          SUM(line_item_unblended_cost) as total_cost
+        FROM 
+          cur_billing_catalog
+        WHERE 
+          line_item_usage_start_date >= date_add('day', -90, current_date)
+        GROUP BY 
+          line_item_product_code, DATE(line_item_usage_start_date)
+        ORDER BY 
+          usage_date ASC
+      `;
+
+      const serviceResults = await queryAthenaBilling(awsAccountId, serviceQuery, credentials);
+      historyEntries = serviceResults.map(row => ({
+        subdomain,
+        awsAccountId,
+        date: new Date(row.usage_date),
+        service: row.service,
+        cost: Number(parseFloat(row.total_cost || 0).toFixed(2)),
+        tags: {}
+      }));
+    } catch (athenaError) {
+      console.error(`[Billing Ingestion] Athena billing fallback failed: ${athenaError.message}`);
+      throw new Error(`Sync Failed: Both Cost Explorer and Athena queries were rejected by AWS. Verify IAM Role permissions. CE Error: ${ceError.message}. Athena Error: ${athenaError.message}`);
+    }
+  }
+
+  // Clear previous cost database rows for this account before updating
+  await CostHistory.deleteMany({ subdomain, awsAccountId });
+  await ResourceCost.deleteMany({ subdomain, awsAccountId });
+
+  if (historyEntries.length > 0) {
+    await CostHistory.insertMany(historyEntries);
+  }
+
+  console.log(`[Billing Ingestion] Completed real sync: ${historyEntries.length} CostHistory records saved for account ${awsAccountId}.`);
 };
 
 /**
@@ -313,224 +343,61 @@ const discoverActiveResources = async (subdomain, awsAccountId) => {
 
   const AwsResource = require('../models/AwsResource');
   const ResourceRelationship = require('../models/ResourceRelationship');
+  const AwsAccount = require('../models/AwsAccount');
 
   // Purge old inventory records for this account
   await AwsResource.deleteMany({ subdomain, awsAccountId });
   await ResourceRelationship.deleteMany({ subdomain, awsAccountId });
 
-  const isMock = process.env.AWS_MOCKED === 'true' || 
-                 awsAccountId.startsWith('1111') || 
-                 awsAccountId.startsWith('1234');
+  const account = await AwsAccount.findOne({ subdomain, awsAccountId });
+  if (!account || !account.iamRoleArn) return;
 
-  if (isMock) {
-    console.log('[Discovery] Triggering sandbox mock resource scraper...');
-    
-    // 1. Generate diverse Mock Resources with required Tags
-    const mockResources = [
-      // VPC
-      {
-        resourceId: `vpc-prod01-${awsAccountId}`,
-        name: 'Production-VPC',
-        type: 'vpc',
-        region: 'us-east-1',
-        status: 'available',
-        tags: { Project: 'Infra-VPC', Environment: 'Production', Team: 'DevOps', Owner: 'DevOpsTeam', Application: 'VpcBase', CostCenter: 'CC200' },
-        resourceMetadata: { cidrBlock: '10.0.0.0/16', isDefault: false }
-      },
-      // EC2 Host Instance 01 (Connected to EBS 01)
-      {
-        resourceId: 'i-ec2prodapp01',
-        name: 'EC2-Prod-App01',
-        type: 'ec2',
-        region: 'us-east-1',
-        status: 'running',
-        tags: { Project: 'Alpha-Web', Environment: 'Production', Team: 'Backend', Owner: 'BackendTeam', Application: 'Storefront', CostCenter: 'CC100' },
-        resourceMetadata: { instanceType: 't3.xlarge', platform: 'Linux', cpuCores: 4, memoryGb: 16 }
-      },
-      // EC2 Host Instance 02
-      {
-        resourceId: 'i-ec2analyticsworker03',
-        name: 'EC2-Analytics-Worker03',
-        type: 'ec2',
-        region: 'us-east-1',
-        status: 'running',
-        tags: { Project: 'Beta-ETL', Environment: 'Staging', Team: 'DataScience', Owner: 'DevOpsTeam', Application: 'ETLWorker', CostCenter: 'CC100' },
-        resourceMetadata: { instanceType: 't3.xlarge', platform: 'Linux', cpuCores: 4, memoryGb: 16 }
-      },
-      // RDS DB Instance
-      {
-        resourceId: 'db-orders-prod-primary',
-        name: 'RDS-Orders-Primary',
-        type: 'rds',
-        region: 'us-east-1',
-        status: 'available',
-        tags: { Project: 'Orders-DB', Environment: 'Production', Team: 'Backend', Owner: 'DatabaseTeam', Application: 'OrderAPI', CostCenter: 'CC100' },
-        resourceMetadata: { engine: 'aurora-postgresql', dbInstanceClass: 'db.r5.xlarge', multiAz: true }
-      },
-      // EBS Storage 01
-      {
-        resourceId: 'vol-ebsprodstorage01',
-        name: 'EBS-Prod-Vol01',
-        type: 'ebs',
-        region: 'us-east-1',
-        status: 'in-use',
-        tags: { Project: 'Alpha-Web', Environment: 'Production', Team: 'Backend', Owner: 'BackendTeam', Application: 'Storefront', CostCenter: 'CC100' },
-        resourceMetadata: { sizeGb: 250, volumeType: 'gp3', iops: 3000 }
-      },
-      // S3 Billing Data Lake bucket
-      {
-        resourceId: `arn:aws:s3:::ciphergate-cost-lake-${awsAccountId}`,
-        name: 'CipherGate-Cost-Lake',
-        type: 's3',
-        region: 'us-east-1',
-        status: 'active',
-        tags: { Project: 'Assets-Lake', Environment: 'Production', Team: 'DevOps', Owner: 'DevOpsTeam', Application: 'MediaStore', CostCenter: 'CC200' },
-        resourceMetadata: { versioning: 'Enabled', encryption: 'AES256' }
-      },
-      // Elastic IP
-      {
-        resourceId: 'eipalloc-prodingress01',
-        name: 'EIP-Prod-Ingress01',
-        type: 'eip',
-        region: 'us-east-1',
-        status: 'associated',
-        tags: { Project: 'Infra-VPC', Environment: 'Production', Team: 'DevOps', Owner: 'DevOpsTeam', Application: 'VpcBase', CostCenter: 'CC200' },
-        resourceMetadata: { publicIp: '54.210.12.87' }
-      },
-      // Application Load Balancer
-      {
-        resourceId: `arn:aws:elasticloadbalancing:us-east-1:${awsAccountId}:loadbalancer/app/prod-alb/1122`,
-        name: 'ALB-Prod-Main',
-        type: 'elbv2',
-        region: 'us-east-1',
-        status: 'active',
-        tags: { Project: 'Infra-VPC', Environment: 'Production', Team: 'DevOps', Owner: 'DevOpsTeam', Application: 'VpcBase', CostCenter: 'CC200' },
-        resourceMetadata: { scheme: 'internet-facing', type: 'application' }
-      },
-      // EKS Cluster
-      {
-        resourceId: `arn:aws:eks:us-east-1:${awsAccountId}:cluster/eks-prod-main`,
-        name: 'EKS-Prod-Main',
-        type: 'eks',
-        region: 'us-east-1',
-        status: 'active',
-        tags: { Project: 'Infra-VPC', Environment: 'Production', Team: 'DevOps', Owner: 'DevOpsTeam', Application: 'EksPlatform', CostCenter: 'CC200' },
-        resourceMetadata: { version: '1.28', endpoint: 'https://eks.us-east-1.amazonaws.com' }
-      },
-      // Lambda Function
-      {
-        resourceId: `arn:aws:lambda:us-east-1:${awsAccountId}:function:AI-Consultant-Chat`,
-        name: 'Lambda-AI-Consultant-Chat',
-        type: 'lambda',
-        region: 'us-east-1',
-        status: 'active',
-        tags: { Project: 'AI-Chat', Environment: 'Development', Team: 'AI', Owner: 'AiTeam', Application: 'ChatBot', CostCenter: 'CC300' },
-        resourceMetadata: { runtime: 'nodejs18.x', memorySize: 512, timeout: 30 }
-      },
-      // EKS Namespaces & Pods (represented as logical resources for attribution queries)
-      {
-        resourceId: `arn:aws:eks:us-east-1:${awsAccountId}:cluster/eks-prod-main/namespace/backend-services`,
-        name: 'ns-backend-services',
-        type: 'eks',
-        region: 'us-east-1',
-        status: 'active',
-        tags: { Project: 'Alpha-Web', Environment: 'Production', Team: 'Backend', Owner: 'BackendTeam', Application: 'Storefront', CostCenter: 'CC100' },
-        containerMetadata: { namespace: 'backend-services', podName: null },
-        resourceMetadata: { podCount: 12, cpuRequestPercent: 42.4 }
-      },
-      {
-        resourceId: `arn:aws:eks:us-east-1:${awsAccountId}:cluster/eks-prod-main/namespace/backend-services/pod/storefront-api-65b`,
-        name: 'pod-storefront-api',
-        type: 'eks',
-        region: 'us-east-1',
-        status: 'running',
-        tags: { Project: 'Alpha-Web', Environment: 'Production', Team: 'Backend', Owner: 'BackendTeam', Application: 'Storefront', CostCenter: 'CC100' },
-        containerMetadata: { namespace: 'backend-services', podName: 'storefront-api-65b' },
-        resourceMetadata: { cpuUsageCores: 0.85, memoryUsageMb: 1024 }
-      }
-    ];
-
-    const resourcesDocs = [];
-    for (const res of mockResources) {
-      const doc = new AwsResource({
-        subdomain,
-        awsAccountId,
-        resourceId: res.resourceId,
-        name: res.name,
-        type: res.type,
-        region: res.region,
-        status: res.status,
-        tags: res.tags,
-        containerMetadata: res.containerMetadata || { namespace: null, podName: null },
-        resourceMetadata: res.resourceMetadata,
-        lastSeenAt: new Date()
-      });
-      await doc.save();
-      resourcesDocs.push(doc);
-    }
-
-    // 2. Generate Dependency Relationships
-    const relationships = [
-      // EC2 Instance to EBS Volume
-      {
-        parentResourceId: 'i-ec2prodapp01',
-        parentType: 'ec2',
-        childResourceId: 'vol-ebsprodstorage01',
-        childType: 'ebs',
-        relationType: 'attaches'
-      },
-      // ALB to EC2 Instance
-      {
-        parentResourceId: `arn:aws:elasticloadbalancing:us-east-1:${awsAccountId}:loadbalancer/app/prod-alb/1122`,
-        parentType: 'elbv2',
-        childResourceId: 'i-ec2prodapp01',
-        childType: 'ec2',
-        relationType: 'routes_to'
-      },
-      // EKS Cluster to Namespace
-      {
-        parentResourceId: `arn:aws:eks:us-east-1:${awsAccountId}:cluster/eks-prod-main`,
-        parentType: 'eks',
-        childResourceId: `arn:aws:eks:us-east-1:${awsAccountId}:cluster/eks-prod-main/namespace/backend-services`,
-        childType: 'eks',
-        relationType: 'hosts'
-      },
-      // EKS Namespace to Pod
-      {
-        parentResourceId: `arn:aws:eks:us-east-1:${awsAccountId}:cluster/eks-prod-main/namespace/backend-services`,
-        parentType: 'eks',
-        childResourceId: `arn:aws:eks:us-east-1:${awsAccountId}:cluster/eks-prod-main/namespace/backend-services/pod/storefront-api-65b`,
-        childType: 'eks',
-        relationType: 'contains'
-      }
-    ];
-
-    for (const rel of relationships) {
-      const relDoc = new ResourceRelationship({
-        subdomain,
-        awsAccountId,
-        parentResourceId: rel.parentResourceId,
-        parentType: rel.parentType,
-        childResourceId: rel.childResourceId,
-        childType: rel.childType,
-        relationType: rel.relationType,
-        lastSeenAt: new Date()
-      });
-      await relDoc.save();
-    }
-
-    console.log(`[Discovery] Scraped and indexed ${resourcesDocs.length} mock resources, and mapped ${relationships.length} relationships.`);
-    return;
-  }
-
-  // Real AWS SDK resource descriptors will fetch inventory details using STS assumed client credentials...
   try {
+    const verification = await verifyCredentials(account.iamRoleArn, account.externalId, awsAccountId);
+    if (!verification.success || !verification.credentials) return;
+
+    const credentials = verification.credentials;
+
+    // Describe EC2 Instances
     const { EC2Client, DescribeInstancesCommand } = require('@aws-sdk/client-ec2');
-    const ec2 = new EC2Client({ region: 'us-east-1' });
-    const response = await ec2.send(new DescribeInstancesCommand({}));
-    // Save real items...
+    const ec2 = new EC2Client({ region: 'us-east-1', credentials });
+    const ec2Response = await ec2.send(new DescribeInstancesCommand({}));
+
+    const resourcesToSave = [];
+    
+    (ec2Response.Reservations || []).forEach(res => {
+      (res.Instances || []).forEach(inst => {
+        const nameTag = (inst.Tags || []).find(t => t.Key === 'Name')?.Value || inst.InstanceId;
+        const tagsObj = {};
+        (inst.Tags || []).forEach(t => { tagsObj[t.Key] = t.Value; });
+
+        resourcesToSave.push({
+          subdomain,
+          awsAccountId,
+          resourceId: inst.InstanceId,
+          name: nameTag,
+          type: 'ec2',
+          region: 'us-east-1',
+          status: inst.State?.Name || 'unknown',
+          tags: tagsObj,
+          lastSeenAt: new Date(),
+          resourceMetadata: {
+            instanceType: inst.InstanceType,
+            platform: inst.PlatformDetails || 'Linux',
+            cpuCores: 2,
+            memoryGb: 8
+          }
+        });
+      });
+    });
+
+    if (resourcesToSave.length > 0) {
+      await AwsResource.insertMany(resourcesToSave);
+      console.log(`[Discovery] Found and indexed ${resourcesToSave.length} active EC2 instances.`);
+    }
+
   } catch (error) {
-    console.error('[Discovery] Real AWS Scraper error:', error.message);
+    console.error(`[Discovery] Failed real-time resource discovery check:`, error.message);
   }
 };
 
@@ -544,110 +411,347 @@ const generateRecommendations = async (subdomain, awsAccountId) => {
   console.log(`[Recommendations] Generating recommendations for account: ${awsAccountId}`);
   
   const AwsRecommendation = require('../models/AwsRecommendation');
+  const AwsAccount = require('../models/AwsAccount');
 
   // Purge old active recommendations
   await AwsRecommendation.deleteMany({ subdomain, awsAccountId, status: 'Active' });
 
-  const recommendations = [
-    {
-      subdomain,
-      awsAccountId,
-      resourceId: 'i-ec2prodapp01',
-      resourceType: 'ec2',
-      resourceName: 'EC2-Prod-App01',
-      recommendationType: 'rightsizing',
-      currentDetails: { instanceType: 't3.xlarge', platform: 'Linux', cpuCores: 4, memoryGb: 16 },
-      recommendedDetails: { instanceType: 't3.large', platform: 'Linux', cpuCores: 2, memoryGb: 8 },
-      currentCost: 120.00,
-      recommendedCost: 60.00,
-      monthlySavings: 1800.00,
-      annualSavings: 21600.00,
-      riskLevel: 'Medium',
-      confidenceScore: 90,
-      implementationEffort: 'Low',
-      impactAnalysis: {
-        affectedResources: ['i-ec2prodapp01', 'vol-ebsprodstorage01'],
-        downtimeRisk: 'Medium',
-        businessImpactDescription: 'EC2 Instance downsizing requires restarting. Application storefront will experience brief outage.'
-      },
-      status: 'Active'
-    },
-    {
-      subdomain,
-      awsAccountId,
-      resourceId: 'i-ec2analyticsworker03',
-      resourceType: 'ec2',
-      resourceName: 'EC2-Analytics-Worker03',
-      recommendationType: 'idle_resource',
-      currentDetails: { instanceType: 't3.xlarge', status: 'running' },
-      recommendedDetails: { instanceType: 't3.xlarge', status: 'stopped' },
-      currentCost: 1200.00,
-      recommendedCost: 0.00,
-      monthlySavings: 1200.00,
-      annualSavings: 14400.00,
-      riskLevel: 'Low',
-      confidenceScore: 95,
-      implementationEffort: 'Low',
-      impactAnalysis: {
-        affectedResources: ['i-ec2analyticsworker03'],
-        downtimeRisk: 'None',
-        businessImpactDescription: 'Decommissioning idle EC2 instance. CPU utilization is < 1% over last 30 days.'
-      },
-      status: 'Active'
-    },
-    {
-      subdomain,
-      awsAccountId,
-      resourceId: 'vol-ebs-unused-01',
-      resourceType: 'ebs',
-      resourceName: 'EBS-Unused-Volume',
-      recommendationType: 'cleanup',
-      currentDetails: { sizeGb: 500, volumeType: 'gp3', status: 'unattached' },
-      recommendedDetails: { status: 'deleted' },
-      currentCost: 40.00,
-      recommendedCost: 0.00,
-      monthlySavings: 40.00,
-      annualSavings: 480.00,
-      riskLevel: 'Low',
-      confidenceScore: 100,
-      implementationEffort: 'Low',
-      impactAnalysis: {
-        affectedResources: ['vol-ebs-unused-01'],
-        downtimeRisk: 'None',
-        businessImpactDescription: 'EBS volume is unattached. Snapshot will be created before deletion.'
-      },
-      status: 'Active'
-    },
-    {
-      subdomain,
-      awsAccountId,
-      resourceId: `arn:aws:billing::${awsAccountId}:savingsplan`,
-      resourceType: 'savingsplan',
-      resourceName: 'Compute Savings Plan',
-      recommendationType: 'savings_plan',
-      currentDetails: { uncoveredSpend: 15000.00 },
-      recommendedDetails: { hourlyCommitment: 0.15, term: '3-Year', type: 'Compute Savings Plans' },
-      currentCost: 15000.00,
-      recommendedCost: 11250.00,
-      monthlySavings: 3750.00,
-      annualSavings: 45000.00,
-      riskLevel: 'Low',
-      confidenceScore: 98,
-      implementationEffort: 'Medium',
-      impactAnalysis: {
-        affectedResources: [],
-        downtimeRisk: 'None',
-        businessImpactDescription: 'Commitment of $0.15/hr for a 3-year term. Covers regional EC2/Fargate/Lambda execution.'
-      },
-      status: 'Active'
-    }
-  ];
+  const account = await AwsAccount.findOne({ subdomain, awsAccountId });
+  if (!account || !account.iamRoleArn) return;
 
-  for (const rec of recommendations) {
-    const doc = new AwsRecommendation(rec);
-    await doc.save();
+  try {
+    const verification = await verifyCredentials(account.iamRoleArn, account.externalId, awsAccountId);
+    if (!verification.success || !verification.credentials) return;
+
+    const credentials = verification.credentials;
+    const { EC2Client, DescribeInstancesCommand, DescribeVolumesCommand, DescribeAddressesCommand } = require('@aws-sdk/client-ec2');
+    const ec2 = new EC2Client({ region: 'us-east-1', credentials });
+
+    const recommendations = [];
+
+    // 1. Fetch Stopped Instances (Idle Compute)
+    const instancesRes = await ec2.send(new DescribeInstancesCommand({
+      Filters: [{ Name: 'instance-state-name', Values: ['stopped'] }]
+    }));
+
+    (instancesRes.Reservations || []).forEach(res => {
+      (res.Instances || []).forEach(inst => {
+        const nameTag = (inst.Tags || []).find(t => t.Key === 'Name')?.Value || inst.InstanceId;
+        
+        // Estimate cost based on instance type
+        let hourlyCost = 0.0464; // default t3.medium
+        if (inst.InstanceType?.includes('large')) hourlyCost = 0.0928;
+        if (inst.InstanceType?.includes('xlarge')) hourlyCost = 0.1856;
+        if (inst.InstanceType?.includes('nano') || inst.InstanceType?.includes('micro')) hourlyCost = 0.0104;
+        
+        const monthlyCost = Number((hourlyCost * 730).toFixed(2));
+
+        recommendations.push({
+          subdomain,
+          awsAccountId,
+          resourceId: inst.InstanceId,
+          resourceType: 'ec2',
+          resourceName: nameTag,
+          recommendationType: 'idle_resource',
+          currentDetails: { instanceType: inst.InstanceType, status: 'stopped', platform: inst.PlatformDetails || 'Linux' },
+          recommendedDetails: { instanceType: inst.InstanceType, status: 'terminated' },
+          currentCost: monthlyCost,
+          recommendedCost: 0.00,
+          monthlySavings: monthlyCost,
+          annualSavings: Number((monthlyCost * 12).toFixed(2)),
+          riskLevel: 'Low',
+          confidenceScore: 95,
+          implementationEffort: 'Low',
+          impactAnalysis: {
+            affectedResources: [inst.InstanceId],
+            downtimeRisk: 'None',
+            businessImpactDescription: `Decommissioning stopped EC2 instance ${nameTag}. It has been inactive and can be safely terminated.`
+          },
+          status: 'Active'
+        });
+      });
+    });
+
+    // 2. Fetch Unattached EBS Volumes (Idle Storage)
+    const volumesRes = await ec2.send(new DescribeVolumesCommand({
+      Filters: [{ Name: 'status', Values: ['available'] }]
+    }));
+
+    (volumesRes.Volumes || []).forEach(vol => {
+      const nameTag = (vol.Tags || []).find(t => t.Key === 'Name')?.Value || vol.VolumeId;
+      const size = vol.Size || 0;
+      // Standard GP3 is $0.08 per GB-month
+      const costPerGb = 0.08;
+      const monthlyCost = Number((size * costPerGb).toFixed(2));
+
+      recommendations.push({
+        subdomain,
+        awsAccountId,
+        resourceId: vol.VolumeId,
+        resourceType: 'ebs',
+        resourceName: nameTag,
+        recommendationType: 'cleanup',
+        currentDetails: { sizeGb: size, volumeType: vol.VolumeType || 'gp3', status: 'unattached' },
+        recommendedDetails: { status: 'deleted' },
+        currentCost: monthlyCost,
+        recommendedCost: 0.00,
+        monthlySavings: monthlyCost,
+        annualSavings: Number((monthlyCost * 12).toFixed(2)),
+        riskLevel: 'Low',
+        confidenceScore: 100,
+        implementationEffort: 'Low',
+        impactAnalysis: {
+          affectedResources: [vol.VolumeId],
+          downtimeRisk: 'None',
+          businessImpactDescription: `EBS volume ${vol.VolumeId} (${size} GB) is unattached and idle. Delete the volume after creating a backup snapshot to avoid ongoing costs.`
+        },
+        status: 'Active'
+      });
+    });
+
+    // 3. Fetch Unassociated Elastic IPs (Idle Networking)
+    const addressesRes = await ec2.send(new DescribeAddressesCommand({}));
+    
+    (addressesRes.Addresses || []).forEach(addr => {
+      // Unassociated EIPs do not have an AssociationId
+      if (!addr.AssociationId) {
+        const monthlyCost = 3.60; // ~$0.005/hour standard unassociated charge
+
+        recommendations.push({
+          subdomain,
+          awsAccountId,
+          resourceId: addr.AllocationId || addr.PublicIp,
+          resourceType: 'eip',
+          resourceName: addr.PublicIp,
+          recommendationType: 'cleanup',
+          currentDetails: { publicIp: addr.PublicIp, status: 'unassociated' },
+          recommendedDetails: { status: 'released' },
+          currentCost: monthlyCost,
+          recommendedCost: 0.00,
+          monthlySavings: monthlyCost,
+          annualSavings: Number((monthlyCost * 12).toFixed(2)),
+          riskLevel: 'Low',
+          confidenceScore: 100,
+          implementationEffort: 'Low',
+          impactAnalysis: {
+            affectedResources: [addr.AllocationId || addr.PublicIp],
+            downtimeRisk: 'None',
+            businessImpactDescription: `Elastic IP ${addr.PublicIp} is currently unassociated. Release this Elastic IP back to AWS to avoid hourly charges.`
+          },
+          status: 'Active'
+        });
+      }
+    });
+
+    for (const rec of recommendations) {
+      const doc = new AwsRecommendation(rec);
+      await doc.save();
+    }
+    console.log(`[Recommendations] Generated ${recommendations.length} recommendations for account ${awsAccountId}.`);
+
+  } catch (error) {
+    console.error(`[Recommendations] Failed real-time recommendations scan for account ${awsAccountId}:`, error.message);
   }
-  console.log(`[Recommendations] Generated 4 recommendations for account ${awsAccountId}.`);
+};
+
+/**
+ * Validates AWS Account ID format and checks if it's not a placeholder
+ * @param {string} accountId 
+ * @returns {boolean}
+ */
+const validatePrincipalAccountId = (accountId) => {
+  if (!accountId || typeof accountId !== 'string') return false;
+  const trimmed = accountId.trim();
+  if (!/^\d{12}$/.test(trimmed)) return false;
+  
+  const blacklisted = [
+    '888888888888',
+    '123456789012',
+    '000000000000',
+    '111122223333',
+    '999999999999'
+  ];
+  if (blacklisted.includes(trimmed)) return false;
+  
+  return true;
+};
+
+/**
+ * Resolves the principal account ID of CipherGate from Env or STS fallback
+ * @returns {Promise<string>}
+ */
+const getPrincipalAccountId = async () => {
+  let accountId = process.env.CIPHERGATE_AWS_PRINCIPAL_ACCOUNT_ID;
+  if (!accountId) {
+    console.log('[AWS STS] CIPHERGATE_AWS_PRINCIPAL_ACCOUNT_ID env var not found. Attempting to resolve dynamically via GetCallerIdentity...');
+    try {
+      const { STSClient, GetCallerIdentityCommand } = require('@aws-sdk/client-sts');
+      const stsClient = new STSClient({ region: 'us-east-1' });
+      const response = await stsClient.send(new GetCallerIdentityCommand({}));
+      accountId = response.Account;
+      console.log(`[AWS STS] Resolved account ID dynamically: ${accountId}`);
+    } catch (error) {
+      console.error('[AWS STS] Failed to dynamically retrieve principal account ID via STS:', error.message);
+      throw new Error('Principal AWS Account ID is not configured and could not be retrieved dynamically via STS.');
+    }
+  }
+  
+  if (!validatePrincipalAccountId(accountId)) {
+    throw new Error(`Invalid or blacklisted AWS Principal Account ID: ${accountId}`);
+  }
+  
+  return accountId;
+};
+
+/**
+ * Generates the cross-account trust policy document dynamically
+ * @param {string} externalId 
+ * @returns {Promise<object>}
+ */
+const generateTrustPolicy = async (externalId) => {
+  if (!externalId) {
+    throw new Error('External ID is required to generate trust policy');
+  }
+  const principalAccountId = await getPrincipalAccountId();
+  const principalArn = `arn:aws:iam::${principalAccountId}:root`;
+  
+  // Validate generated Principal ARN structure
+  if (!/^arn:aws:iam::\d{12}:root$/.test(principalArn)) {
+    throw new Error(`Generated Principal ARN has invalid format: ${principalArn}`);
+  }
+  
+  const policyObject = {
+    Version: "2012-10-17",
+    Statement: [{
+      Effect: "Allow",
+      Principal: {
+        AWS: principalArn
+      },
+      Action: "sts:AssumeRole",
+      Condition: {
+        StringEquals: {
+          "sts:ExternalId": externalId
+        }
+      }
+    }]
+  };
+  
+  return {
+    principalArn,
+    policyDocument: JSON.stringify(policyObject, null, 2),
+    policyObject
+  };
+};
+
+/**
+ * Checks capabilities of assumed role credentials (Cost Explorer, Organizations, S3, Glue, Athena)
+ * @param {object} credentials - Assumed cross-account role credentials
+ * @returns {Promise<object>} Capabilities list
+ */
+const discoverBillingCapability = async (credentials) => {
+  const capabilities = {
+    costExplorer: { status: 'Unconfigured', details: 'Cost Explorer access not verified.' },
+    organizations: { status: 'Unconfigured', details: 'Organizations access not verified.' },
+    s3: { status: 'Unconfigured', details: 'No S3 buckets discovered.', bucket: 'None' },
+    glue: { status: 'Unconfigured', details: 'No Glue database discovered.', database: 'None' },
+    athena: { status: 'Unconfigured', details: 'No Athena workgroups discovered.', workgroup: 'None' }
+  };
+
+  try {
+    // 1. Cost Explorer Check
+    const { CostExplorerClient, GetCostAndUsageCommand } = require('@aws-sdk/client-cost-explorer');
+    const ce = new CostExplorerClient({ region: 'us-east-1', credentials });
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const startStr = yesterday.toISOString().split('T')[0];
+    const endStr = today.toISOString().split('T')[0];
+    try {
+      await ce.send(new GetCostAndUsageCommand({
+        TimePeriod: { Start: startStr, End: endStr },
+        Granularity: 'DAILY',
+        Metrics: ['UnblendedCost']
+      }));
+      capabilities.costExplorer = { status: 'Active', details: 'AWS Cost Explorer query successful.' };
+    } catch (err) {
+      capabilities.costExplorer = { status: 'Failed', details: err.message };
+    }
+
+    // 2. Organizations Check
+    const { OrganizationsClient, ListAccountsCommand } = require('@aws-sdk/client-organizations');
+    const org = new OrganizationsClient({ region: 'us-east-1', credentials });
+    try {
+      await org.send(new ListAccountsCommand({ MaxResults: 1 }));
+      capabilities.organizations = { status: 'Active', details: 'AWS Organizations integration verified.' };
+    } catch (err) {
+      capabilities.organizations = { status: 'Failed', details: err.message };
+    }
+
+    // 3. S3 Check
+    const { S3Client, ListBucketsCommand } = require('@aws-sdk/client-s3');
+    const s3 = new S3Client({ region: 'us-east-1', credentials });
+    try {
+      const s3Res = await s3.send(new ListBucketsCommand({}));
+      const buckets = s3Res.Buckets || [];
+      const billingBucket = buckets.find(b => 
+        b.Name.toLowerCase().includes('cost-lake') || 
+        b.Name.toLowerCase().includes('billing') || 
+        b.Name.toLowerCase().includes('finops') || 
+        b.Name.toLowerCase().includes('cur')
+      );
+      capabilities.s3 = {
+        status: buckets.length > 0 ? 'Active' : 'Unconfigured',
+        details: buckets.length > 0 ? `${buckets.length} S3 bucket(s) discovered.` : 'No S3 buckets in this account.',
+        bucket: billingBucket ? billingBucket.Name : (buckets[0] ? buckets[0].Name : 'None'),
+        buckets: buckets.map(b => b.Name)
+      };
+    } catch (err) {
+      capabilities.s3 = { status: 'Failed', details: err.message, bucket: 'None' };
+    }
+
+    // 4. Glue Check
+    const { GlueClient, GetDatabasesCommand } = require('@aws-sdk/client-glue');
+    const glue = new GlueClient({ region: 'us-east-1', credentials });
+    try {
+      const glueRes = await glue.send(new GetDatabasesCommand({}));
+      const dbs = glueRes.DatabaseList || [];
+      const billingDb = dbs.find(d => 
+        d.Name.toLowerCase().includes('billing') || 
+        d.Name.toLowerCase().includes('cur') || 
+        d.Name.toLowerCase().includes('catalog')
+      );
+      capabilities.glue = {
+        status: dbs.length > 0 ? 'Cataloged' : 'Unconfigured',
+        details: dbs.length > 0 ? `${dbs.length} Glue database(s) discovered.` : 'No Glue databases in this account.',
+        database: billingDb ? billingDb.Name : (dbs[0] ? dbs[0].Name : 'None'),
+        databases: dbs.map(d => d.Name)
+      };
+    } catch (err) {
+      capabilities.glue = { status: 'Failed', details: err.message, database: 'None' };
+    }
+
+    // 5. Athena Check
+    const { AthenaClient, ListWorkGroupsCommand } = require('@aws-sdk/client-athena');
+    const athena = new AthenaClient({ region: 'us-east-1', credentials });
+    try {
+      const athenaRes = await athena.send(new ListWorkGroupsCommand({}));
+      const wgs = athenaRes.WorkGroups || [];
+      const billingWg = wgs.find(w => w.Name.toLowerCase().includes('ciphergate') || w.Name.toLowerCase().includes('finops'));
+      capabilities.athena = {
+        status: wgs.length > 0 ? 'Ready' : 'Unconfigured',
+        details: wgs.length > 0 ? `${wgs.length} Athena workgroup(s) discovered.` : 'No Athena workgroups in this account.',
+        workgroup: billingWg ? billingWg.Name : (wgs[0] ? wgs[0].Name : 'None'),
+        workgroups: wgs.map(w => w.Name)
+      };
+    } catch (err) {
+      capabilities.athena = { status: 'Failed', details: err.message, workgroup: 'None' };
+    }
+
+  } catch (err) {
+    console.error('Failed to query dynamic capabilities:', err.message);
+  }
+
+  return capabilities;
 };
 
 module.exports = {
@@ -657,5 +761,11 @@ module.exports = {
   queryAthenaBilling,
   simulateBillingSync,
   discoverActiveResources,
-  generateRecommendations
+  generateRecommendations,
+  validatePrincipalAccountId,
+  getPrincipalAccountId,
+  generateTrustPolicy,
+  checkAwsHealth,
+  getAwsHealthStatus,
+  discoverBillingCapability
 };

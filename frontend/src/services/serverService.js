@@ -53,10 +53,23 @@ export const deleteAccount = async (id) => {
   }
 };
 
-export const scanOrganization = async (masterAccountId, masterRoleArn) => {
+export const initializeOrganization = async (name, awsAccountId) => {
   try {
     const token = getAuthToken();
-    const response = await api.post('/server/organizations/scan', { masterAccountId, masterRoleArn }, {
+    const response = await api.post('/server/organizations/initialize', { name, awsAccountId }, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error initializing AWS organization:', error);
+    throw error.response?.data || new Error('Failed to initialize AWS organization');
+  }
+};
+
+export const scanOrganization = async (masterAccountId) => {
+  try {
+    const token = getAuthToken();
+    const response = await api.post('/server/organizations/scan', { masterAccountId }, {
       headers: { Authorization: `Bearer ${token}` }
     });
     return response.data;

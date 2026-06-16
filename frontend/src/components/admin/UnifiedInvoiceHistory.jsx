@@ -16,8 +16,22 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, 
   const [selectedInvoiceForStage, setSelectedInvoiceForStage] = useState(null);
   const [targetStage, setTargetStage] = useState(null);
 
-  // Image Preview Modal
-  const [previewImage, setPreviewImage] = useState(null);
+  // Image Preview Modal - supports gallery with multiple proofs
+  const [previewGallery, setPreviewGallery] = useState(null); // { images: [...], currentIndex: 0, title: '' }
+
+  // Helper: get all proofs from a stage detail field (handles both old single proof and new proofs array)
+  const getProofs = (details) => {
+    if (!details) return [];
+    if (details.proofs && details.proofs.length > 0) return details.proofs;
+    if (details.proof) return [{ date: details.date, url: details.proof }];
+    return [];
+  };
+
+  const openGallery = (images, title) => {
+    if (images.length > 0) {
+      setPreviewGallery({ images, currentIndex: 0, title });
+    }
+  };
 
   // Update local state when invoices prop changes
   useEffect(() => {
@@ -194,30 +208,39 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, 
         </Card>
       ) : (
         !loading && (
-          <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-            <table className="min-w-full divide-y divide-gray-200">
+          <div className="w-full rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <table className="w-full table-fixed">
+              <colgroup>
+                <col style={{ width: '11%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '14%' }} />
+                <col style={{ width: '9%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '30%' }} />
+                <col style={{ width: '16%' }} />
+              </colgroup>
               <thead>
-                <tr className="bg-gray-50">
-                  <th className="py-4 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Invoice No</th>
-                  <th className="py-4 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="py-4 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Customer</th>
-                  <th className="py-4 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="py-4 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Amount</th>
-                  <th className="py-4 px-6 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Stage</th>
-                  <th className="py-4 px-6 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="py-3.5 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Invoice No</th>
+                  <th className="py-3.5 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
+                  <th className="py-3.5 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Customer</th>
+                  <th className="py-3.5 px-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Type</th>
+                  <th className="py-3.5 px-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Amount</th>
+                  <th className="py-3.5 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Stage Progress</th>
+                  <th className="py-3.5 px-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-100">
                 {localInvoices.map((invoice) => (
-                  <tr key={invoice._id} className="hover:bg-gray-50 transition-colors">
-                    <td className="py-4 px-6 text-sm font-semibold text-gray-900">{invoice.invoiceNo}</td>
-                    <td className="py-4 px-6 text-sm text-gray-600">{invoice.invoiceDate || formatDate(invoice.createdAt)}</td>
-                    <td className="py-4 px-6 text-sm text-gray-600">
-                      <div className="font-medium text-gray-900">{invoice.customerName || 'N/A'}</div>
-                      <div className="text-xs text-gray-400">{invoice.customerContact}</div>
+                  <tr key={invoice._id} className="hover:bg-blue-50/40 transition-colors">
+                    <td className="py-3.5 px-4 text-sm font-semibold text-gray-900 truncate">{invoice.invoiceNo}</td>
+                    <td className="py-3.5 px-4 text-sm text-gray-500">{invoice.invoiceDate || formatDate(invoice.createdAt)}</td>
+                    <td className="py-3.5 px-4 text-sm">
+                      <div className="font-medium text-gray-800 truncate">{invoice.customerName || 'N/A'}</div>
+                      {invoice.customerContact && <div className="text-xs text-gray-400 truncate">{invoice.customerContact}</div>}
                     </td>
-                    <td className="py-4 px-6 text-sm">
-                      <span className={`px-2.5 py-1 rounded-md text-xs font-bold ${
+                    <td className="py-3.5 px-4 text-center">
+                      <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-bold ${
                         invoice.invoiceType === 'TAX INVOICE' 
                           ? 'bg-amber-100 text-amber-700' 
                           : 'bg-blue-100 text-blue-700'
@@ -225,88 +248,113 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, 
                         {invoice.invoiceType}
                       </span>
                     </td>
-                    <td className="py-4 px-6 text-sm font-bold text-gray-900 text-right">
+                    <td className="py-3.5 px-4 text-sm font-bold text-gray-900 text-right whitespace-nowrap">
                       ₹{calculateTotal(invoice).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="py-4 px-6 text-sm">
-                      <div className="flex items-center gap-1">
-                        {STAGES.map((stage, index) => {
-                          const currentIdx = getStatusIndex(invoice.status || 'Invoice');
-                          const isCompleted = index <= currentIdx;
-                          const isCurrent = index === currentIdx;
-                          
-                          return (
-                            <div key={stage} className="flex items-center">
-                              <button
-                                onClick={() => handleStatusUpdate(invoice._id, stage)}
-                                title={stage}
-                                className={`w-3 h-3 rounded-full transition-all duration-200 ${
-                                  isCompleted 
-                                    ? 'bg-blue-600 shadow-sm' 
-                                    : 'bg-gray-200 hover:bg-gray-300'
-                                } ${isCurrent ? 'ring-2 ring-blue-300 ring-offset-1 scale-125' : ''}`}
-                              />
-                              {index < STAGES.length - 1 && (
-                                <div className={`w-4 h-0.5 ${
-                                  index < currentIdx ? 'bg-blue-600' : 'bg-gray-200'
-                                }`} />
-                              )}
-                            </div>
-                          );
-                        })}
-                        <span className="ml-2 text-[10px] font-bold text-gray-500 uppercase tracking-tight">
-                          {invoice.status || 'Invoice'}
-                        </span>
-                        
-                        {/* Stage Proof Previews */}
-                        <div className="flex gap-1 ml-2">
-                          {invoice.paymentDetails?.proof && (
-                            <button
-                              onClick={() => setPreviewImage(invoice.paymentDetails.proof)}
-                              className="bg-blue-50 p-1 rounded hover:bg-blue-100 transition-colors"
-                              title="View Payment Proof"
-                            >
-                              <svg className="w-3 h-3 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                            </button>
-                          )}
-                          {invoice.workDetails?.proof && (
-                            <button
-                              onClick={() => setPreviewImage(invoice.workDetails.proof)}
-                              className="bg-green-50 p-1 rounded hover:bg-green-100 transition-colors"
-                              title="View Work Proof"
-                            >
-                              <svg className="w-3 h-3 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                            </button>
-                          )}
-                          {invoice.closureDetails?.proof && (
-                            <button
-                              onClick={() => setPreviewImage(invoice.closureDetails.proof)}
-                              className="bg-purple-50 p-1 rounded hover:bg-purple-100 transition-colors"
-                              title="View Closure Proof"
-                            >
-                              <svg className="w-3 h-3 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A10.003 10.003 0 0012 20c4.083 0 7.774-2.147 9.856-5.338a1 1 0 00-.573-1.466C17.585 12.33 14.837 12 12 12c-2.837 0-5.585.33-9.283 1.196a1 1 0 00-.573 1.466A10.003 10.003 0 006.315 20l.054.09A10.003 10.003 0 0012 20c4.083 0 7.774-2.147 9.856-5.338a1 1 0 00-.573-1.466C17.585 12.33 14.837 12 12 12c-2.837 0-5.585.33-9.283 1.196a1 1 0 00-.573 1.466A10.003 10.003 0 006.315 20l.054.09A10.003 10.003 0 0012 20" />
-                              </svg>
-                            </button>
-                          )}
+                    <td className="py-3.5 px-4">
+                      <div className="flex flex-col gap-1.5">
+                        {/* Stage dots row */}
+                        <div className="flex items-center gap-0">
+                          {STAGES.map((stage, index) => {
+                            const currentIdx = getStatusIndex(invoice.status || 'Invoice');
+                            const isCompleted = index < currentIdx;
+                            const isCurrent = index === currentIdx;
+                            
+                            return (
+                              <div key={stage} className="flex items-center">
+                                <button
+                                  onClick={() => handleStatusUpdate(invoice._id, stage)}
+                                  title={stage}
+                                  className={`rounded-full transition-all duration-200 flex-shrink-0 ${
+                                    isCurrent
+                                      ? 'w-4 h-4 bg-blue-600 ring-[3px] ring-blue-200 shadow-sm' 
+                                      : isCompleted
+                                        ? 'w-3 h-3 bg-blue-500' 
+                                        : 'w-3 h-3 bg-gray-200 hover:bg-gray-300'
+                                  }`}
+                                />
+                                {index < STAGES.length - 1 && (
+                                  <div className={`w-5 h-[2px] flex-shrink-0 ${
+                                    index < currentIdx ? 'bg-blue-500' : 'bg-gray-200'
+                                  }`} />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {/* Stage label + proof icons row */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider leading-none">
+                            {invoice.status || 'Invoice'}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            {(() => {
+                              const paymentProofs = getProofs(invoice.paymentDetails);
+                              const workProofs = getProofs(invoice.workDetails);
+                              const closureProofs = getProofs(invoice.closureDetails);
+                              return (
+                                <>
+                                  {paymentProofs.length > 0 && (
+                                    <button
+                                      onClick={() => openGallery(paymentProofs, 'Payment Proof')}
+                                      className="relative bg-blue-50 hover:bg-blue-100 p-0.5 rounded transition-colors"
+                                      title={`Payment Proof${paymentProofs.length > 1 ? `s (${paymentProofs.length})` : ''}`}
+                                    >
+                                      <svg className="w-3.5 h-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                      {paymentProofs.length > 1 && (
+                                        <span className="absolute -top-1.5 -right-1.5 bg-blue-600 text-white text-[7px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 leading-none">{paymentProofs.length}</span>
+                                      )}
+                                    </button>
+                                  )}
+                                  {workProofs.length > 0 && (
+                                    <button
+                                      onClick={() => openGallery(workProofs, 'Work Completion Proof')}
+                                      className="relative bg-green-50 hover:bg-green-100 p-0.5 rounded transition-colors"
+                                      title={`Work Proof${workProofs.length > 1 ? `s (${workProofs.length})` : ''}`}
+                                    >
+                                      <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                      {workProofs.length > 1 && (
+                                        <span className="absolute -top-1.5 -right-1.5 bg-green-600 text-white text-[7px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 leading-none">{workProofs.length}</span>
+                                      )}
+                                    </button>
+                                  )}
+                                  {closureProofs.length > 0 && (
+                                    <button
+                                      onClick={() => openGallery(closureProofs, 'Closure Proof')}
+                                      className="relative bg-purple-50 hover:bg-purple-100 p-0.5 rounded transition-colors"
+                                      title={`Closure Proof${closureProofs.length > 1 ? `s (${closureProofs.length})` : ''}`}
+                                    >
+                                      <svg className="w-3.5 h-3.5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                      {closureProofs.length > 1 && (
+                                        <span className="absolute -top-1.5 -right-1.5 bg-purple-600 text-white text-[7px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 leading-none">{closureProofs.length}</span>
+                                      )}
+                                    </button>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
                         </div>
                       </div>
                     </td>
-                    <td className="py-4 px-6 text-sm text-center">
-                      <div className="flex justify-center items-center gap-4">
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="flex justify-center items-center gap-3">
                         <button
                           onClick={() => onEditInvoice(invoice)}
-                          className="text-blue-600 hover:text-blue-800 font-bold transition-colors"
+                          className="text-blue-600 hover:text-blue-800 text-sm font-semibold transition-colors"
                         >
                           Edit
                         </button>
+                        <span className="text-gray-200">|</span>
                         <button
                           onClick={() => handleDeleteClick(invoice._id)}
-                          className="text-red-500 hover:text-red-700 font-bold transition-colors"
+                          className="text-red-500 hover:text-red-700 text-sm font-semibold transition-colors"
                         >
                           Delete
                         </button>
@@ -329,21 +377,57 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, 
         stage={targetStage}
       />
 
-      {/* Image Preview Modal */}
-      {previewImage && (
-        <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-sm flex items-center justify-center z-[110] p-4 animate-in fade-in duration-200" onClick={() => setPreviewImage(null)}>
+      {/* Image Gallery Preview Modal - supports multiple proofs */}
+      {previewGallery && (
+        <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-sm flex items-center justify-center z-[110] p-4 animate-in fade-in duration-200" onClick={() => setPreviewGallery(null)}>
           <div className="relative max-w-4xl w-full bg-white rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center p-4 border-b">
-              <h3 className="font-bold text-gray-900">Payment Proof</h3>
-              <button onClick={() => setPreviewImage(null)} className="text-gray-500 hover:text-gray-700">
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <h3 className="font-bold text-gray-900">{previewGallery.title}</h3>
+              <div className="flex items-center gap-3">
+                {previewGallery.images.length > 1 && (
+                  <span className="text-xs font-bold text-gray-500">
+                    {previewGallery.currentIndex + 1} of {previewGallery.images.length}
+                  </span>
+                )}
+                <button onClick={() => setPreviewGallery(null)} className="text-gray-500 hover:text-gray-700">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
-            <div className="p-2">
-              <img src={previewImage} alt="Payment Proof" className="w-full h-auto max-h-[80vh] object-contain" />
+            <div className="relative p-2 flex items-center justify-center">
+              {previewGallery.images.length > 1 && (
+                <button
+                  onClick={() => setPreviewGallery(prev => ({ ...prev, currentIndex: prev.currentIndex > 0 ? prev.currentIndex - 1 : prev.images.length - 1 }))}
+                  className="absolute left-2 z-10 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+              )}
+              <img 
+                src={previewGallery.images[previewGallery.currentIndex]?.url || previewGallery.images[previewGallery.currentIndex]?.proof} 
+                alt="Proof" 
+                className="w-full h-auto max-h-[80vh] object-contain" 
+              />
+              {previewGallery.images.length > 1 && (
+                <button
+                  onClick={() => setPreviewGallery(prev => ({ ...prev, currentIndex: prev.currentIndex < prev.images.length - 1 ? prev.currentIndex + 1 : 0 }))}
+                  className="absolute right-2 z-10 bg-black/40 hover:bg-black/60 text-white p-2 rounded-full transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              )}
             </div>
+            {previewGallery.images[previewGallery.currentIndex]?.date && (
+              <div className="text-center pb-3 text-xs text-gray-500 font-medium">
+                {new Date(previewGallery.images[previewGallery.currentIndex].date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+              </div>
+            )}
           </div>
         </div>
       )}

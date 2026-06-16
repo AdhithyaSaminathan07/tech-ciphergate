@@ -75,25 +75,8 @@ const evaluateAnomalies = async (subdomain, awsAccountId) => {
         });
 
         if (!exists) {
-          // CloudWatch mock correlation depending on service
+          // CloudWatch correlation can be populated from real metrics if needed
           let correlation = {};
-          if (service === 'AmazonRDS') {
-            correlation = {
-              metricName: 'CPUUtilization',
-              resourceId: 'db-orders-prod-primary',
-              spikeValue: '94.2%',
-              normalValue: '28.1%',
-              description: 'High RDS write IOPS spike detected matching massive write transaction query volume.'
-            };
-          } else if (service === 'AmazonEC2') {
-            correlation = {
-              metricName: 'NetworkOut',
-              resourceId: 'i-ec2prodapp01',
-              spikeValue: '4.8 Gbps',
-              normalValue: '1.2 Gbps',
-              description: 'Inbound external request volume traffic spike correlated with CDN cache misses.'
-            };
-          }
 
           anomaliesToSave.push({
             subdomain,

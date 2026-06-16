@@ -16,6 +16,21 @@ const startServer = async () => {
     await connectDB();
     console.log('Database connected successfully');
 
+    // Run AWS SDK credentials startup check
+    const awsService = require('./services/awsService');
+    await awsService.checkAwsHealth();
+
+    // Clean up mock AWS accounts on boot to enforce clean state
+    const AwsAccount = require('./models/AwsAccount');
+    await AwsAccount.deleteMany({
+      $or: [
+        { awsAccountId: { $regex: '^1111' } },
+        { awsAccountId: { $regex: '^1234' } },
+        { name: { $regex: 'CipherGate', $options: 'i' } }
+      ]
+    });
+    console.log('🧹 Purged seeded/mock AWS accounts from database.');
+
     const app = express();
 
     const corsOptions = {

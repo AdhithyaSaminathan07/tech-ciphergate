@@ -6,6 +6,7 @@ const {
   verifyAccount,
   deleteAccount,
   scanOrganization,
+  initializeOrganization,
   getCostsSummary,
   getCostsTrend,
   triggerSyncJob,
@@ -37,6 +38,9 @@ router.route('/accounts/:id/verify')
 
 router.route('/accounts/:id')
   .delete(protect, adminOnly, deleteAccount);
+
+router.route('/organizations/initialize')
+  .post(protect, adminOnly, initializeOrganization);
 
 router.route('/organizations/scan')
   .post(protect, adminOnly, scanOrganization);

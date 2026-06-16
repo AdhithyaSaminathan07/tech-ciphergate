@@ -54,15 +54,18 @@ const invoiceSchema = new mongoose.Schema({
   },
   paymentDetails: {
     date: { type: Date },
-    proof: { type: String }
+    proof: { type: String },  // Legacy single proof (backward compat)
+    proofs: [{ date: { type: Date }, url: { type: String } }]  // Multiple proofs array
   },
   workDetails: {
     date: { type: Date },
-    proof: { type: String }
+    proof: { type: String },  // Legacy single proof (backward compat)
+    proofs: [{ date: { type: Date }, url: { type: String } }]  // Multiple proofs array
   },
   closureDetails: {
     date: { type: Date },
-    proof: { type: String }
+    proof: { type: String },  // Legacy single proof (backward compat)
+    proofs: [{ date: { type: Date }, url: { type: String } }]  // Multiple proofs array
   },
   status: { 
     type: String, 

@@ -147,6 +147,16 @@ const TagInput = ({ tags, onChange, placeholder }) => {
 
 const getTicketKey = (id) => id ? `CG-${id.substring(id.length - 4).toUpperCase()}` : '';
 
+const isMongoObjectId = (value) => typeof value === 'string' && /^[a-f\d]{24}$/i.test(value);
+
+const sanitizeChecklistForApi = (checklist = []) => checklist.map(item => {
+    const sanitized = { ...item };
+    if (!isMongoObjectId(sanitized._id)) {
+        delete sanitized._id;
+    }
+    return sanitized;
+});
+
 const isOverdue = (endDate, status) => {
     if (!endDate || status === 'Done') return false;
     const today = new Date();
@@ -932,6 +942,9 @@ const WorkAllocation = () => {
                         if (apiUpdates.assignees && Array.isArray(apiUpdates.assignees)) {
                             apiUpdates.assignees = apiUpdates.assignees.map(a => typeof a === 'object' ? a._id : a);
                         }
+                        if (apiUpdates.checklist && Array.isArray(apiUpdates.checklist)) {
+                            apiUpdates.checklist = sanitizeChecklistForApi(apiUpdates.checklist);
+                        }
                         await updateTicket(updated._id, { ...apiUpdates, subdomain });
                     } catch (error) {
                         console.error('Update failed', error);
@@ -965,7 +978,7 @@ const WorkAllocation = () => {
                 if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
                 saveTimeoutRef.current = setTimeout(async () => {
                     try {
-                        await updateTicket(updated._id, { checklist: updatedChecklist, subdomain });
+                        await updateTicket(updated._id, { checklist: sanitizeChecklistForApi(updatedChecklist), subdomain });
                     } catch (err) { console.error('Checklist save failed', err); }
                 }, 1000);
                 setTickets(prevTickets => prevTickets.map(t => t._id === updated._id ? updated : t));
@@ -1019,7 +1032,7 @@ const WorkAllocation = () => {
             setTickets(tickets.map(t => t._id === updatedTicket._id ? updatedTicket : t));
             try {
                 await updateTicket(updatedTicket._id, {
-                    checklist: updatedChecklist,
+                    checklist: sanitizeChecklistForApi(updatedChecklist),
                     status: updatedStatus,
                     subdomain
                 });
@@ -1932,6 +1945,10 @@ const WorkAllocation = () => {
                                                     ).filter(Boolean);
                                                 }
 
+                                                if (taskToSave.checklist && Array.isArray(taskToSave.checklist)) {
+                                                    taskToSave.checklist = sanitizeChecklistForApi(taskToSave.checklist);
+                                                }
+
                                                 // Clean up dates
                                                 if (taskToSave.startDate === '') taskToSave.startDate = undefined;
                                                 if (taskToSave.endDate === '') taskToSave.endDate = undefined;
@@ -2270,7 +2287,7 @@ const WorkAllocation = () => {
                                                     {isAnalyzing ? (
                                                         <>
                                                             <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                                            <span>Consulting Second Brain...</span>
+                                                            <span>Analyzing with DeepSeek...</span>
                                                         </>
                                                     ) : (
                                                         <>
@@ -2725,7 +2742,7 @@ const WorkAllocation = () => {
                                                                                     )}
 
                                                                                     {/* Proof Status Button */}
-                                                                                    <span className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-600 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-orange-100 hover:bg-orange-100 transition-all shadow-sm cursor-pointer" onClick={() => triggerReferenceUpload(selectedTicket._id === 'new' ? tempTicketId : selectedTicket._id, item._id || idx, workerId)}>
+                                                                                    <span className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-600 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-orange-100 hover:bg-orange-100 transition-all shadow-sm cursor-pointer" onClick={() => triggerReferenceUpload(selectedTicket._id === 'new' ? tempTicketId : selectedTicket._id, selectedTicket._id === 'new' ? idx : (item._id || idx), workerId)}>
                                                                                         <Paperclip className="w-3.5 h-3.5" /> {comp?.referenceFiles?.length > 0 ? 'REF ✓' : 'REF'}
                                                                                     </span>
 

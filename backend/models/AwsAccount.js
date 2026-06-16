@@ -19,6 +19,10 @@ const awsAccountSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  isOrgMaster: {
+    type: Boolean,
+    default: false
+  },
   iamRoleArn: {
     type: String,
     default: null
@@ -38,6 +42,10 @@ const awsAccountSchema = new mongoose.Schema({
     default: ['us-east-1']
   },
   lastSyncedAt: {
+    type: Date,
+    default: null
+  },
+  lastVerifiedAt: {
     type: Date,
     default: null
   },

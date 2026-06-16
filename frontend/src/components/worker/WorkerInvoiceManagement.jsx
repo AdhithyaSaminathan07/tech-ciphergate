@@ -90,6 +90,13 @@ const WorkerInvoiceManagement = () => {
     toast.success('Invoice deleted successfully!');
   };
 
+  // Handle status update from invoice history
+  const handleStatusUpdate = (invoiceId, updatedData) => {
+    setInvoices(prev => prev.map(inv =>
+      inv._id === invoiceId ? { ...inv, ...updatedData } : inv
+    ));
+  };
+
   // Create a wrapper function that includes worker information
   const handleInvoiceSaveWithWorkerInfo = (invoiceData) => {
     handleInvoiceSave(invoiceData);
@@ -173,7 +180,8 @@ const WorkerInvoiceManagement = () => {
           <WorkerInvoiceHistory 
             invoices={invoices} 
             onEditInvoice={handleEditInvoice}
-            onDeleteInvoice={handleDeleteInvoice} // Pass the callback
+            onDeleteInvoice={handleDeleteInvoice}
+            onStatusUpdate={handleStatusUpdate}
           />
         )}
         {activeTab === 'delete-history' && (

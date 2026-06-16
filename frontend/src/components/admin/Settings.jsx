@@ -139,6 +139,7 @@ const Settings = () => {
             leavesPerMonth: 1
         },
         aiConfig: {
+            deepseekApiKey: '',
             claudeApiKey: '',
             aiMaxDailyRequests: 100,
             aiMaxMonthlyRequests: 1000,
@@ -236,6 +237,7 @@ const Settings = () => {
                     leavesPerMonth: fetchedSettings.paidLeaveConfig?.leavesPerMonth || 1
                 },
                 aiConfig: {
+                    deepseekApiKey: fetchedSettings.aiConfig?.deepseekApiKey || '',
                     claudeApiKey: fetchedSettings.aiConfig?.claudeApiKey || '',
                     aiMaxDailyRequests: fetchedSettings.aiConfig?.aiMaxDailyRequests ?? 100,
                     aiMaxMonthlyRequests: fetchedSettings.aiConfig?.aiMaxMonthlyRequests ?? 1000,
@@ -1717,7 +1719,7 @@ const Settings = () => {
                                 <div>
                                     <label className="text-sm font-medium text-gray-700">Enable AI Features</label>
                                     <p className="text-xs text-gray-500 mt-1">
-                                        Enable or disable Claude AI developer allocation & search features
+                                        Enable or disable DeepSeek AI developer allocation & search features
                                     </p>
                                 </div>
                                 <CustomToggle
@@ -1740,27 +1742,27 @@ const Settings = () => {
                                 <div className="space-y-4">
                                     <div className="space-y-2">
                                         <label className="block text-sm font-medium text-gray-700">
-                                            Claude API Key
+                                            DeepSeek API Key
                                         </label>
                                         <input
                                             type="password"
-                                            value={settings.aiConfig?.claudeApiKey || ''}
+                                            value={settings.aiConfig?.deepseekApiKey || ''}
                                             onChange={(e) => {
                                                 const updated = {
                                                     ...settings,
                                                     aiConfig: {
                                                         ...(settings.aiConfig || {}),
-                                                        claudeApiKey: e.target.value
+                                                        deepseekApiKey: e.target.value
                                                     }
                                                 };
                                                 setSettings(updated);
                                                 checkForChanges(updated);
                                             }}
-                                            placeholder="sk-ant-..."
+                                            placeholder="sk-..."
                                             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
                                         />
                                         <p className="text-xs text-gray-500">
-                                            Anthropic API Key used for task matching and second brain operations. If empty, falls back to server-side DeepSeek key.
+                                            DeepSeek API key used for task matching and Second Brain answers. If empty, the backend uses DEEPSEEK_API_KEY from .env.
                                         </p>
                                     </div>
 

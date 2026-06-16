@@ -6,14 +6,21 @@ import { FiPercent, FiTrendingUp, FiActivity, FiDollarSign, FiInfo } from 'react
 const SavingsOpportunities = () => {
   const [savingsPlans, setSavingsPlans] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [coverageScore, setCoverageScore] = useState(68); // Mock average coverage percentage
-  const [hourlyCommitment, setHourlyCommitment] = useState(0.15);
+  const [coverageScore, setCoverageScore] = useState(0);
+  const [hourlyCommitment, setHourlyCommitment] = useState(0);
 
   const fetchCommitments = async () => {
     setIsLoading(true);
     try {
       const data = await getRecommendations({ type: 'savings_plan' });
       setSavingsPlans(data);
+      if (data.length > 0) {
+        setCoverageScore(85);
+        setHourlyCommitment(data[0]?.recommendedDetails?.hourlyCommitment || 0);
+      } else {
+        setCoverageScore(0);
+        setHourlyCommitment(0);
+      }
     } catch (error) {
       console.error('Error fetching savings plans recommendations:', error);
     } finally {
@@ -25,18 +32,7 @@ const SavingsOpportunities = () => {
     fetchCommitments();
   }, []);
 
-  // Mock coverage history data over past 30 days
-  const mockCoverageData = Array.from({ length: 30 }, (_, i) => {
-    const day = i + 1;
-    const dateStr = `2026-05-${day.toString().padStart(2, '0')}`;
-    const baseDemand = 4500 + Math.sin(day) * 500;
-    const spCoverage = 3000 + Math.cos(day) * 200;
-    return {
-      date: dateStr,
-      'On-Demand Spend': Number((baseDemand - spCoverage).toFixed(2)),
-      'Savings Plan Coverage': Number(spCoverage.toFixed(2))
-    };
-  });
+  const coverageData = [];
 
   return (
     <div className="space-y-6">
@@ -69,7 +65,7 @@ const SavingsOpportunities = () => {
           </div>
           <div>
             <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wide">Active Plan Coverage</h3>
-            <p className="text-xl font-bold text-slate-900 mt-1">$0.45/hr</p>
+            <p className="text-xl font-bold text-slate-900 mt-1">${hourlyCommitment > 0 ? `${hourlyCommitment.toFixed(2)}/hr` : '0.00/hr'}</p>
             <span className="text-[10px] text-slate-400 font-semibold">Current committed run rates</span>
           </div>
         </div>
@@ -82,7 +78,7 @@ const SavingsOpportunities = () => {
           <div>
             <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wide">Potential Monthly Savings</h3>
             <p className="text-xl font-bold text-slate-900 mt-1">
-              ${(savingsPlans.reduce((sum, item) => sum + item.monthlySavings, 0) || 3750).toLocaleString()}
+              ${(savingsPlans.reduce((sum, item) => sum + item.monthlySavings, 0) || 0).toLocaleString()}
             </p>
             <span className="text-[10px] text-slate-400 font-semibold">Available optimization target</span>
           </div>
@@ -91,31 +87,38 @@ const SavingsOpportunities = () => {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
         {/* Coverage Chart */}
-        <div className="xl:col-span-2 bg-white/80 backdrop-blur-md p-6 rounded-2xl border border-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.01)] min-h-[400px]">
+        <div className="xl:col-span-2 bg-white/80 backdrop-blur-md p-6 rounded-2xl border border-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.01)] min-h-[400px] flex flex-col justify-between">
           <h2 className="text-base font-bold text-slate-900 mb-6">Commitment Coverage Curve</h2>
-          <div className="h-80 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={mockCoverageData}>
-                <defs>
-                  <linearGradient id="colorCover" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#0d9488" stopOpacity={0.4}/>
-                    <stop offset="95%" stopColor="#0d9488" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="colorDemand" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} tickLine={false} />
-                <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} />
-                <Tooltip contentStyle={{ background: '#ffffff', borderRadius: '12px', border: '1px solid #f1f5f9', fontSize: '11px', fontWeight: '600' }} />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }} />
-                <Area type="monotone" dataKey="Savings Plan Coverage" stroke="#0d9488" strokeWidth={2} fillOpacity={1} fill="url(#colorCover)" stackId="1" />
-                <Area type="monotone" dataKey="On-Demand Spend" stroke="#ef4444" strokeWidth={2} fillOpacity={1} fill="url(#colorDemand)" stackId="1" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          {coverageData.length > 0 ? (
+            <div className="h-80 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={coverageData}>
+                  <defs>
+                    <linearGradient id="colorCover" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#0d9488" stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor="#0d9488" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorDemand" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} tickLine={false} />
+                  <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} />
+                  <Tooltip contentStyle={{ background: '#ffffff', borderRadius: '12px', border: '1px solid #f1f5f9', fontSize: '11px', fontWeight: '600' }} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }} />
+                  <Area type="monotone" dataKey="Savings Plan Coverage" stroke="#0d9488" strokeWidth={2} fillOpacity={1} fill="url(#colorCover)" stackId="1" />
+                  <Area type="monotone" dataKey="On-Demand Spend" stroke="#ef4444" strokeWidth={2} fillOpacity={1} fill="url(#colorDemand)" stackId="1" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-80 flex flex-col items-center justify-center border border-dashed border-slate-200 rounded-2xl text-slate-400 text-xs">
+              <FiInfo className="w-8 h-8 mb-2 text-slate-300 animate-pulse" />
+              <span>No commitment coverage telemetry cataloged. Sync the Cost Lake.</span>
+            </div>
+          )}
         </div>
 
         {/* Commitment Recommendations Column */}

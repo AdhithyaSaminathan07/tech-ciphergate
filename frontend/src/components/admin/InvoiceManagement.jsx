@@ -19,7 +19,7 @@ const InvoiceManagement = () => {
   const { user } = useAuth();
 
   // Filter states
-  const [filterType, setFilterType] = useState('monthly');
+  const [filterType, setFilterType] = useState('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [gstFilter, setGstFilter] = useState('all');
@@ -30,7 +30,7 @@ const InvoiceManagement = () => {
 
   // Load invoices from backend on component mount
   useEffect(() => {
-    fetchInvoices('monthly', '', '', 'all');
+    fetchInvoices('all', '', '', 'all');
 
     // Update admin last viewed timestamp to reset notification count
     updateAdminLastViewed();
@@ -332,8 +332,8 @@ const InvoiceManagement = () => {
                 key={option.id}
                 onClick={() => handleFilterChange(option.id)}
                 className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${filterType === option.id
-                    ? 'bg-blue-50 text-blue-600 shadow-inner'
-                    : 'text-gray-500 hover:text-gray-700'
+                  ? 'bg-blue-50 text-blue-600 shadow-inner'
+                  : 'text-gray-500 hover:text-gray-700'
                   }`}
               >
                 {option.label}

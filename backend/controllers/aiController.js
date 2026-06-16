@@ -26,6 +26,12 @@ const extractJson = (text) => {
   }
 };
 
+const truncateText = (value, maxLength = 1200) => {
+  if (!value) return '';
+  const text = String(value).replace(/\s+/g, ' ').trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+};
+
 // @desc    Analyze task and recommend parameters + developers
 // @route   POST /api/ai/analyze-task
 // @access  Private
@@ -43,7 +49,7 @@ const analyzeTask = asyncHandler(async (req, res) => {
     throw new Error('Subdomain is missing or invalid');
   }
 
-  // 1. Claude Request Cache Look-up
+  // 1. AI request cache look-up
   const taskHash = crypto.createHash('md5').update(title + '|' + (description || '')).digest('hex');
   const cacheKey = `ai_task_rec:${subdomain}:${taskHash}`;
 
@@ -63,24 +69,24 @@ const analyzeTask = asyncHandler(async (req, res) => {
     console.error('[AI Caching] Cache read error:', cacheErr.message);
   }
 
-  // 2. Retrieve all projects for subdomain
-  const projects = await Department.find({ subdomain }).lean();
-  
-  // 3. Retrieve all active workers (developers) with expertise profiles
-  const workers = await Worker.find({ subdomain, status: 'Active' }).lean();
-
-  // 4. Retrieve Repository Intelligence Context from Second Brain
+  // 2. Retrieve active workers and repository intelligence in parallel for faster analysis.
+  let workers = [];
   let repoIntellList = [];
   try {
-    repoIntellList = await SecondBrainItem.find({
-      subdomain,
-      type: 'github_repo_intelligence'
-    }).lean();
+    [workers, repoIntellList] = await Promise.all([
+      Worker.find({ subdomain, status: 'Active' })
+        .select('name username skills expertiseProfile completedTasksCount activeTasksCount')
+        .lean(),
+      SecondBrainItem.find({ subdomain, type: 'github_repo_intelligence' })
+        .select('title metadata')
+        .limit(8)
+        .lean()
+    ]);
   } catch (err) {
-    console.log('[AI Search] Repository intelligence retrieval failed.');
+    console.log('[AI Analysis] Worker or repository retrieval failed:', err.message);
   }
 
-  const repoIntelStr = repoIntellList.map((r, i) =>
+  const repoIntelStr = repoIntellList.slice(0, 6).map((r, i) =>
     `Repo ${i + 1} [Name: ${r.metadata?.repoName || r.title}]:
    - Primary Maintainer: ${r.metadata?.primaryMaintainer?.name || 'None'}
    - Primary Tech Stack: ${(r.metadata?.primaryStack || []).join(', ') || 'Unknown'}
@@ -96,7 +102,7 @@ const analyzeTask = asyncHandler(async (req, res) => {
       { score: { $meta: "textScore" } }
     )
     .sort({ score: { $meta: "textScore" } })
-    .limit(5)
+    .limit(3)
     .lean();
   } catch (err) {
     console.log('[AI Search] Text search failed or index not ready, falling back to regex.');
@@ -110,18 +116,26 @@ const analyzeTask = asyncHandler(async (req, res) => {
         type: { $ne: 'github_repo_intelligence' },
         $or: words.map(w => ({ content: { $regex: new RegExp(w, 'i') } }))
       })
-      .limit(5)
+      .limit(3)
       .lean();
     }
   }
 
   // Format context block strings
   const contextStr = searchResults.map((r, i) => 
-    `Context Block ${i + 1} [Type: ${r.type}]:\nTitle: ${r.title}\nContent: ${r.content}`
+    `Context Block ${i + 1} [Type: ${r.type}]:\nTitle: ${r.title}\nContent: ${truncateText(r.content, 900)}`
   ).join('\n\n');
 
   // Format developer profiles list with weighted scores
-  const devProfilesStr = workers.map(w => {
+  const rankedWorkers = workers
+    .map(w => ({
+      ...w,
+      _analysisScore: (w.expertiseProfile?.weightedExpertiseScore || 0) - ((w.activeTasksCount || 0) * 4)
+    }))
+    .sort((a, b) => b._analysisScore - a._analysisScore)
+    .slice(0, 12);
+
+  const devProfilesStr = rankedWorkers.map(w => {
     const exp = w.expertiseProfile || {};
     return `- ID: ${w._id}
   Name: ${w.name}
@@ -134,7 +148,7 @@ const analyzeTask = asyncHandler(async (req, res) => {
   GitHub Code Reviews: ${exp.gitCodeReviewsCount || 0}
   Completed Tasks: ${w.completedTasksCount || 0}
   Active Task Load: ${w.activeTasksCount || 0}
-  Project History: ${(exp.assignedProjectsList || []).join(', ') || 'None'}`;
+  Project History: ${(exp.assignedProjectsList || []).slice(0, 6).join(', ') || 'None'}`;
   }).join('\n\n');
 
   // Assemble AI Prompts
@@ -204,10 +218,15 @@ DEVELOPER PROFILES LIST:
 ${devProfilesStr || 'No developers found.'}`;
 
   try {
-    const aiResponseText = await generateCompletion(subdomain, systemPrompt, userPrompt);
+    const aiResponseText = await generateCompletion(subdomain, systemPrompt, userPrompt, {
+      maxTokens: 1800,
+      timeoutMs: 25000,
+      temperature: 0.1,
+      responseFormat: { type: 'json_object' }
+    });
     const parsedRecommendation = extractJson(aiResponseText);
 
-    // Save output to Claude Request Cache (24 hours TTL)
+    // Save output to AI request cache (24 hours TTL)
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await GitHubCache.updateOne(
       { subdomain, cache_key: cacheKey },
@@ -324,7 +343,7 @@ ${contextStr || 'No specific context found.'}`;
     try {
       answer = await generateCompletion(subdomain, systemPrompt, userPrompt);
     } catch (err) {
-      console.error('[AI Search] Failed to generate Claude answer:', err.message);
+      console.error('[AI Search] Failed to generate AI answer:', err.message);
       answer = `*Error generating AI response:* ${err.message}. Showing retrieved search items below.`;
     }
   }

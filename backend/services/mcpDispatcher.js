@@ -45,6 +45,10 @@ const TOOL_DEFINITIONS = [
  * @returns {Promise<object>} Tool result
  */
 const executeTool = async (toolName, params = {}, subdomain) => {
+  const AwsAccount = require('../models/AwsAccount');
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+
   const now = new Date();
   const thirtyDaysAgo = new Date(now);
   thirtyDaysAgo.setDate(now.getDate() - 30);
@@ -56,11 +60,11 @@ const executeTool = async (toolName, params = {}, subdomain) => {
     case 'get_monthly_cost': {
       const [mtd, last] = await Promise.all([
         CostHistory.aggregate([
-          { $match: { subdomain, date: { $gte: startOfMonth } } },
+          { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, date: { $gte: startOfMonth } } },
           { $group: { _id: null, total: { $sum: '$cost' } } }
         ]),
         CostHistory.aggregate([
-          { $match: { subdomain, date: { $gte: startOfLastMonth, $lte: endOfLastMonth } } },
+          { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, date: { $gte: startOfLastMonth, $lte: endOfLastMonth } } },
           { $group: { _id: null, total: { $sum: '$cost' } } }
         ])
       ]);
@@ -75,7 +79,7 @@ const executeTool = async (toolName, params = {}, subdomain) => {
       const since = new Date(now);
       since.setDate(now.getDate() - days);
       const daily = await CostHistory.aggregate([
-        { $match: { subdomain, date: { $gte: since } } },
+        { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, date: { $gte: since } } },
         { $group: { _id: { date: '$date', service: '$service' }, cost: { $sum: '$cost' } } },
         { $sort: { '_id.date': 1 } }
       ]);
@@ -85,7 +89,7 @@ const executeTool = async (toolName, params = {}, subdomain) => {
     case 'get_top_cost_services': {
       const limit = params.limit || 5;
       const services = await CostHistory.aggregate([
-        { $match: { subdomain, date: { $gte: thirtyDaysAgo } } },
+        { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, date: { $gte: thirtyDaysAgo } } },
         { $group: { _id: '$service', total: { $sum: '$cost' } } },
         { $sort: { total: -1 } },
         { $limit: limit }
@@ -96,7 +100,7 @@ const executeTool = async (toolName, params = {}, subdomain) => {
     case 'get_top_cost_resources': {
       const limit = params.limit || 10;
       const resources = await ResourceCost.aggregate([
-        { $match: { subdomain, date: { $gte: thirtyDaysAgo } } },
+        { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, date: { $gte: thirtyDaysAgo } } },
         { $group: { _id: '$resourceId', service: { $first: '$service' }, total: { $sum: '$cost' } } },
         { $sort: { total: -1 } },
         { $limit: limit }
@@ -117,7 +121,7 @@ const executeTool = async (toolName, params = {}, subdomain) => {
       const tag = tagMap[toolName];
       const tagKey = `tags.${tag}`;
       const results = await CostHistory.aggregate([
-        { $match: { subdomain, date: { $gte: thirtyDaysAgo }, [tagKey]: { $exists: true } } },
+        { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, date: { $gte: thirtyDaysAgo }, [tagKey]: { $exists: true } } },
         { $group: { _id: `$${tagKey}`, total: { $sum: '$cost' } } },
         { $sort: { total: -1 } }
       ]);
@@ -126,7 +130,7 @@ const executeTool = async (toolName, params = {}, subdomain) => {
 
     case 'get_cost_by_account': {
       const results = await CostHistory.aggregate([
-        { $match: { subdomain, date: { $gte: thirtyDaysAgo } } },
+        { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, date: { $gte: thirtyDaysAgo } } },
         { $group: { _id: '$awsAccountId', total: { $sum: '$cost' } } },
         { $sort: { total: -1 } }
       ]);
@@ -134,7 +138,7 @@ const executeTool = async (toolName, params = {}, subdomain) => {
     }
 
     case 'get_idle_resources': {
-      const idle = await AwsRecommendation.find({ subdomain, recommendationType: 'idle_resource', status: 'Active' });
+      const idle = await AwsRecommendation.find({ subdomain, awsAccountId: { $in: activeAccountIds }, recommendationType: 'idle_resource', status: 'Active' });
       return idle.map(r => ({
         resourceId: r.resourceId, resourceName: r.resourceName, resourceType: r.resourceType,
         monthlySavings: r.monthlySavings, riskLevel: r.riskLevel,
@@ -143,7 +147,7 @@ const executeTool = async (toolName, params = {}, subdomain) => {
     }
 
     case 'get_compute_optimizer_recommendations': {
-      const recs = await AwsRecommendation.find({ subdomain, recommendationType: 'rightsizing', status: 'Active' });
+      const recs = await AwsRecommendation.find({ subdomain, awsAccountId: { $in: activeAccountIds }, recommendationType: 'rightsizing', status: 'Active' });
       return recs.map(r => ({
         resourceId: r.resourceId, resourceName: r.resourceName, resourceType: r.resourceType,
         currentSpec: r.currentDetails, recommendedSpec: r.recommendedDetails,
@@ -154,7 +158,7 @@ const executeTool = async (toolName, params = {}, subdomain) => {
     }
 
     case 'get_savings_plan_recommendations': {
-      const plans = await AwsRecommendation.find({ subdomain, recommendationType: 'savings_plan', status: 'Active' });
+      const plans = await AwsRecommendation.find({ subdomain, awsAccountId: { $in: activeAccountIds }, recommendationType: 'savings_plan', status: 'Active' });
       return plans.map(r => ({
         type: r.recommendedDetails?.type, term: r.recommendedDetails?.term,
         hourlyCommitment: r.recommendedDetails?.hourlyCommitment,
@@ -164,7 +168,7 @@ const executeTool = async (toolName, params = {}, subdomain) => {
     }
 
     case 'get_rds_rightsizing': {
-      const rds = await AwsRecommendation.find({ subdomain, recommendationType: 'rightsizing', resourceType: 'rds', status: 'Active' });
+      const rds = await AwsRecommendation.find({ subdomain, awsAccountId: { $in: activeAccountIds }, recommendationType: 'rightsizing', resourceType: 'rds', status: 'Active' });
       return rds.map(r => ({
         resourceId: r.resourceId, currentClass: r.currentDetails?.dbInstanceClass,
         recommendedClass: r.recommendedDetails?.dbInstanceClass,
@@ -173,7 +177,7 @@ const executeTool = async (toolName, params = {}, subdomain) => {
     }
 
     case 'get_unused_ebs': {
-      const ebs = await AwsRecommendation.find({ subdomain, recommendationType: 'cleanup', resourceType: 'ebs', status: 'Active' });
+      const ebs = await AwsRecommendation.find({ subdomain, awsAccountId: { $in: activeAccountIds }, recommendationType: 'cleanup', resourceType: 'ebs', status: 'Active' });
       return ebs.map(r => ({
         resourceId: r.resourceId, sizeGb: r.currentDetails?.sizeGb, volumeType: r.currentDetails?.volumeType,
         monthlySavings: r.monthlySavings
@@ -181,7 +185,7 @@ const executeTool = async (toolName, params = {}, subdomain) => {
     }
 
     case 'get_anomalies': {
-      const query = { subdomain, status: 'Active' };
+      const query = { subdomain, awsAccountId: { $in: activeAccountIds }, status: 'Active' };
       if (params.severity) query.severity = params.severity;
       const anomalies = await AwsAnomaly.find(query).sort({ date: -1 }).limit(20);
       return anomalies.map(a => ({
@@ -193,11 +197,12 @@ const executeTool = async (toolName, params = {}, subdomain) => {
 
     case 'explain_anomaly': {
       // Search by service name first, then fall back to resourceId or partial match
-      let anomaly = await AwsAnomaly.findOne({ subdomain, service: params.service }).sort({ date: -1 });
+      let anomaly = await AwsAnomaly.findOne({ subdomain, awsAccountId: { $in: activeAccountIds }, service: params.service }).sort({ date: -1 });
       if (!anomaly) {
         // Try case-insensitive partial match on service name
         anomaly = await AwsAnomaly.findOne({
           subdomain,
+          awsAccountId: { $in: activeAccountIds },
           service: { $regex: params.service, $options: 'i' }
         }).sort({ date: -1 });
       }
@@ -212,7 +217,7 @@ const executeTool = async (toolName, params = {}, subdomain) => {
     }
 
     case 'cost_spike_analysis': {
-      const recent = await CostHistory.find({ subdomain, service: params.service }).sort({ date: -1 }).limit(30);
+      const recent = await CostHistory.find({ subdomain, awsAccountId: { $in: activeAccountIds }, service: params.service }).sort({ date: -1 }).limit(30);
       if (recent.length < 3) return { message: `Insufficient data for service: ${params.service}` };
       const avg = recent.slice(1).reduce((s, r) => s + r.cost, 0) / (recent.length - 1);
       const latest = recent[0];
@@ -225,17 +230,17 @@ const executeTool = async (toolName, params = {}, subdomain) => {
     }
 
     case 'forecast_month_end_bill': {
-      const f = await AwsForecast.findOne({ subdomain, forecastType: 'month_end' });
+      const f = await AwsForecast.findOne({ subdomain, awsAccountId: { $in: activeAccountIds }, forecastType: 'month_end' });
       return f ? { forecastType: 'month_end', predictedSpend: f.predictedSpend, confidenceLow: f.confidenceLow, confidenceHigh: f.confidenceHigh, trendAnalysis: f.trendAnalysis } : { message: 'No forecast available yet. Run a sync to generate forecasts.' };
     }
 
     case 'forecast_quarterly_bill': {
-      const f = await AwsForecast.findOne({ subdomain, forecastType: 'quarterly' });
+      const f = await AwsForecast.findOne({ subdomain, awsAccountId: { $in: activeAccountIds }, forecastType: 'quarterly' });
       return f ? { forecastType: 'quarterly', predictedSpend: f.predictedSpend, confidenceLow: f.confidenceLow, confidenceHigh: f.confidenceHigh, trendAnalysis: f.trendAnalysis } : { message: 'No quarterly forecast available yet.' };
     }
 
     case 'forecast_yearly_bill': {
-      const f = await AwsForecast.findOne({ subdomain, forecastType: 'annual' });
+      const f = await AwsForecast.findOne({ subdomain, awsAccountId: { $in: activeAccountIds }, forecastType: 'annual' });
       return f ? { forecastType: 'annual', predictedSpend: f.predictedSpend, confidenceLow: f.confidenceLow, confidenceHigh: f.confidenceHigh, trendAnalysis: f.trendAnalysis } : { message: 'No annual forecast available yet.' };
     }
 

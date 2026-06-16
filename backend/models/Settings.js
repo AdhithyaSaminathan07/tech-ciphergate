@@ -375,6 +375,10 @@ const settingsSchema = mongoose.Schema({
 
   // AI and Second Brain Configuration
   aiConfig: {
+    deepseekApiKey: {
+      type: String,
+      default: ''
+    },
     claudeApiKey: {
       type: String,
       default: ''

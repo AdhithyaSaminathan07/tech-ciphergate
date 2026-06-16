@@ -125,12 +125,75 @@ const initializeServerCronJobs = () => {
     }
   });
 
+  // ──────────────────────────────────────────────────────────
+  // JOB 6: Connection Integrity Validation — runs every 6 hours
+  // Verifies STS AssumeRole access and Organization listing permissions
+  // ──────────────────────────────────────────────────────────
+  cron.schedule('0 */6 * * *', async () => {
+    console.log('[Cron] ▶ Running connection integrity validations (STS & Organizations)...');
+    try {
+      const accounts = await AwsAccount.find({});
+      if (accounts.length === 0) return;
+
+      const AwsAuditLog = require('../models/AwsAuditLog');
+
+      for (const account of accounts) {
+        // Skip validation if account has never been verified (still in Pending state)
+        if (account.connectionStatus === 'Pending') continue;
+
+        try {
+          // 1. Verify STS AssumeRole credentials
+          const verification = await awsService.verifyCredentials(
+            account.iamRoleArn,
+            account.externalId,
+            account.awsAccountId
+          );
+
+          // 2. Verify Organization access (if it has orgId)
+          if (account.orgId) {
+            await awsService.discoverOrganizationAccounts(
+              account.awsAccountId,
+              account.iamRoleArn,
+              account.externalId
+            );
+          }
+
+          // If validation succeeded:
+          account.connectionStatus = 'Connected';
+          account.errorMessage = null;
+          account.lastVerifiedAt = new Date();
+          await account.save();
+
+        } catch (validationError) {
+          // Set status to Failed but DO NOT disconnect or delete the settings
+          account.connectionStatus = 'Failed';
+          account.errorMessage = validationError.message;
+          await account.save();
+
+          // Log Audit Failure Log
+          const audit = new AwsAuditLog({
+            subdomain: account.subdomain,
+            action: 'connection_validation_failed',
+            targetType: 'AwsAccount',
+            targetId: account._id.toString(),
+            newState: account.toObject()
+          });
+          await audit.save();
+          console.error(`[Cron] ❌ Validation failed for account ${account.awsAccountId}: ${validationError.message}`);
+        }
+      }
+    } catch (error) {
+      console.error('[Cron] Connection validation background process error:', error.message);
+    }
+  });
+
   console.log('✅ AWS FinOps Cron Jobs Initialized:');
   console.log('   • 01:00 AM daily  → Billing cost sync');
   console.log('   • 02:00 AM daily  → Anomaly detection');
   console.log('   • 02:30 AM daily  → Forecast recalculation');
   console.log('   • Every 6 hours   → Resource inventory refresh');
   console.log('   • Sunday 03:00 AM → Optimization recommendations');
+  console.log('   • Every 6 hours   → Connection integrity validation');
 };
 
 module.exports = {

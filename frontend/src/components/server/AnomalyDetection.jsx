@@ -137,15 +137,22 @@ const AnomalyDetection = () => {
                   <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} tickLine={false} />
                   <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} />
                   <Tooltip contentStyle={{ background: '#fff', borderRadius: '12px', border: '1px solid #f1f5f9', fontSize: '11px' }} />
-                  {/* Mark the RDS spike date if it exists */}
-                  {trendData.some(d => d['AmazonRDS'] > 400) && (
-                    <ReferenceLine
-                      x={trendData.find(d => d['AmazonRDS'] > 400)?.date}
-                      stroke="#ef4444"
-                      strokeDasharray="4 2"
-                      label={{ value: '⚡ Spike', fill: '#ef4444', fontSize: 10, position: 'top' }}
-                    />
-                  )}
+                  {/* Mark active anomaly dates dynamically */}
+                  {anomalies.filter(a => a.status === 'Active').map(anom => {
+                    const dateStr = new Date(anom.date).toISOString().split('T')[0];
+                    if (trendData.some(d => d.date === dateStr)) {
+                      return (
+                        <ReferenceLine
+                          key={anom._id}
+                          x={dateStr}
+                          stroke="#ef4444"
+                          strokeDasharray="4 2"
+                          label={{ value: '⚡ Spike', fill: '#ef4444', fontSize: 10, position: 'top' }}
+                        />
+                      );
+                    }
+                    return null;
+                  })}
                   <Area type="monotone" dataKey="total" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#anomalyGrad)" />
                 </AreaChart>
               </ResponsiveContainer>

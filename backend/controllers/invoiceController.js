@@ -122,6 +122,49 @@ const updateInvoice = async (req, res) => {
       updateData.actualDate = parseInvoiceDate(updateData.invoiceDate);
     }
 
+    // Handle multi-proof appending for stage details
+    const stageFields = ['paymentDetails', 'workDetails', 'closureDetails'];
+    let needsProofAppend = false;
+    let existingInvoice = null;
+
+    for (const field of stageFields) {
+      if (updateData[field] && updateData[field].proof) {
+        needsProofAppend = true;
+        break;
+      }
+    }
+
+    if (needsProofAppend) {
+      existingInvoice = await Invoice.findById(id);
+      if (!existingInvoice) {
+        return res.status(404).json({ success: false, message: 'Invoice not found' });
+      }
+
+      for (const field of stageFields) {
+        if (updateData[field] && updateData[field].proof) {
+          // Get existing proofs array (handle legacy single proof too)
+          const existingProofs = (existingInvoice[field] && existingInvoice[field].proofs) 
+            ? [...existingInvoice[field].proofs] 
+            : [];
+          
+          // If there's a legacy single proof and proofs array is empty, include it
+          if (existingProofs.length === 0 && existingInvoice[field] && existingInvoice[field].proof) {
+            existingProofs.push({ date: existingInvoice[field].date || existingInvoice.createdAt, url: existingInvoice[field].proof });
+          }
+
+          // Append the new proof
+          existingProofs.push({ date: updateData[field].date || new Date(), url: updateData[field].proof });
+
+          // Replace updateData field with proofs array (keep date, remove single proof)
+          updateData[field] = {
+            date: updateData[field].date || new Date(),
+            proof: updateData[field].proof,  // Keep latest single proof for backward compat
+            proofs: existingProofs
+          };
+        }
+      }
+    }
+
     const invoice = await Invoice.findByIdAndUpdate(
       id,
       updateData,

@@ -41,15 +41,15 @@ const checkAndResetAiCounters = (settings) => {
 };
 
 /**
- * Executes a text completion with Claude, falling back to DeepSeek if needed.
+ * Executes a text completion with DeepSeek.
  * Ensures strict isolation by subdomain and enforces daily/monthly API cost limits.
- * 
+ *
  * @param {string} subdomain - Company subdomain context
  * @param {string} systemPrompt - Instructions for the AI behavior
  * @param {string} userPrompt - Context/query details
  * @returns {Promise<string>} AI response text
  */
-const generateCompletion = async (subdomain, systemPrompt, userPrompt) => {
+const generateCompletion = async (subdomain, systemPrompt, userPrompt, options = {}) => {
   if (!subdomain || subdomain === 'main') {
     throw new Error('Invalid subdomain context');
   }
@@ -93,46 +93,64 @@ const generateCompletion = async (subdomain, systemPrompt, userPrompt) => {
   settings.markModified('aiConfig');
   await settings.save();
 
-  // 2. Select API Key & Endpoint
-  const settingsClaudeKey = settings.aiConfig.claudeApiKey;
-  const envClaudeKey = process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY;
-  const key = settingsClaudeKey || envClaudeKey;
+  // 2. Select API Key & Endpoint. Prefer .env so the shared low-cost DeepSeek key is used by default.
+  const key = process.env.DEEPSEEK_API_KEY || settings.aiConfig.deepseekApiKey;
 
   if (!key) {
-    throw new Error('Claude API key is not configured in the settings or environment.');
+    throw new Error('DeepSeek API key is not configured. Set DEEPSEEK_API_KEY in the backend .env or add it in AI settings.');
   }
 
-  console.log(`[AI Service] Invoking Claude API...`);
-  try {
-    const response = await axios.post(
-      'https://api.anthropic.com/v1/messages',
-      {
-        model: 'claude-sonnet-4-6',
-        max_tokens: 4000,
-        system: systemPrompt,
-        messages: [
-          { role: 'user', content: userPrompt }
-        ]
-      },
-      {
-        headers: {
-          'x-api-key': key,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json'
-        },
-        timeout: 45000
-      }
-    );
+  const payload = {
+    model: options.model || process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+    max_tokens: options.maxTokens || 2500,
+    temperature: options.temperature ?? 0.2,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ]
+  };
 
-    const content = response.data?.content;
-    if (Array.isArray(content) && content.length > 0) {
-      return content[0].text;
+  if (options.responseFormat) {
+    payload.response_format = options.responseFormat;
+  }
+
+  const callDeepSeek = async (requestPayload) => axios.post(
+    'https://api.deepseek.com/v1/chat/completions',
+    requestPayload,
+    {
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'content-type': 'application/json'
+      },
+      timeout: options.timeoutMs || 30000
     }
-    throw new Error('Claude response format unexpected');
+  );
+
+  console.log(`[AI Service] Invoking DeepSeek API (${payload.model})...`);
+  try {
+    let response;
+    try {
+      response = await callDeepSeek(payload);
+    } catch (error) {
+      if (!options.responseFormat || error.response?.status !== 400) {
+        throw error;
+      }
+
+      const retryPayload = { ...payload };
+      delete retryPayload.response_format;
+      console.warn('[AI Service] DeepSeek JSON mode rejected; retrying without response_format.');
+      response = await callDeepSeek(retryPayload);
+    }
+
+    const content = response.data?.choices?.[0]?.message?.content;
+    if (content) {
+      return content;
+    }
+    throw new Error('DeepSeek response format unexpected');
   } catch (error) {
-    console.error('[AI Service] Claude API error:', error.response?.data || error.message);
+    console.error('[AI Service] DeepSeek API error:', error.response?.data || error.message);
     const apiErrorMsg = error.response?.data?.error?.message || error.message;
-    throw new Error(`Claude API request failed: ${apiErrorMsg}`);
+    throw new Error(`DeepSeek API request failed: ${apiErrorMsg}`);
   }
 };
 

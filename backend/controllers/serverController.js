@@ -9,7 +9,20 @@ const asyncHandler = require('express-async-handler');
 const getAccounts = asyncHandler(async (req, res) => {
   const subdomain = req.user.subdomain;
   const accounts = await AwsAccount.find({ subdomain }).sort({ createdAt: -1 });
-  res.json(accounts);
+
+  const accountsWithPolicies = await Promise.all(accounts.map(async (acc) => {
+    const docObj = acc.toObject();
+    try {
+      const policyData = await awsService.generateTrustPolicy(acc.externalId);
+      docObj.principalArn = policyData.principalArn;
+      docObj.policyDocument = policyData.policyDocument;
+    } catch (err) {
+      console.warn(`[getAccounts] Failed to generate trust policy for account ${acc.awsAccountId}:`, err.message);
+    }
+    return docObj;
+  }));
+
+  res.json(accountsWithPolicies);
 });
 
 // @desc    Register a new AWS account (generates ExternalID)
@@ -55,7 +68,16 @@ const createAccount = asyncHandler(async (req, res) => {
   });
   await audit.save();
 
-  res.status(201).json(account);
+  const docObj = account.toObject();
+  try {
+    const policyData = await awsService.generateTrustPolicy(account.externalId);
+    docObj.principalArn = policyData.principalArn;
+    docObj.policyDocument = policyData.policyDocument;
+  } catch (err) {
+    console.warn(`[createAccount] Failed to generate trust policy for new account:`, err.message);
+  }
+
+  res.status(201).json(docObj);
 });
 
 // @desc    Verify and establish assume-role connection via STS
@@ -90,6 +112,7 @@ const verifyAccount = asyncHandler(async (req, res) => {
     account.connectionStatus = 'Connected';
     account.regions = verification.detectedRegions;
     account.lastSyncedAt = new Date();
+    account.lastVerifiedAt = new Date();
     account.errorMessage = null;
 
     await account.save();
@@ -106,10 +129,17 @@ const verifyAccount = asyncHandler(async (req, res) => {
     });
     await audit.save();
 
+    const docObj = account.toObject();
+    try {
+      const policyData = await awsService.generateTrustPolicy(account.externalId);
+      docObj.principalArn = policyData.principalArn;
+      docObj.policyDocument = policyData.policyDocument;
+    } catch (e) {}
+
     res.json({
       success: true,
       message: 'AWS connection established and verified successfully',
-      account
+      account: docObj
     });
   } catch (err) {
     account.iamRoleArn = iamRoleArn;
@@ -129,10 +159,17 @@ const verifyAccount = asyncHandler(async (req, res) => {
     });
     await audit.save();
 
+    const docObj = account.toObject();
+    try {
+      const policyData = await awsService.generateTrustPolicy(account.externalId);
+      docObj.principalArn = policyData.principalArn;
+      docObj.policyDocument = policyData.policyDocument;
+    } catch (e) {}
+
     res.status(400).json({
       success: false,
       message: err.message,
-      account
+      account: docObj
     });
   }
 });
@@ -167,51 +204,102 @@ const deleteAccount = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'AWS account registry deleted successfully' });
 });
 
+// @desc    Register and initialize a new AWS Organization Master account (generates ExternalID)
+// @route   POST /api/server/organizations/initialize
+// @access  Private (Admin Only)
+const initializeOrganization = asyncHandler(async (req, res) => {
+  const { name, awsAccountId } = req.body;
+  const subdomain = req.user.subdomain;
+
+  if (!name || !awsAccountId) {
+    res.status(400);
+    throw new Error('Please provide display name and a 12-digit AWS Master Account ID');
+  }
+
+  if (!/^\d{12}$/.test(awsAccountId)) {
+    res.status(400);
+    throw new Error('AWS Account ID must be exactly 12 digits');
+  }
+
+  // Check if account is already registered under this subdomain
+  let masterAccount = await AwsAccount.findOne({ subdomain, awsAccountId });
+
+  if (masterAccount) {
+    // If it exists but is not marked as Org Master, we update it
+    masterAccount.name = name;
+    masterAccount.isOrgMaster = true;
+    masterAccount.orgId = masterAccount.orgId || 'Pending-Sync';
+    await masterAccount.save();
+  } else {
+    // Generate secure external ID
+    const externalId = awsService.generateExternalId();
+
+    masterAccount = new AwsAccount({
+      subdomain,
+      awsAccountId,
+      name,
+      externalId,
+      isOrgMaster: true,
+      orgId: 'Pending-Sync',
+      connectionStatus: 'Pending'
+    });
+
+    await masterAccount.save();
+  }
+
+  // Create Audit Log
+  const audit = new AwsAuditLog({
+    subdomain,
+    userId: req.user._id,
+    action: 'initialize_aws_organization',
+    targetType: 'AwsAccount',
+    targetId: masterAccount._id.toString(),
+    newState: masterAccount.toObject()
+  });
+  await audit.save();
+
+  // Return the account with dynamically calculated trust policy
+  const docObj = masterAccount.toObject();
+  try {
+    const policyData = await awsService.generateTrustPolicy(masterAccount.externalId);
+    docObj.principalArn = policyData.principalArn;
+    docObj.policyDocument = policyData.policyDocument;
+  } catch (err) {
+    console.warn(`[initializeOrganization] Failed to generate trust policy:`, err.message);
+  }
+
+  res.status(201).json(docObj);
+});
+
 // @desc    Scan and register linked accounts from AWS Organizations
 // @route   POST /api/server/organizations/scan
 // @access  Private (Admin Only)
 const scanOrganization = asyncHandler(async (req, res) => {
-  const { masterAccountId, masterRoleArn } = req.body;
+  const { masterAccountId } = req.body;
   const subdomain = req.user.subdomain;
 
-  if (!masterAccountId || !masterRoleArn) {
+  if (!masterAccountId) {
     res.status(400);
-    throw new Error('Master Account ID and Master Role ARN are required');
+    throw new Error('Master Account ID is required');
   }
 
-  // Retrieve or generate externalId for organizations setup
-  let masterAccount = await AwsAccount.findOne({ subdomain, awsAccountId: masterAccountId });
-
+  // Retrieve Master Account record
+  let masterAccount = await AwsAccount.findOne({ subdomain, awsAccountId: masterAccountId, isOrgMaster: true });
   if (!masterAccount) {
-    const externalId = awsService.generateExternalId();
-    masterAccount = new AwsAccount({
-      subdomain,
-      awsAccountId: masterAccountId,
-      name: 'Org Billing Master',
-      externalId,
-      orgId: 'Pending-Sync'
-    });
-    await masterAccount.save();
+    res.status(404);
+    throw new Error('Master AWS Account connection not found or not initialized');
+  }
+
+  if (masterAccount.connectionStatus !== 'Connected' || !masterAccount.iamRoleArn) {
+    res.status(400);
+    throw new Error('Master account connection must be verified and connected first');
   }
 
   try {
-    // Verify master role access first
-    const verification = await awsService.verifyCredentials(
-      masterRoleArn,
-      masterAccount.externalId,
-      masterAccountId
-    );
-
-    masterAccount.iamRoleArn = masterRoleArn;
-    masterAccount.connectionStatus = 'Connected';
-    masterAccount.regions = verification.detectedRegions;
-    masterAccount.lastSyncedAt = new Date();
-    masterAccount.errorMessage = null;
-
     // Discover child accounts under this organization
     const discovered = await awsService.discoverOrganizationAccounts(
       masterAccountId,
-      masterRoleArn,
+      masterAccount.iamRoleArn,
       masterAccount.externalId
     );
 
@@ -221,7 +309,16 @@ const scanOrganization = asyncHandler(async (req, res) => {
       if (child.isMaster) {
         masterAccount.orgId = child.orgId;
         await masterAccount.save();
-        results.push(masterAccount);
+        
+        // Append policy document dynamic details
+        const docObj = masterAccount.toObject();
+        try {
+          const policyData = await awsService.generateTrustPolicy(masterAccount.externalId);
+          docObj.principalArn = policyData.principalArn;
+          docObj.policyDocument = policyData.policyDocument;
+        } catch (e) {}
+        
+        results.push(docObj);
         continue;
       }
 
@@ -241,7 +338,15 @@ const scanOrganization = asyncHandler(async (req, res) => {
         childDoc.orgId = child.orgId;
         await childDoc.save();
       }
-      results.push(childDoc);
+      
+      const childObj = childDoc.toObject();
+      try {
+        const policyData = await awsService.generateTrustPolicy(childDoc.externalId);
+        childObj.principalArn = policyData.principalArn;
+        childObj.policyDocument = policyData.policyDocument;
+      } catch (e) {}
+      
+      results.push(childObj);
     }
 
     // Audit Log
@@ -280,52 +385,113 @@ const getCostLakeStatus = asyncHandler(async (req, res) => {
   const CostHistory = require('../models/CostHistory');
   const ResourceCost = require('../models/ResourceCost');
 
+  // Connected accounts
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+  const accountCount = connectedAccounts.length;
+
   // Real data counts
-  const costHistoryCount = await CostHistory.countDocuments({ subdomain });
-  const resourceCostCount = await ResourceCost.countDocuments({ subdomain });
+  const costHistoryCount = await CostHistory.countDocuments({ subdomain, awsAccountId: { $in: activeAccountIds } });
+  const resourceCostCount = await ResourceCost.countDocuments({ subdomain, awsAccountId: { $in: activeAccountIds } });
   const totalRecords = costHistoryCount + resourceCostCount;
 
   // Determine last sync from most recent CostHistory entry
-  const latestEntry = await CostHistory.findOne({ subdomain }).sort({ createdAt: -1 });
+  const latestEntry = await CostHistory.findOne({ subdomain, awsAccountId: { $in: activeAccountIds } }).sort({ createdAt: -1 });
   const lastSync = latestEntry?.createdAt || null;
-
-  // Connected accounts (Athena/Glue only "active" if data exists)
-  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
-  const accountCount = connectedAccounts.length;
 
   const hasCostData = totalRecords > 0;
 
-  res.json({
-    cur: {
+  // Set default discovered capabilities
+  const discovered = {
+    organizations: {
       status: accountCount > 0 ? 'Configured' : 'Not Configured',
       description: accountCount > 0
         ? `${accountCount} account(s) delivering Cost & Usage Reports`
-        : 'No accounts connected. Add and verify an AWS account first.',
-      accountCount,
+        : 'No accounts connected. Add and verify an AWS account first.'
     },
     s3: {
       status: hasCostData ? 'Active' : (accountCount > 0 ? 'Ready' : 'Not Configured'),
       bucket: subdomain ? `cg-finops-cost-lake-${subdomain}` : 'Not configured',
-      totalRecords,
-      costHistoryRecords: costHistoryCount,
-      resourceCostRecords: resourceCostCount,
-      description: hasCostData
+      details: hasCostData
         ? `${totalRecords.toLocaleString()} billing records stored`
-        : 'No billing data yet. Trigger a sync to populate the Cost Lake.',
+        : 'No billing data yet. Trigger a sync to populate the Cost Lake.'
     },
     glue: {
       status: hasCostData ? 'Cataloged' : (accountCount > 0 ? 'Idle' : 'Unconfigured'),
       database: 'cur_billing_catalog',
-      description: hasCostData
+      details: hasCostData
         ? 'Billing schema cataloged and queryable via Athena'
-        : 'Catalog will populate after first sync.',
+        : 'Catalog will populate after first sync.'
     },
     athena: {
       status: hasCostData ? 'Ready' : (accountCount > 0 ? 'Waiting' : 'Unconfigured'),
       workgroup: 'ciphergate-finops-wg',
-      description: hasCostData
+      details: hasCostData
         ? 'Cost Lake is queryable. Run sync to refresh Athena partitions.'
-        : 'Athena will be ready after the Cost Lake is populated.',
+        : 'Athena will be ready after the Cost Lake is populated.'
+    }
+  };
+
+  // Perform live AWS resources capability check if we have a connected account
+  if (accountCount > 0) {
+    try {
+      const primaryAccount = connectedAccounts[0];
+      const verification = await awsService.verifyCredentials(
+        primaryAccount.iamRoleArn,
+        primaryAccount.externalId,
+        primaryAccount.awsAccountId
+      );
+      if (verification.success && verification.credentials) {
+        const caps = await awsService.discoverBillingCapability(verification.credentials);
+        
+        discovered.organizations = {
+          status: caps.organizations.status === 'Active' ? 'Configured' : caps.organizations.status,
+          details: caps.organizations.details
+        };
+        discovered.s3 = {
+          status: caps.s3.status === 'Active' ? (hasCostData ? 'Active' : 'Ready') : caps.s3.status,
+          bucket: caps.s3.bucket !== 'None' ? caps.s3.bucket : `cg-finops-cost-lake-${subdomain}`,
+          details: caps.s3.details
+        };
+        discovered.glue = {
+          status: caps.glue.status,
+          database: caps.glue.database !== 'None' ? caps.glue.database : 'cur_billing_catalog',
+          details: caps.glue.details
+        };
+        discovered.athena = {
+          status: caps.athena.status,
+          workgroup: caps.athena.workgroup !== 'None' ? caps.athena.workgroup : 'ciphergate-finops-wg',
+          details: caps.athena.details
+        };
+      }
+    } catch (err) {
+      console.warn(`[getCostLakeStatus] Live discovery failed, using standard fallback status: ${err.message}`);
+    }
+  }
+
+  res.json({
+    cur: {
+      status: discovered.organizations.status,
+      description: discovered.organizations.description || discovered.organizations.details,
+      accountCount,
+    },
+    s3: {
+      status: discovered.s3.status,
+      bucket: discovered.s3.bucket,
+      totalRecords,
+      costHistoryRecords: costHistoryCount,
+      resourceCostRecords: resourceCostCount,
+      description: discovered.s3.description || discovered.s3.details,
+    },
+    glue: {
+      status: discovered.glue.status,
+      database: discovered.glue.database,
+      description: discovered.glue.description || discovered.glue.details,
+    },
+    athena: {
+      status: discovered.athena.status,
+      workgroup: discovered.athena.workgroup,
+      description: discovered.athena.description || discovered.athena.details,
     },
     sync: {
       lastSync,
@@ -345,6 +511,9 @@ const getCostsSummary = asyncHandler(async (req, res) => {
   const AwsRecommendation = require('../models/AwsRecommendation');
   const AwsAnomaly = require('../models/AwsAnomaly');
 
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+
   const now = new Date();
   const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -356,26 +525,26 @@ const getCostsSummary = asyncHandler(async (req, res) => {
   const [mtdAgg, lmAgg, dailyAgg, savingsAgg, activeAnomalies] = await Promise.all([
     // MTD spend
     CostHistory.aggregate([
-      { $match: { subdomain, date: { $gte: startOfCurrentMonth } } },
+      { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, date: { $gte: startOfCurrentMonth } } },
       { $group: { _id: null, total: { $sum: '$cost' } } }
     ]),
     // Last Month spend
     CostHistory.aggregate([
-      { $match: { subdomain, date: { $gte: startOfLastMonth, $lte: endOfLastMonth } } },
+      { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, date: { $gte: startOfLastMonth, $lte: endOfLastMonth } } },
       { $group: { _id: null, total: { $sum: '$cost' } } }
     ]),
     // Daily cost (last 30 days)
     CostHistory.aggregate([
-      { $match: { subdomain, date: { $gte: thirtyDaysAgo } } },
+      { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, date: { $gte: thirtyDaysAgo } } },
       { $group: { _id: null, total: { $sum: '$cost' } } }
     ]),
     // Real total savings opportunity from active recommendations
     AwsRecommendation.aggregate([
-      { $match: { subdomain, status: 'Active' } },
+      { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, status: 'Active' } },
       { $group: { _id: null, totalSavings: { $sum: '$monthlySavings' }, count: { $sum: 1 } } }
     ]),
     // Count active anomalies
-    AwsAnomaly.countDocuments({ subdomain, status: 'Active' })
+    AwsAnomaly.countDocuments({ subdomain, awsAccountId: { $in: activeAccountIds }, status: 'Active' })
   ]);
 
   const mtdSpend = mtdAgg[0]?.total || 0;
@@ -404,6 +573,9 @@ const getCostsTrend = asyncHandler(async (req, res) => {
   const { range } = req.query;
   const CostHistory = require('../models/CostHistory');
 
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+
   const now = new Date();
   let startDate = new Date();
   if (range === '7d') startDate.setDate(now.getDate() - 7);
@@ -413,7 +585,7 @@ const getCostsTrend = asyncHandler(async (req, res) => {
   startDate.setHours(0, 0, 0, 0);
 
   const data = await CostHistory.aggregate([
-    { $match: { subdomain, date: { $gte: startDate } } },
+    { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, date: { $gte: startDate } } },
     {
       $group: {
         _id: { date: '$date', service: '$service' },
@@ -514,7 +686,10 @@ const getInventory = asyncHandler(async (req, res) => {
   const AwsResource = require('../models/AwsResource');
   const { type, accountId, region, search, page = 1, limit = 20 } = req.query;
 
-  const query = { subdomain };
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+
+  const query = { subdomain, awsAccountId: { $in: activeAccountIds } };
   if (type) query.type = type;
   if (accountId) query.awsAccountId = accountId;
   if (region) query.region = region;
@@ -547,7 +722,10 @@ const getRelationships = asyncHandler(async (req, res) => {
   const subdomain = req.user.subdomain;
   const ResourceRelationship = require('../models/ResourceRelationship');
 
-  const relations = await ResourceRelationship.find({ subdomain });
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+
+  const relations = await ResourceRelationship.find({ subdomain, awsAccountId: { $in: activeAccountIds } });
   res.json(relations);
 });
 
@@ -558,6 +736,9 @@ const getCostsAttribution = asyncHandler(async (req, res) => {
   const subdomain = req.user.subdomain;
   const { groupBy = 'Project' } = req.query;
 
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+
   const CostHistory = require('../models/CostHistory');
   const ResourceCost = require('../models/ResourceCost');
 
@@ -565,20 +746,20 @@ const getCostsAttribution = asyncHandler(async (req, res) => {
 
   if (groupBy.toLowerCase() === 'namespace') {
     results = await ResourceCost.aggregate([
-      { $match: { subdomain, containerNamespace: { $ne: null } } },
+      { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, containerNamespace: { $ne: null } } },
       { $group: { _id: '$containerNamespace', total: { $sum: '$cost' } } },
       { $sort: { total: -1 } }
     ]);
   } else if (groupBy.toLowerCase() === 'pod') {
     results = await ResourceCost.aggregate([
-      { $match: { subdomain, containerPodName: { $ne: null } } },
+      { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, containerPodName: { $ne: null } } },
       { $group: { _id: '$containerPodName', total: { $sum: '$cost' } } },
       { $sort: { total: -1 } }
     ]);
   } else {
     const tagKey = `tags.${groupBy}`;
     results = await CostHistory.aggregate([
-      { $match: { subdomain, [tagKey]: { $exists: true, $ne: null } } },
+      { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, [tagKey]: { $exists: true, $ne: null } } },
       { $group: { _id: `$${tagKey}`, total: { $sum: '$cost' } } },
       { $sort: { total: -1 } }
     ]);
@@ -602,6 +783,9 @@ const getTopResources = asyncHandler(async (req, res) => {
   const ResourceCost = require('../models/ResourceCost');
   const AwsResource = require('../models/AwsResource');
 
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -609,6 +793,7 @@ const getTopResources = asyncHandler(async (req, res) => {
     {
       $match: {
         subdomain,
+        awsAccountId: { $in: activeAccountIds },
         date: { $gte: thirtyDaysAgo }
       }
     },
@@ -627,6 +812,7 @@ const getTopResources = asyncHandler(async (req, res) => {
   const resourceIds = topCosts.map(c => c._id);
   const resources = await AwsResource.find({
     subdomain,
+    awsAccountId: { $in: activeAccountIds },
     resourceId: { $in: resourceIds }
   });
 
@@ -660,8 +846,11 @@ const getTagCompliance = asyncHandler(async (req, res) => {
   const subdomain = req.user.subdomain;
   const AwsResource = require('../models/AwsResource');
 
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+
   const requiredTags = ['Project', 'Environment', 'Team', 'Owner', 'Application', 'CostCenter'];
-  const resources = await AwsResource.find({ subdomain });
+  const resources = await AwsResource.find({ subdomain, awsAccountId: { $in: activeAccountIds } });
 
   if (resources.length === 0) {
     return res.json({
@@ -726,7 +915,10 @@ const getRecommendations = asyncHandler(async (req, res) => {
   const AwsRecommendation = require('../models/AwsRecommendation');
   const { type, status } = req.query;
 
-  const query = { subdomain };
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+
+  const query = { subdomain, awsAccountId: { $in: activeAccountIds } };
   if (type) query.recommendationType = type;
   if (status) query.status = status;
 
@@ -742,7 +934,10 @@ const getRecommendationById = asyncHandler(async (req, res) => {
   const AwsRecommendation = require('../models/AwsRecommendation');
   const ApprovalWorkflow = require('../models/ApprovalWorkflow');
 
-  const recommendation = await AwsRecommendation.findOne({ _id: req.params.id, subdomain });
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+
+  const recommendation = await AwsRecommendation.findOne({ _id: req.params.id, subdomain, awsAccountId: { $in: activeAccountIds } });
   if (!recommendation) {
     res.status(404);
     throw new Error('Recommendation not found');
@@ -767,7 +962,10 @@ const approveRecommendation = asyncHandler(async (req, res) => {
   const iacService = require('../services/iacService');
   const AwsAuditLog = require('../models/AwsAuditLog');
 
-  const recommendation = await AwsRecommendation.findOne({ _id: req.params.id, subdomain });
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+
+  const recommendation = await AwsRecommendation.findOne({ _id: req.params.id, subdomain, awsAccountId: { $in: activeAccountIds } });
   if (!recommendation) {
     res.status(404);
     throw new Error('Recommendation not found');
@@ -835,7 +1033,10 @@ const rejectRecommendation = asyncHandler(async (req, res) => {
   const ApprovalWorkflow = require('../models/ApprovalWorkflow');
   const AwsAuditLog = require('../models/AwsAuditLog');
 
-  const recommendation = await AwsRecommendation.findOne({ _id: req.params.id, subdomain });
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+
+  const recommendation = await AwsRecommendation.findOne({ _id: req.params.id, subdomain, awsAccountId: { $in: activeAccountIds } });
   if (!recommendation) {
     res.status(404);
     throw new Error('Recommendation not found');
@@ -892,7 +1093,10 @@ const getAnomalies = asyncHandler(async (req, res) => {
   const AwsAnomaly = require('../models/AwsAnomaly');
   const { status, severity } = req.query;
 
-  const query = { subdomain };
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+
+  const query = { subdomain, awsAccountId: { $in: activeAccountIds } };
   if (status) query.status = status;
   if (severity) query.severity = severity;
 
@@ -914,7 +1118,10 @@ const resolveAnomaly = asyncHandler(async (req, res) => {
     throw new Error('Please provide a reason/explanation for resolving the anomaly.');
   }
 
-  const anomaly = await AwsAnomaly.findOne({ _id: req.params.id, subdomain });
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+
+  const anomaly = await AwsAnomaly.findOne({ _id: req.params.id, subdomain, awsAccountId: { $in: activeAccountIds } });
   if (!anomaly) {
     res.status(404);
     throw new Error('Anomaly not found');
@@ -952,7 +1159,10 @@ const getForecasts = asyncHandler(async (req, res) => {
   const subdomain = req.user.subdomain;
   const AwsForecast = require('../models/AwsForecast');
 
-  const forecasts = await AwsForecast.find({ subdomain }).sort({ targetDate: 1 });
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+
+  const forecasts = await AwsForecast.find({ subdomain, awsAccountId: { $in: activeAccountIds } }).sort({ targetDate: 1 });
   res.json(forecasts);
 });
 
@@ -1080,6 +1290,7 @@ module.exports = {
   verifyAccount,
   deleteAccount,
   scanOrganization,
+  initializeOrganization,
   getCostsSummary,
   getCostsTrend,
   triggerSyncJob,

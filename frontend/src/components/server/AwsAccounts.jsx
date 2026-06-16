@@ -120,19 +120,7 @@ const AwsAccounts = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const getPolicyTemplate = (externalId) => {
-    return JSON.stringify({
-      Version: "2012-10-17",
-      Statement: [{
-        Effect: "Allow",
-        Principal: { AWS: "arn:aws:iam::888888888888:root" },
-        Action: "sts:AssumeRole",
-        Condition: {
-          StringEquals: { "sts:ExternalId": externalId }
-        }
-      }]
-    }, null, 2);
-  };
+  // Policy template is now retrieved dynamically from the backend
 
   return (
     <div className="space-y-6">
@@ -182,6 +170,7 @@ const AwsAccounts = () => {
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Display Name</label>
                 <input
+                  id="display-name-input"
                   type="text"
                   placeholder="e.g. CipherGate-Production"
                   value={formName}
@@ -234,10 +223,11 @@ const AwsAccounts = () => {
                 <div className="flex justify-between items-center text-xs bg-slate-800 p-2 rounded-lg border border-slate-700">
                   <span className="text-slate-400 font-medium">CipherGate Role ARN:</span>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-slate-200">arn:aws:iam::888888888888:root</span>
+                    <span className="font-mono text-slate-200">{activeAccountForSetup.principalArn || 'Loading...'}</span>
                     <button 
-                      onClick={() => handleCopyToClipboard('arn:aws:iam::888888888888:root', 'arn')}
+                      onClick={() => handleCopyToClipboard(activeAccountForSetup.principalArn || '', 'arn')}
                       className="text-slate-400 hover:text-teal-400 transition"
+                      disabled={!activeAccountForSetup.principalArn}
                     >
                       <FiCopy size={13} />
                     </button>
@@ -261,8 +251,18 @@ const AwsAccounts = () => {
               <div>
                 <span className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Trust Relationship Document</span>
                 <pre className="text-[10px] bg-slate-950 p-3 rounded-lg overflow-x-auto text-slate-300 border border-slate-900 font-mono leading-normal max-h-36">
-                  {getPolicyTemplate(activeAccountForSetup.externalId)}
+                  {activeAccountForSetup.policyDocument || 'Loading trust policy...'}
                 </pre>
+                {activeAccountForSetup.policyDocument && (
+                  <button
+                    type="button"
+                    onClick={() => handleCopyToClipboard(activeAccountForSetup.policyDocument, 'policy')}
+                    className="mt-2 text-[10px] font-bold text-teal-400 hover:text-teal-300 flex items-center gap-1.5 transition"
+                  >
+                    <FiCopy size={11} />
+                    <span>Copy Document</span>
+                  </button>
+                )}
               </div>
 
               <div className="pt-2">
@@ -309,8 +309,20 @@ const AwsAccounts = () => {
             ) : accounts.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-center">
                 <FiKey className="w-10 h-10 text-slate-300 mb-3" />
-                <h3 className="text-slate-700 font-bold text-sm">No connected AWS Accounts</h3>
-                <p className="text-slate-400 text-xs mt-1 max-w-xs">Initialize your configuration by filling out the AWS credentials registry on the left.</p>
+                <h3 className="text-slate-700 font-bold text-sm">No AWS Accounts Connected</h3>
+                <p className="text-slate-400 text-xs mt-1 mb-4 max-w-xs">Initialize your configuration by filling out the AWS credentials registry on the left.</p>
+                <button
+                  onClick={() => {
+                    const input = document.getElementById('display-name-input');
+                    if (input) {
+                      input.focus();
+                      input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                  }}
+                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl transition shadow-sm active:scale-95"
+                >
+                  Connect AWS Account
+                </button>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -350,16 +362,12 @@ const AwsAccounts = () => {
                       </div>
 
                       <div className="mt-4 space-y-3">
-                        {acc.iamRoleArn ? (
-                          <div className="text-[11px] bg-slate-50 p-2 rounded-lg border border-slate-100/50 flex justify-between items-center">
-                            <span className="text-slate-500 truncate font-mono max-w-[200px]">{acc.iamRoleArn}</span>
-                            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{acc.regions?.length || 0} Regions</span>
-                          </div>
-                        ) : (
-                          <div className="text-xs text-slate-500">
-                            Configure trust policy and assign IAM role below to synchronize resources.
-                          </div>
-                        )}
+                        <div className="text-[11px] text-slate-600 space-y-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-100/50">
+                          <div className="truncate"><strong>Role ARN:</strong> <span className="font-mono text-slate-500" title={acc.iamRoleArn}>{acc.iamRoleArn || 'Pending Config'}</span></div>
+                          <div><strong>External ID:</strong> <span className="font-mono text-slate-500">{acc.externalId}</span></div>
+                          <div><strong>Last Verified:</strong> <span className="text-slate-500">{acc.lastVerifiedAt ? new Date(acc.lastVerifiedAt).toLocaleString() : 'Never'}</span></div>
+                          <div><strong>Last Sync:</strong> <span className="text-slate-500">{acc.lastSyncedAt ? new Date(acc.lastSyncedAt).toLocaleString() : 'Never'}</span></div>
+                        </div>
 
                         {/* Input Role Verification in card */}
                         <div className="flex gap-2 pt-2 border-t border-slate-100/50">
