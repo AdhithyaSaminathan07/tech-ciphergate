@@ -11,6 +11,139 @@ const ProjectPaymentLedger = require('../models/ProjectPaymentLedger');
 const { calculateWorkerProductivity } = require('../utils/productivityCalculator');
 const Ticket = require('../models/ticketModel');
 
+// ─── Helper: Calculate 5X Unauthorized Absence Penalty ─────────────────────
+// Applies ONLY to past days where employee was absent (no punch-in),
+// has no Approved leave, no Pending leave, AND either has a Rejected leave
+// or submitted no leave at all.
+// Permissions are completely excluded — this applies to full-day Leaves only.
+const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves, attendanceData, holidays) => {
+  const penalties = [];
+  let totalPenalty = 0;
+
+  // Get today's date in IST (same timezone as the rest of the app)
+  const now = new Date();
+  const indiaDateFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  });
+  const todayStr = indiaDateFormatter.format(now);
+
+  // Compute perDaySalary: salary / working days in period (excluding Sundays)
+  const fromDateObj = new Date(fromDate);
+  const toDateObj = new Date(toDate);
+  let workingDays = 0;
+  const counter = new Date(fromDateObj);
+  while (counter <= toDateObj) {
+    if (counter.getDay() !== 0) workingDays++;
+    counter.setDate(counter.getDate() + 1);
+  }
+  const perDaySalary = workingDays > 0 ? (worker.salary || 0) / workingDays : 0;
+
+  // Build a set of dateStrings that have a punch-in (presence === true)
+  const punchInDates = new Set();
+  attendanceData.forEach(att => {
+    if (att.presence === true) {
+      // Attendance date is stored as a string in the DB
+      const dStr = typeof att.date === 'string' ? att.date : new Date(att.date).toISOString().split('T')[0];
+      punchInDates.add(dStr);
+    }
+  });
+
+  // Build holiday date set for quick lookup
+  const holidayDates = new Set();
+  holidays.forEach(h => {
+    const hDate = new Date(h.date).toISOString().split('T')[0];
+    holidayDates.add(hDate);
+  });
+
+  // Filter leaves: Only full-day leave types (exclude Permissions entirely)
+  const fullDayLeaves = allLeaves.filter(l => l.leaveType !== 'Permission');
+
+  // Iterate every day in the report range
+  const d = new Date(fromDateObj);
+  while (d <= toDateObj) {
+    const dateStr = d.toISOString().split('T')[0];
+
+    // ── Safety Rule: Only evaluate PAST days (end-of-day validation) ──
+    if (dateStr >= todayStr) {
+      d.setDate(d.getDate() + 1);
+      continue;
+    }
+
+    // ── Skip Sundays ──
+    if (d.getDay() === 0) {
+      d.setDate(d.getDate() + 1);
+      continue;
+    }
+
+    // ── Skip Holidays ──
+    if (holidayDates.has(dateStr)) {
+      d.setDate(d.getDate() + 1);
+      continue;
+    }
+
+    // ── Safety Rule: If employee punched in, NO 5X ──
+    if (punchInDates.has(dateStr)) {
+      d.setDate(d.getDate() + 1);
+      continue;
+    }
+
+    // ── Find any leaves covering this date (full-day types only) ──
+    const leavesForDay = fullDayLeaves.filter(l => {
+      const start = new Date(l.startDate).toISOString().split('T')[0];
+      const end = new Date(l.endDate).toISOString().split('T')[0];
+      return dateStr >= start && dateStr <= end;
+    });
+
+    // ── Safety Rule: Approved leave → normal processing, skip ──
+    const hasApprovedLeave = leavesForDay.some(l => l.status === 'Approved' || l.leaveType === 'Paid Leave');
+    if (hasApprovedLeave) {
+      d.setDate(d.getDate() + 1);
+      continue;
+    }
+
+    // ── Safety Rule: Pending leave → employee waiting for approval, NO 5X ──
+    const hasPendingLeave = leavesForDay.some(l => l.status === 'Pending');
+    if (hasPendingLeave) {
+      d.setDate(d.getDate() + 1);
+      continue;
+    }
+
+    // ── Now determine 5X trigger: Rejected leave OR no leave at all ──
+    const hasRejectedLeave = leavesForDay.some(l => l.status === 'Rejected');
+    const hasNoLeave = leavesForDay.length === 0;
+
+    if (hasRejectedLeave || hasNoLeave) {
+      const penaltyAmount = parseFloat((perDaySalary * 5).toFixed(4));
+      const leaveStatus = hasRejectedLeave ? 'Rejected' : 'No Leave Request';
+      const status = hasRejectedLeave ? 'Unauthorized Leave' : 'Unauthorized Absence';
+      const reason = hasRejectedLeave ? 'Leave Request Rejected' : 'Absent Without Leave Request';
+
+      penalties.push({
+        date: dateStr,
+        displayDate: new Intl.DateTimeFormat('en-IN', {
+          day: '2-digit', month: 'short', year: 'numeric',
+          timeZone: 'Asia/Kolkata'
+        }).format(new Date(dateStr + 'T00:00:00')),
+        status,
+        leaveStatus,
+        penaltyFactor: 5,
+        penaltyAmount,
+        perDaySalary: parseFloat(perDaySalary.toFixed(4)),
+        reason
+      });
+      totalPenalty += penaltyAmount;
+    }
+
+    d.setDate(d.getDate() + 1);
+  }
+
+  return {
+    penalties,
+    totalUnauthorizedPenalty: parseFloat(totalPenalty.toFixed(4))
+  };
+};
+
 // ─── Helper: Automatically record/freeze project payments for a past month ───
 const autoRecordProjectPaymentsHelper = async (employeeId, subdomain, month, year) => {
   const monthStart = new Date(year, month - 1, 1);
@@ -279,10 +412,8 @@ const giveBonus = asyncHandler(async (req, res) => {
     }
   });
 
-  const leaveData = await Leave.find({
-    worker: id,
-    status: 'Approved'
-  });
+  const allLeavesForPenalty = await Leave.find({ worker: id });
+  const leaveData = allLeavesForPenalty.filter(l => l.status === 'Approved' || l.leaveType === 'Paid Leave');
 
   const holidays = await Holiday.find({});
   const settings = await Settings.findOne({ subdomain: worker.subdomain });
@@ -294,6 +425,7 @@ const giveBonus = asyncHandler(async (req, res) => {
     attendanceData,
     fromDate,
     toDate,
+    leaveData,
     options: {
       batches,
       holidays,
@@ -303,8 +435,21 @@ const giveBonus = asyncHandler(async (req, res) => {
     }
   });
 
-  // Get the worker's actual earned salary from the report
-  const actualEarnedSalary = productivityReport.summary.finalSalary || 0;
+  // Get the worker's actual earned salary from the report and apply 5X penalty
+  const standardEarnedSalary = productivityReport.summary.finalSalary || 0;
+  const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
+  const { totalUnauthorizedPenalty } = enableUnauthorizedLeavePenalty
+    ? calculateUnauthorizedAbsencePenalty(
+        worker,
+        fromDate,
+        toDate,
+        allLeavesForPenalty,
+        attendanceData,
+        holidays
+      )
+    : { totalUnauthorizedPenalty: 0 };
+
+  const actualEarnedSalary = Math.max(0, standardEarnedSalary - totalUnauthorizedPenalty);
   const baseSalary = worker.salary || 0;
 
   // Calculate the new bonus logic:
@@ -425,6 +570,10 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
         { leaveType: 'Paid Leave' }
       ]
     });
+
+    // Fetch ALL leaves (all statuses) separately for the 5X unauthorized absence penalty check
+    // This does NOT affect the existing salary calculation (leaveData above remains unchanged)
+    const allLeavesForPenalty = await Leave.find({ worker: id });
 
     const holidays = await Holiday.find({});
     const settings = await Settings.findOne({ subdomain: worker.subdomain });
@@ -618,26 +767,49 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
     // Apply project adjustment to final salary (adjustment may be negative for overpayments)
     const finalSalaryWithAdjustment = Math.max(0, finalSalaryWithFines + projectAdjustment);
 
+    // ── 5X Unauthorized Absence Penalty (separate from all existing calculations) ──
+    // Only triggers for past days where employee: did not punch in, has no Approved/Pending leave,
+    // and either has a Rejected leave OR submitted no leave at all.
+    // Permissions are excluded entirely. Does NOT modify leaveData or existing salary logic.
+    const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
+    const { penalties: unauthorizedAbsencePenalties, totalUnauthorizedPenalty } =
+      enableUnauthorizedLeavePenalty
+        ? calculateUnauthorizedAbsencePenalty(
+            worker,
+            fromDate,
+            toDate,
+            allLeavesForPenalty,
+            attendanceData,
+            holidays
+          )
+        : { penalties: [], totalUnauthorizedPenalty: 0 };
+
+    // Final salary after subtracting unauthorized absence penalty
+    const finalSalaryAfterUnauthorizedPenalty = Math.max(0, finalSalaryWithAdjustment - totalUnauthorizedPenalty);
+
     res.status(200).json({
       message: 'Salary report generated successfully',
       report,
       bonuses: bonusesForPeriod,
       totalBonusAmount: totalBonusAmount,
-      totalFinesAmount: totalFinesAmount, // ADD THIS
+      totalFinesAmount: totalFinesAmount,
       finalSalaryWithBonus: finalSalaryWithBonus,
-      finalSalaryWithFines: finalSalaryWithAdjustment, // NOW includes adjustment
-      projectAdjustment, // NEW: total adjustment amount
-      projectAdjustmentDetails, // NEW: detailed breakdown per project/month
+      finalSalaryWithFines: finalSalaryAfterUnauthorizedPenalty, // includes unauthorized penalty deduction
+      projectAdjustment,
+      projectAdjustmentDetails,
       isCurrentlyViolating,
       earliestDeadline,
       delayedTasks,
-      projectBreakdown, // HYBRID
+      projectBreakdown,
+      // 5X Unauthorized Absence Penalty — stored separately for display
+      unauthorizedAbsencePenalties,
+      totalUnauthorizedPenalty,
       worker: {
         name: worker.name,
         salary: worker.salary,
         finalSalary: worker.finalSalary,
         perDaySalary: worker.perDaySalary,
-        fines: worker.fines // ADD THIS
+        fines: worker.fines
       }
     });
   } catch (error) {
@@ -703,6 +875,9 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
         { leaveType: 'Paid Leave' }
       ]
     });
+
+    // Fetch ALL leaves (all statuses) separately for the 5X unauthorized absence penalty check
+    const allLeavesForPenalty = await Leave.find({ worker: id });
 
     const holidays = await Holiday.find({});
     const settings = await Settings.findOne({ subdomain: worker.subdomain });
@@ -889,10 +1064,26 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
     // Apply project adjustment to final salary
     const finalSalaryWithAdjustment = Math.max(0, finalSalaryWithFines + projectAdjustment);
 
+    // ── 5X Unauthorized Absence Penalty (separate from all existing calculations) ──
+    const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
+    const { penalties: unauthorizedAbsencePenalties, totalUnauthorizedPenalty } =
+      enableUnauthorizedLeavePenalty
+        ? calculateUnauthorizedAbsencePenalty(
+            worker,
+            start,
+            end,
+            allLeavesForPenalty,
+            attendanceData,
+            holidays
+          )
+        : { penalties: [], totalUnauthorizedPenalty: 0 };
+
+    const finalSalaryAfterUnauthorizedPenalty = Math.max(0, finalSalaryWithAdjustment - totalUnauthorizedPenalty);
+
     const responseData = {
       message: 'Salary report generated successfully',
       baseSalary: worker.salary,
-      finalSalary: finalSalaryWithAdjustment,
+      finalSalary: finalSalaryAfterUnauthorizedPenalty,
       actualEarnedSalary: report.summary.finalSalary || 0,
       totalDeductions: (report.summary.totalSalaryDeduction || 0) + totalFinesAmount,
       report,
@@ -900,13 +1091,16 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
       totalBonusAmount: totalBonusAmount,
       totalFinesAmount: totalFinesAmount,
       finalSalaryWithBonus: finalSalaryWithBonus,
-      finalSalaryWithFines: finalSalaryWithAdjustment,
-      projectAdjustment, // NEW: total adjustment amount
-      projectAdjustmentDetails, // NEW: detailed breakdown
+      finalSalaryWithFines: finalSalaryAfterUnauthorizedPenalty,
+      projectAdjustment,
+      projectAdjustmentDetails,
       isCurrentlyViolating,
       earliestDeadline,
       delayedTasks,
-      projectBreakdown, // Added breakdown
+      projectBreakdown,
+      // 5X Unauthorized Absence Penalty — stored separately for display
+      unauthorizedAbsencePenalties,
+      totalUnauthorizedPenalty,
       worker: {
         name: worker.name,
         salary: worker.salary,
@@ -1340,8 +1534,7 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
       date: { $gte: fromDate, $lte: toDate }
     });
     const allLeaveData = await Leave.find({
-      subdomain,
-      $or: [{ status: 'Approved' }, { leaveType: 'Paid Leave' }]
+      subdomain
     });
     const allSalaryProjects = await SalaryProject.find({
       subdomain,
@@ -1379,13 +1572,13 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         return { ...pObj, perDeveloperShare: share, totalWorkingDays: workingDays, perDayValue: workingDays > 0 ? share / workingDays : 0 };
       });
 
-      // Calculate productivity
+      // Calculate productivity (filtering only approved/paid leaves for standard logic)
       const report = calculateWorkerProductivity({
         worker,
         attendanceData: workerAttendance,
         fromDate,
         toDate,
-        leaveData: workerLeaves,
+        leaveData: workerLeaves.filter(l => l.status === 'Approved' || l.leaveType === 'Paid Leave'),
         projects: enrichedProjects,
         options: {
           batches,
@@ -1422,6 +1615,22 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         .reduce((sum, f) => sum + (f.amount || 0), 0);
 
       const finalSalaryWithFines = Math.max(0, finalSalaryWithBonus - totalFinesAmount);
+
+      // Calculate 5X Unauthorized Absence Penalty
+      const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
+      const { penalties: unauthorizedAbsencePenalties, totalUnauthorizedPenalty } =
+        enableUnauthorizedLeavePenalty
+          ? calculateUnauthorizedAbsencePenalty(
+              worker,
+              fromDate,
+              toDate,
+              workerLeaves,
+              workerAttendance,
+              holidays
+            )
+          : { penalties: [], totalUnauthorizedPenalty: 0 };
+
+      const finalSalaryAfterUnauthorizedPenalty = Math.max(0, finalSalaryWithFines - totalUnauthorizedPenalty);
 
       // Task Penalty
       const delayedTasks = allTickets.filter(task => {
@@ -1501,9 +1710,9 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         actualWorkingDays: report.summary?.actualWorkingDays || 0,
         totalAbsentDays: report.summary?.totalAbsentDays || 0,
         totalLeaveDays: report.summary?.totalLeaveDays || 0,
-        grossFinalSalary: finalSalaryWithFines,
+        grossFinalSalary: finalSalaryAfterUnauthorizedPenalty,
         taskPenalty: taskPenalty,
-        totalFinalSalary: finalSalaryWithFines,
+        totalFinalSalary: finalSalaryAfterUnauthorizedPenalty,
         subdomain: worker.subdomain,
         fullReport: {
           report,
@@ -1511,8 +1720,10 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
           totalBonusAmount,
           totalFinesAmount,
           finalSalaryWithBonus,
-          finalSalaryWithFines,
+          finalSalaryWithFines: finalSalaryAfterUnauthorizedPenalty,
           delayedTasks,
+          unauthorizedAbsencePenalties,
+          totalUnauthorizedPenalty,
           worker: {
             name: worker.name,
             salary: worker.salary,
@@ -1599,8 +1810,7 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
       date: { $gte: fromDate, $lte: toDate }
     });
     const allLeaveData = await Leave.find({
-      subdomain,
-      $or: [{ status: 'Approved' }, { leaveType: 'Paid Leave' }]
+      subdomain
     });
     const allSalaryProjects = await SalaryProject.find({
       subdomain,
@@ -1636,12 +1846,13 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
         return { ...pObj, perDeveloperShare: share, totalWorkingDays: workingDays, perDayValue: workingDays > 0 ? share / workingDays : 0 };
       });
 
+      // Calculate productivity (filtering only approved/paid leaves for standard logic)
       const report = calculateWorkerProductivity({
         worker,
         attendanceData: workerAttendance,
         fromDate,
         toDate,
-        leaveData: workerLeaves,
+        leaveData: workerLeaves.filter(l => l.status === 'Approved' || l.leaveType === 'Paid Leave'),
         projects: enrichedProjects,
         options: {
           batches,
@@ -1668,6 +1879,18 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
         .reduce((sum, f) => sum + (f.amount || 0), 0);
 
       const finalSalaryWithFines = Math.max(0, finalSalaryWithBonus - totalFinesAmount);
+
+      const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
+      const { totalUnauthorizedPenalty } = enableUnauthorizedLeavePenalty
+        ? calculateUnauthorizedAbsencePenalty(
+            worker,
+            fromDate,
+            toDate,
+            workerLeaves,
+            workerAttendance,
+            holidays
+          )
+        : { totalUnauthorizedPenalty: 0 };
 
       const delayedTasks = allTickets.filter(task => {
         if (!task.endDate) return false;
@@ -1719,7 +1942,7 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
         });
       });
 
-      const totalFinalSalary = finalSalaryWithFines;
+      const totalFinalSalary = Math.max(0, finalSalaryWithFines - totalUnauthorizedPenalty);
       const deptName = worker.department?.name || 'N/A';
       if (deptName !== 'N/A') {
         teamEarnings[deptName] = (teamEarnings[deptName] || 0) + totalFinalSalary;

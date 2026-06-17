@@ -2885,6 +2885,15 @@ const SalaryManagement = () => {
                                                         })()}</span>
                                                     </div>
                                                 )}
+                                                {individualReportData.totalUnauthorizedPenalty > 0 && (
+                                                    <div className="flex justify-between items-center bg-orange-500 p-3 px-4 rounded-2xl shadow-lg shadow-orange-200">
+                                                        <div>
+                                                            <span className="text-xs font-bold text-white">⚠ Unauthorized Absence</span>
+                                                            <p className="text-[9px] text-orange-100 mt-0.5">{individualReportData.unauthorizedAbsencePenalties?.length} day(s) × 5X</p>
+                                                        </div>
+                                                        <span className="text-xs font-black text-white">- ₹{individualReportData.totalUnauthorizedPenalty?.toFixed(2)}</span>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -3049,6 +3058,52 @@ const SalaryManagement = () => {
                                     ))}
                                 </div>
                             </div>
+
+                            {/* Unauthorized Absence Penalty Breakdown in Individual Report */}
+                            {individualReportData.unauthorizedAbsencePenalties?.length > 0 && (
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <AlertTriangle size={16} className="text-orange-500 flex-none" />
+                                            <h4 className="text-sm font-black text-orange-600 uppercase tracking-[0.15em]">Unauthorized Absence Penalties</h4>
+                                        </div>
+                                        <div className="h-px flex-1 bg-orange-100 mx-4"></div>
+                                        <span className="flex-none text-xs font-black text-orange-600 bg-orange-50 px-3 py-1 rounded-lg border border-orange-200">
+                                            Total: - ₹{individualReportData.totalUnauthorizedPenalty?.toFixed(2)}
+                                        </span>
+                                    </div>
+                                    <div className="bg-orange-50/30 border border-orange-100 rounded-[2rem] overflow-hidden">
+                                        <div className="px-6 py-3 bg-orange-50/60 border-b border-orange-100">
+                                            <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest">
+                                                {individualReportData.unauthorizedAbsencePenalties.length} day(s) at 5× basic pay per day · Pending/Approved leaves are NOT penalized
+                                            </p>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full divide-y divide-orange-50 text-xs">
+                                                <thead className="bg-orange-50/40">
+                                                    <tr>
+                                                        {['Date', 'Status', 'Leave Status', 'Factor', 'Deduction', 'Reason'].map(h => (
+                                                            <th key={h} className="px-5 py-3 text-left font-black text-orange-400 uppercase tracking-widest text-[9px]">{h}</th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-orange-50/50 bg-white/60">
+                                                    {individualReportData.unauthorizedAbsencePenalties.map((p, idx) => (
+                                                        <tr key={idx} className="hover:bg-orange-50/30 transition-colors">
+                                                            <td className="px-5 py-3 font-bold text-slate-700">{p.displayDate}</td>
+                                                            <td className="px-5 py-3"><span className="inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[9px] uppercase tracking-tighter bg-orange-100 text-orange-700 border border-orange-200">{p.status}</span></td>
+                                                            <td className="px-5 py-3"><span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[9px] uppercase tracking-tighter border ${p.leaveStatus === 'Rejected' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-slate-50 text-slate-500 border-slate-100'}`}>{p.leaveStatus}</span></td>
+                                                            <td className="px-5 py-3"><span className="inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[10px] bg-rose-600 text-white border border-rose-700">5X</span></td>
+                                                            <td className="px-5 py-3 font-black text-orange-600">- ₹{p.penaltyAmount.toFixed(2)}</td>
+                                                            <td className="px-5 py-3 font-medium text-slate-500 text-[10px]">{p.reason}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Daily Table - Reusing premium table style */}
                             <div className="space-y-4">
@@ -3294,6 +3349,13 @@ const SalaryManagement = () => {
                                                     <p className="text-xl font-bold text-rose-500 tracking-tight">- ₹{reportData.totalFinesAmount.toFixed(2)}</p>
                                                 </div>
                                             )}
+                                            {reportData.totalUnauthorizedPenalty > 0 && (
+                                                <div>
+                                                    <p className="text-[10px] font-black text-orange-500 uppercase tracking-[0.15em] mb-2">⚠ Unauthorized Absence Penalty</p>
+                                                    <p className="text-xl font-bold text-orange-600 tracking-tight">- ₹{reportData.totalUnauthorizedPenalty.toFixed(2)}</p>
+                                                    <p className="text-[9px] font-bold text-orange-400 mt-1">{reportData.unauthorizedAbsencePenalties?.length || 0} day(s) × 5X</p>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
@@ -3417,6 +3479,76 @@ const SalaryManagement = () => {
                                                 </div>
                                             </div>
                                         ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ── Unauthorized Absence Penalty Breakdown ── */}
+                            {reportData.unauthorizedAbsencePenalties?.length > 0 && (
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <AlertTriangle size={16} className="text-orange-500 flex-none" />
+                                            <h4 className="text-sm font-black text-orange-600 uppercase tracking-[0.15em]">Unauthorized Absence Penalties</h4>
+                                        </div>
+                                        <div className="h-px flex-1 bg-orange-100 mx-4"></div>
+                                        <span className="flex-none text-xs font-black text-orange-600 bg-orange-50 px-3 py-1 rounded-lg border border-orange-200">
+                                            Total: - ₹{reportData.totalUnauthorizedPenalty.toFixed(2)}
+                                        </span>
+                                    </div>
+
+                                    <div className="bg-orange-50/30 border border-orange-100 rounded-[2rem] overflow-hidden">
+                                        <div className="px-6 py-3 bg-orange-50/60 border-b border-orange-100 flex items-center gap-2">
+                                            <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest">
+                                                {reportData.unauthorizedAbsencePenalties.length} day(s) penalized at 5× basic pay per day
+                                            </p>
+                                            <span className="ml-auto text-[9px] font-black text-orange-400 uppercase tracking-widest">
+                                                Pending/Approved leaves are NOT penalized
+                                            </span>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full divide-y divide-orange-50 text-xs">
+                                                <thead className="bg-orange-50/40">
+                                                    <tr>
+                                                        {['Date', 'Status', 'Leave Status', 'Penalty Factor', 'Deduction', 'Reason'].map(h => (
+                                                            <th key={h} className="px-5 py-3 text-left font-black text-orange-400 uppercase tracking-widest text-[9px]">{h}</th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-orange-50/50 bg-white/60">
+                                                    {reportData.unauthorizedAbsencePenalties.map((p, idx) => (
+                                                        <tr key={idx} className="hover:bg-orange-50/30 transition-colors">
+                                                            <td className="px-5 py-3 font-bold text-slate-700">{p.displayDate}</td>
+                                                            <td className="px-5 py-3">
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[9px] uppercase tracking-tighter bg-orange-100 text-orange-700 border border-orange-200">
+                                                                    {p.status}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-5 py-3">
+                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[9px] uppercase tracking-tighter border ${p.leaveStatus === 'Rejected' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-slate-50 text-slate-500 border-slate-100'}`}>
+                                                                    {p.leaveStatus}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-5 py-3">
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[10px] bg-rose-600 text-white border border-rose-700 shadow-sm">
+                                                                    5X
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-5 py-3 font-black text-orange-600">- ₹{p.penaltyAmount.toFixed(2)}</td>
+                                                            <td className="px-5 py-3 font-medium text-slate-500 text-[10px]">{p.reason}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div className="px-6 py-3 bg-orange-50/60 border-t border-orange-100 flex justify-between items-center">
+                                            <p className="text-[10px] font-bold text-orange-400">
+                                                Per-day salary: ₹{reportData.unauthorizedAbsencePenalties[0]?.perDaySalary?.toFixed(2)} × 5 = ₹{reportData.unauthorizedAbsencePenalties[0]?.penaltyAmount?.toFixed(2)} per unauthorized day
+                                            </p>
+                                            <p className="text-xs font-black text-orange-600">
+                                                Total Penalty: - ₹{reportData.totalUnauthorizedPenalty.toFixed(2)}
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
                             )}

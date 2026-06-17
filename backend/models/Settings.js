@@ -191,6 +191,10 @@ const settingsSchema = mongoose.Schema({
     includePermissionPenalty: {
       type: Boolean,
       default: false
+    },
+    enableUnauthorizedLeavePenalty: {
+      type: Boolean,
+      default: true
     }
   },
 
@@ -406,6 +410,30 @@ const settingsSchema = mongoose.Schema({
     aiFeaturesEnabled: {
       type: Boolean,
       default: true
+    }
+  },
+
+  bugBountyConfig: {
+    enabled: {
+      type: Boolean,
+      default: true
+    },
+    bugReportUrl: {
+      type: String,
+      default: 'https://techvaseegrah.com/bug-bounty'
+    },
+    disclosureMessage: {
+      type: String,
+      default: 'Visit to check the bug bounty to earn for each bug 1000'
+    },
+    popupFrequency: {
+      type: String,
+      enum: ['always', 'once', 'every_day', 'every_week', 'every_month', 'disabled'],
+      default: 'every_day'
+    },
+    lastUpdated: {
+      type: Date,
+      default: Date.now
     }
   }
 

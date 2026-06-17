@@ -49,7 +49,13 @@ const getSettingsPublic = async (req, res) => {
     // Only return location settings for public access
     const publicSettings = {
       attendanceLocation: settings.attendanceLocation,
-      attendanceAccessControl: settings.attendanceAccessControl
+      attendanceAccessControl: settings.attendanceAccessControl,
+      bugBountyConfig: settings.bugBountyConfig || {
+        enabled: true,
+        bugReportUrl: 'https://techvaseegrah.com/bug-bounty',
+        disclosureMessage: 'Visit to check the bug bounty to earn for each bug 1000',
+        popupFrequency: 'every_day'
+      }
     };
 
     res.json(publicSettings);

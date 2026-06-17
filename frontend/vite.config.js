@@ -72,7 +72,16 @@ export default defineConfig({
             srcDir: 'src',
             filename: 'sw.js',
             injectManifest: {
-                maximumFileSizeToCacheInBytes: 5000000 // 5MB limit
+                maximumFileSizeToCacheInBytes: 5000000, // 5MB limit
+                globIgnores: [
+                  '**/models/**/*',          // Exclude ML models from precaching (load on-demand)
+                  '**/Invoicelogo.pngg',      // Exclude unused duplicate image
+                  '**/*.mp4',                // Exclude video files
+                  '**/*.bak',                // Exclude backup files
+                  '**/*.backup.jsx',         // Exclude backup files
+                  '**/*.fixed.jsx',          // Exclude backup files
+                  '**/node_modules/**/*'
+                ]
             },
             devOptions: {
                 enabled: true
@@ -92,7 +101,7 @@ export default defineConfig({
                         // Split heavy libraries into their own chunks
                         if (id.includes('face-api.js')) return 'face-api';
                         if (id.includes('jspdf')) return 'pdf-lib';
-                        if (id.includes('xlsx')) return 'excel-lib';
+                        if (id.includes('xlsx') || id.includes('exceljs')) return 'excel-lib';
                         if (id.includes('recharts')) return 'charts';
                         if (id.includes('framer-motion') || id.includes('motion')) return 'framer-motion';
                         if (id.includes('react-icons') || id.includes('lucide-react')) return 'icons';

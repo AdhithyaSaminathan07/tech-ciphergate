@@ -224,9 +224,10 @@ const getWorkers = asyncHandler(async (req, res) => {
       .populate('department', 'name')
       .lean();
 
-    // Transform workers to include department name and full photo URL
+    // Transform workers to include department name, face enrollment status, and full photo URL
     const transformedWorkers = workers.map(worker => ({
       ...worker,
+      faceEnrolled: Array.isArray(worker.faceEmbeddings) && worker.faceEmbeddings.length > 0,
       department: worker.department ? worker.department.name : 'N/A',
       photoUrl: worker.photo
         ? `/uploads/${worker.photo}`
@@ -596,7 +597,13 @@ const getWorkersByDepartment = asyncHandler(async (req, res) => {
       .populate('department', 'name')
       .lean();
 
-    res.json(workers);
+    const transformedWorkers = workers.map(worker => ({
+      ...worker,
+      faceEnrolled: Array.isArray(worker.faceEmbeddings) && worker.faceEmbeddings.length > 0,
+      department: worker.department ? worker.department.name : 'N/A'
+    }));
+
+    res.json(transformedWorkers);
   } catch (error) {
     console.error('Get Workers by Department Error:', error);
     res.status(500);

@@ -1,5 +1,8 @@
+import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useContext } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
+import { FiShield, FiX } from 'react-icons/fi';
 import {
   FaUsers, FaTasks, FaCalendarAlt, FaBuilding,
   FaChartBar, FaArrowRight, FaComments, FaMoneyBillWave, FaWallet
@@ -21,6 +24,7 @@ import WelcomeBanner from './WelcomeBanner';
 import SalesVelocityWidget from './SalesVelocityWidget';
 import renewalService from '../../services/renewalService';
 import { getSalaryProjects, getBulkSalaryReport } from '../../services/salaryService';
+import api from '../../services/api';
 
 /* ─────────────────────────────────────────
    Circular Progress
@@ -35,9 +39,9 @@ const CircularProgress = ({
   return (
     <div className="relative inline-flex items-center justify-center flex-shrink-0">
       <svg width={size} height={size} className="transform -rotate-90">
-        <circle cx={size/2} cy={size/2} r={radius}
+        <circle cx={size / 2} cy={size / 2} r={radius}
           stroke="rgba(0,0,0,0.04)" strokeWidth={strokeWidth} fill="none" />
-        <circle cx={size/2} cy={size/2} r={radius}
+        <circle cx={size / 2} cy={size / 2} r={radius}
           stroke={color} strokeWidth={strokeWidth} fill="none"
           strokeDasharray={circumference} strokeDashoffset={offset}
           strokeLinecap="round"
@@ -151,6 +155,22 @@ const Dashboard = () => {
   const { subdomain } = useContext(appContext);
   const { user } = useContext(AuthContext);
 
+  const [showBugBountyPopup, setShowBugBountyPopup] = useState(false);
+  const [bugBountyData, setBugBountyData] = useState(null);
+
+  const handleDismissBugBounty = () => {
+    setShowBugBountyPopup(false);
+    const username = user?.username || 'default';
+    localStorage.setItem(`bugBountyPopupLastShown_${username}`, Date.now().toString());
+  };
+
+  const handleViewBugBountyDetails = () => {
+    setShowBugBountyPopup(false);
+    const username = user?.username || 'default';
+    localStorage.setItem(`bugBountyPopupLastShown_${username}`, Date.now().toString());
+    window.open(bugBountyData?.bugReportUrl || 'https://techvaseegrah.com/bug-bounty', '_blank');
+  };
+
   const loadDashboardData = async () => {
     setIsLoading(true);
     try {
@@ -168,30 +188,30 @@ const Dashboard = () => {
         renewalService.getRenewals({ subdomain }),
         // Fetch current month's salary reports for all workers (Live Daily)
         getBulkSalaryReport(
-          subdomain, 
+          subdomain,
           `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`,
           new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toLocaleDateString('en-CA')
         )
       ]);
 
-      const workersData         = results[0].status === 'fulfilled' ? results[0].value : [];
-      const tasksData           = results[1].status === 'fulfilled' ? results[1].value : [];
-      const topicsData          = results[2].status === 'fulfilled' ? results[2].value : [];
-      const leavesData          = results[4].status === 'fulfilled' ? results[4].value : [];
-      const commentsData        = results[5].status === 'fulfilled' ? results[5].value : [];
-      const mealsSummary        = results[6].status === 'fulfilled' ? results[6].value : { total: 0 };
-      const departmentsDataRaw  = results[7].status === 'fulfilled' ? results[7].value : [];
-      const attendanceSummary   = results[8].status === 'fulfilled' ? results[8].value : { percentage: 0 };
-      const ticketsData         = results[9].status === 'fulfilled' ? results[9].value : [];
-      const renewalsData        = results[10]?.status === 'fulfilled' ? results[10].value.data || [] : [];
-      const bulkSalaryData      = results[11]?.status === 'fulfilled' ? results[11].value.reports || [] : [];
+      const workersData = results[0].status === 'fulfilled' ? results[0].value : [];
+      const tasksData = results[1].status === 'fulfilled' ? results[1].value : [];
+      const topicsData = results[2].status === 'fulfilled' ? results[2].value : [];
+      const leavesData = results[4].status === 'fulfilled' ? results[4].value : [];
+      const commentsData = results[5].status === 'fulfilled' ? results[5].value : [];
+      const mealsSummary = results[6].status === 'fulfilled' ? results[6].value : { total: 0 };
+      const departmentsDataRaw = results[7].status === 'fulfilled' ? results[7].value : [];
+      const attendanceSummary = results[8].status === 'fulfilled' ? results[8].value : { percentage: 0 };
+      const ticketsData = results[9].status === 'fulfilled' ? results[9].value : [];
+      const renewalsData = results[10]?.status === 'fulfilled' ? results[10].value.data || [] : [];
+      const bulkSalaryData = results[11]?.status === 'fulfilled' ? results[11].value.reports || [] : [];
 
-      const deptsSafe      = Array.isArray(departmentsDataRaw) ? departmentsDataRaw : [];
-      const pending        = leavesData.filter(l => l.status === 'Pending');
-      const approved       = leavesData.filter(l => l.status === 'Approved');
-      const rejected       = leavesData.filter(l => l.status === 'Rejected');
-      const unread         = commentsData.filter(c => c.isNew || c.replies?.some(r => r.isNew));
-      const activeWorkers  = workersData.filter(w => w.status !== 'Relieved');
+      const deptsSafe = Array.isArray(departmentsDataRaw) ? departmentsDataRaw : [];
+      const pending = leavesData.filter(l => l.status === 'Pending');
+      const approved = leavesData.filter(l => l.status === 'Approved');
+      const rejected = leavesData.filter(l => l.status === 'Rejected');
+      const unread = commentsData.filter(c => c.isNew || c.replies?.some(r => r.isNew));
+      const activeWorkers = workersData.filter(w => w.status !== 'Relieved');
 
       const activeWorkerIds = new Set(activeWorkers.map(w => w._id.toString()));
       const monthlyBaseSalary = activeWorkers.reduce((acc, w) => acc + (Number(w.salary) || 0), 0);
@@ -202,7 +222,7 @@ const Dashboard = () => {
       let expiringSoon = 0, expired = 0;
       renewalsData.forEach(r => {
         if (r.domain_status === 'EXPIRING_SOON' || r.server_status === 'EXPIRING_SOON') expiringSoon++;
-        if (r.domain_status === 'EXPIRED'       || r.server_status === 'EXPIRED')        expired++;
+        if (r.domain_status === 'EXPIRED' || r.server_status === 'EXPIRED') expired++;
       });
 
       setStats({
@@ -213,10 +233,10 @@ const Dashboard = () => {
         leaves: { total: leavesData.length, pending: pending.length, approved: approved.length, rejected: rejected.length },
         comments: { total: commentsData.length, unread: unread.length },
         tickets: {
-          todo:       ticketsData.filter(t => t.status === 'To Do').length,
+          todo: ticketsData.filter(t => t.status === 'To Do').length,
           inProgress: ticketsData.filter(t => t.status === 'In Progress').length,
-          review:     ticketsData.filter(t => t.status === 'Review').length,
-          done:       ticketsData.filter(t => t.status === 'Done').length,
+          review: ticketsData.filter(t => t.status === 'Review').length,
+          done: ticketsData.filter(t => t.status === 'Done').length,
         },
         kpi: calculateKpiStats(ticketsData),
         renewals: { total: renewalsData.length, expiringSoon, expired },
@@ -238,13 +258,67 @@ const Dashboard = () => {
             teamEarnings[deptName] = (teamEarnings[deptName] || 0) + (report.totalFinalSalary || 0);
           }
         });
-      
+
       const sortedTeams = Object.entries(teamEarnings)
         .map(([name, amount]) => ({ name, amount }))
         .sort((a, b) => b.amount - a.amount)
         .slice(0, 3);
-      
+
       setTopTeams(sortedTeams);
+      // Fetch public settings for bug bounty popup
+      try {
+        console.log('[DEBUG Admin Dashboard] subdomain:', subdomain);
+        if (subdomain && subdomain !== 'main') {
+          const response = await api.get(`/settings/public/${subdomain}`);
+          console.log('[DEBUG Admin Dashboard] response.data:', response.data);
+          if (response.data?.bugBountyConfig) {
+            const config = response.data.bugBountyConfig;
+            setBugBountyData(config);
+            console.log('[DEBUG Admin Dashboard] config:', config);
+
+            if (config.popupFrequency && config.popupFrequency !== 'disabled') {
+              const username = user?.username || 'default';
+              const lastShownKey = `bugBountyPopupLastShown_${username}`;
+              const lastShown = localStorage.getItem(lastShownKey);
+              console.log('[DEBUG Admin Dashboard] username:', username, 'lastShownKey:', lastShownKey, 'lastShown:', lastShown);
+
+              let shouldShow = false;
+              if (config.popupFrequency === 'always') {
+                shouldShow = true;
+              } else if (!lastShown) {
+                shouldShow = true;
+              } else {
+                const diffMs = Date.now() - parseInt(lastShown);
+                const hours = diffMs / (1000 * 60 * 60);
+
+                const lastUpdatedTime = config.lastUpdated ? new Date(config.lastUpdated).getTime() : 0;
+                const lastShownTime = parseInt(lastShown);
+
+                if (lastUpdatedTime > lastShownTime) {
+                  shouldShow = true;
+                } else if (config.popupFrequency === 'every_day') {
+                  const lastDate = new Date(parseInt(lastShown)).toDateString();
+                  const currentDate = new Date().toDateString();
+                  shouldShow = lastDate !== currentDate;
+                } else if (config.popupFrequency === 'every_week') {
+                  shouldShow = hours >= 7 * 24;
+                } else if (config.popupFrequency === 'every_month') {
+                  shouldShow = hours >= 30 * 24;
+                } else if (config.popupFrequency === 'once') {
+                  shouldShow = false;
+                }
+              }
+
+              console.log('[DEBUG Admin Dashboard] shouldShow popup:', shouldShow);
+              if (shouldShow) {
+                setShowBugBountyPopup(true);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching settings for bug bounty:', err);
+      }
     } catch (err) {
       console.error('Dashboard load error:', err);
     } finally {
@@ -252,7 +326,11 @@ const Dashboard = () => {
     }
   };
 
-  useEffect(() => { loadDashboardData(); }, [subdomain]);
+  useEffect(() => {
+    if (user) {
+      loadDashboardData();
+    }
+  }, [user, subdomain]);
 
   if (isLoading) {
     return (
@@ -269,8 +347,8 @@ const Dashboard = () => {
   /* ── attendance colour helper ── */
   const deptColor = (pct) =>
     pct >= 90 ? '#5EB063' :
-    pct >= 70 ? '#3B82F6' :
-    pct >= 40 ? '#FFA756' : '#F43F5E';
+      pct >= 70 ? '#3B82F6' :
+        pct >= 40 ? '#FFA756' : '#F43F5E';
 
   const totalTickets = stats.tickets.todo + stats.tickets.inProgress + stats.tickets.review + stats.tickets.done;
   const completionRate = totalTickets > 0 ? Math.round((stats.tickets.done / totalTickets) * 100) : 0;
@@ -286,8 +364,8 @@ const Dashboard = () => {
     <div className="bg-dash-bg min-h-screen">
       <div className="max-w-[1600px] mx-auto flex flex-col gap-4 md:gap-6 pb-10">
 
-        <WelcomeBanner 
-          userName={user?.name || user?.username || 'admin21'} 
+        <WelcomeBanner
+          userName={user?.name || user?.username || 'admin21'}
           pendingReviews={stats.tickets.review}
           totalTasks={totalTickets}
           completionRate={completionRate}
@@ -299,12 +377,12 @@ const Dashboard = () => {
         ══════════════════════════════════════════ */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-4">
           <div className="col-span-2 md:col-span-1">
-            <StatCard title="Total Employees"  value={stats.workers}          icon={FaUsers}       link="/admin/workers"  />
+            <StatCard title="Total Employees" value={stats.workers} icon={FaUsers} link="/admin/workers" />
           </div>
-          <StatCard title="Active Tasks"     value={stats.tasks}            icon={FaTasks}       link="/admin/tasks"    />
-          <StatCard title="Topics"           value={stats.topics}           icon={FaTasks}       link="/admin/topics"   />
+          <StatCard title="Active Tasks" value={stats.tasks} icon={FaTasks} link="/admin/tasks" />
+          <StatCard title="Topics" value={stats.topics} icon={FaTasks} link="/admin/topics" />
           <StatCard title="Monthly Base Salary" value={`₹${stats.salary.base.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} icon={FaMoneyBillWave} />
-          <StatCard title="Total Net Payout"    value={`₹${stats.salary.payout.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} icon={FaWallet} />
+          <StatCard title="Total Net Payout" value={`₹${stats.salary.payout.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} icon={FaWallet} />
         </div>
 
         {/* ══════════════════════════════════════════
@@ -347,11 +425,10 @@ const Dashboard = () => {
                         #{ticket._id.substring(ticket._id.length - 4).toUpperCase()}
                       </p>
                     </div>
-                    <span className={`ml-3 text-[10px] font-bold uppercase px-3 py-1 rounded-full flex-shrink-0 ${
-                      ticket.status === 'Review'
+                    <span className={`ml-3 text-[10px] font-bold uppercase px-3 py-1 rounded-full flex-shrink-0 ${ticket.status === 'Review'
                         ? 'bg-dash-soft-orange text-dash-orange'
                         : 'bg-blue-50 text-blue-600'
-                    }`}>
+                      }`}>
                       {ticket.status}
                     </span>
                   </div>
@@ -421,9 +498,8 @@ const Dashboard = () => {
                 {/* SLA Index */}
                 <div className="text-center px-2 flex flex-col items-center pt-3 sm:pt-0">
                   <p className="dash-label mb-2">SLA Index</p>
-                  <span className={`dash-value ${
-                    stats.kpi.slaBreachRate > 20 ? 'text-rose-500' : 'text-dash-green'
-                  }`}>
+                  <span className={`dash-value ${stats.kpi.slaBreachRate > 20 ? 'text-rose-500' : 'text-dash-green'
+                    }`}>
                     {100 - stats.kpi.slaBreachRate}%
                   </span>
                 </div>
@@ -437,12 +513,11 @@ const Dashboard = () => {
                 <div className="flex gap-6 mt-2">
                   <div>
                     <p className="dash-label mb-1">Status</p>
-                    <p className={`text-[14px] font-bold uppercase ${
-                      attendancePercentage >= 80 ? 'text-dash-green' :
-                      attendancePercentage >= 50 ? 'text-blue-500' : 'text-rose-500'
-                    }`}>
+                    <p className={`text-[14px] font-bold uppercase ${attendancePercentage >= 80 ? 'text-dash-green' :
+                        attendancePercentage >= 50 ? 'text-blue-500' : 'text-rose-500'
+                      }`}>
                       {attendancePercentage >= 80 ? 'Healthy' :
-                       attendancePercentage >= 50 ? 'Moderate' : 'Low'}
+                        attendancePercentage >= 50 ? 'Moderate' : 'Low'}
                     </p>
                   </div>
                   <div>
@@ -522,9 +597,9 @@ const Dashboard = () => {
             {/* 3-stat row */}
             <div className="grid grid-cols-3 gap-3 mb-6">
               {[
-                { label: 'Total',    value: stats.renewals.total,       cls: 'text-dash-text', bg: 'bg-white' },
+                { label: 'Total', value: stats.renewals.total, cls: 'text-dash-text', bg: 'bg-white' },
                 { label: 'Expiring', value: stats.renewals.expiringSoon, cls: 'text-dash-orange', bg: 'bg-dash-soft-orange' },
-                { label: 'Expired',  value: stats.renewals.expired,      cls: 'text-rose-500', bg: 'bg-rose-50' },
+                { label: 'Expired', value: stats.renewals.expired, cls: 'text-rose-500', bg: 'bg-rose-50' },
               ].map(({ label, value, cls, bg }) => (
                 <div key={label} className={`flex flex-col items-center justify-center py-4 ${bg} rounded-2xl border border-dash-border shadow-sm`}>
                   <p className="dash-label mb-1">{label}</p>
@@ -534,24 +609,21 @@ const Dashboard = () => {
             </div>
 
             {/* Status banner */}
-            <div className={`rounded-2xl px-5 py-4 flex items-center justify-between ${
-              stats.renewals.expired > 0
+            <div className={`rounded-2xl px-5 py-4 flex items-center justify-between ${stats.renewals.expired > 0
                 ? 'bg-rose-50 border border-rose-100'
                 : 'bg-dash-soft-green border border-dash-green/20'
-            }`}>
+              }`}>
               <div>
                 <p className="dash-label mb-1 opacity-80">
                   System Status
                 </p>
-                <p className={`text-[15px] font-bold ${
-                  stats.renewals.expired > 0 ? 'text-rose-500' : 'text-dash-green'
-                }`}>
+                <p className={`text-[15px] font-bold ${stats.renewals.expired > 0 ? 'text-rose-500' : 'text-dash-green'
+                  }`}>
                   {stats.renewals.expired > 0 ? 'Action Required' : 'All Systems Good'}
                 </p>
               </div>
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-[20px] ${
-                stats.renewals.expired > 0 ? 'bg-rose-100' : 'bg-green-100'
-              }`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-[20px] ${stats.renewals.expired > 0 ? 'bg-rose-100' : 'bg-green-100'
+                }`}>
                 {stats.renewals.expired > 0 ? '⚠' : '✓'}
               </div>
             </div>
@@ -593,11 +665,84 @@ const Dashboard = () => {
             ROW 4 — BOTTOM SUMMARY STRIP
         ══════════════════════════════════════════ */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-          <StatCard title="Leaves Pending"   value={stats.leaves.pending}   icon={FaCalendarAlt} link="/admin/leaves"   />
-          <StatCard title="Leaves Approved"  value={stats.leaves.approved}  icon={FaCalendarAlt} link="/admin/leaves"   />
-          <StatCard title="Comments Unread"  value={stats.comments.unread}  icon={FaComments}    link="/admin/comments" />
-          <StatCard title="Meals Requested"  value={stats.foodRequests}     icon={FaUsers}                              />
+          <StatCard title="Leaves Pending" value={stats.leaves.pending} icon={FaCalendarAlt} link="/admin/leaves" />
+          <StatCard title="Leaves Approved" value={stats.leaves.approved} icon={FaCalendarAlt} link="/admin/leaves" />
+          <StatCard title="Comments Unread" value={stats.comments.unread} icon={FaComments} link="/admin/comments" />
+          <StatCard title="Meals Requested" value={stats.foodRequests} icon={FaUsers} />
         </div>
+
+        {/* Bug Bounty Program Popup */}
+        {createPortal(
+          <AnimatePresence>
+            {showBugBountyPopup && (
+              <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+                {/* Backdrop */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={handleDismissBugBounty}
+                  className="fixed inset-0 bg-slate-900/60 backdrop-blur-md"
+                />
+                {/* Modal Card */}
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                  transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                  className="relative bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-100 z-10"
+                >
+                  {/* Header */}
+                  <div className="p-6 pb-4 flex justify-between items-start border-b border-slate-50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-[#0d9488]">
+                        <FiShield size={20} className="stroke-[2.5]" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-extrabold text-slate-900 leading-tight">
+                          Bug Bounty Program
+                        </h3>
+                        <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">
+                          Responsible Disclosure
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleDismissBugBounty}
+                      className="p-1.5 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded-lg transition-colors"
+                    >
+                      <FiX size={16} />
+                    </button>
+                  </div>
+
+                  {/* Message */}
+                  <div className="p-6 py-5">
+                    <p className="text-sm text-slate-600 font-medium leading-relaxed">
+                      {bugBountyData?.disclosureMessage || 'Visit to check the bug bounty to earn for each bug 1000'}
+                    </p>
+                  </div>
+
+                  {/* Footer Buttons */}
+                  <div className="p-6 pt-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
+                    <button
+                      onClick={handleDismissBugBounty}
+                      className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-70 transition-colors"
+                    >
+                      Dismiss
+                    </button>
+                    <button
+                      onClick={handleViewBugBountyDetails}
+                      className="px-5 py-2 text-sm font-bold text-white bg-[#0d9488] hover:bg-[#0f766e] rounded-xl shadow-md shadow-teal-600/10 hover:shadow-lg hover:shadow-teal-600/15 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+                    >
+                      View Details
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
 
       </div>
     </div>

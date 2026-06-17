@@ -678,7 +678,7 @@ const WorkerManagement = () => {
       width: '120px',
       headerAlign: 'text-center',
       align: 'text-center',
-      render: (record) => getFaceEnrollBadge(record.faceEnrolled)
+      render: (record) => getFaceEnrollBadge(record.faceEnrolled || (Array.isArray(record.faceEmbeddings) && record.faceEmbeddings.length > 0))
     },
     {
       header: 'Status',
@@ -792,7 +792,7 @@ const WorkerManagement = () => {
           </div>
           <div className="bg-gray-50/50 p-2 rounded-lg border border-gray-100">
             <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-0.5">Face Enroll</p>
-            {getFaceEnrollBadge(worker.faceEnrolled)}
+            {getFaceEnrollBadge(worker.faceEnrolled || (Array.isArray(worker.faceEmbeddings) && worker.faceEmbeddings.length > 0))}
           </div>
         </div>
 
@@ -1776,13 +1776,6 @@ const WorkerManagement = () => {
         onComplete={loadData}
       />
 
-      {showFaceCapture && selectedWorkerForFace && (
-        <FaceCapture
-          workerId={selectedWorkerForFace._id}
-          onCaptured={handleFacesCaptured}
-          onClose={() => setShowFaceCapture(false)}
-        />
-      )}
 
       <WorkerHistoryModal
         isOpen={isHistoryModalOpen}

@@ -103,37 +103,178 @@ const DEFAULT_RULES = [
         severity: 'critical',
         content: `<p><strong>General Penalty</strong> — Non-adherence to any rule results in a fine of <strong>₹500</strong> or <strong>job termination</strong>.</p>
 <p><strong>Implementation Accountability</strong> — Failure to enforce assigned rules results in a fine of <strong>₹2,000</strong> or <strong>job termination</strong>.</p>`
+    },
+    {
+        title: 'Entertainment Restriction Regulation',
+        category: 'Workplace Conduct',
+        severity: 'critical',
+        content: `<ul>
+<li>Listening to music or audio entertainment content without authorization is prohibited.</li>
+<li>Watching movies, television programs, online videos, streaming content, or entertainment media unrelated to work is prohibited.</li>
+<li>Playing video games, electronic games, mobile games, or interactive entertainment software is prohibited.</li>
+<li>Company activities may be monitored for compliance purposes.</li>
+<li>Violations may result in disciplinary action, fines, suspension of privileges, or termination.</li>
+</ul>`
+    },
+    {
+        title: 'Headphone Usage Policy',
+        category: 'Workplace Conduct',
+        severity: 'high',
+        content: `<ul>
+<li>Bluetooth headphones and personal wireless audio devices are prohibited inside office premises unless authorized.</li>
+<li>Developers who have not received company-provided headphones must report to management.</li>
+<li>Employees must remain focused on assigned duties during working hours.</li>
+<li>Personal creative activities and non-work-related content creation must be performed outside official work hours unless approved.</li>
+</ul>`
+    },
+    {
+        title: 'Leave & Permission Approval Policy',
+        category: 'Leave Policy',
+        severity: 'critical',
+        content: `<ul>
+<li>All leave requests and permissions must be approved through the official CipherGate approval process.</li>
+<li>Any leave or permission taken without approval shall be considered unauthorized.</li>
+<li>Unapproved leave or permission may result in disciplinary action and salary deductions according to company policy.</li>
+</ul>`
+    },
+    {
+        title: 'Workplace Monitoring & Compliance Policy',
+        category: 'Security & Compliance',
+        severity: 'critical',
+        content: `<ul>
+<li>CCTV monitoring may be used.</li>
+<li>Internal compliance monitoring may be used.</li>
+<li>Team intelligence reporting may be used.</li>
+<li>Cyber activity monitoring may be used.</li>
+<li>Company asset monitoring may be used.</li>
+<li>Monitoring information may be used for investigations, compliance verification and disciplinary proceedings.</li>
+</ul>`
+    },
+    {
+        title: 'Meeting & Discussion Control Policy',
+        category: 'Workplace Conduct',
+        severity: 'critical',
+        content: `<ul>
+<li>All meetings must be conducted only in designated meeting spaces.</li>
+<li>Group discussions involving three or more employees require approval.</li>
+<li>Cross-team discussions during working hours are prohibited unless approved.</li>
+<li>Meetings must follow company approval procedures.</li>
+<li>Violations may result in disciplinary action and fines.</li>
+</ul>`
+    },
+    {
+        title: 'Gaming & Unrelated Content Policy',
+        category: 'Workplace Conduct',
+        severity: 'critical',
+        content: `<ul>
+<li>Playing games on company premises is prohibited.</li>
+<li>Watching unrelated entertainment videos during working hours is prohibited.</li>
+<li>Mobile games, PC games, browser games and entertainment streaming are prohibited.</li>
+<li>Violations may result in fines, suspension or termination.</li>
+</ul>`
+    },
+    {
+        title: 'Daily Report Compliance Policy',
+        category: 'Reporting & Communication',
+        severity: 'high',
+        content: `<ul>
+<li>All employees must submit daily work reports in the designated reporting channel.</li>
+<li>Failure to submit daily reports may result in disciplinary action or fines according to company policy.</li>
+</ul>`
+    },
+    {
+        title: 'Profit Sharing Eligibility Policy',
+        category: 'Compensation & Benefits',
+        severity: 'critical',
+        content: `<p><strong>Rule 29 – Profit Sharing Eligibility Criteria</strong></p>
+<p>To qualify for the Company's Profit Sharing Scheme, an employee must satisfy ALL of the following conditions:</p>
+<ol>
+<li><strong>Attendance Requirement</strong>
+<ul><li>Maintain a minimum attendance rate of 90% during the evaluation period.</li></ul>
+</li>
+<li><strong>Disciplinary Record Requirement</strong>
+<ul><li>Have no fines, warnings, disciplinary actions, or penalties issued within the preceding three (3) months.</li></ul>
+</li>
+<li><strong>Project Performance Requirement</strong>
+<ul><li>Achieve a minimum 90% project completion rate based on assigned tasks, deliverables, and deadlines.</li></ul>
+</li>
+<li><strong>Assessment Requirement</strong>
+<ul><li>Obtain a minimum score of 90% in company assessments, evaluations, competency tests, examinations, or scorecards.</li></ul>
+</li>
+</ol>
+<p>Employees who fail to satisfy any of the above requirements may become ineligible for profit-sharing benefits for the applicable evaluation period.</p>
+<p>Eligibility determination remains subject to Management review and approval.</p>`
+    },
+    {
+        title: 'Revenue & Profitability Performance Policy',
+        category: 'Compensation & Benefits',
+        severity: 'critical',
+        content: `<p><strong>Rule 30 – Revenue and Profitability Performance Policy</strong></p>
+<p><strong>1. Minimum Profitability Requirement</strong></p>
+<p>Employees are expected to contribute business value that generates a minimum net profit equivalent to 30% of their monthly basic salary within a rolling sixty (60) day period.</p>
+<p>Failure to achieve the required profitability target may result in:</p>
+<ul>
+<li>Performance review by Management;</li>
+<li>Placement under a Performance Improvement Plan (PIP);</li>
+<li>Reassignment of responsibilities where appropriate;</li>
+<li>Additional performance monitoring; or</li>
+<li>Termination of employment in accordance with company policies.</li>
+</ul>
+<p>The Company reserves the sole right to determine the methodology used to calculate profit contribution and business value generation.</p>
+<p><strong>2. Profit Sharing Reserve Fund</strong></p>
+<p>The Company shall retain 10% of each employee's profit-sharing entitlement within a Profit Sharing Reserve Fund.</p>
+<p>The reserve fund may be utilized for:</p>
+<ul>
+<li>Business continuity support during low revenue periods;</li>
+<li>Approved employee emergency medical assistance;</li>
+<li>Approved employee marriage-related financial assistance; and</li>
+<li>Other management-approved emergency requirements.</li>
+</ul>
+<p>Subject to settlement of all outstanding obligations, the accumulated reserve balance may be released upon successful completion of the employee's notice period, exit clearance process, and final management approval.</p>
+<p><strong>3. Basic Salary Support During Low-Revenue Periods</strong></p>
+<p>Where an employee is temporarily unable to generate sufficient revenue or profit contribution, the Company may, at its sole discretion, provide a Basic Salary Support Payment.</p>
+<p>Such support payments:</p>
+<ul>
+<li>Shall be treated as an advance, recoverable support amount, or company loan;</li>
+<li>Shall be recorded against the employee account;</li>
+<li>May be recovered from future incentives, commissions, profit-sharing distributions, or other amounts payable;</li>
+<li>Shall not be treated as additional salary, bonus, or permanent compensation.</li>
+</ul>
+<p>Management shall determine the repayment schedule and recovery method.</p>
+<p><strong>4. Management Discretion</strong></p>
+<p>All profit calculations, reserve fund administration, salary support payments, loan approvals, profitability assessments, and profit-sharing distributions shall remain subject to final Management review, interpretation, and approval.</p>
+<p>The Company's decision regarding profitability calculations and profit-sharing administration shall be final.</p>`
     }
 ];
 
 /**
  * Auto-initializes default rules for a subdomain if none exist yet.
  * Runs silently on first access — admin can edit all rules afterwards from Admin > Rules panel.
+ * Also upgrades existing tenants to rules version 2.0 and appends the new rules if their current rules version is less than 2.0.
  */
 const initializeDefaultRules = async (subdomain) => {
     try {
-        const existingCount = await Rule.countDocuments({ subdomain });
-        if (existingCount > 0) return; // Already seeded, skip
-
+        const VERSION = '2.0';
         const admin = await Admin.findOne({ subdomain });
         if (!admin) return; // Need an admin to assign as creator
 
-        const VERSION = '1.0';
-        const ruleDocs = DEFAULT_RULES.map(r => ({
-            ...r,
-            version: VERSION,
-            status: 'active',
-            changeLog: 'Default company rulebook — auto-initialized',
-            attachments: [],
-            subdomain,
-            createdBy: admin._id
-        }));
-        await Rule.insertMany(ruleDocs);
+        const existingCount = await Rule.countDocuments({ subdomain });
+        if (existingCount === 0) {
+            // Future tenant: Seed all DEFAULT_RULES as version 2.0
+            const ruleDocs = DEFAULT_RULES.map(r => ({
+                ...r,
+                version: VERSION,
+                status: 'active',
+                changeLog: 'Default company rulebook — auto-initialized',
+                attachments: [],
+                subdomain,
+                createdBy: admin._id
+            }));
+            await Rule.insertMany(ruleDocs);
 
-        // Ensure Settings has rulesConfiguration
-        let settings = await Settings.findOne({ subdomain });
-        if (!settings) settings = new Settings({ subdomain });
-        if (!settings.rulesConfiguration?.currentVersion) {
+            // Ensure Settings has rulesConfiguration
+            let settings = await Settings.findOne({ subdomain });
+            if (!settings) settings = new Settings({ subdomain });
             settings.rulesConfiguration = {
                 forceAcceptance: true,
                 scrollValidation: true,
@@ -146,8 +287,81 @@ const initializeDefaultRules = async (subdomain) => {
             };
             settings.lastUpdated = Date.now();
             await settings.save();
+            console.log(`✅ [Rules] Auto-seeded ${ruleDocs.length} default rules (v2.0) for: ${subdomain}`);
+        } else {
+            // Existing tenant: Check if version needs to be bumped to 2.0
+            let settings = await Settings.findOne({ subdomain });
+            if (!settings) settings = new Settings({ subdomain });
+
+            const newRuleTitles = [
+                'Entertainment Restriction Regulation',
+                'Headphone Usage Policy',
+                'Leave & Permission Approval Policy',
+                'Workplace Monitoring & Compliance Policy',
+                'Meeting & Discussion Control Policy',
+                'Gaming & Unrelated Content Policy',
+                'Daily Report Compliance Policy',
+                'Profit Sharing Eligibility Policy',
+                'Revenue & Profitability Performance Policy'
+            ];
+
+            const rulesToInsert = [];
+            for (const r of DEFAULT_RULES) {
+                if (newRuleTitles.includes(r.title)) {
+                    // Check if it already exists to prevent duplicate insertion
+                    const exists = await Rule.findOne({ subdomain, title: r.title });
+                    if (!exists) {
+                        rulesToInsert.push({
+                            ...r,
+                            version: VERSION,
+                            status: 'active',
+                            changeLog: 'Appended new rule during v2.0 upgrade',
+                            attachments: [],
+                            subdomain,
+                            createdBy: admin._id
+                        });
+                    }
+                }
+            }
+
+            const currentVersion = settings.rulesConfiguration?.currentVersion || '1.0';
+
+            // If we inserted new rules or if settings version is not 2.0, we apply updates
+            if (rulesToInsert.length > 0 || currentVersion !== VERSION) {
+                if (rulesToInsert.length > 0) {
+                    await Rule.insertMany(rulesToInsert);
+                    console.log(`✅ [Rules] Appended ${rulesToInsert.length} new rules to subdomain: ${subdomain}`);
+                }
+
+                // Bump settings version to 2.0
+                if (!settings.rulesConfiguration) {
+                    settings.rulesConfiguration = {
+                        forceAcceptance: true,
+                        scrollValidation: true,
+                        allowPdfDownload: true,
+                        requireCheckbox: true,
+                        autoNotify: true,
+                        gracePeriodDays: 0,
+                        mobileAcceptance: true,
+                        currentVersion: VERSION
+                    };
+                } else {
+                    settings.rulesConfiguration.currentVersion = VERSION;
+                }
+                settings.lastUpdated = Date.now();
+                await settings.save();
+
+                // Force re-acceptance for all workers who might have accepted version 2.0 already.
+                // Resetting their accepted version back to '1.0' ensures everyone gets the rules acceptance prompt.
+                const resetResult = await Worker.updateMany(
+                    { subdomain, acceptedRulesVersion: VERSION },
+                    { acceptedRulesVersion: '1.0' }
+                );
+                if (resetResult.modifiedCount > 0) {
+                    console.log(`🔄 [Rules] Reset acceptedRulesVersion for ${resetResult.modifiedCount} workers on ${subdomain} to trigger re-acceptance of v2.0`);
+                }
+            }
         }
-        console.log(`✅ [Rules] Auto-seeded ${ruleDocs.length} default rules for: ${subdomain}`);
     } catch (err) {
         console.error(`⚠️ [Rules] initializeDefaultRules error for ${subdomain}:`, err.message);
     }
@@ -168,7 +382,7 @@ const getActiveRules = asyncHandler(async (req, res) => {
 
     const rules = await Rule.find({ subdomain, status: 'active' }).sort({ category: 1, title: 1 });
     const settings = await Settings.findOne({ subdomain });
-    const rulesConfig = settings ? settings.rulesConfiguration : { currentVersion: '1.0' };
+    const rulesConfig = settings ? settings.rulesConfiguration : { currentVersion: '2.0' };
 
     res.json({ success: true, rules, rulesConfig });
 });

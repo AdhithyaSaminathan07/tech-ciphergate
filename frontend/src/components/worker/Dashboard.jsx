@@ -12,10 +12,12 @@ import Spinner from '../common/Spinner';
 import CustomTaskForm from './CustomTaskForm';
 import { readNotification } from '../../services/notificationService';
 import appContext from '../../context/AppContext';
+import { FiShield, FiX } from 'react-icons/fi';
 import { FaMoneyBillAlt, FaCamera, FaTasks, FaHistory, FaBell, FaExclamationTriangle, FaTrophy, FaChevronDown, FaChevronUp, FaWallet, FaArrowRight, FaCrown, FaMedal, FaArrowCircleUp, FaClipboardList, FaClipboardCheck } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import CountUp from 'react-countup';
 import api from '../../services/api';
+import { createPortal } from 'react-dom';
 import FaceAttendance from '../admin/FaceAttendance';
 import RFIDAttendancePopup from './RFIDAttendancePopup';
 import MyFines from '../dashboard/MyFines';
@@ -50,6 +52,22 @@ const SectionHeader = ({ title, sub, action, actionLink }) => (
 const Dashboard = () => {
   const { subdomain } = useContext(appContext);
   const { user } = useAuth();
+  
+  const [showBugBountyPopup, setShowBugBountyPopup] = useState(false);
+  const [bugBountyData, setBugBountyData] = useState(null);
+
+  const handleDismissBugBounty = () => {
+    setShowBugBountyPopup(false);
+    const username = user?.username || 'default';
+    localStorage.setItem(`bugBountyPopupLastShown_${username}`, Date.now().toString());
+  };
+  
+  const handleViewBugBountyDetails = () => {
+    setShowBugBountyPopup(false);
+    const username = user?.username || 'default';
+    localStorage.setItem(`bugBountyPopupLastShown_${username}`, Date.now().toString());
+    window.open(bugBountyData?.bugReportUrl || 'https://techvaseegrah.com/bug-bounty', '_blank');
+  };
   const navigate = useNavigate();
   
   const [notifications, setNotifications] = useState([]);
@@ -62,11 +80,14 @@ const Dashboard = () => {
   const [showRFIDAttendance, setShowRFIDAttendance] = useState(false);
   const [accessControl, setAccessControl] = useState({ rfidAttendance: true, faceAttendance: true });
   const [showDeductionBreakdown, setShowDeductionBreakdown] = useState(false);
+  const [showUnauthorizedBreakdown, setShowUnauthorizedBreakdown] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [salaryData, setSalaryData] = useState({
     baseSalary: 0,
     finalSalary: 0,
     totalDeductions: 0,
+    totalUnauthorizedPenalty: 0,
+    unauthorizedAbsencePenalties: [],
     delayedTasks: [],
     report: null
   });
@@ -79,6 +100,8 @@ const Dashboard = () => {
         baseSalary: data.baseSalary ?? 0,
         finalSalary: data.finalSalary ?? 0,
         totalDeductions: data.totalDeductions ?? 0,
+        totalUnauthorizedPenalty: data.totalUnauthorizedPenalty ?? 0,
+        unauthorizedAbsencePenalties: data.unauthorizedAbsencePenalties ?? [],
         delayedTasks: data.delayedTasks ?? [],
         report: data.report ?? null
       });
@@ -102,6 +125,47 @@ const Dashboard = () => {
         const response = await api.get(`/settings/public/${subdomain}`);
         if (response.data?.attendanceAccessControl?.employee) {
           setAccessControl(response.data.attendanceAccessControl.employee);
+        }
+        if (response.data?.bugBountyConfig) {
+          const config = response.data.bugBountyConfig;
+          setBugBountyData(config);
+          
+          if (config.popupFrequency && config.popupFrequency !== 'disabled') {
+            const username = user?.username || 'default';
+            const lastShownKey = `bugBountyPopupLastShown_${username}`;
+            const lastShown = localStorage.getItem(lastShownKey);
+            
+            let shouldShow = false;
+            if (config.popupFrequency === 'always') {
+              shouldShow = true;
+            } else if (!lastShown) {
+              shouldShow = true;
+            } else {
+              const diffMs = Date.now() - parseInt(lastShown);
+              const hours = diffMs / (1000 * 60 * 60);
+              
+              const lastUpdatedTime = config.lastUpdated ? new Date(config.lastUpdated).getTime() : 0;
+              const lastShownTime = parseInt(lastShown);
+              
+              if (lastUpdatedTime > lastShownTime) {
+                shouldShow = true;
+              } else if (config.popupFrequency === 'every_day') {
+                const lastDate = new Date(parseInt(lastShown)).toDateString();
+                const currentDate = new Date().toDateString();
+                shouldShow = lastDate !== currentDate;
+              } else if (config.popupFrequency === 'every_week') {
+                shouldShow = hours >= 7 * 24;
+              } else if (config.popupFrequency === 'every_month') {
+                shouldShow = hours >= 30 * 24;
+              } else if (config.popupFrequency === 'once') {
+                shouldShow = false;
+              }
+            }
+            
+            if (shouldShow) {
+              setShowBugBountyPopup(true);
+            }
+          }
         }
       }
     } catch (error) {
@@ -362,6 +426,50 @@ const Dashboard = () => {
                     </AnimatePresence>
                   )}
 
+                  {salaryData.totalUnauthorizedPenalty > 0 && (
+                    <>
+                      <div 
+                        onClick={() => setShowUnauthorizedBreakdown(!showUnauthorizedBreakdown)}
+                        className="flex justify-between items-center text-slate-500 cursor-pointer hover:bg-slate-50/80 p-0.5 rounded transition-all select-none"
+                      >
+                        <span className="flex items-center gap-1 text-orange-500 font-bold">
+                          <span className="text-slate-400">−</span> Unapproved Leave Penalties
+                          <FaChevronDown className={`text-slate-400 transition-transform duration-200 ${showUnauthorizedBreakdown ? 'rotate-180' : ''}`} size={8} />
+                        </span>
+                        <span className="text-rose-500 font-bold">
+                          −₹{Math.round(salaryData.totalUnauthorizedPenalty).toLocaleString('en-IN')}
+                        </span>
+                      </div>
+
+                      {/* Unauthorized penalty breakdown (expandable) */}
+                      <AnimatePresence>
+                        {showUnauthorizedBreakdown && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="space-y-1 mt-1 mb-1 max-h-24 overflow-y-auto pr-1 pl-2">
+                              {salaryData.unauthorizedAbsencePenalties?.map((p, index) => (
+                                <div key={index} className="p-1.5 bg-orange-50 border border-orange-100 rounded-lg text-[10px] leading-relaxed">
+                                  <div className="flex justify-between font-bold mb-0.5">
+                                    <span className="text-orange-700 truncate max-w-[70%]">{p.displayDate} - {p.status}</span>
+                                    <span className="text-rose-600">−₹{Math.round(p.penaltyAmount).toLocaleString('en-IN')}</span>
+                                  </div>
+                                  <div className="flex justify-between text-slate-400 font-semibold">
+                                    <span>{p.reason}</span>
+                                    <span>Factor: 5X</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </>
+                  )}
+
                   <div className="flex justify-between items-center text-slate-500">
                     <span className="flex items-center gap-1">
                       <span className="text-slate-400">−</span> Delay Deduction
@@ -372,13 +480,13 @@ const Dashboard = () => {
                   </div>
                   <div className="flex justify-between items-center border-t border-slate-100 pt-1.5 text-slate-600 font-bold">
                     <span>Total Deductions</span>
-                    <span className="text-rose-700">−₹{Math.round(salaryData.totalDeductions + calculatedTaskPenalties.totalTaskPenalty).toLocaleString('en-IN')}</span>
+                    <span className="text-rose-700">−₹{Math.round(salaryData.totalDeductions + calculatedTaskPenalties.totalTaskPenalty + (salaryData.totalUnauthorizedPenalty || 0)).toLocaleString('en-IN')}</span>
                   </div>
                 </div>
 
                 {/* Hero Stat: Final Payout — always baseSalary - totalDeductions */}
                 {(() => {
-                  const displayFinalPayout = Math.max(0, salaryData.baseSalary - salaryData.totalDeductions - calculatedTaskPenalties.totalTaskPenalty);
+                  const displayFinalPayout = Math.max(0, salaryData.baseSalary - salaryData.totalDeductions - calculatedTaskPenalties.totalTaskPenalty - (salaryData.totalUnauthorizedPenalty || 0));
                   const payoutRatio = salaryData.baseSalary > 0
                     ? Math.max(0, Math.min(100, Math.round((displayFinalPayout / salaryData.baseSalary) * 100)))
                     : 0;
@@ -420,7 +528,7 @@ const Dashboard = () => {
                 })()}
 
                 {/* No deductions message */}
-                {salaryData.totalDeductions === 0 && calculatedTaskPenalties.taskPenalties.length === 0 && (
+                {salaryData.totalDeductions === 0 && calculatedTaskPenalties.taskPenalties.length === 0 && salaryData.totalUnauthorizedPenalty === 0 && (
                   <div className="text-[10px] text-teal-600 text-center font-semibold py-1">
                     🎉 Perfect record this month!
                   </div>
@@ -624,6 +732,79 @@ const Dashboard = () => {
         </div>
 
       </div>
+
+      {/* Bug Bounty Program Popup */}
+      {createPortal(
+        <AnimatePresence>
+          {showBugBountyPopup && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+              {/* Backdrop */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={handleDismissBugBounty}
+                className="fixed inset-0 bg-slate-900/60 backdrop-blur-md"
+              />
+              {/* Modal Card */}
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                className="relative bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-100 z-10"
+              >
+                {/* Header */}
+                <div className="p-6 pb-4 flex justify-between items-start border-b border-slate-50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-[#0d9488]">
+                      <FiShield size={20} className="stroke-[2.5]" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-slate-900 leading-tight">
+                        Bug Bounty Program
+                      </h3>
+                      <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">
+                        Responsible Disclosure
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleDismissBugBounty}
+                    className="p-1.5 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded-lg transition-colors"
+                  >
+                    <FiX size={16} />
+                  </button>
+                </div>
+
+                {/* Message */}
+                <div className="p-6 py-5">
+                  <p className="text-sm text-slate-600 font-medium leading-relaxed">
+                    {bugBountyData?.disclosureMessage || 'Visit to check the bug bounty to earn for each bug 1000'}
+                  </p>
+                </div>
+
+                {/* Footer Buttons */}
+                <div className="p-6 pt-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
+                  <button
+                    onClick={handleDismissBugBounty}
+                    className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-70 transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                  <button
+                    onClick={handleViewBugBountyDetails}
+                    className="px-5 py-2 text-sm font-bold text-white bg-[#0d9488] hover:bg-[#0f766e] rounded-xl shadow-md shadow-teal-600/10 hover:shadow-lg hover:shadow-teal-600/15 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+                  >
+                    View Details
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
       {/* Attendance Popups */}
       {showFaceAttendance && (

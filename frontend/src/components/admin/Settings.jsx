@@ -21,7 +21,10 @@ import {
     FiActivity,
     FiUserCheck,
     FiInfo,
-    FiCalendar
+    FiCalendar,
+    FiShield,
+    FiCopy,
+    FiSliders
 } from 'react-icons/fi';
 import Modal from '../common/Modal';
 import HolidayManagement from './HolidayManagement';
@@ -131,7 +134,8 @@ const Settings = () => {
                 employee: { value: 90, enabled: true }
             },
             monthlyLimit: 2,
-            deductionMultiplier: 2
+            deductionMultiplier: 2,
+            enableUnauthorizedLeavePenalty: true
         },
         includePermission: false,
         paidLeaveConfig: {
@@ -146,6 +150,12 @@ const Settings = () => {
             aiDailyRequestCount: 0,
             aiMonthlyRequestCount: 0,
             aiFeaturesEnabled: true
+        },
+        bugBountyConfig: {
+            enabled: true,
+            bugReportUrl: 'https://techvaseegrah.com/bug-bounty',
+            disclosureMessage: 'Visit to check the bug bounty to earn for each bug 1000',
+            popupFrequency: 'every_day'
         }
     });
 
@@ -214,7 +224,8 @@ const Settings = () => {
                     }
                 },
                 monthlyLimit: fetchedSettings.advancedLeaveDeduction?.monthlyLimit || 2,
-                deductionMultiplier: fetchedSettings.advancedLeaveDeduction?.deductionMultiplier || 2
+                deductionMultiplier: fetchedSettings.advancedLeaveDeduction?.deductionMultiplier || 2,
+                enableUnauthorizedLeavePenalty: fetchedSettings.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== undefined ? fetchedSettings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty : true
             };
 
             const finalSettings = {
@@ -244,6 +255,12 @@ const Settings = () => {
                     aiDailyRequestCount: fetchedSettings.aiConfig?.aiDailyRequestCount || 0,
                     aiMonthlyRequestCount: fetchedSettings.aiConfig?.aiMonthlyRequestCount || 0,
                     aiFeaturesEnabled: fetchedSettings.aiConfig?.aiFeaturesEnabled ?? true
+                },
+                bugBountyConfig: {
+                    enabled: fetchedSettings.bugBountyConfig?.enabled ?? false,
+                    bugReportUrl: fetchedSettings.bugBountyConfig?.bugReportUrl || 'https://techvaseegrah.com/bug-bounty',
+                    disclosureMessage: fetchedSettings.bugBountyConfig?.disclosureMessage || 'Visit to check the bug bounty to earn for each bug 1000',
+                    popupFrequency: fetchedSettings.bugBountyConfig?.popupFrequency || 'every_day'
                 }
             };
 
@@ -471,14 +488,25 @@ const Settings = () => {
         setSaving(true);
         try {
             const token = getAuthToken();
-            console.log('[Settings] Saving settings for subdomain:', subdomain, 'Payload:', settings);
-            await api.put(`/settings/${subdomain}`, settings, {
+            const hasBountyChanges = JSON.stringify(settings.bugBountyConfig) !== JSON.stringify(originalSettings.bugBountyConfig);
+            const updatedBountyConfig = {
+                ...settings.bugBountyConfig,
+                enabled: settings.bugBountyConfig?.popupFrequency !== 'disabled',
+                lastUpdated: hasBountyChanges ? new Date().toISOString() : (settings.bugBountyConfig?.lastUpdated || new Date().toISOString())
+            };
+            const payload = {
+                ...settings,
+                bugBountyConfig: updatedBountyConfig
+            };
+            console.log('[Settings] Saving settings for subdomain:', subdomain, 'Payload:', payload);
+            await api.put(`/settings/${subdomain}`, payload, {
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 }
             });
-            setOriginalSettings(settings);
+            setSettings(payload);
+            setOriginalSettings(payload);
             setHasChanges(false);
             toast.success('Settings updated successfully');
         } catch (error) {
@@ -509,6 +537,76 @@ const Settings = () => {
             />
         </button>
     );
+
+    const [isBugBountyExpanded, setIsBugBountyExpanded] = useState(true);
+    const [isCopied, setIsCopied] = useState(false);
+
+    const handleBugBountyChange = (field, value) => {
+        const updated = {
+            ...settings,
+            bugBountyConfig: {
+                ...(settings.bugBountyConfig || {}),
+                [field]: value,
+                enabled: field === 'popupFrequency' ? value !== 'disabled' : (settings.bugBountyConfig?.popupFrequency !== 'disabled')
+            }
+        };
+        setSettings(updated);
+        checkForChanges(updated);
+    };
+
+    const handleCopyUrl = () => {
+        const url = settings.bugBountyConfig?.bugReportUrl || 'https://techvaseegrah.com/bug-bounty';
+        navigator.clipboard.writeText(url);
+        setIsCopied(true);
+        toast.success('URL copied to clipboard!');
+        setTimeout(() => setIsCopied(false), 2000);
+    };
+
+    const handleClearBugBounty = () => {
+        const updated = {
+            ...settings,
+            bugBountyConfig: {
+                enabled: false,
+                bugReportUrl: '',
+                disclosureMessage: '',
+                popupFrequency: 'disabled'
+            }
+        };
+        setSettings(updated);
+        checkForChanges(updated);
+    };
+
+    const handleSaveBugBounty = async () => {
+        setSaving(true);
+        try {
+            const token = getAuthToken();
+            const updatedConfig = {
+                ...settings.bugBountyConfig,
+                enabled: settings.bugBountyConfig?.popupFrequency !== 'disabled',
+                lastUpdated: new Date().toISOString()
+            };
+            await api.put(`/settings/${subdomain}`, {
+                bugBountyConfig: updatedConfig
+            }, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            const updatedSettings = {
+                ...settings,
+                bugBountyConfig: updatedConfig
+            };
+            setSettings(updatedSettings);
+            setOriginalSettings(updatedSettings);
+            setHasChanges(false);
+            toast.success('Bug Bounty settings updated successfully');
+        } catch (error) {
+            toast.error('Failed to save Bug Bounty settings');
+        } finally {
+            setSaving(false);
+        }
+    };
 
     useEffect(() => {
         if (subdomain && subdomain !== 'main') {
@@ -1139,10 +1237,10 @@ const Settings = () => {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                             {/* Rule Toggles */}
                             <div className="space-y-6">
-                                <div className="bg-gray-50 p-6 rounded-xl border border-gray-100">
+                                <div className="bg-gray-50 p-6 rounded-xl border border-gray-100 h-full">
                                     <div className="flex items-center justify-between mb-2">
                                         <h4 className="font-bold text-gray-800">Attendance Penalty Policy</h4>
                                         <CustomToggle
@@ -1247,6 +1345,35 @@ const Settings = () => {
                                     )}
                                 </div>
                             </div>
+
+                            <div className="space-y-6">
+                                <div className="bg-gray-50 p-6 rounded-xl border border-gray-100 h-full flex flex-col justify-between animate-fadeIn">
+                                    <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <h4 className="font-bold text-gray-800">5X Unauthorized Absence Policy</h4>
+                                            <CustomToggle
+                                                checked={settings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty}
+                                                onChange={() => handleAdvancedSettingsChange('enableUnauthorizedLeavePenalty', !settings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty)}
+                                            />
+                                        </div>
+                                        <p className="text-sm text-gray-500 mb-4">
+                                            Apply 5X daily basic pay deduction for past absent days with rejected leave requests or no leave requests submitted.
+                                        </p>
+                                    </div>
+                                    <div className="pt-4 border-t border-gray-200 mt-auto flex items-center gap-2">
+                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black uppercase tracking-wider transition-colors duration-300 ${
+                                            settings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty
+                                                ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                                : 'bg-gray-100 text-gray-500 border border-gray-200'
+                                        }`}>
+                                            {settings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty ? 'Enabled (5X)' : 'Disabled'}
+                                        </span>
+                                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                                            Pending leaves are safe
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         {/* Note */}
@@ -1258,6 +1385,7 @@ const Settings = () => {
                                     <li>When enabled, system evaluates BOTH attendance and limits.</li>
                                     <li>If ANY condition fails (e.g. low dept attendance OR limit exceeded), <strong>{settings.advancedLeaveDeduction.deductionMultiplier}X deduction factor</strong> is recorded for that specific leave request.</li>
                                     <li>If <strong>Include Permission in Penalty</strong> is on, the multiplier applies to late arrival/early departure time as well.</li>
+                                    <li>If <strong>5X Unauthorized Absence Policy</strong> is enabled, unapproved or rejected leave/absence results in a 5X daily basic pay penalty.</li>
                                 </ul>
                             </div>
                         </div>
@@ -1832,6 +1960,127 @@ const Settings = () => {
                                 </div>
                             )}
                         </div>
+                    </div>
+                </Card>
+
+                {/* Bug Bounty Program Configuration */}
+                <Card className="mb-8 hover:shadow-lg transition-shadow duration-200 overflow-hidden">
+                    <div className="h-2 bg-gradient-to-r from-violet-500 to-indigo-500" />
+                    <div className="p-6">
+                        {/* Header Section */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-gray-100">
+                            <div className="flex items-start gap-4">
+                                <div className="p-3 bg-indigo-50 rounded-2xl border border-indigo-100 text-indigo-600 flex-shrink-0">
+                                    <FiShield className="h-6 w-6 stroke-[2]" />
+                                </div>
+                                <div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <h3 className="text-lg font-bold text-gray-900 leading-tight">
+                                            Bug Bounty Program
+                                        </h3>
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                            (settings.bugBountyConfig?.enabled && settings.bugBountyConfig?.popupFrequency !== 'disabled' && settings.bugBountyConfig?.bugReportUrl)
+                                                ? 'bg-green-50 text-green-700 border border-green-200'
+                                                : 'bg-gray-100 text-gray-600 border border-gray-200'
+                                        }`}>
+                                            {(settings.bugBountyConfig?.enabled && settings.bugBountyConfig?.popupFrequency !== 'disabled' && settings.bugBountyConfig?.bugReportUrl) ? 'Configured' : 'Not Configured'}
+                                        </span>
+                                    </div>
+                                    <p className="text-sm text-gray-500 mt-1">
+                                        Manage your responsible disclosure URL and dashboard popup frequency.
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsBugBountyExpanded(!isBugBountyExpanded)}
+                                className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-xl hover:bg-gray-50 text-sm font-semibold text-gray-705 shadow-sm transition-all self-start sm:self-center"
+                            >
+                                <FiSliders className="h-4 w-4 text-gray-500" />
+                                {isBugBountyExpanded ? 'Hide Settings' : 'Show Settings'}
+                            </button>
+                        </div>
+
+                        {/* Collapsible Content */}
+                        {isBugBountyExpanded && (
+                            <div className="space-y-6 pt-6">
+                                {/* Bug Report URL */}
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-bold text-gray-700">
+                                        Bug Report URL
+                                    </label>
+                                    <div className="flex gap-3">
+                                        <input
+                                            type="text"
+                                            value={settings.bugBountyConfig?.bugReportUrl || ''}
+                                            onChange={(e) => handleBugBountyChange('bugReportUrl', e.target.value)}
+                                            placeholder="https://techvaseegrah.com/bug-bounty"
+                                            className="flex-grow px-4 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={handleCopyUrl}
+                                            className="px-4 py-2.5 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 rounded-xl shadow-sm text-sm font-bold flex items-center gap-2 transition-all active:scale-95"
+                                        >
+                                            <FiCopy className="h-4 w-4" />
+                                            {isCopied ? 'Copied' : 'Copy'}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Disclosure Message */}
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-bold text-gray-700">
+                                        Disclosure Summary Message
+                                    </label>
+                                    <textarea
+                                        rows={3}
+                                        value={settings.bugBountyConfig?.disclosureMessage || ''}
+                                        onChange={(e) => handleBugBountyChange('disclosureMessage', e.target.value)}
+                                        placeholder="Visit to check the bug bounty to earn for each bug 1000"
+                                        className="w-full px-4 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all"
+                                    />
+                                </div>
+
+                                {/* Dashboard Popup Frequency */}
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-bold text-gray-700">
+                                        Dashboard Popup Frequency
+                                    </label>
+                                    <select
+                                        value={settings.bugBountyConfig?.popupFrequency || 'every_day'}
+                                        onChange={(e) => handleBugBountyChange('popupFrequency', e.target.value)}
+                                        className="w-full px-4 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all bg-white"
+                                    >
+                                        <option value="always">Always Show</option>
+                                        <option value="every_day">Every Day (Today)</option>
+                                        <option value="every_week">Once a Week</option>
+                                        <option value="every_month">Once a Month</option>
+                                        <option value="once">Once</option>
+                                        <option value="disabled">Disable Popup</option>
+                                    </select>
+                                </div>
+
+                                {/* Action Buttons Row */}
+                                <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                                    <button
+                                        type="button"
+                                        onClick={handleClearBugBounty}
+                                        className="text-red-500 hover:text-red-700 text-sm font-bold hover:underline transition-colors active:scale-95"
+                                    >
+                                        Clear all
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveBugBounty}
+                                        className="px-5 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md shadow-indigo-600/10 hover:shadow-lg hover:shadow-indigo-600/15 transition-all duration-200 flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98]"
+                                    >
+                                        <FiSave className="h-4 w-4" />
+                                        Save Settings
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </Card>
 
