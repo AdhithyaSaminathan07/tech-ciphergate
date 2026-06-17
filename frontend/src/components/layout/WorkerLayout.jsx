@@ -25,6 +25,7 @@ import Sidebar from './Sidebar';
 import appContext from '../../context/AppContext';
 import Header from './Header';
 import BottomNavigation from './BottomNavigation';
+import FloatingChatButton from '../common/FloatingChatButton';
 
 const WorkerLayout = ({ children }) => {
   const { user, logout } = useAuth();
@@ -170,6 +171,7 @@ const WorkerLayout = ({ children }) => {
         <main className="flex-1 p-1 sm:p-4 md:p-6 pb-24 md:pb-6 overflow-x-hidden overflow-y-auto custom-main-scroll">
           {children}
         </main>
+        <FloatingChatButton isAdmin={false} />
         <BottomNavigation navItems={bottomNavItems} badges={{ comments: newComments, leaves: leaveUpdates }} />
       </div>
     </div>

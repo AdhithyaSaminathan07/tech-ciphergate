@@ -246,18 +246,18 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                     {/* Content Overlay */}
                     <div className={`relative z-10 h-full flex items-stretch justify-between ${isAdmin ? 'px-2 md:px-8' : 'px-2 md:px-6'}`}>
                         {/* Left Side: Logo & Menu */}
-                        <div className="flex items-center gap-1 h-full lg:min-w-[240px]">
+                        <div className="flex items-center gap-1 h-full min-w-0 lg:min-w-[240px]">
                             {isAdmin && (
                                 <button
                                     onClick={onMenuClick}
-                                    className="p-2 -ml-2 rounded-xl text-slate-500 hover:bg-slate-100/80 hover:text-slate-900 transition-all active:scale-90 md:hidden"
+                                    className="p-2 -ml-2 shrink-0 rounded-xl text-slate-500 hover:bg-slate-100/80 hover:text-slate-900 transition-all active:scale-90 md:hidden"
                                 >
                                     <Menu size={20} />
                                 </button>
                             )}
 
                             <h1
-                                className={`font-extrabold text-emerald-800 tracking-tight ${isAdmin ? 'text-lg md:text-xl' : 'text-base md:text-lg'}`}
+                                className={`font-extrabold text-emerald-800 tracking-tight truncate ${isAdmin ? 'text-lg md:text-xl' : 'text-base md:text-lg'}`}
                             >
                                 {title || 'Dashboard'}
                             </h1>
@@ -280,7 +280,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                             </div>
                         </div>
                         {/* Right Side: Tools & Profile */}
-                        <div className="flex items-center gap-1 md:gap-4 flex-1 justify-end lg:flex-initial lg:min-w-[240px] h-full">
+                        <div className="flex items-center gap-1 md:gap-4 shrink-0 justify-end lg:min-w-[240px] h-full">
                             {/* Mobile Search Icon */}
                             <button
                                 onClick={() => setIsSearchOpen(true)}

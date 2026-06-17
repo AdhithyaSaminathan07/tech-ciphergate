@@ -72,6 +72,7 @@ import Sidebar from './Sidebar';
 import Header from './Header';
 import BottomNavigation from './BottomNavigation';
 import QuestionGenerationTracker from '../admin/QuestionGenerationTracker';
+import FloatingChatButton from '../common/FloatingChatButton';
 import appContext from '../../context/AppContext';
 
 // Lazy load management components
@@ -508,6 +509,8 @@ const AdminLayout = () => {
         generationData={null}
         isGenerating={false}
       />
+
+      <FloatingChatButton isAdmin={true} />
 
       {/* BottomNavigation removed for Admin as per strict separation rules */}
 
