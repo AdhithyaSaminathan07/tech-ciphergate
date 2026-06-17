@@ -412,7 +412,7 @@ const WorkerWorkAllocation = () => {
                             onDrop={(e) => handleDrop(e, status)}
                         >
                             <div className="px-5 pt-4 pb-3 flex justify-between items-center text-gray-700 border-b border-gray-100/50">
-                                <h2 className="text-sm font-bold tracking-wide uppercase flex items-center gap-2">
+                                <h2 className="text-sm font-bold tracking-wide flex items-center gap-2">
                                     {status}
                                     <span className="font-semibold text-xs bg-white text-gray-500 border border-gray-200 px-2 py-0.5 rounded-full shadow-sm">
                                         {filteredTickets.filter(t => t.status === status).length}
@@ -432,22 +432,19 @@ const WorkerWorkAllocation = () => {
                                         onTouchMove={handleTouchMove}
                                         onTouchEnd={handleTouchEnd}
                                         onClick={() => { setSelectedTicket(ticket); setIsModalOpen(true); }}
-                                        className={`p-4 rounded-xl shadow-sm border cursor-pointer hover:shadow-md hover:border-teal-100 active:cursor-grabbing transition-all group active:scale-[0.98] 
-                                            ${isOverdue(ticket.endDate, ticket.status) ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'} 
-                                            ${ticket.issueType === 'Bug' ? 'border-l-4 border-l-red-500' : ticket.issueType === 'Story' ? 'border-l-4 border-l-teal-500' : ticket.issueType === 'Epic' ? 'border-l-4 border-l-purple-500' : 'border-l-4 border-l-blue-500'}`}
+                                        className={`p-4 rounded-xl shadow-sm border cursor-pointer hover:shadow-md hover:border-teal-100 active:cursor-grabbing transition-all group active:scale-[0.98] ${isOverdue(ticket.endDate, ticket.status) ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'} ${ticket.issueType === 'Bug' ? 'border-l-4 border-l-red-500' : ticket.issueType === 'Story' ? 'border-l-4 border-l-teal-500' : ticket.issueType === 'Epic' ? 'border-l-4 border-l-purple-500' : 'border-l-4 border-l-blue-500'}`}
                                     >
                                         <div className="flex gap-2 mb-1 flex-wrap">
                                             {ticket.team && (
-                                                <span key="team-badge" className="bg-teal-600 text-white text-[10px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider flex items-center gap-1 shadow-sm">
+                                                <span key="team-badge" className="bg-teal-600 text-white text-[10px] px-1.5 py-0.5 rounded font-bold tracking-wider flex items-center gap-1 shadow-sm">
                                                     <Users className="w-2.5 h-2.5" /> Team: {ticket.team}
                                                 </span>
                                             )}
                                             {ticket.labels && ticket.labels.map(lbl => (
-                                                <span key={lbl} className="bg-gray-100 text-gray-500 text-[10px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider">{lbl}</span>
+                                                <span key={lbl} className="bg-gray-100 text-gray-500 text-[10px] px-1.5 py-0.5 rounded font-bold tracking-wider">{lbl}</span>
                                             ))}
                                             {(ticket.startDate || ticket.endDate) && (
-                                                <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider flex items-center gap-1 border 
-                                                    ${isOverdue(ticket.endDate, ticket.status) ? 'bg-red-100 text-red-700 border-red-200' : 'bg-teal-50 text-teal-600 border-teal-100'}`}>
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold tracking-wider flex items-center gap-1 border ${isOverdue(ticket.endDate, ticket.status) ? 'bg-red-100 text-red-700 border-red-200' : 'bg-teal-50 text-teal-600 border-teal-100'}`}>
                                                     <Calendar className="w-2.5 h-2.5" />
                                                     {ticket.startDate ? new Date(ticket.startDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'TBD'} - {ticket.endDate ? new Date(ticket.endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'TBD'}
                                                 </span>
@@ -457,7 +454,7 @@ const WorkerWorkAllocation = () => {
                                         <div className="text-sm font-medium text-gray-800 leading-snug mb-3 group-hover:text-teal-700 transition-colors">
                                             {ticket.title}
                                             {ticket.status === 'Review' && (
-                                                <span className="ml-2 inline-block px-2 py-0.5 rounded bg-blue-50 text-blue-600 text-[10px] font-bold uppercase border border-blue-100">
+                                                <span className="ml-2 inline-block px-2 py-0.5 rounded bg-blue-50 text-blue-600 text-[10px] font-bold border border-blue-100">
                                                     Waiting for Review
                                                 </span>
                                             )}
@@ -471,7 +468,7 @@ const WorkerWorkAllocation = () => {
 
                                         {ticket.checklist && ticket.checklist.length > 0 && (
                                             <div className="mb-4">
-                                                <div className="flex justify-between items-center mb-1 text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                                                <div className="flex justify-between items-center mb-1 text-[10px] text-gray-400 font-bold tracking-wider">
                                                     <span>My Progress</span>
                                                     <span>
                                                         {ticket.status === 'Done' ? 100 : (ticket.status === 'Review' ? 90 : (ticket.status === 'In Progress' ? 25 : 0))}%
@@ -494,7 +491,7 @@ const WorkerWorkAllocation = () => {
                                                         const prevStatus = columns[columns.indexOf(status) - 1];
                                                         updateStatus(ticket._id, prevStatus);
                                                     }}
-                                                    className="flex-1 py-1.5 bg-gray-50 text-gray-500 rounded-lg border border-gray-100 text-[10px] font-bold uppercase tracking-wider"
+                                                    className="flex-1 py-1.5 bg-gray-50 text-gray-500 rounded-lg border border-gray-100 text-[10px] font-bold tracking-wider"
                                                 >
                                                     Move Back
                                                 </button>
@@ -506,7 +503,7 @@ const WorkerWorkAllocation = () => {
                                                         const nextStatus = columns[columns.indexOf(status) + 1];
                                                         updateStatus(ticket._id, nextStatus);
                                                     }}
-                                                    className="flex-1 py-1.5 bg-teal-50 text-teal-700 rounded-lg border border-teal-100 text-[10px] font-bold uppercase tracking-wider"
+                                                    className="flex-1 py-1.5 bg-teal-50 text-teal-700 rounded-lg border border-teal-100 text-[10px] font-bold tracking-wider"
                                                 >
                                                     {status === 'In Progress' ? 'Submit for Review' : 'Move Next'}
                                                 </button>
@@ -557,7 +554,7 @@ const WorkerWorkAllocation = () => {
                         <div className="px-6 py-4 flex justify-between items-center text-gray-600 shrink-0 border-b border-gray-100 bg-gray-50/50">
                             <div className="flex items-center space-x-2 text-sm font-semibold bg-white px-3 py-1.5 rounded-lg shadow-sm border border-gray-200">
                                 <IssueIcon type={selectedTicket.issueType} />
-                                <span className="uppercase text-gray-700">{selectedTicket.issueType}</span>
+                                <span className="text-gray-700">{selectedTicket.issueType}</span>
                             </div>
                             <div className="flex items-center space-x-1">
                                 <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors bg-gray-100">
@@ -644,13 +641,13 @@ const WorkerWorkAllocation = () => {
                                                                                     {item.text}
                                                                                 </div>
                                                                                 {status === 'Submitted' && (
-                                                                                    <span className="text-[9px] font-extrabold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full uppercase tracking-tighter shrink-0 mt-0.5">Submitted</span>
+                                                                                    <span className="text-[9px] font-extrabold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full tracking-tighter shrink-0 mt-0.5">Submitted</span>
                                                                                 )}
                                                                                 {status === 'Approved' && (
-                                                                                    <span className="text-[9px] font-extrabold bg-teal-100 text-teal-600 px-1.5 py-0.5 rounded-full uppercase tracking-tighter shrink-0 mt-0.5">Approved</span>
+                                                                                    <span className="text-[9px] font-extrabold bg-teal-100 text-teal-600 px-1.5 py-0.5 rounded-full tracking-tighter shrink-0 mt-0.5">Approved</span>
                                                                                 )}
                                                                                 {status === 'Rejected' && (
-                                                                                    <span className="text-[9px] font-extrabold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full uppercase tracking-tighter shrink-0 mt-0.5">Rejected</span>
+                                                                                    <span className="text-[9px] font-extrabold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full tracking-tighter shrink-0 mt-0.5">Rejected</span>
                                                                                 )}
                                                                             </div>
                                                                             {item.text && item.text.length > 40 && (
@@ -736,12 +733,12 @@ const WorkerWorkAllocation = () => {
                                                                                 {isRejected ? (
                                                                                     <>
                                                                                         <Upload className="w-4 h-4" />
-                                                                                        <span className="text-[10px] font-bold uppercase hidden sm:inline">Reupload</span>
+                                                                                        <span className="text-[10px] font-bold hidden sm:inline">Reupload</span>
                                                                                     </>
                                                                                 ) : (
                                                                                     <>
                                                                                         {status === 'Approved' ? <File className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
-                                                                                        <span className="text-[10px] font-bold uppercase hidden sm:inline">{status === 'Approved' ? 'View' : 'Update'}</span>
+                                                                                        <span className="text-[10px] font-bold hidden sm:inline">{status === 'Approved' ? 'View' : 'Update'}</span>
                                                                                     </>
                                                                                 )}
                                                                             </button>
@@ -752,7 +749,7 @@ const WorkerWorkAllocation = () => {
                                                                                 className="p-2 rounded-lg bg-teal-600 text-white hover:bg-teal-700 shadow-md flex items-center gap-2 transition-all"
                                                                             >
                                                                                 <Upload className="w-4 h-4" />
-                                                                                <span className="text-[10px] font-bold uppercase hidden sm:inline">Upload</span>
+                                                                                <span className="text-[10px] font-bold hidden sm:inline">Upload</span>
                                                                             </button>
                                                                         )}
                                                                     </div>
@@ -805,7 +802,7 @@ const WorkerWorkAllocation = () => {
                                         <div className="bg-gray-50/50 border border-gray-200 rounded-xl p-4">
                                             {selectedTicket.workerQuery ? (
                                                 <div className="mb-3">
-                                                    <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">Your Question</div>
+                                                    <div className="text-[10px] font-bold text-gray-400 mb-1">Your Question</div>
                                                     <p className="text-sm text-gray-700 bg-white p-3 rounded-lg border border-gray-100">{selectedTicket.workerQuery}</p>
                                                 </div>
                                             ) : (
@@ -854,7 +851,7 @@ const WorkerWorkAllocation = () => {
                                             value={selectedTicket.status}
                                             onChange={(e) => updateSelectedTicketStatus(e.target.value)}
                                             disabled={selectedTicket.status === 'Done'}
-                                            className="w-full md:w-auto bg-gray-100 hover:bg-gray-200 border border-gray-200 text-gray-700 text-xs font-bold rounded-lg p-2.5 pr-8 focus:ring-2 focus:ring-teal-500 appearance-none uppercase transition-colors cursor-pointer outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="w-full md:w-auto bg-gray-100 hover:bg-gray-200 border border-gray-200 text-gray-700 text-xs font-bold rounded-lg p-2.5 pr-8 focus:ring-2 focus:ring-teal-500 appearance-none transition-colors cursor-pointer outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                                             style={{ backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234B5563' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', backgroundSize: '1.2em' }}
                                         >
                                             {columns.map(status => (
@@ -865,28 +862,28 @@ const WorkerWorkAllocation = () => {
                                         {selectedTicket.status === 'In Progress' && (
                                             <button
                                                 onClick={() => updateSelectedTicketStatus('Review')}
-                                                className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 px-4 rounded-lg text-xs uppercase shadow-sm transition-all flex items-center justify-center gap-2"
+                                                className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 px-4 rounded-lg text-xs shadow-sm transition-all flex items-center justify-center gap-2"
                                             >
                                                 <CheckSquare className="w-4 h-4" /> Confirm and Submit for Review
                                             </button>
                                         )}
 
                                         {selectedTicket.status === 'Review' && (
-                                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-[11px] text-blue-700 font-bold uppercase text-center shadow-inner">
+                                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-[11px] text-blue-700 font-bold text-center shadow-inner">
                                                 Waiting for Admin Approval
                                             </div>
                                         )}
                                     </div>
 
                                     <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm text-gray-800">
-                                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Properties</h3>
+                                        <h3 className="text-xs font-bold text-gray-400 tracking-wider mb-4">Properties</h3>
 
                                         <div className="space-y-5">
                                             <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                                                <span className="w-24 text-gray-500 font-semibold text-xs uppercase">Assignees</span>
+                                                <span className="w-24 text-gray-500 font-semibold text-xs">Assignees</span>
                                                 <div className="flex-1 font-medium bg-gray-50 border border-gray-200 p-2 rounded-lg text-sm text-gray-700 flex flex-wrap gap-1.5">
                                                     {selectedTicket.team && (
-                                                        <span className="bg-teal-100 text-teal-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase border border-teal-200 flex items-center gap-1 shadow-sm">
+                                                        <span className="bg-teal-100 text-teal-700 px-2 py-0.5 rounded text-[10px] font-bold border border-teal-200 flex items-center gap-1 shadow-sm">
                                                             <Users className="w-3 h-3" /> Team: {selectedTicket.team}
                                                         </span>
                                                     )}
@@ -903,7 +900,7 @@ const WorkerWorkAllocation = () => {
                                             </div>
 
                                             <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                                                <span className="w-24 text-gray-500 font-semibold text-xs uppercase">Type</span>
+                                                <span className="w-24 text-gray-500 font-semibold text-xs">Type</span>
                                                 <div className="flex-1 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm text-gray-700">
                                                     <IssueIcon type={selectedTicket.issueType} />
                                                     <span className="font-medium">{selectedTicket.issueType}</span>
@@ -911,7 +908,7 @@ const WorkerWorkAllocation = () => {
                                             </div>
 
                                             <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                                                <span className="w-24 text-gray-500 font-semibold text-xs uppercase">Priority</span>
+                                                <span className="w-24 text-gray-500 font-semibold text-xs">Priority</span>
                                                 <div className="flex-1 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm text-gray-700">
                                                     <PriorityIcon priority={selectedTicket.priority} />
                                                     <span className="font-medium">{selectedTicket.priority}</span>
@@ -919,21 +916,21 @@ const WorkerWorkAllocation = () => {
                                             </div>
 
                                             <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2 border-t border-gray-100">
-                                                <span className="w-24 text-gray-500 font-semibold text-xs uppercase">Story Pts</span>
+                                                <span className="w-24 text-gray-500 font-semibold text-xs">Story Pts</span>
                                                 <div className="flex-1 font-medium bg-gray-50 border border-gray-200 p-2 rounded-lg text-sm text-gray-700">
                                                     {selectedTicket.storyPoints || 0}
                                                 </div>
                                             </div>
 
                                             <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                                                <span className="w-24 text-gray-500 font-semibold text-xs uppercase">Labels</span>
+                                                <span className="w-24 text-gray-500 font-semibold text-xs">Labels</span>
                                                 <div className="flex-1 font-medium bg-gray-50 border border-gray-200 p-2 rounded-lg text-sm text-gray-700">
                                                     {selectedTicket.labels?.join(', ') || 'None'}
                                                 </div>
                                             </div>
 
                                             <div className="pt-2 border-t border-gray-100">
-                                                <span className="text-gray-400 font-bold text-[10px] uppercase tracking-wider mb-2 block">Scheduling</span>
+                                                <span className="text-gray-400 font-bold text-[10px] tracking-wider mb-2 block">Scheduling</span>
                                                 <div className="space-y-3">
                                                     <div className="flex flex-col gap-1.5">
                                                         <span className="text-[11px] text-gray-500 font-semibold">Start Date</span>
@@ -1014,7 +1011,7 @@ const WorkerWorkAllocation = () => {
                                         href={refViewer.url} 
                                         target="_blank" 
                                         rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg text-xs font-bold uppercase hover:bg-teal-700 transition-colors"
+                                        className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg text-xs font-bold hover:bg-teal-700 transition-colors"
                                     >
                                         <Download className="w-4 h-4" /> Download File
                                     </a>

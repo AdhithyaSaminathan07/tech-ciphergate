@@ -86,7 +86,7 @@ const PerformanceCard = ({ onLeaderboardClick }) => {
             <div className="p-4 md:p-5 flex flex-col justify-between h-full gap-3">
                 {/* Header */}
                 <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Performance Score</p>
+                    <p className="text-xs font-bold text-slate-400 tracking-widest">Performance Score</p>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-50 border border-slate-100 text-slate-500">
                         Rank {rankDisplay}
                     </span>
@@ -98,7 +98,7 @@ const PerformanceCard = ({ onLeaderboardClick }) => {
                         <h3 className="text-3xl font-black text-slate-900 leading-none tracking-tight">
                             <AnimatedCounter value={data.totalPoints} />
                         </h3>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Total Points</p>
+                        <p className="text-[10px] text-slate-400 font-bold tracking-wider mt-1">Total Points</p>
                     </div>
                     {data.weeklyPoints > 0 && (
                         <div className="flex items-center gap-1 text-emerald-700 bg-emerald-50/60 border border-emerald-100/50 rounded-full px-2 py-0.5">
@@ -110,15 +110,15 @@ const PerformanceCard = ({ onLeaderboardClick }) => {
                 {/* Stats Row - Clean Typography, No Emojis */}
                 <div className="grid grid-cols-3 gap-2 mt-1">
                     <div className="flex flex-col bg-slate-50/50 border border-slate-100/60 rounded-xl p-2 text-center">
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Streak</span>
+                        <span className="text-xs font-bold text-slate-400 tracking-wider mb-0.5">Streak</span>
                         <span className="text-base font-black text-slate-800">{data.currentStreak}d</span>
                     </div>
                     <div className="flex flex-col bg-slate-50/50 border border-slate-100/60 rounded-xl p-2 text-center">
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Success</span>
+                        <span className="text-xs font-bold text-slate-400 tracking-wider mb-0.5">Success</span>
                         <span className="text-base font-black text-slate-800">{data.taskSuccessRate}%</span>
                     </div>
                     <div className="flex flex-col bg-slate-50/50 border border-slate-100/60 rounded-xl p-2 text-center">
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Done</span>
+                        <span className="text-xs font-bold text-slate-400 tracking-wider mb-0.5">Done</span>
                         <span className="text-base font-black text-slate-800">{data.totalCompletedTickets}</span>
                     </div>
                 </div>
@@ -150,7 +150,7 @@ const PerformanceCard = ({ onLeaderboardClick }) => {
                 )}
 
                 {/* Click hint */}
-                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-350 text-center group-hover:text-teal-600 transition-colors mt-2">
+                <p className="text-[9px] font-bold tracking-wider text-slate-350 text-center group-hover:text-teal-600 transition-colors mt-2">
                     View full leaderboard
                 </p>
             </div>

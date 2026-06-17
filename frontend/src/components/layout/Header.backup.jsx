@@ -164,7 +164,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                     <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" />
                     <span className="font-black text-slate-900 tracking-tight text-lg hidden md:block">CipherGate</span>
                     <span className="font-semibold text-slate-800 ml-4 hidden md:block">/</span>
-                    <span className="font-black text-slate-900 tracking-tight text-lg ml-2 uppercase hidden md:block">{title || 'Dashboard'}</span>
+                    <span className="font-black text-slate-900 tracking-tight text-lg ml-2 hidden md:block">{title || 'Dashboard'}</span>
                 </div>
 
                 {/* Center - Search Bar */}
@@ -336,8 +336,8 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                     >
                                         <div className="py-4 px-5 bg-white flex justify-between items-center border-b border-slate-50">
                                             <div>
-                                                <h3 className="font-black text-slate-900 text-sm tracking-tight uppercase">Notifications</h3>
-                                                <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mt-0.5">Alert Center</p>
+                                                <h3 className="font-black text-slate-900 text-sm tracking-tight">Notifications</h3>
+                                                <p className="text-[9px] text-slate-400 font-black tracking-widest mt-0.5">Alert Center</p>
                                             </div>
                                             <div className="flex items-center gap-1">
                                                 <button
@@ -358,13 +358,13 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                         <div className="px-5 py-2 bg-slate-50/50 flex gap-4 border-b border-slate-50">
                                             <button
                                                 onClick={() => setNotifTab('all')}
-                                                className={`text-[10px] font-black uppercase tracking-wider py-1 ${notifTab === 'all' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                                className={`text-[10px] font-black tracking-wider py-1 ${notifTab === 'all' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-slate-400 hover:text-slate-600'}`}
                                             >
                                                 All ({notifications.length})
                                             </button>
                                             <button
                                                 onClick={() => setNotifTab('unread')}
-                                                className={`text-[10px] font-black uppercase tracking-wider py-1 ${notifTab === 'unread' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                                className={`text-[10px] font-black tracking-wider py-1 ${notifTab === 'unread' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-slate-400 hover:text-slate-600'}`}
                                             >
                                                 Unread ({unreadCount})
                                             </button>
@@ -376,7 +376,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                                     <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center mb-3 border border-slate-100 shadow-sm">
                                                         <Bell className="w-6 h-6 text-slate-200" />
                                                     </div>
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No notifications</p>
+                                                    <p className="text-[10px] font-black text-slate-400 tracking-widest">No notifications</p>
                                                 </div>
                                             ) : (
                                                 <div className="divide-y divide-slate-50">
@@ -443,7 +443,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                         <div className="flex items-center pl-2 md:pl-4 border-l border-slate-100 ml-1 md:ml-4 relative" ref={profileRef}>
                             <div className="flex flex-col items-end mr-2 md:mr-3 hidden sm:flex">
                                 <span className="text-xs font-black text-slate-800 leading-none">{user.name || 'User'}</span>
-                                <span className="text-[9px] font-black text-teal-600 uppercase tracking-widest mt-1">{user.role || 'Member'}</span>
+                                <span className="text-[9px] font-black text-teal-600 tracking-widest mt-1">{user.role || 'Member'}</span>
                             </div>
 
                             <button
@@ -477,7 +477,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-sm font-black text-slate-900 truncate">{user.displayName || user.name}</p>
-                                                    <p className="text-[10px] text-teal-600 font-black uppercase tracking-widest truncate">{user.role || 'Member'}</p>
+                                                    <p className="text-[10px] text-teal-600 font-black tracking-widest truncate">{user.role || 'Member'}</p>
                                                 </div>
                                             </div>
                                         </div>
@@ -562,7 +562,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                     </div>
                                 ) : searchQuery === '' ? (
                                     <div className="mb-4">
-                                        <h4 className="text-[10px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-2">⚡ Recent Modules</h4>
+                                        <h4 className="text-[10px] font-black text-[#9CA3AF] tracking-[0.15em] mb-2">⚡ Recent Modules</h4>
                                         <div className="space-y-1">
                                             {[
                                                 { name: 'Workers', path: '/admin/workers' },
@@ -588,7 +588,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                     <>
                                         {isAdmin && filteredDepartments.length > 0 && (
                                             <div className="mb-4">
-                                                <h4 className="text-[10px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-2">🏢 Departments</h4>
+                                                <h4 className="text-[10px] font-black text-[#9CA3AF] tracking-[0.15em] mb-2">🏢 Departments</h4>
                                                 <div className="space-y-2">
                                                     {filteredDepartments.map((dept, idx) => {
                                                         const isSelected = idx === selectedIndex;
@@ -607,7 +607,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                         )}
                                         {isAdmin && filteredWorkers.length > 0 && (
                                             <div className="mb-4">
-                                                <h4 className="text-[10px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-2">👤 People</h4>
+                                                <h4 className="text-[10px] font-black text-[#9CA3AF] tracking-[0.15em] mb-2">👤 People</h4>
                                                 <div className="space-y-2">
                                                     {filteredWorkers.map((worker, idx) => {
                                                         const isSelected = (filteredDepartments.length + idx) === selectedIndex;
@@ -626,7 +626,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                         )}
                                         {filteredTasks.length > 0 && (
                                             <div>
-                                                <h4 className="text-[10px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-2">📋 Tasks</h4>
+                                                <h4 className="text-[10px] font-black text-[#9CA3AF] tracking-[0.15em] mb-2">📋 Tasks</h4>
                                                 <div className="space-y-2">
                                                     {filteredTasks.map((task, idx) => {
                                                         const isSelected = (filteredDepartments.length + filteredWorkers.length + idx) === selectedIndex;

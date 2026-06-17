@@ -286,22 +286,22 @@ const KpiManagement = () => {
                         ))}
                     </select>
 
-                    <div className="flex items-center bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden p-1 gap-1">
-                        <div className="p-1.5 text-slate-400 border-r border-slate-100 px-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center bg-white border border-slate-200 rounded-xl shadow-sm p-2 sm:p-1 gap-2 sm:gap-1 w-full sm:w-auto">
+                        <div className="hidden sm:block p-1.5 text-slate-400 border-r border-slate-100 px-2">
                             <Calendar className="w-4 h-4" />
                         </div>
                         <input
                             type="date"
                             value={dateRange.start}
                             onChange={e => setDateRange({ ...dateRange, start: e.target.value })}
-                            className="bg-transparent border-none text-xs font-black py-1 focus:ring-0 text-slate-700 outline-none"
+                            className="w-full sm:w-auto bg-slate-50 sm:bg-transparent border border-slate-100 sm:border-none rounded-lg sm:rounded-none text-xs font-black py-2 sm:py-1 px-3 sm:px-1 focus:ring-0 text-slate-700 outline-none"
                         />
-                        <span className="text-slate-300 mx-1 text-xs font-black">~</span>
+                        <span className="text-slate-300 mx-1 text-xs font-black hidden sm:inline">~</span>
                         <input
                             type="date"
                             value={dateRange.end}
                             onChange={e => setDateRange({ ...dateRange, end: e.target.value })}
-                            className="bg-transparent border-none text-xs font-black py-1 focus:ring-0 text-slate-700 outline-none"
+                            className="w-full sm:w-auto bg-slate-50 sm:bg-transparent border border-slate-100 sm:border-none rounded-lg sm:rounded-none text-xs font-black py-2 sm:py-1 px-3 sm:px-1 focus:ring-0 text-slate-700 outline-none"
                         />
                     </div>
                 </div>
@@ -418,12 +418,12 @@ const KpiManagement = () => {
                                         </div>
                                         <div>
                                             <p className="text-sm font-black text-slate-800">{worker.name}</p>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{worker.dept}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold tracking-wider">{worker.dept}</p>
                                         </div>
                                     </div>
                                     <div className="text-right">
                                         <p className="text-sm font-black text-teal-600">{worker.points} <span className="text-[10px] text-slate-400 font-bold">SP</span></p>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">{worker.completed} Issues</p>
+                                        <p className="text-[10px] text-slate-400 font-bold tracking-tighter">{worker.completed} Issues</p>
                                     </div>
                                 </div>
                             )) : (
@@ -475,22 +475,22 @@ const KpiManagement = () => {
                         <div className="relative z-10">
                             <div className="flex items-center gap-2 mb-4">
                                 <TrendingUp className="w-4 h-4 text-teal-400" />
-                                <h4 className="text-teal-400 text-xs font-black uppercase tracking-widest">Performance Insights</h4>
+                                <h4 className="text-teal-400 text-xs font-black tracking-widest">Performance Insights</h4>
                             </div>
                             {stats.resolved > 0 ? (
                                 <div className="space-y-4">
                                     <p className="text-sm font-medium leading-relaxed opacity-90">
-                                        Delivery for <span className="font-bold text-white uppercase">{subdomain || 'Main'}</span> is currently operating at <span className="text-teal-400 font-black">{stats.efficiency}%</span> efficiency.
+                                        Delivery for <span className="font-bold text-white">{subdomain || 'Main'}</span> is currently operating at <span className="text-teal-400 font-black">{stats.efficiency}%</span> efficiency.
                                     </p>
                                     <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700 shadow-inner">
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase mb-1 tracking-tighter">Bottleneck Analysis</p>
+                                        <p className="text-[10px] text-slate-400 font-bold mb-1 tracking-tighter">Bottleneck Analysis</p>
                                         <p className="text-xs font-bold text-white">
                                             {cfdData[cfdData.length - 1]?.Review > 5 ? "Review column is piling up. Action required." : "Status distribution is currently healthy."}
                                         </p>
                                     </div>
                                     <button
                                         onClick={exportAnalyticsCSV}
-                                        className="w-full flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-teal-400 hover:text-white transition-colors"
+                                        className="w-full flex items-center justify-between text-[10px] font-black tracking-widest text-teal-400 hover:text-white transition-colors"
                                     >
                                         Export Analytics <ChevronRight className="w-3 h-3" />
                                     </button>
@@ -528,13 +528,13 @@ const KPICard = ({ title, value, unit = "", icon, color, trend, trendLabel, subt
                 )}
             </div>
             <div>
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">{title}</span>
+                <span className="text-[10px] font-black text-slate-400 tracking-widest block mb-1">{title}</span>
                 <div className="flex items-baseline gap-1">
                     <span className="text-2xl font-black text-slate-900 tracking-tight">{value}</span>
-                    {unit && <span className="text-xs font-bold text-slate-400 uppercase opacity-70">{unit}</span>}
+                    {unit && <span className="text-xs font-bold text-slate-400 opacity-70">{unit}</span>}
                 </div>
-                {subtitle && <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter opacity-80">{subtitle}</p>}
-                {trendLabel && <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">{trendLabel}</p>}
+                {subtitle && <p className="text-[10px] text-slate-400 font-bold mt-1 tracking-tighter opacity-80">{subtitle}</p>}
+                {trendLabel && <p className="text-[10px] text-slate-400 font-bold mt-1 tracking-tighter">{trendLabel}</p>}
             </div>
         </div>
     );
@@ -544,7 +544,7 @@ const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
         return (
             <div className="bg-white/95 backdrop-blur-md p-4 rounded-xl shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-200 min-w-[150px]">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">{label}</p>
+                <p className="text-[10px] font-black text-slate-400 tracking-widest mb-3 border-b border-slate-100 pb-2">{label}</p>
                 <div className="space-y-2.5">
                     {payload.map((p, i) => (
                         <div key={i} className="flex items-center justify-between gap-6">

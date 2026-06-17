@@ -199,7 +199,7 @@ const EmployeeScores = () => {
                         onClick={exportScores}
                         disabled={!scores.length}
                         variant="outline"
-                        className="bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
+                        className="!bg-green-50 hover:!bg-green-100 border border-green-200 !text-green-800"
                     >
                         <FaDownload className="mr-2" />
                         Export CSV

@@ -161,25 +161,13 @@ I am your **Senior AWS FinOps Architect**. I analyze your live cloud billing dat
         {messages.map((msg, idx) => (
           <div key={idx} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
             {/* Avatar */}
-            <div className={`w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center shadow-sm ${
-              msg.role === 'user'
-                ? 'bg-slate-800 text-white'
-                : msg.isError
-                ? 'bg-rose-100 text-rose-600'
-                : 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white'
-            }`}>
+            <div className={`w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center shadow-sm ${ msg.role === 'user' ? 'bg-slate-800 text-white' : msg.isError ? 'bg-rose-100 text-rose-600' : 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white' }`}>
               {msg.role === 'user' ? <FiUser size={14} /> : <FiCpu size={14} />}
             </div>
 
             <div className={`max-w-[82%] space-y-2 ${msg.role === 'user' ? 'items-end' : 'items-start'} flex flex-col`}>
               {/* Bubble */}
-              <div className={`px-4 py-3 rounded-2xl text-xs leading-relaxed shadow-sm ${
-                msg.role === 'user'
-                  ? 'bg-slate-800 text-slate-100 rounded-tr-none'
-                  : msg.isError
-                  ? 'bg-rose-50 text-rose-800 border border-rose-100 rounded-tl-none'
-                  : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none'
-              }`}>
+              <div className={`px-4 py-3 rounded-2xl text-xs leading-relaxed shadow-sm ${ msg.role === 'user' ? 'bg-slate-800 text-slate-100 rounded-tr-none' : msg.isError ? 'bg-rose-50 text-rose-800 border border-rose-100 rounded-tl-none' : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none' }`}>
                 {msg.role === 'user' ? (
                   <p>{msg.content}</p>
                 ) : (
@@ -193,7 +181,7 @@ I am your **Senior AWS FinOps Architect**. I analyze your live cloud billing dat
               {/* Tool calls */}
               {msg.toolCalls?.length > 0 && (
                 <div className="w-full space-y-1">
-                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider px-1">MCP Tool Executions</p>
+                  <p className="text-[9px] text-slate-400 font-bold tracking-wider px-1">MCP Tool Executions</p>
                   {msg.toolCalls.map((tc, tcIdx) => (
                     <ToolCallBlock key={tcIdx} toolCall={tc} />
                   ))}
@@ -227,7 +215,7 @@ I am your **Senior AWS FinOps Architect**. I analyze your live cloud billing dat
       {/* Suggested prompts */}
       {messages.length <= 1 && !isLoading && (
         <div className="bg-white border-x border-slate-100 px-4 py-3">
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Suggested Questions</p>
+          <p className="text-[10px] text-slate-400 font-bold tracking-wider mb-2">Suggested Questions</p>
           <div className="flex flex-wrap gap-2">
             {SUGGESTED_PROMPTS.map((prompt, idx) => (
               <button

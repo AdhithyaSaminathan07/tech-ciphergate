@@ -83,7 +83,7 @@ const SalesVelocityWidget = () => {
 
       <div className="mt-auto bg-dash-green text-white rounded-2xl md:rounded-[24px] p-4 md:p-5 flex justify-between items-center shadow-[0_10px_20px_rgba(94,176,99,0.2)]">
         <div>
-          <p className="text-[10px] md:text-[11px] font-bold uppercase tracking-widest opacity-80 mb-1">Calculated Velocity</p>
+          <p className="text-[10px] md:text-[11px] font-bold tracking-widest opacity-80 mb-1">Calculated Velocity</p>
           <p className="text-[18px] md:text-[24px] font-bold">₹{metrics.salesVelocity} <span className="text-[12px] md:text-[14px] opacity-70">/ Day</span></p>
         </div>
         <div className="text-[9px] md:text-[11px] font-bold bg-white/20 px-2.5 py-1 md:px-3 md:py-1.5 rounded-full backdrop-blur-sm">

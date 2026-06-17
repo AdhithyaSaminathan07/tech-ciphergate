@@ -157,10 +157,7 @@ const Home = () => {
               <motion.div
                 key={feature.title}
                 onClick={() => setActiveFeature(index)}
-                className={`flex flex-col items-center p-4 rounded-xl cursor-pointer transition-all ${activeFeature === index
-                  ? 'bg-[#0d9488]/20 border border-[#0d9488]'
-                  : 'bg-gray-100 hover:bg-gray-200'
-                  }`}
+                className={`flex flex-col items-center p-4 rounded-xl cursor-pointer transition-all ${activeFeature === index ? 'bg-[#0d9488]/20 border border-[#0d9488]' : 'bg-gray-100 hover:bg-gray-200' }`}
               >
                 <div className={`mb-2 ${activeFeature === index ? 'text-[#0d9488]' : 'text-black'}`}>
                   {feature.icon}

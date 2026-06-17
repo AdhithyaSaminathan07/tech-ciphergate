@@ -330,7 +330,7 @@ const Dashboard = () => {
           <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
             <div>
               <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Attendance</p>
+                <p className="text-xs font-bold text-slate-400 tracking-widest">Attendance</p>
                 <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Check-in</span>
               </div>
               <p className="text-[11px] text-slate-400 mb-4 leading-relaxed">
@@ -370,7 +370,7 @@ const Dashboard = () => {
           <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
             <div>
               <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Salary - Current Month</p>
+                <p className="text-xs font-bold text-slate-400 tracking-widest">Salary - Current Month</p>
                 <span className="text-[10px] bg-slate-50 text-slate-500 px-2 py-0.5 rounded-full font-bold">Estimated</span>
               </div>
               <div className="space-y-3">
@@ -495,7 +495,7 @@ const Dashboard = () => {
                       {/* Progress bar */}
                       {salaryData.baseSalary > 0 && (
                         <div className="space-y-1">
-                          <div className="flex justify-between text-[9px] font-bold text-slate-400 uppercase">
+                          <div className="flex justify-between text-[9px] font-bold text-slate-400">
                             <span>Payout ratio</span>
                             <span>{payoutRatio}%</span>
                           </div>
@@ -511,7 +511,7 @@ const Dashboard = () => {
                       {/* Final Payout hero */}
                       <div className="bg-teal-50/60 rounded-xl p-3 border border-teal-100 flex items-center justify-between">
                         <div>
-                          <span className="block text-[10px] text-teal-600 uppercase font-black tracking-wider">Final Payout</span>
+                          <span className="block text-[10px] text-teal-600 font-black tracking-wider">Final Payout</span>
                           <span className="text-xl font-black text-teal-700 tracking-tight">
                             ₹{Math.round(displayFinalPayout).toLocaleString('en-IN')}
                           </span>
@@ -541,7 +541,7 @@ const Dashboard = () => {
           <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
             <div>
               <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Top Team Earnings</p>
+                <p className="text-xs font-bold text-slate-400 tracking-widest">Top Team Earnings</p>
                 <span className="text-[10px] bg-slate-50 text-slate-500 px-2 py-0.5 rounded-full font-bold">Monthly Rank</span>
               </div>
               <div className="space-y-3 mt-3.5">
@@ -580,7 +580,7 @@ const Dashboard = () => {
                   })()
                 ) : (
                   <div className="py-8 text-center flex flex-col items-center justify-center">
-                    <p className="text-[10px] font-bold text-slate-350 uppercase tracking-wider">No team earnings recorded</p>
+                    <p className="text-[10px] font-bold text-slate-350 tracking-wider">No team earnings recorded</p>
                   </div>
                 )}
               </div>
@@ -764,7 +764,7 @@ const Dashboard = () => {
                       <h3 className="text-base font-extrabold text-slate-900 leading-tight">
                         Bug Bounty Program
                       </h3>
-                      <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">
+                      <p className="text-[10px] text-slate-400 font-semibold tracking-wider mt-0.5">
                         Responsible Disclosure
                       </p>
                     </div>
@@ -839,4 +839,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default Dashboard;

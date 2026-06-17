@@ -240,29 +240,13 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                     {/* Background Bar */}
                     <div className="absolute inset-0">
                         <div
-                            className={`
-                                mx-auto 
-                                h-14 
-                                md:h-16 
-                                flex 
-                                items-stretch 
-                                bg-white
-                                border-b
-                                border-slate-200/70
-                                shadow-[0_1px_2px_rgba(0,0,0,0.04)]
-                                backdrop-blur-md
-                                relative
-                                overflow-hidden
-                                transition-all
-                                duration-300
-                                ${isAdmin ? 'ring-0' : ''}
-                            `}
+                            className={`mx-auto h-14 md:h-16 flex items-stretch bg-white border-b border-slate-200/70 shadow-[0_1px_2px_rgba(0,0,0,0.04)] backdrop-blur-md relative overflow-hidden transition-all duration-300 ${isAdmin ? 'ring-0' : ''}`}
                         />
                     </div>
                     {/* Content Overlay */}
-                    <div className={`relative z-10 h-full flex items-stretch justify-between ${isAdmin ? 'px-4 md:px-8' : 'px-2 md:px-6'}`}>
-                        {/* Left Side: Logo & Menu (True Bottom Aligned) */}
-                        <div className="flex items-end h-full pt-5 pb-[2px] lg:min-w-[240px]">
+                    <div className={`relative z-10 h-full flex items-stretch justify-between ${isAdmin ? 'px-2 md:px-8' : 'px-2 md:px-6'}`}>
+                        {/* Left Side: Logo & Menu */}
+                        <div className="flex items-center gap-1 h-full lg:min-w-[240px]">
                             {isAdmin && (
                                 <button
                                     onClick={onMenuClick}
@@ -273,18 +257,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                             )}
 
                             <h1
-                                className={`
-                                    font-black 
-                                    text-emerald-700 
-                                    tracking-[0.12em] 
-                                    uppercase 
-                                    leading-none
-                                    self-end
-                                    ${isAdmin ? 'text-lg md:text-xl' : 'text-base md:text-lg'}
-                                `}
-                                style={{
-                                    transform: 'translateY(2px)'
-                                }}
+                                className={`font-extrabold text-emerald-800 tracking-tight ${isAdmin ? 'text-lg md:text-xl' : 'text-base md:text-lg'}`}
                             >
                                 {title || 'Dashboard'}
                             </h1>
@@ -307,7 +280,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                             </div>
                         </div>
                         {/* Right Side: Tools & Profile */}
-                        <div className="flex items-center gap-1.5 md:gap-4 flex-1 justify-end lg:flex-initial lg:min-w-[240px] h-full">
+                        <div className="flex items-center gap-1 md:gap-4 flex-1 justify-end lg:flex-initial lg:min-w-[240px] h-full">
                             {/* Mobile Search Icon */}
                             <button
                                 onClick={() => setIsSearchOpen(true)}
@@ -456,8 +429,8 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                             >
                                                 <div className="py-4 px-5 bg-white flex justify-between items-center border-b border-slate-50">
                                                     <div>
-                                                        <h3 className="font-black text-slate-900 text-sm tracking-tight uppercase">Notifications</h3>
-                                                        <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest mt-0.5">Alert Center</p>
+                                                        <h3 className="font-black text-slate-900 text-sm tracking-tight">Notifications</h3>
+                                                        <p className="text-[9px] text-slate-400 font-black tracking-widest mt-0.5">Alert Center</p>
                                                     </div>
                                                     <div className="flex items-center gap-1">
                                                         <button
@@ -478,13 +451,13 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                                 <div className="px-5 py-2 bg-slate-50/50 flex gap-4 border-b border-slate-50">
                                                     <button
                                                         onClick={() => setNotifTab('all')}
-                                                        className={`text-[10px] font-black uppercase tracking-wider py-1 ${notifTab === 'all' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                                        className={`text-[10px] font-black tracking-wider py-1 ${notifTab === 'all' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-slate-400 hover:text-slate-600'}`}
                                                     >
                                                         All ({notifications.length})
                                                     </button>
                                                     <button
                                                         onClick={() => setNotifTab('unread')}
-                                                        className={`text-[10px] font-black uppercase tracking-wider py-1 ${notifTab === 'unread' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                                        className={`text-[10px] font-black tracking-wider py-1 ${notifTab === 'unread' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-slate-400 hover:text-slate-600'}`}
                                                     >
                                                         Unread ({unreadCount})
                                                     </button>
@@ -496,7 +469,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                                             <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center mb-3 border border-slate-100 shadow-sm">
                                                                 <Bell className="w-6 h-6 text-slate-200" />
                                                             </div>
-                                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No notifications</p>
+                                                            <p className="text-[10px] font-black text-slate-400 tracking-widest">No notifications</p>
                                                         </div>
                                                     ) : (
                                                         <div className="divide-y divide-slate-50">
@@ -561,20 +534,20 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
 
                             {/* Profile Section */}
                             {user && (
-                                <div className="flex items-center pl-4 md:pl-8 ml-2 relative h-full" ref={profileRef}>
+                                <div className="flex items-center pl-1 md:pl-8 relative h-full" ref={profileRef}>
                                     <div
                                         onClick={() => setIsProfileOpen(!isProfileOpen)}
-                                        className={`flex items-center gap-3 cursor-pointer group px-3 py-1.5 rounded-2xl transition-all duration-300 ${isProfileOpen ? 'bg-slate-100/80 shadow-inner' : 'hover:bg-slate-50'}`}
+                                        className={`flex items-center gap-1.5 md:gap-3 cursor-pointer group px-1.5 md:px-3 py-1.5 rounded-2xl transition-all duration-300 ${isProfileOpen ? 'bg-slate-100/80 shadow-inner' : 'hover:bg-slate-50'}`}
                                     >
                                         <div className="flex flex-col items-end hidden sm:flex">
-                                            <span className="text-[13px] font-black text-slate-900 leading-tight tracking-tight uppercase">{user.name || 'User'}</span>
+                                            <span className="text-[13px] font-black text-slate-900 leading-tight tracking-tight">{user.name || 'User'}</span>
                                             <div className="flex items-center gap-1.5 mt-0.5">
                                                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                                <span className="text-[9px] font-black text-teal-600 uppercase tracking-[0.15em]">{user.role || 'Member'}</span>
+                                                <span className="text-[9px] font-black text-teal-600 tracking-[0.15em]">{user.role || 'Member'}</span>
                                             </div>
                                         </div>
 
-                                        <div className={`relative h-10 w-10 rounded-xl overflow-hidden shadow-md transition-all duration-300 group-hover:shadow-teal-500/10 group-hover:scale-105 border-2 ${isProfileOpen ? 'border-teal-500 shadow-teal-500/20' : 'border-white'}`}>
+                                        <div className={`relative h-9 w-9 md:h-10 md:w-10 rounded-xl overflow-hidden shadow-md transition-all duration-300 group-hover:shadow-teal-500/10 group-hover:scale-105 border-2 ${isProfileOpen ? 'border-teal-500 shadow-teal-500/20' : 'border-white'}`}>
                                             {user.photo ? (
                                                 <img src={getFullFileUrl(user.photo)} alt="Profile" className="w-full h-full object-cover" />
                                             ) : (
@@ -585,7 +558,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                             <div className="absolute inset-0 ring-1 ring-inset ring-black/5 rounded-xl" />
                                         </div>
 
-                                        <ChevronDown size={14} className={`text-slate-400 transition-transform duration-300 ${isProfileOpen ? 'rotate-180 text-teal-600' : 'group-hover:text-slate-600'}`} />
+                                        <ChevronDown size={14} className={`hidden md:block text-slate-400 transition-transform duration-300 ${isProfileOpen ? 'rotate-180 text-teal-600' : 'group-hover:text-slate-600'}`} />
                                     </div>
 
                                     <AnimatePresence>
@@ -612,10 +585,10 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                                             </div>
                                                         </div>
                                                         <div className="flex-1 min-w-0">
-                                                            <h3 className="text-[13px] font-black tracking-tight uppercase truncate">{user.displayName || user.name}</h3>
+                                                            <h3 className="text-[13px] font-black tracking-tight truncate">{user.displayName || user.name}</h3>
                                                             <div className="flex items-center gap-1.5 mt-0.5">
                                                                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                                                                <span className="text-[9px] font-black text-teal-400 uppercase tracking-[0.15em]">{user.role || 'Member'}</span>
+                                                                <span className="text-[9px] font-black text-teal-400 tracking-[0.15em]">{user.role || 'Member'}</span>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -633,7 +606,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                                             <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center group-hover/btn:bg-white shadow-sm transition-all">
                                                                 <Settings2 size={16} />
                                                             </div>
-                                                            <span className="text-[12px] font-bold uppercase tracking-tight">Account Settings</span>
+                                                            <span className="text-[12px] font-bold tracking-tight">Account Settings</span>
                                                             <ChevronRight size={12} className="ml-auto opacity-40 group-hover/btn:opacity-100 transition-all" />
                                                         </button>
 
@@ -647,14 +620,14 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                                             <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center group-hover/btn:bg-white shadow-sm transition-all">
                                                                 <LogOut size={16} />
                                                             </div>
-                                                            <span className="text-[12px] font-bold uppercase tracking-tight">Logout Session</span>
+                                                            <span className="text-[12px] font-bold tracking-tight">Logout Session</span>
                                                             <ChevronRight size={12} className="ml-auto opacity-40 group-hover/btn:opacity-100 transition-all" />
                                                         </button>
                                                     </div>
                                                 </div>
 
                                                 <div className="px-4 py-3 bg-slate-50/50 border-t border-slate-50 flex justify-center">
-                                                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em]">Security Core v2.4</p>
+                                                    <p className="text-[8px] font-bold text-slate-400 tracking-[0.2em]">Security Core v2.4</p>
                                                 </div>
                                             </motion.div>
                                         )}
@@ -723,7 +696,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                             <div className="absolute inset-0 rounded-full border-2 border-teal-500 border-t-transparent animate-spin"></div>
                                         </div>
                                         <div>
-                                            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-widest">Consulting AI Second Brain</h4>
+                                            <h4 className="text-xs font-bold text-slate-700 tracking-widest">Consulting AI Second Brain</h4>
                                             <p className="text-[10px] text-slate-400 font-medium mt-1">Retrieving repository files, wikis, and historical tasks...</p>
                                         </div>
                                     </div>
@@ -735,7 +708,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                             <div className="flex items-center justify-between border-b border-teal-100/50 pb-2.5 mb-3">
                                                 <div className="flex items-center gap-1.5">
                                                     <Cpu size={16} className="text-teal-600" />
-                                                    <span className="text-xs font-black text-slate-700 uppercase tracking-wider">AI Second Brain Synthesis</span>
+                                                    <span className="text-xs font-black text-slate-700 tracking-wider">AI Second Brain Synthesis</span>
                                                 </div>
                                                 <button 
                                                     onClick={() => {
@@ -743,7 +716,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                                         setAiAnswer('');
                                                         setAiAnswerResults([]);
                                                     }}
-                                                    className="text-[9px] font-black text-teal-600 hover:text-teal-700 uppercase tracking-widest"
+                                                    className="text-[9px] font-black text-teal-600 hover:text-teal-700 tracking-widest"
                                                 >
                                                     ← Back to Search
                                                 </button>
@@ -756,13 +729,13 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                         {/* Matches Sources */}
                                         {aiAnswerResults.length > 0 && (
                                             <div className="space-y-2">
-                                                <h4 className="text-[10px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-1">📂 Matched Context Sources ({aiAnswerResults.length})</h4>
+                                                <h4 className="text-[10px] font-black text-[#9CA3AF] tracking-[0.15em] mb-1">📂 Matched Context Sources ({aiAnswerResults.length})</h4>
                                                 <div className="space-y-1.5">
                                                     {aiAnswerResults.map((r, i) => (
                                                         <div key={i} className="p-2.5 bg-white border border-slate-100 rounded-xl shadow-sm hover:border-slate-200 transition-all flex flex-col gap-1">
                                                             <div className="flex justify-between items-center">
                                                                 <span className="text-[11px] font-bold text-slate-800">{r.title}</span>
-                                                                <span className="text-[8px] font-extrabold px-1.5 py-0.5 bg-slate-50 border border-slate-200 text-slate-500 rounded-full uppercase">{r.type}</span>
+                                                                <span className="text-[8px] font-extrabold px-1.5 py-0.5 bg-slate-50 border border-slate-200 text-slate-500 rounded-full">{r.type}</span>
                                                             </div>
                                                             <p className="text-[10px] text-slate-500 line-clamp-2 leading-relaxed">{r.content}</p>
                                                         </div>
@@ -777,7 +750,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                     </div>
                                 ) : searchQuery === '' ? (
                                     <div className="mb-4">
-                                        <h4 className="text-[10px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-2">⚡ Recent Modules</h4>
+                                        <h4 className="text-[10px] font-black text-[#9CA3AF] tracking-[0.15em] mb-2">⚡ Recent Modules</h4>
                                         <div className="space-y-1">
                                             {[
                                                 { name: 'Workers', path: '/admin/workers' },
@@ -803,7 +776,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                     <>
                                         {isAdmin && filteredDepartments.length > 0 && (
                                             <div className="mb-4">
-                                                <h4 className="text-[10px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-2">🏢 Departments</h4>
+                                                <h4 className="text-[10px] font-black text-[#9CA3AF] tracking-[0.15em] mb-2">🏢 Departments</h4>
                                                 <div className="space-y-2">
                                                     {filteredDepartments.map((dept, idx) => {
                                                         const isSelected = idx === selectedIndex;
@@ -822,7 +795,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                         )}
                                         {isAdmin && filteredWorkers.length > 0 && (
                                             <div className="mb-4">
-                                                <h4 className="text-[10px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-2">👤 People</h4>
+                                                <h4 className="text-[10px] font-black text-[#9CA3AF] tracking-[0.15em] mb-2">👤 People</h4>
                                                 <div className="space-y-2">
                                                     {filteredWorkers.map((worker, idx) => {
                                                         const isSelected = (filteredDepartments.length + idx) === selectedIndex;
@@ -841,7 +814,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                         )}
                                         {filteredTasks.length > 0 && (
                                             <div>
-                                                <h4 className="text-[10px] font-black text-[#9CA3AF] uppercase tracking-[0.15em] mb-2">📋 Tasks</h4>
+                                                <h4 className="text-[10px] font-black text-[#9CA3AF] tracking-[0.15em] mb-2">📋 Tasks</h4>
                                                 <div className="space-y-2">
                                                     {filteredTasks.map((task, idx) => {
                                                         const isSelected = (filteredDepartments.length + filteredWorkers.length + idx) === selectedIndex;

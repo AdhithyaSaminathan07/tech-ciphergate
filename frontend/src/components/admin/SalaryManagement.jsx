@@ -1349,7 +1349,7 @@ const SalaryManagement = () => {
                 if (!record?.department) return <span className="text-slate-400">N/A</span>;
                 const deptName = typeof record.department === 'object' ? record.department.name : record.department;
                 return (
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-50/50 text-[#0d9488] border border-teal-100/30 uppercase tracking-wider">
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-50/50 text-[#0d9488] border border-teal-100/30 tracking-wider">
                         {deptName}
                     </span>
                 );
@@ -1871,32 +1871,28 @@ const SalaryManagement = () => {
 
     return (
         <div>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                 <div className="min-w-0">
-                    <h1 className="text-2xl font-black text-slate-800 tracking-tight">Payroll Overview</h1>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Manage employee base pay, bonuses, and fines</p>
+                    <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Payroll Overview</h1>
+                    <p className="text-sm text-slate-500 mt-1">Manage employee base pay, bonuses, and fines</p>
                 </div>
                 
                 {/* Header Actions */}
-                <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-start sm:justify-end">
+                <div className="grid grid-cols-2 md:flex md:flex-wrap items-center gap-2.5 w-full md:w-auto">
                     <button
-                        className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl font-bold transition-all duration-150 active:scale-95 flex items-center gap-2 text-xs shadow-sm"
+                        className="px-3 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl font-bold transition-all duration-150 active:scale-95 flex justify-center items-center gap-1.5 text-xs shadow-sm whitespace-nowrap"
                         onClick={openBulkReportModal}
                     >
-                        <List size={16} className="text-slate-400" /> View All Reports
+                        <List size={14} className="text-slate-400" /> View Reports
                     </button>
                     <button
-                        className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl font-bold transition-all duration-150 active:scale-95 flex items-center gap-2 text-xs shadow-sm"
+                        className="px-3 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl font-bold transition-all duration-150 active:scale-95 flex justify-center items-center gap-1.5 text-xs shadow-sm whitespace-nowrap"
                         onClick={() => setIsFineModalOpen(true)}
                     >
-                        <Coins size={16} className="text-slate-400" /> Fine
+                        <Coins size={14} className="text-slate-400" /> Fine
                     </button>
                     <button
-                        className={`px-4 py-2.5 border rounded-xl font-bold transition-all duration-150 active:scale-95 flex items-center gap-2 text-xs shadow-sm ${
-                            isFineFilterOpen 
-                            ? 'border-teal-200 bg-teal-50 text-teal-700' 
-                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
-                        }`}
+                        className={`px-3 py-2 border rounded-xl font-bold transition-all duration-150 active:scale-95 flex justify-center items-center gap-1.5 text-xs shadow-sm whitespace-nowrap ${ isFineFilterOpen ? 'border-teal-200 bg-teal-50 text-teal-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300' }`}
                         onClick={() => {
                             const nextState = !isFineFilterOpen;
                             setIsFineFilterOpen(nextState);
@@ -1905,13 +1901,13 @@ const SalaryManagement = () => {
                             }
                         }}
                     >
-                        <Sliders size={16} className={isFineFilterOpen ? 'text-teal-600' : 'text-slate-400'} /> Fine History
+                        <Sliders size={14} className={isFineFilterOpen ? 'text-teal-600' : 'text-slate-400'} /> Fine History
                     </button>
                     <button
-                        className="px-4 py-2.5 bg-rose-50 border border-rose-100 text-rose-600 hover:bg-rose-100/50 rounded-xl font-bold transition-all duration-150 active:scale-95 flex items-center gap-2 text-xs shadow-sm"
+                        className="px-3 py-2 bg-rose-50 border border-rose-100 text-rose-600 hover:bg-rose-100/50 rounded-xl font-bold transition-all duration-150 active:scale-95 flex justify-center items-center gap-1.5 text-xs shadow-sm whitespace-nowrap"
                         onClick={handleSalaryReset}
                     >
-                        <RefreshCw size={16} className="text-rose-500" /> Reset Salary
+                        <RefreshCw size={14} className="text-rose-500" /> Reset Salary
                     </button>
                 </div>
             </div>
@@ -1919,7 +1915,7 @@ const SalaryManagement = () => {
             {isFineFilterOpen && (
                 <Card className="mb-4">
                     <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Fine History & Filter</h3>
+                        <h3 className="text-sm font-black text-slate-800 tracking-widest">Fine History & Filter</h3>
                         <button
                             onClick={() => setIsFineFilterOpen(false)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all active:scale-95"
@@ -1933,7 +1929,7 @@ const SalaryManagement = () => {
                         <form onSubmit={handleFineFilterSubmit}>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Month</label>
+                                    <label className="block text-[10px] font-black text-slate-400 tracking-widest mb-1.5">Month</label>
                                     <select
                                         value={selectedFineMonth}
                                         onChange={(e) => setSelectedFineMonth(e.target.value)}
@@ -1955,7 +1951,7 @@ const SalaryManagement = () => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Year</label>
+                                    <label className="block text-[10px] font-black text-slate-400 tracking-widest mb-1.5">Year</label>
                                     <select
                                         value={selectedFineYear}
                                         onChange={(e) => setSelectedFineYear(e.target.value)}
@@ -1970,7 +1966,7 @@ const SalaryManagement = () => {
                                 <div className="flex items-end">
                                     <button
                                         type="submit"
-                                        className="btn btn-primary w-full text-xs py-2.5 rounded-xl font-bold tracking-wider uppercase active:scale-95 shadow-md shadow-teal-500/10"
+                                        className="btn btn-primary w-full text-xs py-2.5 rounded-xl font-bold tracking-wider active:scale-95 shadow-md shadow-teal-500/10"
                                         disabled={isLoadingFines}
                                     >
                                         {isLoadingFines ? 'Loading...' : 'Apply Filter'}
@@ -1981,20 +1977,20 @@ const SalaryManagement = () => {
 
                         {finesData.length > 0 && (
                             <div className="mt-6 border-t border-slate-100 pt-4">
-                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Fines Summary</h4>
+                                <h4 className="text-[10px] font-black text-slate-400 tracking-widest mb-3">Fines Summary</h4>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                                     <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-4 shadow-sm">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total Fines</p>
+                                        <p className="text-[10px] font-black text-slate-400 tracking-widest mb-0.5">Total Fines</p>
                                         <p className="text-xl font-black text-slate-700">{finesData.length}</p>
                                     </div>
                                     <div className="bg-rose-50/30 border border-rose-100/50 rounded-2xl p-4 shadow-sm">
-                                        <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-0.5">Total Amount</p>
+                                        <p className="text-[10px] font-black text-rose-400 tracking-widest mb-0.5">Total Amount</p>
                                         <p className="text-xl font-black text-rose-600">
                                             ₹{finesData.reduce((sum, fine) => sum + fine.amount, 0).toFixed(2)}
                                         </p>
                                     </div>
                                     <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-4 shadow-sm">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Unique Workers</p>
+                                        <p className="text-[10px] font-black text-slate-400 tracking-widest mb-0.5">Unique Workers</p>
                                         <p className="text-xl font-black text-slate-700">
                                             {[...new Set(finesData.map(fine => fine.workerId))].length}
                                         </p>
@@ -2006,11 +2002,11 @@ const SalaryManagement = () => {
                                     <table className="min-w-full divide-y divide-gray-200">
                                         <thead className="bg-gray-50">
                                             <tr>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reason</th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Employee</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Date</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Amount</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Reason</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
@@ -2098,11 +2094,7 @@ const SalaryManagement = () => {
                             <button
                                 type="button"
                                 onClick={() => setIsSalaryFilterOpen(!isSalaryFilterOpen)}
-                                className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border font-bold text-xs transition-all duration-200 active:scale-95 w-full md:w-auto shadow-sm ${
-                                    isSalaryFilterOpen 
-                                    ? 'bg-teal-50 border-teal-200 text-teal-700' 
-                                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
-                                }`}
+                                className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border font-bold text-xs transition-all duration-200 active:scale-95 w-full md:w-auto shadow-sm ${ isSalaryFilterOpen ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300' }`}
                             >
                                 <Sliders size={14} className="text-slate-500" />
                                 <span>Filters</span>
@@ -2141,7 +2133,7 @@ const SalaryManagement = () => {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                                     {/* Department */}
                                     <div className="flex flex-col">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Department</label>
+                                        <label className="text-[10px] font-black text-slate-400 tracking-widest mb-1.5">Department</label>
                                         <select
                                             value={filterDepartment}
                                             onChange={(e) => setFilterDepartment(e.target.value)}
@@ -2156,7 +2148,7 @@ const SalaryManagement = () => {
 
                                     {/* Fine Status */}
                                     <div className="flex flex-col">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Fine Status (This Month)</label>
+                                        <label className="text-[10px] font-black text-slate-400 tracking-widest mb-1.5">Fine Status (This Month)</label>
                                         <select
                                             value={filterFineStatus}
                                             onChange={(e) => setFilterFineStatus(e.target.value)}
@@ -2170,7 +2162,7 @@ const SalaryManagement = () => {
 
                                     {/* Bank Status */}
                                     <div className="flex flex-col">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Bank Details</label>
+                                        <label className="text-[10px] font-black text-slate-400 tracking-widest mb-1.5">Bank Details</label>
                                         <select
                                             value={filterBankStatus}
                                             onChange={(e) => setFilterBankStatus(e.target.value)}
@@ -2184,7 +2176,7 @@ const SalaryManagement = () => {
 
                                     {/* Sort By */}
                                     <div className="flex flex-col">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Sort By</label>
+                                        <label className="text-[10px] font-black text-slate-400 tracking-widest mb-1.5">Sort By</label>
                                         <select
                                             value={sortBy}
                                             onChange={(e) => setSortBy(e.target.value)}
@@ -2203,7 +2195,7 @@ const SalaryManagement = () => {
 
                                     {/* Min Salary */}
                                     <div className="flex flex-col sm:col-span-2 md:col-span-1">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Min Base Salary (₹)</label>
+                                        <label className="text-[10px] font-black text-slate-400 tracking-widest mb-1.5">Min Base Salary (₹)</label>
                                         <input
                                             type="number"
                                             placeholder="Min Salary"
@@ -2215,7 +2207,7 @@ const SalaryManagement = () => {
 
                                     {/* Max Salary */}
                                     <div className="flex flex-col sm:col-span-2 md:col-span-1">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Max Base Salary (₹)</label>
+                                        <label className="text-[10px] font-black text-slate-400 tracking-widest mb-1.5">Max Base Salary (₹)</label>
                                         <input
                                             type="number"
                                             placeholder="Max Salary"
@@ -2333,7 +2325,7 @@ const SalaryManagement = () => {
                                 </button>
                                 <div className="min-w-0">
                                     <h1 className="text-lg font-black text-slate-900 tracking-tight leading-tight">Bulk Salary Reports</h1>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Payroll Overview</p>
+                                    <p className="text-[10px] font-black text-slate-400 tracking-widest">Payroll Overview</p>
                                 </div>
                             </div>
 
@@ -2391,12 +2383,12 @@ const SalaryManagement = () => {
                             {/* Left Sidebar — Employee Selection */}
                             <div className="w-64 md:w-72 flex-none border-r border-slate-100 flex flex-col bg-white/60 min-h-0">
                                 <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 flex-none">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    <p className="text-[10px] font-black text-slate-400 tracking-widest">
                                         {selectedWorkersForReport.length > 0 ? `${selectedWorkersForReport.length} Selected` : 'Employees'}
                                     </p>
                                     <button
                                         onClick={toggleAllWorkersSelection}
-                                        className="text-[10px] font-black text-teal-600 uppercase tracking-widest hover:text-teal-700 transition-colors"
+                                        className="text-[10px] font-black text-teal-600 tracking-widest hover:text-teal-700 transition-colors"
                                     >
                                         {selectedWorkersForReport.length === bulkFilteredWorkers.length ? 'Deselect All' : 'Select All'}
                                     </button>
@@ -2444,10 +2436,7 @@ const SalaryManagement = () => {
                                     {bulkFilteredWorkers.map(worker => (
                                         <label
                                             key={worker._id}
-                                            className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer group ${selectedWorkersForReport.includes(worker._id)
-                                                ? 'bg-teal-50 border-teal-200 shadow-sm'
-                                                : 'bg-transparent border-slate-100 hover:border-slate-200 hover:bg-slate-50/60'
-                                                }`}
+                                            className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer group ${selectedWorkersForReport.includes(worker._id) ? 'bg-teal-50 border-teal-200 shadow-sm' : 'bg-transparent border-slate-100 hover:border-slate-200 hover:bg-slate-50/60' }`}
                                         >
                                             <div className="flex items-center gap-3 min-w-0">
                                                 <div className="relative flex-none">
@@ -2462,7 +2451,7 @@ const SalaryManagement = () => {
                                                 </div>
                                                 <div className="min-w-0">
                                                     <p className="text-xs font-bold text-slate-700 truncate">{worker.name}</p>
-                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight truncate">{worker.department?.name || worker.department}</p>
+                                                    <p className="text-[9px] font-bold text-slate-400 tracking-tight truncate">{worker.department?.name || worker.department}</p>
                                                 </div>
                                             </div>
                                             <input
@@ -2471,8 +2460,7 @@ const SalaryManagement = () => {
                                                 checked={selectedWorkersForReport.includes(worker._id)}
                                                 onChange={() => toggleWorkerSelection(worker._id)}
                                             />
-                                            <div className={`w-5 h-5 rounded-lg border-2 flex-none flex items-center justify-center transition-colors ${selectedWorkersForReport.includes(worker._id) ? 'bg-teal-500 border-teal-500' : 'border-slate-200 group-hover:border-teal-200'
-                                                }`}>
+                                            <div className={`w-5 h-5 rounded-lg border-2 flex-none flex items-center justify-center transition-colors ${selectedWorkersForReport.includes(worker._id) ? 'bg-teal-500 border-teal-500' : 'border-slate-200 group-hover:border-teal-200' }`}>
                                                 {selectedWorkersForReport.includes(worker._id) && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
                                             </div>
                                         </label>
@@ -2490,7 +2478,7 @@ const SalaryManagement = () => {
                                             <FileText size={32} className="text-slate-300" />
                                         </div>
                                         <h3 className="text-lg font-black text-slate-400 mb-1">No Report Generated Yet</h3>
-                                        <p className="text-xs font-bold text-slate-300 uppercase tracking-widest">Select employees on the left, then click Generate</p>
+                                        <p className="text-xs font-bold text-slate-300 tracking-widest">Select employees on the left, then click Generate</p>
                                     </div>
                                 )}
 
@@ -2513,23 +2501,23 @@ const SalaryManagement = () => {
                                             {/* Stats Cards */}
                                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                                                 <div className="bg-emerald-50 border border-emerald-100 rounded-3xl p-6 shadow-sm">
-                                                    <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Total Net Payout</p>
+                                                    <p className="text-[10px] font-black text-emerald-600 tracking-widest mb-1">Total Net Payout</p>
                                                     <p className="text-2xl font-black text-emerald-700">
                                                         ₹{bulkReportData.reduce((sum, r) => sum + Math.max(0, r.totalFinalSalary - (deductionView ? (r.taskPenalty || 0) : 0)), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                                     </p>
                                                 </div>
                                                 <div className="bg-slate-50 border border-slate-100 rounded-3xl p-6 shadow-sm">
-                                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Total Workers</p>
+                                                    <p className="text-[10px] font-black text-slate-500 tracking-widest mb-1">Total Workers</p>
                                                     <p className="text-2xl font-black text-slate-700">{bulkReportData.length}</p>
                                                 </div>
                                                 <div className="bg-rose-50 border border-rose-100 rounded-3xl p-6 shadow-sm">
-                                                    <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-1">Avg Attendance</p>
+                                                    <p className="text-[10px] font-black text-rose-500 tracking-widest mb-1">Avg Attendance</p>
                                                     <p className="text-2xl font-black text-rose-700">
                                                         {(bulkReportData.reduce((sum, r) => sum + (r.totalWorkingDays / (r.totalWorkingDays + r.totalAbsentDays || 1)), 0) / bulkReportData.length * 100).toFixed(1)}%
                                                     </p>
                                                 </div>
                                                 <div className="bg-violet-50 border border-violet-100 rounded-3xl p-6 shadow-sm">
-                                                    <p className="text-[10px] font-black text-violet-600 uppercase tracking-widest mb-1">Avg Salary / Worker</p>
+                                                    <p className="text-[10px] font-black text-violet-600 tracking-widest mb-1">Avg Salary / Worker</p>
                                                     <p className="text-2xl font-black text-violet-700">
                                                         ₹{bulkReportData.length > 0 ? (bulkReportData.reduce((sum, r) => sum + Math.max(0, r.totalFinalSalary - (deductionView ? (r.taskPenalty || 0) : 0)), 0) / bulkReportData.length).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
                                                     </p>
@@ -2538,13 +2526,13 @@ const SalaryManagement = () => {
 
                                             {/* Report Summary Header */}
                                             <div className="flex items-center justify-between flex-wrap gap-3">
-                                                <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Report Summary</h4>
+                                                <h4 className="text-sm font-black text-slate-900 tracking-widest">Report Summary</h4>
 
                                                 {/* Export Dropdown */}
                                                 <div className="relative">
                                                     <button
                                                         onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
-                                                        className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-teal-600 text-white hover:bg-teal-700 transition-all text-[10px] font-black uppercase tracking-widest shadow-lg shadow-teal-200"
+                                                        className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-teal-600 text-white hover:bg-teal-700 transition-all text-[10px] font-black tracking-widest shadow-lg shadow-teal-200"
                                                     >
                                                         <span>Export Reports</span>
                                                         <svg className={`w-3 h-3 transition-transform ${isExportDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -2608,7 +2596,7 @@ const SalaryManagement = () => {
                                                         <thead className="bg-slate-50/80 sticky top-0 backdrop-blur-sm z-10">
                                                             <tr>
                                                                 {['Employee', 'Department', 'Working Days', 'Actual Worked', 'Absent Days', 'Final Salary', 'Bank Status', 'Actions'].map(h => (
-                                                                    <th key={h} className="px-4 py-4 text-left font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 text-[10px]">{h}</th>
+                                                                    <th key={h} className="px-4 py-4 text-left font-black text-slate-400 tracking-widest border-b border-slate-100 text-[10px]">{h}</th>
                                                                 ))}
                                                             </tr>
                                                         </thead>
@@ -2623,7 +2611,7 @@ const SalaryManagement = () => {
                                                                             <p className="font-bold text-slate-700">{report.name}</p>
                                                                         </td>
                                                                         <td className="px-4 py-4">
-                                                                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 font-bold text-[9px] uppercase tracking-wider">
+                                                                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 font-bold text-[9px] tracking-wider">
                                                                                 {report.department}
                                                                             </span>
                                                                         </td>
@@ -2639,13 +2627,13 @@ const SalaryManagement = () => {
                                                                         <td className="px-4 py-4">
                                                                             <p className="font-black text-emerald-600 text-sm">₹{Math.max(0, report.totalFinalSalary - (deductionView ? (report.taskPenalty || 0) : 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                                                             {report.projectAdjustment !== undefined && report.projectAdjustment !== 0 && (
-                                                                                <span className={`inline-flex items-center px-1.5 py-0.5 mt-1 rounded text-[8px] font-black uppercase tracking-wider ${report.projectAdjustment < 0 ? 'bg-rose-50 text-rose-600 border border-rose-100/50' : 'bg-emerald-50 text-emerald-600 border border-emerald-100/50'}`}>
+                                                                                <span className={`inline-flex items-center px-1.5 py-0.5 mt-1 rounded text-[8px] font-black tracking-wider ${report.projectAdjustment < 0 ? 'bg-rose-50 text-rose-600 border border-rose-100/50' : 'bg-emerald-50 text-emerald-600 border border-emerald-100/50'}`}>
                                                                                     {report.projectAdjustment > 0 ? '+' : ''}₹{report.projectAdjustment.toFixed(2)} Adj
                                                                                 </span>
                                                                             )}
                                                                         </td>
                                                                         <td className="px-4 py-4">
-                                                                            <span className={`inline-flex items-center px-2 py-1 rounded-lg font-bold text-[9px] uppercase tracking-wider ${hasBankDetails ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                                                                            <span className={`inline-flex items-center px-2 py-1 rounded-lg font-bold text-[9px] tracking-wider ${hasBankDetails ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
                                                                                 {hasBankDetails ? 'Added' : 'Pending'}
                                                                             </span>
                                                                         </td>
@@ -2653,7 +2641,7 @@ const SalaryManagement = () => {
                                                                             <div className="flex items-center gap-2">
                                                                                 <button
                                                                                     onClick={() => openIndividualReport(report)}
-                                                                                    className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all font-black text-[9px] uppercase tracking-widest"
+                                                                                    className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all font-black text-[9px] tracking-widest"
                                                                                 >
                                                                                     View
                                                                                 </button>
@@ -2735,7 +2723,7 @@ const SalaryManagement = () => {
                                     <div>
                                         <h2 className="text-2xl font-black tracking-tight">{selectedIndividualWorker?.name}</h2>
                                         <div className="flex items-center gap-2 mt-1">
-                                            <span className="px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-400 text-[10px] font-black uppercase tracking-widest border border-teal-500/30">
+                                            <span className="px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-400 text-[10px] font-black tracking-widest border border-teal-500/30">
                                                 {selectedIndividualWorker?.department}
                                             </span>
                                             <span className="text-slate-400 text-xs font-bold">• {workers.find(w => w._id === selectedIndividualWorker?.workerId)?.rfid || 'ID: N/A'}</span>
@@ -2746,7 +2734,7 @@ const SalaryManagement = () => {
                                 <div className="flex flex-col items-end gap-3">
                                     <div className="flex items-center gap-2 bg-white/5 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10">
                                         <div className={`w-2 h-2 rounded-full ${deductionView ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)] animate-pulse' : 'bg-slate-500'}`}></div>
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-300 mr-2">Deduction View</span>
+                                        <span className="text-[10px] font-black tracking-widest text-slate-300 mr-2">Deduction View</span>
                                         <label className="relative inline-flex items-center cursor-pointer">
                                             <input
                                                 type="checkbox"
@@ -2770,10 +2758,10 @@ const SalaryManagement = () => {
                                     <div key={i} className="space-y-1">
                                         <div className="flex items-center gap-2 text-slate-400">
                                             {stat.icon}
-                                            <p className="text-[10px] font-black uppercase tracking-widest">{stat.label}</p>
+                                            <p className="text-[10px] font-black tracking-widest">{stat.label}</p>
                                         </div>
                                         <p className={`text-lg font-black ${stat.color}`}>{stat.value}</p>
-                                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-tight">{stat.sub}</p>
+                                        <p className="text-[9px] font-bold text-slate-500 tracking-tight">{stat.sub}</p>
                                     </div>
                                 ))}
                             </div>
@@ -2791,7 +2779,7 @@ const SalaryManagement = () => {
                                 <div className="flex items-center justify-between mb-8">
                                     <div>
                                         <h3 className="text-xl font-black text-slate-900 tracking-tight">Financial Summary</h3>
-                                        <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">Revenue & Deductions Breakdown</p>
+                                        <p className="text-xs font-bold text-slate-400 mt-1 tracking-widest">Revenue & Deductions Breakdown</p>
                                     </div>
                                     <div className="flex gap-2">
                                         <button
@@ -2807,7 +2795,7 @@ const SalaryManagement = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                                     <div className="space-y-6">
                                         <div>
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Gross Earnings</p>
+                                            <p className="text-[10px] font-black text-slate-400 tracking-widest mb-3 px-1">Gross Earnings</p>
                                             <div className="space-y-3">
                                                 <div className="flex justify-between items-center bg-slate-50 p-3 px-4 rounded-2xl">
                                                     <span className="text-xs font-bold text-slate-600">Base Salary</span>
@@ -2853,7 +2841,7 @@ const SalaryManagement = () => {
 
                                     <div className="space-y-6">
                                         <div>
-                                            <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-3 px-1">Active Deductions</p>
+                                            <p className="text-[10px] font-black text-rose-400 tracking-widest mb-3 px-1">Active Deductions</p>
                                             <div className="space-y-3">
                                                 <div className="flex justify-between items-center bg-rose-50/50 p-3 px-4 rounded-2xl border border-rose-100/50">
                                                     <span className="text-xs font-bold text-rose-600">Attendance/Leaves</span>
@@ -2900,7 +2888,7 @@ const SalaryManagement = () => {
 
                                     <div className="flex flex-col justify-end">
                                         <div className="bg-slate-900 rounded-[2rem] p-6 text-right shadow-2xl shadow-slate-900/30">
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Final Net Payout</p>
+                                            <p className="text-[10px] font-black text-slate-400 tracking-[0.2em] mb-2">Final Net Payout</p>
                                             <p className="text-3xl font-black text-teal-400 tracking-tighter">₹{(() => {
                                                 const baseVal = individualReportData.finalSalaryWithFines || 0;
                                                 if (deductionView && individualReportData.delayedTasks?.length > 0) {
@@ -2955,7 +2943,7 @@ const SalaryManagement = () => {
                                             className="overflow-hidden space-y-6"
                                         >
                                             <div className="flex items-center justify-between">
-                                                <h4 className="text-sm font-black text-rose-600 uppercase tracking-[0.2em]">Task Penalty Details</h4>
+                                                <h4 className="text-sm font-black text-rose-600 tracking-[0.2em]">Task Penalty Details</h4>
                                                 <div className="h-px flex-1 bg-rose-100 mx-4"></div>
                                             </div>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2964,32 +2952,32 @@ const SalaryManagement = () => {
                                                         <div className="relative z-10 space-y-4">
                                                             <div className="flex justify-between items-start">
                                                                 <div>
-                                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Task Title</p>
+                                                                    <p className="text-[10px] font-black text-slate-400 tracking-widest mb-1">Task Title</p>
                                                                     <h5 className="text-sm font-bold text-slate-800">{tp.title}</h5>
                                                                 </div>
                                                                 <div className="text-right">
-                                                                    <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1">Penalty</p>
+                                                                    <p className="text-[10px] font-black text-rose-400 tracking-widest mb-1">Penalty</p>
                                                                     <p className="text-lg font-black text-rose-600">₹{tp.taskDeduction.toFixed(2)}</p>
                                                                 </div>
                                                             </div>
                                                             <div className="grid grid-cols-2 gap-4 py-3 border-y border-slate-50">
                                                                 <div>
-                                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-tight mb-0.5">Deadline</p>
+                                                                    <p className="text-[9px] font-black text-slate-400 tracking-tight mb-0.5">Deadline</p>
                                                                     <p className="text-[11px] font-bold text-slate-600">{new Date(tp.endDate).toLocaleDateString()}</p>
                                                                 </div>
                                                                 <div>
-                                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-tight mb-0.5">Deduction Period</p>
+                                                                    <p className="text-[9px] font-black text-slate-400 tracking-tight mb-0.5">Deduction Period</p>
                                                                     <p className="text-[11px] font-bold text-slate-600">{tp.period}</p>
                                                                 </div>
                                                             </div>
                                                             <div className="bg-slate-50/50 rounded-2xl p-3">
-                                                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Daily Breakdown</p>
+                                                                <p className="text-[9px] font-black text-slate-400 tracking-widest mb-2">Daily Breakdown</p>
                                                                 <div className="space-y-1 max-h-24 overflow-y-auto pr-2 custom-scrollbar">
                                                                     {tp.dailyList.map((day, idx) => (
                                                                         <div key={idx} className="flex justify-between items-center text-[10px]">
                                                                             <span className="font-medium text-slate-500">{day.date}</span>
                                                                             <div className="flex items-center gap-1.5">
-                                                                                {day.alreadyDeducted && <span className="text-[7px] font-black text-slate-300 uppercase">(Handled)</span>}
+                                                                                {day.alreadyDeducted && <span className="text-[7px] font-black text-slate-300">(Handled)</span>}
                                                                                 <span className={`font-black ${day.amount > 0 ? 'text-rose-500' : 'text-slate-400'}`}>₹{day.amount.toFixed(2)}</span>
                                                                             </div>
                                                                         </div>
@@ -3009,7 +2997,7 @@ const SalaryManagement = () => {
                             {individualReportData.projectAdjustmentDetails && individualReportData.projectAdjustmentDetails.length > 0 && (
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
-                                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Project Adjustment Breakdown</h4>
+                                        <h4 className="text-sm font-black text-slate-900 tracking-widest">Project Adjustment Breakdown</h4>
                                         <div className="h-px flex-1 bg-slate-100 mx-4"></div>
                                     </div>
                                     <div className="bg-slate-50/50 rounded-[2rem] p-6 border border-slate-100 space-y-2">
@@ -3037,7 +3025,7 @@ const SalaryManagement = () => {
                             {/* Detailed Stats Grid */}
                             <div className="space-y-4">
                                 <div className="flex items-center justify-between">
-                                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Efficiency Metrics</h4>
+                                    <h4 className="text-sm font-black text-slate-900 tracking-widest">Efficiency Metrics</h4>
                                     <div className="h-px flex-1 bg-slate-100 mx-4"></div>
                                 </div>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6 bg-slate-50/50 p-8 rounded-[2.5rem] border border-slate-100">
@@ -3052,7 +3040,7 @@ const SalaryManagement = () => {
                                         { label: 'Deduction Total', value: `₹${individualReportData.report.totalSalaryDeduction?.toLocaleString()}`, color: 'text-rose-600' }
                                     ].map((item, idx) => (
                                         <div key={idx} className="space-y-1">
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.label}</p>
+                                            <p className="text-[10px] font-black text-slate-400 tracking-widest">{item.label}</p>
                                             <p className={`text-sm font-black ${item.color || 'text-slate-700'}`}>{item.value || 0}</p>
                                         </div>
                                     ))}
@@ -3065,7 +3053,7 @@ const SalaryManagement = () => {
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-3">
                                             <AlertTriangle size={16} className="text-orange-500 flex-none" />
-                                            <h4 className="text-sm font-black text-orange-600 uppercase tracking-[0.15em]">Unauthorized Absence Penalties</h4>
+                                            <h4 className="text-sm font-black text-orange-600 tracking-[0.15em]">Unauthorized Absence Penalties</h4>
                                         </div>
                                         <div className="h-px flex-1 bg-orange-100 mx-4"></div>
                                         <span className="flex-none text-xs font-black text-orange-600 bg-orange-50 px-3 py-1 rounded-lg border border-orange-200">
@@ -3074,7 +3062,7 @@ const SalaryManagement = () => {
                                     </div>
                                     <div className="bg-orange-50/30 border border-orange-100 rounded-[2rem] overflow-hidden">
                                         <div className="px-6 py-3 bg-orange-50/60 border-b border-orange-100">
-                                            <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest">
+                                            <p className="text-[10px] font-black text-orange-500 tracking-widest">
                                                 {individualReportData.unauthorizedAbsencePenalties.length} day(s) at 5× basic pay per day · Pending/Approved leaves are NOT penalized
                                             </p>
                                         </div>
@@ -3083,7 +3071,7 @@ const SalaryManagement = () => {
                                                 <thead className="bg-orange-50/40">
                                                     <tr>
                                                         {['Date', 'Status', 'Leave Status', 'Factor', 'Deduction', 'Reason'].map(h => (
-                                                            <th key={h} className="px-5 py-3 text-left font-black text-orange-400 uppercase tracking-widest text-[9px]">{h}</th>
+                                                            <th key={h} className="px-5 py-3 text-left font-black text-orange-400 tracking-widest text-[9px]">{h}</th>
                                                         ))}
                                                     </tr>
                                                 </thead>
@@ -3091,8 +3079,8 @@ const SalaryManagement = () => {
                                                     {individualReportData.unauthorizedAbsencePenalties.map((p, idx) => (
                                                         <tr key={idx} className="hover:bg-orange-50/30 transition-colors">
                                                             <td className="px-5 py-3 font-bold text-slate-700">{p.displayDate}</td>
-                                                            <td className="px-5 py-3"><span className="inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[9px] uppercase tracking-tighter bg-orange-100 text-orange-700 border border-orange-200">{p.status}</span></td>
-                                                            <td className="px-5 py-3"><span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[9px] uppercase tracking-tighter border ${p.leaveStatus === 'Rejected' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-slate-50 text-slate-500 border-slate-100'}`}>{p.leaveStatus}</span></td>
+                                                            <td className="px-5 py-3"><span className="inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[9px] tracking-tighter bg-orange-100 text-orange-700 border border-orange-200">{p.status}</span></td>
+                                                            <td className="px-5 py-3"><span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[9px] tracking-tighter border ${p.leaveStatus === 'Rejected' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-slate-50 text-slate-500 border-slate-100'}`}>{p.leaveStatus}</span></td>
                                                             <td className="px-5 py-3"><span className="inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[10px] bg-rose-600 text-white border border-rose-700">5X</span></td>
                                                             <td className="px-5 py-3 font-black text-orange-600">- ₹{p.penaltyAmount.toFixed(2)}</td>
                                                             <td className="px-5 py-3 font-medium text-slate-500 text-[10px]">{p.reason}</td>
@@ -3108,7 +3096,7 @@ const SalaryManagement = () => {
                             {/* Daily Table - Reusing premium table style */}
                             <div className="space-y-4">
                                 <div className="flex items-center justify-between">
-                                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Attendance Timeline</h4>
+                                    <h4 className="text-sm font-black text-slate-900 tracking-widest">Attendance Timeline</h4>
                                     <div className="h-px flex-1 bg-slate-100 mx-4"></div>
                                 </div>
                                 <div className="rounded-[2rem] border border-slate-100 overflow-hidden bg-white shadow-lg shadow-slate-100">
@@ -3117,7 +3105,7 @@ const SalaryManagement = () => {
                                             <thead className="bg-slate-50/80 sticky top-0 backdrop-blur-sm z-10">
                                                 <tr>
                                                     {['Date', 'Status', 'In/Out', 'Deduction', 'Salary'].map(h => (
-                                                        <th key={h} className="px-6 py-4 text-left font-black text-slate-400 uppercase tracking-widest">{h}</th>
+                                                        <th key={h} className="px-6 py-4 text-left font-black text-slate-400 tracking-widest">{h}</th>
                                                     ))}
                                                 </tr>
                                             </thead>
@@ -3137,7 +3125,7 @@ const SalaryManagement = () => {
                                                                     title="Click to view 2X penalty details"
                                                                 >
                                                                     <span>{row.date}</span>
-                                                                    <span className="inline-flex items-center px-1 rounded bg-rose-50 text-rose-600 text-[8px] font-black uppercase tracking-tighter border border-rose-100 group-hover:bg-rose-100 transition-all cursor-pointer">
+                                                                    <span className="inline-flex items-center px-1 rounded bg-rose-50 text-rose-600 text-[8px] font-black tracking-tighter border border-rose-100 group-hover:bg-rose-100 transition-all cursor-pointer">
                                                                         {row.penaltyFactor}X Penalty
                                                                     </span>
                                                                 </button>
@@ -3146,11 +3134,7 @@ const SalaryManagement = () => {
                                                             )}
                                                         </td>
                                                         <td className="px-6 py-4">
-                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[9px] uppercase tracking-tighter
-                                                                ${row.status === 'Present' ? 'bg-emerald-50 text-emerald-600' :
-                                                                    row.status === 'Absent' ? 'bg-rose-50 text-rose-500' :
-                                                                        row.status === 'Sunday' ? 'bg-slate-50 text-slate-400' :
-                                                                            'bg-sky-50 text-sky-600'}`}>
+                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[9px] tracking-tighter ${row.status === 'Present' ? 'bg-emerald-50 text-emerald-600' : row.status === 'Absent' ? 'bg-rose-50 text-rose-500' : row.status === 'Sunday' ? 'bg-slate-50 text-slate-400' : 'bg-sky-50 text-sky-600'}`}>
                                                                 {row.status}
                                                             </span>
                                                         </td>
@@ -3175,7 +3159,7 @@ const SalaryManagement = () => {
                 title={
                     <div className="flex flex-col gap-0.5">
                         <span className="text-slate-900">Salary Report</span>
-                        <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">{selectedWorker?.name}</span>
+                        <span className="text-xs font-medium text-slate-500 tracking-wider">{selectedWorker?.name}</span>
                     </div>
                 }
                 size="xl"
@@ -3185,13 +3169,13 @@ const SalaryManagement = () => {
                         <div className="flex items-center gap-4">
                             <button
                                 onClick={toggleDateSelection}
-                                className="text-[11px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-500 transition-colors"
+                                className="text-[11px] font-black tracking-widest text-slate-400 hover:text-blue-500 transition-colors"
                             >
                                 {useMonthSelection ? 'Select Date Range' : 'Select Month'}
                             </button>
                             <div className="w-px h-4 bg-slate-200"></div>
                             <label className="flex items-center gap-2 cursor-pointer group">
-                                <span className="text-[11px] font-black uppercase tracking-widest text-slate-400 group-hover:text-rose-500 transition-colors">Deduction View</span>
+                                <span className="text-[11px] font-black tracking-widest text-slate-400 group-hover:text-rose-500 transition-colors">Deduction View</span>
                                 <div className="relative">
                                     <input
                                         type="checkbox"
@@ -3209,7 +3193,7 @@ const SalaryManagement = () => {
                     {useMonthSelection ? (
                         <div className="flex flex-wrap items-end gap-4 mb-8 px-4">
                             <div className="flex-1 min-w-[150px]">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Month</label>
+                                <label className="text-[10px] font-black text-slate-400 tracking-widest mb-1.5 block">Month</label>
                                 <select
                                     value={selectedMonth}
                                     onChange={handleMonthChange}
@@ -3224,7 +3208,7 @@ const SalaryManagement = () => {
                                 </select>
                             </div>
                             <div className="flex-1 min-w-[150px]">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Year</label>
+                                <label className="text-[10px] font-black text-slate-400 tracking-widest mb-1.5 block">Year</label>
                                 <select
                                     value={selectedYear}
                                     onChange={handleYearChange}
@@ -3249,7 +3233,7 @@ const SalaryManagement = () => {
                     ) : (
                         <div className="flex flex-wrap items-end gap-4 mb-8 px-4">
                             <div className="flex-1 min-w-[150px]">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">From Date</label>
+                                <label className="text-[10px] font-black text-slate-400 tracking-widest mb-1.5 block">From Date</label>
                                 <input
                                     type="date"
                                     name="fromDate"
@@ -3259,7 +3243,7 @@ const SalaryManagement = () => {
                                 />
                             </div>
                             <div className="flex-1 min-w-[150px]">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">To Date</label>
+                                <label className="text-[10px] font-black text-slate-400 tracking-widest mb-1.5 block">To Date</label>
                                 <input
                                     type="date"
                                     name="toDate"
@@ -3292,66 +3276,66 @@ const SalaryManagement = () => {
                                     <div className="lg:col-span-7 p-8">
                                         <div className="grid grid-cols-2 gap-x-12 gap-y-8">
                                             <div>
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2">Monthly Base Salary</p>
+                                                <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-2">Monthly Base Salary</p>
                                                 <p className="text-xl font-bold text-slate-800 tracking-tight">₹{reportData.report.summary.originalSalary?.toFixed(2) || '0.00'}</p>
                                             </div>
                                             <div>
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2">Base Salary (SaaS)</p>
+                                                <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-2">Base Salary (SaaS)</p>
                                                 <p className="text-xl font-bold text-slate-800 tracking-tight">₹{reportData.report.summary.expectedSaaSSalary?.toFixed(2) || reportData.report.summary.originalSalary?.toFixed(2) || '0.00'}</p>
                                             </div>
                                             <div>
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2">Total Deductions</p>
+                                                <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-2">Total Deductions</p>
                                                 <p className="text-xl font-bold text-rose-500 tracking-tight">- ₹{reportData.report.totalSalaryDeduction?.toFixed(2) || '0.00'}</p>
                                             </div>
                                             <div>
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2">Net Base Salary</p>
+                                                <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-2">Net Base Salary</p>
                                                 <p className="text-xl font-bold text-slate-800 tracking-tight">₹{reportData.report.summary.netBaseSalary?.toFixed(2) || '0.00'}</p>
                                             </div>
                                             {(reportData.report.summary.grossProjectSalary > 0 || reportData.report.summary.totalProjectSalary > 0) && (
                                                 <>
                                                     <div>
-                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2">Gross Project Earnings</p>
+                                                        <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-2">Gross Project Earnings</p>
                                                         <p className="text-xl font-bold text-teal-600 tracking-tight">₹{(reportData.report.summary.grossProjectSalary !== undefined ? reportData.report.summary.grossProjectSalary : reportData.report.summary.totalProjectSalary)?.toFixed(2) || '0.00'}</p>
                                                     </div>
                                                     {reportData.report.summary.totalProjectDeductions > 0 && (
                                                         <div>
-                                                            <p className="text-[10px] font-black text-rose-400 uppercase tracking-[0.15em] mb-2">Project Deductions</p>
+                                                            <p className="text-[10px] font-black text-rose-400 tracking-[0.15em] mb-2">Project Deductions</p>
                                                             <p className="text-xl font-bold text-rose-500 tracking-tight">- ₹{reportData.report.summary.totalProjectDeductions?.toFixed(2) || '0.00'}</p>
                                                         </div>
                                                     )}
                                                     <div>
-                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2">Net Project Earnings</p>
+                                                        <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-2">Net Project Earnings</p>
                                                         <p className="text-xl font-bold text-teal-600 tracking-tight">₹{reportData.report.summary.totalProjectSalary?.toFixed(2) || '0.00'}</p>
                                                     </div>
                                                 </>
                                             )}
                                             {reportData.projectAdjustment !== undefined && reportData.projectAdjustment !== 0 && (
                                                 <div>
-                                                    <p className={`text-[10px] font-black uppercase tracking-[0.15em] mb-2 ${reportData.projectAdjustment < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>Project Adjustment</p>
+                                                    <p className={`text-[10px] font-black tracking-[0.15em] mb-2 ${reportData.projectAdjustment < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>Project Adjustment</p>
                                                     <p className={`text-xl font-bold tracking-tight ${reportData.projectAdjustment < 0 ? 'text-rose-500' : 'text-emerald-600'}`}>{reportData.projectAdjustment > 0 ? '+' : ''} ₹{reportData.projectAdjustment?.toFixed(2)}</p>
                                                 </div>
                                             )}
                                             {reportData.projectAdjustment !== undefined && reportData.projectAdjustment !== 0 && (
                                                 <div>
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2">Final Project Pay</p>
+                                                    <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-2">Final Project Pay</p>
                                                     <p className="text-xl font-bold text-slate-800 tracking-tight">₹{Math.max(0, (reportData.report.summary.totalProjectSalary || 0) + (reportData.projectAdjustment || 0)).toFixed(2)}</p>
                                                 </div>
                                             )}
                                             {reportData.totalBonusAmount > 0 && (
                                                 <div>
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2">Bonus Amount</p>
+                                                    <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-2">Bonus Amount</p>
                                                     <p className="text-xl font-bold text-teal-600 tracking-tight">+ ₹{reportData.totalBonusAmount.toFixed(2)}</p>
                                                 </div>
                                             )}
                                             {reportData.totalFinesAmount > 0 && (
                                                 <div>
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2">Total Fines</p>
+                                                    <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-2">Total Fines</p>
                                                     <p className="text-xl font-bold text-rose-500 tracking-tight">- ₹{reportData.totalFinesAmount.toFixed(2)}</p>
                                                 </div>
                                             )}
                                             {reportData.totalUnauthorizedPenalty > 0 && (
                                                 <div>
-                                                    <p className="text-[10px] font-black text-orange-500 uppercase tracking-[0.15em] mb-2">⚠ Unauthorized Absence Penalty</p>
+                                                    <p className="text-[10px] font-black text-orange-500 tracking-[0.15em] mb-2">⚠ Unauthorized Absence Penalty</p>
                                                     <p className="text-xl font-bold text-orange-600 tracking-tight">- ₹{reportData.totalUnauthorizedPenalty.toFixed(2)}</p>
                                                     <p className="text-[9px] font-bold text-orange-400 mt-1">{reportData.unauthorizedAbsencePenalties?.length || 0} day(s) × 5X</p>
                                                 </div>
@@ -3363,7 +3347,7 @@ const SalaryManagement = () => {
                                     <div className="lg:col-span-5 bg-white rounded-[2rem] p-10 shadow-[0_20px_40px_-15px_rgba(13,148,136,0.1)] border border-teal-50 flex flex-col justify-center items-center lg:items-end text-center lg:text-right relative overflow-hidden">
                                         <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500/5 rounded-full -mr-16 -mt-16 blur-2xl"></div>
                                         <div className="relative z-10">
-                                            <p className="text-[11px] font-black text-teal-600 uppercase tracking-[0.25em] mb-3">Total Final Salary</p>
+                                            <p className="text-[11px] font-black text-teal-600 tracking-[0.25em] mb-3">Total Final Salary</p>
                                             <div className="text-5xl md:text-6xl font-black text-[#0d9488] tracking-tighter">
                                                 {(() => {
                                                     const parseSalary = (str) => {
@@ -3438,19 +3422,19 @@ const SalaryManagement = () => {
                                         const currentMonth = now.getMonth() + 1;
                                         const isPastMonth = (reportYear < currentYear) || (reportYear === currentYear && reportMonth < currentMonth);
                                         return isPastMonth ? (
-                                            <span className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest bg-slate-100 text-slate-600 border border-slate-200/50 flex items-center gap-1.5">
+                                            <span className="px-3 py-1.5 rounded-lg text-[10px] font-black tracking-widest bg-slate-100 text-slate-600 border border-slate-200/50 flex items-center gap-1.5">
                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                                                 <span>Payment Frozen</span>
                                             </span>
                                         ) : (
-                                            <span className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest bg-amber-50 text-amber-600 border border-amber-100 flex items-center gap-1.5">
+                                            <span className="px-3 py-1.5 rounded-lg text-[10px] font-black tracking-widest bg-amber-50 text-amber-600 border border-amber-100 flex items-center gap-1.5">
                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                                 <span>Active (Dynamic)</span>
                                             </span>
                                         );
                                     })()}
                                     {reportData.projectAdjustment !== undefined && reportData.projectAdjustment !== 0 && (
-                                        <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest ${reportData.projectAdjustment < 0 ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-emerald-50 text-emerald-600 border border-emerald-100'}`}>
+                                        <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black tracking-widest ${reportData.projectAdjustment < 0 ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-emerald-50 text-emerald-600 border border-emerald-100'}`}>
                                             Adjustment: {reportData.projectAdjustment > 0 ? '+' : ''}₹{reportData.projectAdjustment?.toFixed(2)}
                                         </span>
                                     )}
@@ -3460,7 +3444,7 @@ const SalaryManagement = () => {
                             {/* Adjustment Details Breakdown */}
                             {reportData.projectAdjustmentDetails && reportData.projectAdjustmentDetails.length > 0 && (
                                 <div className="bg-slate-50/50 rounded-[2rem] p-6 border border-slate-100 mt-2">
-                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Project Adjustment Breakdown</h4>
+                                    <h4 className="text-[10px] font-black text-slate-400 tracking-widest mb-4">Project Adjustment Breakdown</h4>
                                     <div className="space-y-2">
                                         {reportData.projectAdjustmentDetails.map((detail, idx) => (
                                             <div key={idx} className="flex flex-wrap items-center justify-between bg-white rounded-xl p-3 px-4 border border-slate-100 gap-2">
@@ -3489,7 +3473,7 @@ const SalaryManagement = () => {
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-3">
                                             <AlertTriangle size={16} className="text-orange-500 flex-none" />
-                                            <h4 className="text-sm font-black text-orange-600 uppercase tracking-[0.15em]">Unauthorized Absence Penalties</h4>
+                                            <h4 className="text-sm font-black text-orange-600 tracking-[0.15em]">Unauthorized Absence Penalties</h4>
                                         </div>
                                         <div className="h-px flex-1 bg-orange-100 mx-4"></div>
                                         <span className="flex-none text-xs font-black text-orange-600 bg-orange-50 px-3 py-1 rounded-lg border border-orange-200">
@@ -3499,10 +3483,10 @@ const SalaryManagement = () => {
 
                                     <div className="bg-orange-50/30 border border-orange-100 rounded-[2rem] overflow-hidden">
                                         <div className="px-6 py-3 bg-orange-50/60 border-b border-orange-100 flex items-center gap-2">
-                                            <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest">
+                                            <p className="text-[10px] font-black text-orange-500 tracking-widest">
                                                 {reportData.unauthorizedAbsencePenalties.length} day(s) penalized at 5× basic pay per day
                                             </p>
-                                            <span className="ml-auto text-[9px] font-black text-orange-400 uppercase tracking-widest">
+                                            <span className="ml-auto text-[9px] font-black text-orange-400 tracking-widest">
                                                 Pending/Approved leaves are NOT penalized
                                             </span>
                                         </div>
@@ -3511,7 +3495,7 @@ const SalaryManagement = () => {
                                                 <thead className="bg-orange-50/40">
                                                     <tr>
                                                         {['Date', 'Status', 'Leave Status', 'Penalty Factor', 'Deduction', 'Reason'].map(h => (
-                                                            <th key={h} className="px-5 py-3 text-left font-black text-orange-400 uppercase tracking-widest text-[9px]">{h}</th>
+                                                            <th key={h} className="px-5 py-3 text-left font-black text-orange-400 tracking-widest text-[9px]">{h}</th>
                                                         ))}
                                                     </tr>
                                                 </thead>
@@ -3520,12 +3504,12 @@ const SalaryManagement = () => {
                                                         <tr key={idx} className="hover:bg-orange-50/30 transition-colors">
                                                             <td className="px-5 py-3 font-bold text-slate-700">{p.displayDate}</td>
                                                             <td className="px-5 py-3">
-                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[9px] uppercase tracking-tighter bg-orange-100 text-orange-700 border border-orange-200">
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[9px] tracking-tighter bg-orange-100 text-orange-700 border border-orange-200">
                                                                     {p.status}
                                                                 </span>
                                                             </td>
                                                             <td className="px-5 py-3">
-                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[9px] uppercase tracking-tighter border ${p.leaveStatus === 'Rejected' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-slate-50 text-slate-500 border-slate-100'}`}>
+                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[9px] tracking-tighter border ${p.leaveStatus === 'Rejected' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-slate-50 text-slate-500 border-slate-100'}`}>
                                                                     {p.leaveStatus}
                                                                 </span>
                                                             </td>
@@ -3589,7 +3573,7 @@ const SalaryManagement = () => {
                                         >
                                             <div className="space-y-4">
                                                 <div className="flex items-center justify-between">
-                                                    <h4 className="text-sm font-black text-rose-600 uppercase tracking-[0.2em]">Task Deduction Breakdown</h4>
+                                                    <h4 className="text-sm font-black text-rose-600 tracking-[0.2em]">Task Deduction Breakdown</h4>
                                                     <div className="h-px flex-1 bg-rose-100 mx-4"></div>
                                                 </div>
 
@@ -3600,17 +3584,17 @@ const SalaryManagement = () => {
 
                                                             <div className="relative z-10 space-y-4">
                                                                 <div>
-                                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Task</p>
+                                                                    <p className="text-[10px] font-black text-slate-400 tracking-widest mb-1">Task</p>
                                                                     <h5 className="text-sm font-bold text-slate-800">{tp.title}</h5>
                                                                 </div>
 
                                                                 <div className="grid grid-cols-2 gap-4">
                                                                     <div>
-                                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Deadline Date</p>
+                                                                        <p className="text-[10px] font-black text-slate-400 tracking-widest mb-1">Deadline Date</p>
                                                                         <p className="text-xs font-bold text-slate-600">{new Date(tp.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
                                                                     </div>
                                                                     <div>
-                                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Completed Date</p>
+                                                                        <p className="text-[10px] font-black text-slate-400 tracking-widest mb-1">Completed Date</p>
                                                                         <p className={`text-xs font-bold ${tp.doneDate ? 'text-teal-600' : 'text-rose-500'}`}>
                                                                             {tp.doneDate ? new Date(tp.doneDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Ongoing'}
                                                                         </p>
@@ -3619,26 +3603,26 @@ const SalaryManagement = () => {
 
                                                                 <div className="flex justify-between items-end border-t border-slate-50 pt-3">
                                                                     <div>
-                                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Deduction Period</p>
+                                                                        <p className="text-[10px] font-black text-slate-400 tracking-widest mb-1">Deduction Period</p>
                                                                         <p className="text-xs font-bold text-slate-700">{tp.period}</p>
                                                                     </div>
                                                                     <div className="text-right">
-                                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Overdue Days</p>
+                                                                        <p className="text-[10px] font-black text-slate-400 tracking-widest mb-1">Overdue Days</p>
                                                                         <p className="text-xs font-black text-rose-600">{tp.overdueWorkingDays} Days</p>
                                                                     </div>
                                                                 </div>
 
                                                                 <div className="bg-slate-50/50 rounded-2xl p-4">
                                                                     <div className="flex justify-between items-center mb-2">
-                                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Daily Deduction</p>
-                                                                        <p className="text-[8px] font-bold text-slate-300 uppercase">Actual Earned Salary</p>
+                                                                        <p className="text-[10px] font-black text-slate-400 tracking-widest">Daily Deduction</p>
+                                                                        <p className="text-[8px] font-bold text-slate-300">Actual Earned Salary</p>
                                                                     </div>
                                                                     <div className="space-y-1.5 max-h-32 overflow-y-auto pr-2 custom-scrollbar">
                                                                         {tp.dailyList.map((day, idx) => (
                                                                             <div key={idx} className="flex justify-between items-center text-[11px]">
                                                                                 <span className="font-medium text-slate-500">{day.date}</span>
                                                                                 <div className="flex items-center gap-1.5">
-                                                                                    {day.alreadyDeducted && <span className="text-[8px] font-black text-slate-300 uppercase tracking-tighter">(Handled)</span>}
+                                                                                    {day.alreadyDeducted && <span className="text-[8px] font-black text-slate-300 tracking-tighter">(Handled)</span>}
                                                                                     <span className={`font-black ${day.amount > 0 ? 'text-rose-500' : 'text-slate-400'}`}>₹{day.amount.toFixed(2)}</span>
                                                                                 </div>
                                                                             </div>
@@ -3649,11 +3633,11 @@ const SalaryManagement = () => {
 
                                                                 <div className="pt-2 flex justify-between items-end">
                                                                     <div>
-                                                                        <p className="text-[10px] font-black text-rose-400 uppercase tracking-[0.15em] mb-1">Status</p>
-                                                                        <p className="text-[10px] font-black text-rose-600 uppercase">Permanent Delay Penalty Applied</p>
+                                                                        <p className="text-[10px] font-black text-rose-400 tracking-[0.15em] mb-1">Status</p>
+                                                                        <p className="text-[10px] font-black text-rose-600">Permanent Delay Penalty Applied</p>
                                                                     </div>
                                                                     <div className="text-right">
-                                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Task Total</p>
+                                                                        <p className="text-[10px] font-black text-slate-400 tracking-widest">Task Total</p>
                                                                         <p className="text-lg font-black text-rose-600">₹{tp.taskDeduction.toFixed(2)}</p>
                                                                     </div>
                                                                 </div>
@@ -3670,7 +3654,7 @@ const SalaryManagement = () => {
                                                                 <Coins size={18} />
                                                             </div>
                                                             <div>
-                                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Salary Before Deduction</p>
+                                                                <p className="text-[10px] font-black text-slate-400 tracking-widest mb-0.5">Salary Before Deduction</p>
                                                                 <p className="text-xl font-bold text-slate-700">₹{salaryBefore.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
                                                             </div>
                                                         </div>
@@ -3679,14 +3663,14 @@ const SalaryManagement = () => {
                                                                 <span className="font-black text-lg">-</span>
                                                             </div>
                                                             <div>
-                                                                <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-0.5">Total Deducted Amount</p>
+                                                                <p className="text-[10px] font-black text-rose-400 tracking-widest mb-0.5">Total Deducted Amount</p>
                                                                 <p className="text-xl font-bold text-rose-600">₹{totalPenaltyAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
                                                             </div>
                                                         </div>
                                                     </div>
 
                                                     <div className="bg-white rounded-3xl p-6 px-10 border border-teal-100 shadow-lg shadow-teal-500/5 text-right">
-                                                        <p className="text-[11px] font-black text-teal-600 uppercase tracking-[0.2em] mb-2">Final Salary After Deduction</p>
+                                                        <p className="text-[11px] font-black text-teal-600 tracking-[0.2em] mb-2">Final Salary After Deduction</p>
                                                         <p className="text-4xl font-black text-teal-600 tracking-tighter">₹{finalSalary.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
                                                     </div>
                                                 </div>
@@ -3739,7 +3723,7 @@ const SalaryManagement = () => {
                                                     { label: 'Per Min Salary', value: `₹${reportData.report.summary.perMinuteSalary?.toFixed(4)}` }
                                                 ].map((item, idx) => (
                                                     <div key={idx}>
-                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{item.label}</p>
+                                                        <p className="text-[10px] font-bold text-slate-400 tracking-wider mb-1">{item.label}</p>
                                                         <p className={`text-sm font-semibold ${item.color || 'text-slate-700'}`}>{item.value || 0}</p>
                                                     </div>
                                                 ))}
@@ -3747,13 +3731,13 @@ const SalaryManagement = () => {
                                                 {/* Extra metrics like Penalized Days if any */}
                                                 {reportData.report.summary.penalizedLeaveDays > 0 && (
                                                     <div>
-                                                        <p className="text-[10px] font-bold text-rose-400 uppercase tracking-wider mb-1 text-rose-500">Extra Leaves (2X)</p>
+                                                        <p className="text-[10px] font-bold text-rose-400 tracking-wider mb-1 text-rose-500">Extra Leaves (2X)</p>
                                                         <p className="text-sm font-bold text-rose-600">{reportData.report.summary.penalizedLeaveDays} Days (₹{reportData.report.summary.penalizedLeaveDeduction.toFixed(2)})</p>
                                                     </div>
                                                 )}
                                                 {reportData.report.summary.penalizedAbsentDays > 0 && (
                                                     <div>
-                                                        <p className="text-[10px] font-bold text-rose-400 uppercase tracking-wider mb-1 text-rose-500">Extra Absences (2X)</p>
+                                                        <p className="text-[10px] font-bold text-rose-400 tracking-wider mb-1 text-rose-500">Extra Absences (2X)</p>
                                                         <p className="text-sm font-bold text-rose-600">{reportData.report.summary.penalizedAbsentDays} Days (₹{reportData.report.summary.penalizedAbsentDeduction.toFixed(2)})</p>
                                                     </div>
                                                 )}
@@ -3766,7 +3750,7 @@ const SalaryManagement = () => {
                             {/* Daily Breakdown Table */}
                             <div className="space-y-4">
                                 <div className="flex items-center justify-between">
-                                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Daily Breakdown</h4>
+                                    <h4 className="text-sm font-black text-slate-900 tracking-widest">Daily Breakdown</h4>
                                     <div className="h-px flex-1 bg-slate-100 mx-4"></div>
                                 </div>
                                 <div className="rounded-2xl border border-slate-100 overflow-hidden bg-white shadow-sm">
@@ -3775,7 +3759,7 @@ const SalaryManagement = () => {
                                             <thead className="bg-slate-50/80 sticky top-0 backdrop-blur-sm z-10">
                                                 <tr>
                                                     {['Date', 'Status', 'Work Type', 'In', 'Out', 'Delay', 'Deduction', 'Salary'].map(h => (
-                                                        <th key={h} className="px-4 py-3 text-left font-black text-slate-400 uppercase tracking-widest">{h}</th>
+                                                        <th key={h} className="px-4 py-3 text-left font-black text-slate-400 tracking-widest">{h}</th>
                                                     ))}
                                                 </tr>
                                             </thead>
@@ -3795,7 +3779,7 @@ const SalaryManagement = () => {
                                                                     title="Click to view 2X penalty details"
                                                                 >
                                                                     <span>{row.date}</span>
-                                                                    <span className="inline-flex items-center px-1 rounded bg-rose-50 text-rose-600 text-[8px] font-black uppercase tracking-tighter border border-rose-100 group-hover:bg-rose-100 transition-all cursor-pointer">
+                                                                    <span className="inline-flex items-center px-1 rounded bg-rose-50 text-rose-600 text-[8px] font-black tracking-tighter border border-rose-100 group-hover:bg-rose-100 transition-all cursor-pointer">
                                                                         {row.penaltyFactor}X Penalty
                                                                     </span>
                                                                 </button>
@@ -3804,18 +3788,13 @@ const SalaryManagement = () => {
                                                             )}
                                                         </td>
                                                         <td className="px-4 py-3">
-                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-bold text-[10px] uppercase tracking-tight
-                                                                ${row.status === 'Present' ? 'bg-emerald-50 text-emerald-600' :
-                                                                    row.status === 'Absent' ? 'bg-rose-50 text-rose-500' :
-                                                                        row.status === 'Sunday' ? 'bg-slate-50 text-slate-400' :
-                                                                            row.status === 'Holiday' ? 'bg-amber-50 text-amber-600' :
-                                                                                'bg-sky-50 text-sky-600'}`}>
+                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-bold text-[10px] tracking-tight ${row.status === 'Present' ? 'bg-emerald-50 text-emerald-600' : row.status === 'Absent' ? 'bg-rose-50 text-rose-500' : row.status === 'Sunday' ? 'bg-slate-50 text-slate-400' : row.status === 'Holiday' ? 'bg-amber-50 text-amber-600' : 'bg-sky-50 text-sky-600'}`}>
                                                                 {row.status}
                                                             </span>
                                                         </td>
                                                         <td className="px-4 py-3">
                                                             <div className="flex flex-col">
-                                                                <span className={`font-black text-[9px] uppercase tracking-widest ${row.workType === 'PROJECT' ? 'text-teal-600' : 'text-slate-400'}`}>
+                                                                <span className={`font-black text-[9px] tracking-widest ${row.workType === 'PROJECT' ? 'text-teal-600' : 'text-slate-400'}`}>
                                                                     {row.workType}
                                                                 </span>
                                                                 {row.projectName && <span className="text-[10px] text-slate-400 truncate max-w-[120px]">{row.projectName}</span>}
@@ -3882,7 +3861,7 @@ const SalaryManagement = () => {
                 title={
                     <div className="flex items-center gap-2 text-rose-600">
                         <AlertTriangle size={18} />
-                        <span className="font-black uppercase tracking-wider text-xs">Penalty Explanation</span>
+                        <span className="font-black tracking-wider text-xs">Penalty Explanation</span>
                     </div>
                 }
                 size="sm"
@@ -3890,30 +3869,25 @@ const SalaryManagement = () => {
                 {penaltyExplanation && (
                     <div className="space-y-4 p-1">
                         <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Date</p>
+                            <p className="text-[10px] font-black text-slate-400 tracking-widest mb-1">Date</p>
                             <p className="text-sm font-bold text-slate-800">{penaltyExplanation.date}</p>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</p>
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-bold text-[10px] uppercase tracking-tight
-                                    ${penaltyExplanation.status === 'Present' ? 'bg-emerald-50 text-emerald-600' :
-                                        penaltyExplanation.status === 'Absent' ? 'bg-rose-50 text-rose-500' :
-                                            penaltyExplanation.status === 'Sunday' ? 'bg-slate-50 text-slate-400' :
-                                                penaltyExplanation.status === 'Holiday' ? 'bg-amber-50 text-amber-600' :
-                                                    'bg-sky-50 text-sky-600'}`}>
+                                <p className="text-[10px] font-black text-slate-400 tracking-widest mb-1">Status</p>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-bold text-[10px] tracking-tight ${penaltyExplanation.status === 'Present' ? 'bg-emerald-50 text-emerald-600' : penaltyExplanation.status === 'Absent' ? 'bg-rose-50 text-rose-500' : penaltyExplanation.status === 'Sunday' ? 'bg-slate-50 text-slate-400' : penaltyExplanation.status === 'Holiday' ? 'bg-amber-50 text-amber-600' : 'bg-sky-50 text-sky-600'}`}>
                                     {penaltyExplanation.status}
                                 </span>
                             </div>
                             <div>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Deduction Penalty</p>
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[10px] uppercase tracking-tight bg-rose-50 text-rose-600">
+                                <p className="text-[10px] font-black text-slate-400 tracking-widest mb-1">Deduction Penalty</p>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-lg font-black text-[10px] tracking-tight bg-rose-50 text-rose-600">
                                     {penaltyExplanation.penaltyFactor}X Applied
                                 </span>
                             </div>
                         </div>
                         <div className="pt-2 border-t border-slate-100">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Reason for Multiplier Penalty</p>
+                            <p className="text-[10px] font-black text-slate-400 tracking-widest mb-1.5">Reason for Multiplier Penalty</p>
                             <div className="bg-rose-50/50 border border-rose-100/50 rounded-xl p-3">
                                 <p className="text-xs font-semibold text-rose-700 leading-relaxed">
                                     {penaltyExplanation.penaltyReason || "Deduction policy rules applied."}

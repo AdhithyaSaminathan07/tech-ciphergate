@@ -94,7 +94,7 @@ const Scoreboard = ({ department, noCard = false }) => {
               <div className="text-sm font-black text-slate-900 truncate tracking-tight">
                 {worker.name}
               </div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+              <div className="text-[10px] font-bold text-slate-400 tracking-widest mt-0.5">
                 {worker.department || 'Employee'}
               </div>
             </div>
@@ -102,7 +102,7 @@ const Scoreboard = ({ department, noCard = false }) => {
               <div className="text-sm font-black text-teal-600">
                 {worker.totalPoints || 0}
               </div>
-              <div className="text-[9px] font-bold text-slate-400 uppercase">Points</div>
+              <div className="text-[9px] font-bold text-slate-400">Points</div>
             </div>
           </div>
         ))}
@@ -113,13 +113,13 @@ const Scoreboard = ({ department, noCard = false }) => {
         <table className="min-w-full divide-y divide-slate-100">
           <thead className="bg-slate-50/80">
             <tr>
-              <th scope="col" className="px-6 py-3 text-left text-[11px] font-black text-slate-500 uppercase tracking-widest">
+              <th scope="col" className="px-6 py-3 text-left text-[11px] font-black text-slate-500 tracking-widest">
                 Rank
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-[11px] font-black text-slate-500 uppercase tracking-widest">
+              <th scope="col" className="px-6 py-3 text-left text-[11px] font-black text-slate-500 tracking-widest">
                 Employee
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-[11px] font-black text-slate-500 uppercase tracking-widest">
+              <th scope="col" className="px-6 py-3 text-left text-[11px] font-black text-slate-500 tracking-widest">
                 Total Points
               </th>
             </tr>

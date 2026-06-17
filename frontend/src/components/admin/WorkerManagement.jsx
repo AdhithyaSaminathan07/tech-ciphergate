@@ -573,11 +573,7 @@ const WorkerManagement = () => {
 
   const getFaceEnrollBadge = (faceEnrolled) => {
     return (
-      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-        faceEnrolled 
-          ? "bg-green-50 text-green-700 border-green-200" 
-          : "bg-yellow-50 text-yellow-700 border-yellow-200"
-      }`}>
+      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${ faceEnrolled ? "bg-green-50 text-green-700 border-green-200" : "bg-yellow-50 text-yellow-700 border-yellow-200" }`}>
         {faceEnrolled ? 'Captured' : 'Not Captured'}
       </span>
     );
@@ -758,22 +754,22 @@ const WorkerManagement = () => {
         layout
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`bg-white p-4 rounded-xl border ${isMuted ? 'border-gray-200 bg-gray-50/50' : 'border-gray-100 shadow-sm'} mb-3`}
+        className={`bg-white p-3.5 rounded-[12px] border ${isMuted ? 'border-slate-200 bg-slate-50/50' : 'border-slate-200/60 shadow-sm'} mb-3`}
       >
         <div className="flex justify-between items-start mb-3">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2.5">
             <div className="relative">
               <img
                 src={getFullFileUrl(worker.photo) || `https://ui-avatars.com/api/?name=${encodeURIComponent(worker.name)}&background=0d9488&color=fff`}
                 alt={worker.name}
-                className={`w-12 h-12 rounded-full object-cover border-2 border-white ${isMuted ? 'grayscale opacity-60' : ''}`}
+                className={`w-10 h-10 rounded-full object-cover border border-slate-100 ${isMuted ? 'grayscale opacity-60' : ''}`}
                 onError={(e) => { e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(worker.name)}&background=0d9488&color=fff`; }}
               />
-              <div className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-white ${worker.status === 'Active' || !worker.status ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+              <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${worker.status === 'Active' || !worker.status ? 'bg-green-500' : 'bg-slate-400'}`}></div>
             </div>
             <div>
-              <h3 className={`font-bold ${isMuted ? 'text-gray-500' : 'text-gray-900'} leading-tight`}>{worker.name}</h3>
-              <p className="text-xs text-gray-500">@{worker.username}</p>
+              <h3 className={`text-sm font-bold ${isMuted ? 'text-slate-500' : 'text-slate-900'} leading-none`}>{worker.name}</h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">@{worker.username}</p>
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
@@ -781,22 +777,22 @@ const WorkerManagement = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="bg-gray-50/50 p-2 rounded-lg border border-gray-100">
-            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-0.5">Department</p>
-            <p className="text-xs font-semibold text-gray-700 truncate">{deptName}</p>
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <div className="bg-slate-50/70 px-2.5 py-1.5 rounded-lg border border-slate-100">
+            <p className="text-[9px] text-slate-400 font-bold tracking-widest mb-0.5">Department</p>
+            <p className="text-xs font-semibold text-slate-700 truncate">{deptName}</p>
           </div>
-          <div className="bg-gray-50/50 p-2 rounded-lg border border-gray-100">
-            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-0.5">ID / RFID</p>
-            <p className="text-xs font-mono font-semibold text-gray-700">{worker.rfid}</p>
+          <div className="bg-slate-50/70 px-2.5 py-1.5 rounded-lg border border-slate-100">
+            <p className="text-[9px] text-slate-400 font-bold tracking-widest mb-0.5">ID / RFID</p>
+            <p className="text-xs font-mono font-semibold text-slate-700">{worker.rfid}</p>
           </div>
-          <div className="bg-gray-50/50 p-2 rounded-lg border border-gray-100">
-            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-0.5">Face Enroll</p>
+          <div className="col-span-2 bg-slate-50/70 px-2.5 py-1.5 rounded-lg border border-slate-100 flex justify-between items-center">
+            <p className="text-[9px] text-slate-400 font-bold tracking-widest">Face Enroll</p>
             {getFaceEnrollBadge(worker.faceEnrolled || (Array.isArray(worker.faceEmbeddings) && worker.faceEmbeddings.length > 0))}
           </div>
         </div>
 
-        <div className="flex justify-between items-center pt-3 border-t border-gray-100">
+        <div className="flex justify-between items-center pt-2.5 border-t border-slate-100">
           <div className="flex space-x-1">
             <button 
               onClick={() => openEditModal(worker)}
@@ -865,79 +861,91 @@ const WorkerManagement = () => {
   return (
     <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pb-8">
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between md:justify-end mb-8 gap-4">
-        <div className="md:hidden">
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Employee Management</h1>
-          <p className="text-gray-500 mt-1">Manage, filter and track your workforce efficiently.</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between md:justify-end mb-6 gap-4">
+        <div className="md:hidden mb-1">
+          <h1 className="text-2xl font-display font-bold text-slate-900 tracking-tight">Employee Management</h1>
+          <p className="text-sm text-slate-500 mt-1 leading-snug">Manage, filter and track your workforce efficiently.</p>
         </div>
-        <div className="flex items-center space-x-3">
-          <Button variant="outline" onClick={() => setIsHistoryModalOpen(true)} className="flex items-center shadow-sm">
-            <FaHistory className="mr-2" /> History
+        <div className="flex items-center gap-2 w-full md:w-auto mt-2 md:mt-0">
+          <Button 
+            variant="outline" 
+            onClick={() => setIsHistoryModalOpen(true)} 
+            className="flex shrink-0 items-center justify-center bg-white border-slate-200 hover:bg-slate-50 text-slate-700 shadow-sm w-[38px] h-[38px] md:w-auto md:px-3 rounded-[10px] transition-all !p-0 md:!py-2"
+            title="History"
+          >
+            <FaHistory className="text-slate-500" size={15} />
+            <span className="hidden md:inline ml-1.5 text-sm font-semibold">History</span>
           </Button>
-          <Button variant="primary" onClick={openAddModal} className="flex items-center shadow-md !bg-[#0d9488] !border-[#0d9488]">
-            <FaPlus className="mr-2" /> Add Employee
+          <Button 
+            variant="primary" 
+            onClick={openAddModal} 
+            className="flex-1 md:flex-none flex items-center justify-center bg-[#0d9488] hover:bg-[#0f766e] text-white shadow-sm text-sm px-4 h-[38px] rounded-[10px] whitespace-nowrap transition-all !py-0"
+          >
+            <FaPlus size={14} className="mr-1.5" /> Add Employee
           </Button>
         </div>
       </div>
       
       {/* Tabs Switcher */}
-      <div className="flex items-center space-x-1 p-1 bg-gray-100 rounded-2xl mb-8 w-fit shadow-inner">
+      <div className="grid grid-cols-2 md:flex md:items-center gap-1 p-1 bg-slate-100/80 backdrop-blur-sm rounded-[12px] mb-6 w-full md:w-fit shadow-sm border border-slate-200/60">
         <button
           onClick={() => setActiveTab('active')}
-          className={`flex items-center space-x-2 px-6 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'active' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-teal-600 hover:bg-white/50'}`}
+          className={`flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-3 md:px-5 py-2 md:py-2.5 rounded-[10px] text-xs md:text-sm font-semibold transition-all ${activeTab === 'active' ? 'bg-white text-teal-700 shadow-sm ring-1 ring-slate-900/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50/50'}`}
         >
-          <UserCheck size={18} className={activeTab === 'active' ? 'text-teal-600' : 'text-gray-400'} />
-          <span>Active Employees</span>
-          <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'active' ? 'bg-teal-100 text-teal-600' : 'bg-gray-200 text-gray-500'}`}>
+          <div className="flex items-center gap-1.5">
+            <UserCheck size={15} className={`flex-shrink-0 ${activeTab === 'active' ? 'text-teal-600' : 'text-slate-400'}`} />
+            <span className="truncate tracking-wide">Active</span>
+          </div>
+          <span className={`px-1.5 md:px-2 py-0.5 rounded-full text-[10px] font-bold ${activeTab === 'active' ? 'bg-teal-50 text-teal-700' : 'bg-slate-200/70 text-slate-500'}`}>
             {processedWorkers.active.length}
           </span>
         </button>
         <button
           onClick={() => setActiveTab('archived')}
-          className={`flex items-center space-x-2 px-6 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'archived' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-orange-600 hover:bg-white/50'}`}
+          className={`flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-3 md:px-5 py-2 md:py-2.5 rounded-[10px] text-xs md:text-sm font-semibold transition-all ${activeTab === 'archived' ? 'bg-white text-orange-700 shadow-sm ring-1 ring-slate-900/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50/50'}`}
         >
-          <UserX size={18} className={activeTab === 'archived' ? 'text-orange-600' : 'text-gray-400'} />
-          <span>Relieved Employees</span>
-          <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] ${activeTab === 'archived' ? 'bg-orange-100 text-orange-600' : 'bg-gray-200 text-gray-500'}`}>
+          <div className="flex items-center gap-1.5">
+            <UserX size={15} className={`flex-shrink-0 ${activeTab === 'archived' ? 'text-orange-500' : 'text-slate-400'}`} />
+            <span className="truncate tracking-wide">Relieved</span>
+          </div>
+          <span className={`px-1.5 md:px-2 py-0.5 rounded-full text-[10px] font-bold ${activeTab === 'archived' ? 'bg-orange-50 text-orange-700' : 'bg-slate-200/70 text-slate-500'}`}>
             {processedWorkers.archived.length}
           </span>
         </button>
       </div>
 
       {/* Advanced Control Bar */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200/80 p-3 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
           {/* Search Box */}
           <div className="relative lg:col-span-1">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-4 w-4 text-gray-400" />
+              <Search className="h-4 w-4 text-slate-400" />
             </div>
             <input
               type="text"
               placeholder="Search name, rfid..."
-              className="block w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0d9488] focus:border-transparent transition-all"
+              className="block w-full pl-9 pr-8 py-2 bg-slate-50/50 border border-slate-200 rounded-[10px] text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0d9488]/20 focus:border-[#0d9488] focus:bg-white transition-all shadow-sm"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600"
               >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
 
-
-
           {/* Department Filter */}
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <FaBuilding className="h-4 w-4 text-gray-400" />
+              <FaBuilding className="h-3.5 w-3.5 text-slate-400" />
             </div>
             <select
-              className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#0d9488] transition-all appearance-none"
+              className="block w-full pl-9 pr-3 py-2 bg-slate-50/50 border border-slate-200 rounded-[10px] text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0d9488]/20 focus:border-[#0d9488] focus:bg-white transition-all appearance-none shadow-sm cursor-pointer"
               value={departmentFilter}
               onChange={(e) => setDepartmentFilter(e.target.value)}
             >
@@ -951,10 +959,10 @@ const WorkerManagement = () => {
           {/* Batch Filter */}
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <FaLayerGroup className="h-4 w-4 text-gray-400" />
+              <FaLayerGroup className="h-3.5 w-3.5 text-slate-400" />
             </div>
             <select
-              className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#0d9488] transition-all appearance-none"
+              className="block w-full pl-9 pr-3 py-2 bg-slate-50/50 border border-slate-200 rounded-[10px] text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0d9488]/20 focus:border-[#0d9488] focus:bg-white transition-all appearance-none shadow-sm cursor-pointer"
               value={batchFilter}
               onChange={(e) => setBatchFilter(e.target.value)}
             >
@@ -968,10 +976,10 @@ const WorkerManagement = () => {
           {/* Sorting */}
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <ArrowUpDown className="h-4 w-4 text-gray-400" />
+              <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" />
             </div>
             <select
-              className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#0d9488] transition-all appearance-none"
+              className="block w-full pl-9 pr-3 py-2 bg-slate-50/50 border border-slate-200 rounded-[10px] text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0d9488]/20 focus:border-[#0d9488] focus:bg-white transition-all appearance-none shadow-sm cursor-pointer"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
             >
@@ -985,7 +993,7 @@ const WorkerManagement = () => {
 
         {/* Reset Filters Link */}
         {(searchTerm || departmentFilter !== 'All' || batchFilter !== 'All') && (
-          <div className="mt-3 flex justify-end">
+          <div className="mt-2.5 flex justify-end">
             <button
               onClick={() => {
                 setSearchTerm('');
@@ -993,9 +1001,9 @@ const WorkerManagement = () => {
                 setBatchFilter('All');
                 setSortBy('newest');
               }}
-              className="text-xs font-bold text-[#0d9488] hover:text-teal-700 flex items-center bg-teal-50 px-3 py-1.5 rounded-lg border border-teal-100 transition-all shadow-sm"
+              className="text-[11px] font-bold text-slate-500 hover:text-slate-800 flex items-center bg-slate-100/50 px-2.5 py-1 rounded-md border border-slate-200/50 transition-all"
             >
-              <RefreshCw className="h-3 w-3 mr-1.5" /> Reset All Filters
+              <RefreshCw className="h-3 w-3 mr-1.5" /> Reset Filters
             </button>
           </div>
         )}
@@ -1311,7 +1319,7 @@ const WorkerManagement = () => {
             </div>
 
             <div className="md:col-span-2 mt-4 mb-2">
-              <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Bank Details</h3>
+              <h3 className="text-sm font-bold text-gray-700 tracking-wider">Bank Details</h3>
               <div className="border-t border-gray-200 mt-1"></div>
             </div>
 
@@ -1615,7 +1623,7 @@ const WorkerManagement = () => {
             </div>
 
             <div className="md:col-span-2 mt-4 mb-2">
-              <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Bank Details</h3>
+              <h3 className="text-sm font-bold text-gray-700 tracking-wider">Bank Details</h3>
               <div className="border-t border-gray-200 mt-1"></div>
             </div>
 

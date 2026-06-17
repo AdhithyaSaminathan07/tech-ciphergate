@@ -63,16 +63,7 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
       {/* Premium White Layout-Attached Sidebar */}
       <aside
         onMouseLeave={() => setExpandedDropdowns({})}
-        className={`
-          group/sidebar z-[500]
-          bg-white text-slate-900
-          shadow-[4px_0_24px_rgba(0,0,0,0.02)] border-r border-slate-100
-          transition-all duration-[300ms] ease-[cubic-bezier(0.4,0,0.2,1)]
-          flex flex-col overflow-hidden md:overflow-visible flex-shrink-0
-          fixed inset-y-0 left-0 md:sticky md:top-0 md:h-screen
-          ${isOpen ? 'translate-x-0 w-[280px] shadow-2xl' : '-translate-x-full md:translate-x-0 md:w-[72px] hover:md:w-[240px]'}
-          md:flex
-        `}
+        className={`group/sidebar z-[500] bg-white text-slate-900 shadow-[4px_0_24px_rgba(0,0,0,0.02)] border-r border-slate-100 transition-all duration-[300ms] ease-[cubic-bezier(0.4,0,0.2,1)] flex flex-col overflow-hidden md:overflow-visible flex-shrink-0 fixed inset-y-0 left-0 md:sticky md:top-0 md:h-screen ${isOpen ? 'translate-x-0 w-[280px] shadow-2xl' : '-translate-x-full md:translate-x-0 md:w-[72px] hover:md:w-[240px]'} md:flex`}
       >
         {/* Inner Wrapper maintains 240px so text doesn't wrap during width transition */}
         <div className="w-full h-full flex flex-col pt-6">
@@ -83,7 +74,7 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
               onClick={() => { if (window.innerWidth < 768) setIsOpen(false); }}
               className="flex items-center gap-3 w-full"
             >
-              <div className="w-[36px] h-[32px] flex-shrink-0 flex items-center justify-center  rounded-lg">
+              <div className="w-[36px] h-[32px] flex-shrink-0 flex items-center justify-center rounded-lg">
                 <ShatteredLogo
                   src="/logo.png"
                   alt="Logo"
@@ -91,10 +82,10 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
                 />
               </div>
               <div className={`flex flex-col justify-center transition-all duration-[200ms] ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap ${isOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2 group-hover/sidebar:opacity-100 group-hover/sidebar:translate-x-0'}`}>
-                <h1 className="text-slate-900 font-bold text-[14px] tracking-tight leading-none uppercase">
+                <h1 className="text-slate-900 font-bold text-[14px] tracking-tight leading-none">
                   {logoText}
                 </h1>
-                <span className="text-teal-600 text-[8px] font-black tracking-[0.2em] uppercase mt-1">Enterprise</span>
+                <span className="text-teal-600 text-[8px] font-black tracking-[0.2em] mt-1">Enterprise</span>
               </div>
             </Link>
           </div>
@@ -105,7 +96,7 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
               if (link.isHeader) {
                 return (
                   <div key={`header-${index}`} className={`pt-6 pb-2 px-4 transition-opacity duration-[200ms] whitespace-nowrap ${isOpen ? 'opacity-100' : 'opacity-0 group-hover/sidebar:opacity-100'}`}>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{link.label}</p>
+                    <p className="text-[10px] font-black text-slate-400 tracking-[0.2em]">{link.label}</p>
                   </div>
                 );
               }
@@ -251,7 +242,7 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
                                       onClick={toggleSec}
                                       className="flex items-center justify-between w-full pt-3 pb-1 pl-2 pr-2 hover:bg-slate-50 rounded-lg text-left transition-colors select-none group/sub"
                                     >
-                                      <span className="text-[9px] font-black text-slate-400 group-hover/sub:text-slate-600 uppercase tracking-[0.12em] transition-colors">
+                                      <span className="text-[9px] font-black text-slate-400 group-hover/sub:text-slate-600 tracking-[0.12em] transition-colors">
                                         {sec.header.label}
                                       </span>
                                       <span className="text-slate-400 group-hover/sub:text-slate-600 transition-colors">
@@ -318,7 +309,7 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
                     <p className="text-[13px] font-bold text-slate-900 truncate tracking-tight">
                       {user.displayName || user.name || user.username}
                     </p>
-                    <p className="text-[9px] text-teal-600 font-black uppercase tracking-widest mt-0.5">
+                    <p className="text-[9px] text-teal-600 font-black tracking-widest mt-0.5">
                       {user.role || 'Admin'}
                     </p>
                   </div>

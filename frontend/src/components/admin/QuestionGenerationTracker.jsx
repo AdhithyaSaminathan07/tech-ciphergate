@@ -103,9 +103,7 @@ const QuestionGenerationTracker = ({
 
   return (
     <div className="fixed bottom-4 right-4 z-50">
-      <div className={`bg-white rounded-lg shadow-2xl border border-gray-200 transition-all duration-300 ${
-        isMinimized ? 'w-80' : 'w-96'
-      }`}>
+      <div className={`bg-white rounded-lg shadow-2xl border border-gray-200 transition-all duration-300 ${ isMinimized ? 'w-80' : 'w-96' }`}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-t-lg">
           <div className="flex items-center space-x-2">
@@ -199,11 +197,7 @@ const QuestionGenerationTracker = ({
                       {/* Mini Progress Bar */}
                       <div className="w-full bg-white rounded-full h-2">
                         <div 
-                          className={`h-2 rounded-full transition-all duration-300 ${
-                            employee.status === 'completed' ? 'bg-green-500' :
-                            employee.status === 'in-progress' ? 'bg-orange-500' :
-                            employee.status === 'failed' ? 'bg-red-500' : 'bg-gray-300'
-                          }`}
+                          className={`h-2 rounded-full transition-all duration-300 ${ employee.status === 'completed' ? 'bg-green-500' : employee.status === 'in-progress' ? 'bg-orange-500' : employee.status === 'failed' ? 'bg-red-500' : 'bg-gray-300' }`}
                           style={{ width: `${empProgress}%` }}
                         ></div>
                       </div>
@@ -245,10 +239,7 @@ const QuestionGenerationTracker = ({
           <div className="p-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <div className={`w-3 h-3 rounded-full ${
-                  isGenerating ? 'bg-orange-500 animate-pulse' : 
-                  progress.processedEmployees === progress.totalEmployees ? 'bg-green-500' : 'bg-gray-400'
-                }`}></div>
+                <div className={`w-3 h-3 rounded-full ${ isGenerating ? 'bg-orange-500 animate-pulse' : progress.processedEmployees === progress.totalEmployees ? 'bg-green-500' : 'bg-gray-400' }`}></div>
                 <span className="text-sm text-gray-700">
                   {progress.processedEmployees}/{progress.totalEmployees} employees
                 </span>

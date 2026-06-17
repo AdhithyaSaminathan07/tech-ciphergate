@@ -178,7 +178,7 @@ const ApplyForLeave = () => {
         <div className="mb-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-gray-500 text-xs font-bold uppercase tracking-wider">Company</span>
+              <span className="text-gray-500 text-xs font-bold tracking-wider">Company</span>
               <FiActivity className={`text-blue-500 ${!stats.advancedSettings?.thresholds?.company?.enabled ? 'opacity-30' : ''}`} />
             </div>
             <div className={`text-2xl font-black ${!stats.advancedSettings?.thresholds?.company?.enabled ? 'text-gray-400' : 'text-gray-900'}`}>{stats.stats.companyAttendance}%</div>
@@ -188,12 +188,12 @@ const ApplyForLeave = () => {
                 style={{ width: `${stats.stats.companyAttendance}%` }}
               ></div>
             </div>
-            {!stats.advancedSettings?.thresholds?.company?.enabled && <p className="text-[10px] text-gray-400 mt-1 uppercase font-bold">Policy Disabled</p>}
+            {!stats.advancedSettings?.thresholds?.company?.enabled && <p className="text-[10px] text-gray-400 mt-1 font-bold">Policy Disabled</p>}
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-gray-500 text-xs font-bold uppercase tracking-wider">Department</span>
+              <span className="text-gray-500 text-xs font-bold tracking-wider">Department</span>
               <FiLayers className={`text-indigo-500 ${!stats.advancedSettings?.thresholds?.department?.enabled ? 'opacity-30' : ''}`} />
             </div>
             <div className={`text-2xl font-black ${!stats.advancedSettings?.thresholds?.department?.enabled ? 'text-gray-400' : 'text-gray-900'}`}>{stats.stats.deptAttendance}%</div>
@@ -203,12 +203,12 @@ const ApplyForLeave = () => {
                 style={{ width: `${stats.stats.deptAttendance}%` }}
               ></div>
             </div>
-            {!stats.advancedSettings?.thresholds?.department?.enabled && <p className="text-[10px] text-gray-400 mt-1 uppercase font-bold">Policy Disabled</p>}
+            {!stats.advancedSettings?.thresholds?.department?.enabled && <p className="text-[10px] text-gray-400 mt-1 font-bold">Policy Disabled</p>}
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-gray-500 text-xs font-bold uppercase tracking-wider">Personal</span>
+              <span className="text-gray-500 text-xs font-bold tracking-wider">Personal</span>
               <FiUserCheck className={`text-emerald-500 ${!stats.advancedSettings?.thresholds?.employee?.enabled ? 'opacity-30' : ''}`} />
             </div>
             <div className={`text-2xl font-black ${!stats.advancedSettings?.thresholds?.employee?.enabled ? 'text-gray-400' : 'text-gray-900'}`}>{stats.stats.personalAttendance}%</div>
@@ -218,26 +218,26 @@ const ApplyForLeave = () => {
                 style={{ width: `${stats.stats.personalAttendance}%` }}
               ></div>
             </div>
-            {!stats.advancedSettings?.thresholds?.employee?.enabled && <p className="text-[10px] text-gray-400 mt-1 uppercase font-bold">Policy Disabled</p>}
+            {!stats.advancedSettings?.thresholds?.employee?.enabled && <p className="text-[10px] text-gray-400 mt-1 font-bold">Policy Disabled</p>}
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-gray-500 text-xs font-bold uppercase tracking-wider">Monthly Usage</span>
+              <span className="text-gray-500 text-xs font-bold tracking-wider">Monthly Usage</span>
               <FiInfo className="text-orange-500" />
             </div>
             <div className="text-2xl font-black text-gray-900">{stats.stats.leavesTaken} / {stats.stats.allowedLimit}</div>
-            <p className="text-[10px] text-gray-400 mt-2 font-bold uppercase">Days Used This Month</p>
+            <p className="text-[10px] text-gray-400 mt-2 font-bold">Days Used This Month</p>
           </div>
 
           {stats.paidLeaveConfig?.enabled && (
              <div className="bg-white p-5 rounded-2xl border border-teal-100 shadow-sm hover:shadow-md transition-all sm:col-span-2 lg:col-span-4 mt-2">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-teal-600 text-xs font-black uppercase tracking-widest flex items-center">
+                  <span className="text-teal-600 text-xs font-black tracking-widest flex items-center">
                     <div className="w-2 h-2 bg-teal-500 rounded-full mr-2 animate-pulse"></div>
                     Paid Leave Balance
                   </span>
-                  <span className="bg-teal-50 text-teal-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border border-teal-100">
+                  <span className="bg-teal-50 text-teal-700 px-3 py-1 rounded-full text-[10px] font-black tracking-tighter border border-teal-100">
                     Monthly Reset
                   </span>
                 </div>
@@ -246,7 +246,7 @@ const ApplyForLeave = () => {
                     <div className="text-4xl font-black text-gray-900 tracking-tighter">
                       {stats.stats.paidLeaveUsed} <span className="text-gray-300 text-2xl">/</span> {stats.stats.paidLeaveLimit}
                     </div>
-                    <p className="text-[10px] text-gray-400 mt-1 font-bold uppercase tracking-wide">
+                    <p className="text-[10px] text-gray-400 mt-1 font-bold tracking-wide">
                       {stats.stats.paidLeaveLimit - stats.stats.paidLeaveUsed} Days remaining in {new Date().toLocaleString('default', { month: 'long' })}
                     </p>
                   </div>

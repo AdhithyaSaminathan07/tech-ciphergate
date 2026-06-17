@@ -215,10 +215,7 @@ const LeaveRequests = () => {
                 <button
                   key={option.value}
                   onClick={() => setStatusFilter(option.value)}
-                  className={`px-4 py-2 rounded-md text-sm font-medium focus:outline-none transition-colors ${statusFilter === option.value
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                    }`}
+                  className={`px-4 py-2 rounded-md text-sm font-medium focus:outline-none transition-colors ${statusFilter === option.value ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50' }`}
                 >
                   {option.label}
                 </button>
@@ -273,10 +270,7 @@ const LeaveRequests = () => {
               <div className="col-span-1 sm:col-span-2 flex flex-wrap gap-2">
                 <button
                   onClick={handleThisMonthFilter}
-                  className={`px-4 py-2 rounded-md text-sm font-medium ${isThisMonthActive
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                    }`}
+                  className={`px-4 py-2 rounded-md text-sm font-medium ${isThisMonthActive ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50' }`}
                 >
                   This Month
                 </button>
@@ -391,15 +385,7 @@ const LeaveRequests = () => {
             {filteredLeaves.map((leave) => (
               <div
                 key={leave._id}
-                className={`p-4 sm:p-6 transition-all hover:bg-gray-50 border-l-4 ${leave.status === 'Approved'
-                    ? 'border-green-500'
-                    : leave.status === 'Rejected'
-                      ? 'border-red-500'
-                      : 'border-yellow-500'
-                  } ${!leave.workerViewed && (leave.status === 'Approved' || leave.status === 'Rejected')
-                    ? 'bg-blue-50/50'
-                    : ''
-                  }`}
+                className={`p-4 sm:p-6 transition-all hover:bg-gray-50 border-l-4 ${leave.status === 'Approved' ? 'border-green-500' : leave.status === 'Rejected' ? 'border-red-500' : 'border-yellow-500' } ${!leave.workerViewed && (leave.status === 'Approved' || leave.status === 'Rejected') ? 'bg-blue-50/50' : '' }`}
               >
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-4 gap-2">
                   <div>
@@ -422,14 +408,14 @@ const LeaveRequests = () => {
                     {/* Deduction Penalty Indicator */}
                     {leave.leaveType === 'Paid Leave' && (
                       <div className="flex flex-wrap gap-1 mr-3">
-                        <span className="bg-teal-50 text-teal-600 px-2.5 py-1 rounded-full text-[10px] font-black border border-teal-200 uppercase tracking-tight flex items-center shadow-sm">
+                        <span className="bg-teal-50 text-teal-600 px-2.5 py-1 rounded-full text-[10px] font-black border border-teal-200 tracking-tight flex items-center shadow-sm">
                           <FiDollarSign className="mr-0.5" /> SALARY: PAID (IMMEDIATE)
                         </span>
                       </div>
                     )}
                     {leave.leaveType !== 'Permission' && leave.leaveType !== 'Paid Leave' && leave.deductionFactor > 1 && (
                       <div className="flex flex-wrap gap-1 mr-3">
-                        <span className="bg-red-50 text-red-600 px-2.5 py-1 rounded-full text-[10px] font-black border border-red-200 uppercase tracking-tight flex items-center shadow-sm">
+                        <span className="bg-red-50 text-red-600 px-2.5 py-1 rounded-full text-[10px] font-black border border-red-200 tracking-tight flex items-center shadow-sm">
                           <FiDollarSign className="mr-0.5" /> {leave.deductionFactor}X DEDUCTION
                         </span>
                       </div>
@@ -450,14 +436,14 @@ const LeaveRequests = () => {
                 <div className="bg-white rounded-md border border-gray-200 divide-y divide-gray-200">
                   <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-gray-200">
                     <div className="p-3">
-                      <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Duration</p>
+                      <p className="text-xs text-gray-500 tracking-wide font-medium mb-1">Duration</p>
                       <div className="font-medium">
                         {formatDate(leave.startDate)} - {formatDate(leave.endDate)}
                       </div>
                     </div>
 
                     <div className="p-3">
-                      <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Status</p>
+                      <p className="text-xs text-gray-500 tracking-wide font-medium mb-1">Status</p>
                       <div className="font-medium text-gray-900">
                         {leave.status === 'Approved' && <span className="text-green-600">Approved</span>}
                         {leave.status === 'Rejected' && <span className="text-red-600">Rejected</span>}
@@ -468,14 +454,14 @@ const LeaveRequests = () => {
 
                   {/* Reason */}
                   <div className="p-3">
-                    <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Reason</p>
+                    <p className="text-xs text-gray-500 tracking-wide font-medium mb-1">Reason</p>
                     <p className="text-gray-700">{leave.reason}</p>
                   </div>
 
                   {/* Document (if any) */}
                   {leave.document && (
                     <div className="p-3">
-                      <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Supporting Document</p>
+                      <p className="text-xs text-gray-500 tracking-wide font-medium mb-1">Supporting Document</p>
                       <a
                         href={leave.document}
                         target="_blank"

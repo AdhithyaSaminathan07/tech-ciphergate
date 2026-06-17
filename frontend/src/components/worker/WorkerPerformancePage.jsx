@@ -71,7 +71,7 @@ const WorkerPerformancePage = () => {
             {/* Main Stats Grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Total Points</p>
+                    <p className="text-xs font-bold text-slate-400 tracking-wider mb-2">Total Points</p>
                     <div className="flex items-end gap-1">
                         <span className="text-yellow-400 text-xl">⭐</span>
                         <span className="text-3xl font-black text-slate-900">{(data.totalPoints || 0).toLocaleString()}</span>
@@ -82,19 +82,19 @@ const WorkerPerformancePage = () => {
                 </div>
 
                 <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Rank</p>
+                    <p className="text-xs font-bold text-slate-400 tracking-wider mb-2">Rank</p>
                     <p className="text-3xl font-black text-slate-900">{rankDisplay}</p>
                     <p className="text-xs text-slate-400 mt-1">Company-wide</p>
                 </div>
 
                 <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Streak 🔥</p>
+                    <p className="text-xs font-bold text-slate-400 tracking-wider mb-2">Streak 🔥</p>
                     <p className="text-3xl font-black text-orange-600">{data.currentStreak || 0}</p>
                     <p className="text-xs text-slate-400 mt-1">Best: {data.longestStreak || 0}</p>
                 </div>
 
                 <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Success Rate</p>
+                    <p className="text-xs font-bold text-slate-400 tracking-wider mb-2">Success Rate</p>
                     <p className="text-3xl font-black text-teal-600">{data.taskSuccessRate}%</p>
                     <p className="text-xs text-slate-400 mt-1">{data.totalCompletedTickets} tasks done</p>
                 </div>

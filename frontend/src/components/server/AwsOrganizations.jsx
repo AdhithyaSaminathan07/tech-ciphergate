@@ -162,11 +162,7 @@ const AwsOrganizations = () => {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className={`p-4 rounded-xl border text-sm flex items-center justify-between shadow-sm ${
-              message.type === 'error' 
-                ? 'bg-rose-50 border-rose-200 text-rose-800' 
-                : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-            }`}
+            className={`p-4 rounded-xl border text-sm flex items-center justify-between shadow-sm ${ message.type === 'error' ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800' }`}
           >
             <span>{message.text}</span>
             <button onClick={() => setMessage({ text: '', type: '' })} className="font-bold ml-4 hover:opacity-75">×</button>
@@ -187,7 +183,7 @@ const AwsOrganizations = () => {
 
               <form onSubmit={handleInitializeOrg} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Display Name</label>
+                  <label className="block text-xs font-bold text-slate-500 tracking-wider mb-2">Display Name</label>
                   <input
                     id="master-display-name-input"
                     type="text"
@@ -200,7 +196,7 @@ const AwsOrganizations = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Master Account ID</label>
+                  <label className="block text-xs font-bold text-slate-500 tracking-wider mb-2">Master Account ID</label>
                   <input
                     id="master-account-input"
                     type="text"
@@ -231,11 +227,7 @@ const AwsOrganizations = () => {
                     <h3 className="text-sm font-bold text-slate-900">{masterAccount.name}</h3>
                     <p className="text-[11px] font-mono text-slate-500 mt-0.5">Master ID: {masterAccount.awsAccountId}</p>
                   </div>
-                  <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded border uppercase ${
-                    masterAccount.connectionStatus === 'Connected'
-                      ? 'bg-teal-50 text-teal-700 border-teal-100'
-                      : 'bg-rose-50 text-rose-700 border-rose-100'
-                  }`}>
+                  <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded border ${ masterAccount.connectionStatus === 'Connected' ? 'bg-teal-50 text-teal-700 border-teal-100' : 'bg-rose-50 text-rose-700 border-rose-100' }`}>
                     {masterAccount.connectionStatus}
                   </span>
                 </div>
@@ -299,7 +291,7 @@ const AwsOrganizations = () => {
                 </div>
 
                 <div>
-                  <span className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Trust Relationship Document</span>
+                  <span className="block text-xs font-bold text-slate-400 mb-2 tracking-wide">Trust Relationship Document</span>
                   <pre className="text-[10px] bg-slate-950 p-3 rounded-lg overflow-x-auto text-slate-300 border border-slate-900 font-mono leading-normal max-h-36">
                     {masterAccount.policyDocument || 'Loading trust policy...'}
                   </pre>
@@ -412,11 +404,7 @@ const AwsOrganizations = () => {
                     <div><strong>Last Sync:</strong> <span className="font-semibold text-slate-900">{discoveredAccounts[0]?.lastSyncedAt ? new Date(discoveredAccounts[0].lastSyncedAt).toLocaleString() : 'Never'}</span></div>
                     <div>
                       <strong>Status:</strong>{' '}
-                      <span className={`font-bold px-2 py-0.5 rounded text-[10px] uppercase ${
-                        discoveredAccounts[0]?.connectionStatus === 'Connected' 
-                          ? 'bg-teal-50 text-teal-700 border border-teal-100' 
-                          : 'bg-rose-50 text-rose-700 border border-rose-100'
-                      }`}>
+                      <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${ discoveredAccounts[0]?.connectionStatus === 'Connected' ? 'bg-teal-50 text-teal-700 border border-teal-100' : 'bg-rose-50 text-rose-700 border border-rose-100' }`}>
                         {discoveredAccounts[0]?.connectionStatus || 'Pending'}
                       </span>
                     </div>
@@ -435,9 +423,9 @@ const AwsOrganizations = () => {
                           </div>
                           
                           {isMaster ? (
-                            <span className="text-[9px] font-extrabold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 uppercase">Master</span>
+                            <span className="text-[9px] font-extrabold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">Master</span>
                           ) : (
-                            <span className="text-[9px] font-extrabold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-100 uppercase">Linked</span>
+                            <span className="text-[9px] font-extrabold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-100">Linked</span>
                           )}
                         </div>
 

@@ -582,12 +582,12 @@ const DeveloperCompensation = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Project Name</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">60% Profit</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Final Profit Sharing</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Project Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Amount</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">60% Profit</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Final Profit Sharing</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Date</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -689,13 +689,13 @@ const DeveloperCompensation = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Developer</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Projects</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">60% Profit</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Base Salary</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actual Salary</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deducted</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Final Profit Sharing</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Developer</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Total Projects</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">60% Profit</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Base Salary</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Actual Salary</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Deducted</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Final Profit Sharing</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -876,13 +876,13 @@ const DeveloperCompensation = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Developer</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Base Salary</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actual Salary</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deducted Amount</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Project Amount</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">60% Profit</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Final Profit Sharing</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Developer</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Base Salary</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Actual Salary</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Deducted Amount</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Project Amount</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">60% Profit</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">Final Profit Sharing</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">

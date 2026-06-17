@@ -33,14 +33,7 @@ const Button = ({
     return (
       <button
         type={type}
-        className={`
-          ${baseClasses}
-          ${variantClasses[variant]}
-          ${sizeClasses[size]}
-          ${widthClass}
-          ${disabledClass}
-          ${className}
-        `}
+        className={`${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${widthClass} ${disabledClass} ${className}`}
         onClick={onClick}
         disabled={disabled}
       >

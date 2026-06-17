@@ -496,7 +496,7 @@ const MonthlyPayslip = () => {
               {/* 1. Header Section */}
               <div className="flex flex-col items-center mb-8">
                 <img src={logoSelection === 'tech' ? "/Invoicelogo.png" : "/vaseveda.png"} alt="Logo" className="h-16 object-contain mb-2" />
-                <div className="text-[#4a9d2d] font-bold text-2xl uppercase tracking-widest border-b-2 border-gray-800 pb-1 px-4">
+                <div className="text-[#4a9d2d] font-bold text-2xl tracking-widest border-b-2 border-gray-800 pb-1 px-4">
                   MONTHLY PAYSLIP
                 </div>
               </div>
@@ -611,12 +611,12 @@ const MonthlyPayslip = () => {
                   <div className="h-20 flex items-center justify-center">
                      {signatures.signature && <img src={signatures.signature} className="max-h-full max-w-[200px] object-contain" />}
                   </div>
-                  <div className="border-t-2 border-gray-800 w-48 text-center pt-2 font-extrabold text-sm uppercase">
+                  <div className="border-t-2 border-gray-800 w-48 text-center pt-2 font-extrabold text-sm">
                     Employer Signature
                   </div>
                 </div>
                 <div className="flex flex-col items-center justify-end pb-0">
-                  <div className="border-t-2 border-gray-800 w-48 text-center pt-2 font-extrabold text-sm uppercase">
+                  <div className="border-t-2 border-gray-800 w-48 text-center pt-2 font-extrabold text-sm">
                     Employee Signature
                   </div>
                 </div>
@@ -632,7 +632,7 @@ const MonthlyPayslip = () => {
         
         {/* Header Options */}
         <div className={`flex flex-col gap-2 w-full md:w-auto ${isViewMode ? 'opacity-50 pointer-events-none' : ''}`}>
-          <span className="text-gray-500 font-bold text-[10px] tracking-widest uppercase">SELECT HEADER:</span>
+          <span className="text-gray-500 font-bold text-[10px] tracking-widest">SELECT HEADER:</span>
           <div className="flex gap-4">
             <label className={`cursor-pointer flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${logoSelection === 'tech' ? 'border-[#4a9d2d] bg-green-50' : 'border-gray-200 hover:bg-gray-50'}`}>
               <input type="radio" checked={logoSelection === 'tech'} onChange={() => setLogoSelection('tech')} className="hidden" />

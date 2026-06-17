@@ -183,8 +183,7 @@ const Comments = () => {
             {comments.map((comment) => (
               <div
                 key={comment._id || `comment-${Math.random()}`}
-                className={`border rounded-lg overflow-hidden ${comment.isNew ? 'border-blue-400' : 'border-gray-200'
-                  }`}
+                className={`border rounded-lg overflow-hidden ${comment.isNew ? 'border-blue-400' : 'border-gray-200' }`}
               >
                 <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
                   <div className="flex justify-between items-center">
@@ -223,10 +222,7 @@ const Comments = () => {
                       {comment.replies.map((reply, index) => (
                         <div
                           key={`${comment._id}-reply-${index}`}
-                          className={`p-3 rounded-md ${reply.isAdminReply
-                              ? 'bg-blue-50 border-l-4 border-blue-400'
-                              : 'bg-gray-50'
-                            } ${reply.isNew ? 'border-2 border-blue-300' : ''}`}
+                          className={`p-3 rounded-md ${reply.isAdminReply ? 'bg-blue-50 border-l-4 border-blue-400' : 'bg-gray-50' } ${reply.isNew ? 'border-2 border-blue-300' : ''}`}
                         >
                           <div className="flex justify-between items-center mb-1">
                             <p className="text-sm font-medium">

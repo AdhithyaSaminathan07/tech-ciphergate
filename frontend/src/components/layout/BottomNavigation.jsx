@@ -40,7 +40,7 @@ const BottomNavigation = ({ navItems = [], badges = {} }) => {
                 <div className={`text-[20px] transition-all duration-300 ${isActive ? 'scale-110 -translate-y-0.5' : ''}`}>
                   {item.icon}
                 </div>
-                <span className={`text-[10px] font-black uppercase tracking-tight mt-1 transition-all duration-300 ${isActive ? 'opacity-100' : 'opacity-80'}`}>
+                <span className={`text-[10px] font-black tracking-tight mt-1 transition-all duration-300 ${isActive ? 'opacity-100' : 'opacity-80'}`}>
                   {item.label}
                 </span>
                 

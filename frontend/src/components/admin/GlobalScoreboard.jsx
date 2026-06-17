@@ -326,13 +326,7 @@ const GlobalScoreboard = () => {
                             {topPerformers.map((performer, index) => (
                                 <div
                                     key={performer._id || index}
-                                    className={`p-4 rounded-lg border-2 ${
-                                        index === 0 
-                                            ? 'border-yellow-400 bg-yellow-50' 
-                                            : index === 1 
-                                                ? 'border-gray-400 bg-gray-50' 
-                                                : 'border-orange-400 bg-orange-50'
-                                    }`}
+                                    className={`p-4 rounded-lg border-2 ${ index === 0 ? 'border-yellow-400 bg-yellow-50' : index === 1 ? 'border-gray-400 bg-gray-50' : 'border-orange-400 bg-orange-50' }`}
                                 >
                                     <div className="flex items-center justify-between mb-2">
                                         {getRankIcon(index + 1)}

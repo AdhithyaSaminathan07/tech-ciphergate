@@ -112,7 +112,7 @@ const AnomalyDetection = () => {
               <Icon size={18} />
             </div>
             <div>
-              <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide">{label}</p>
+              <p className="text-xs text-slate-500 font-semibold tracking-wide">{label}</p>
               <p className="text-xl font-bold text-slate-900 font-mono">{value}</p>
             </div>
           </div>
@@ -170,7 +170,7 @@ const AnomalyDetection = () => {
           {selectedAnomaly ? (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
-                <span className={`px-2 py-0.5 text-[9px] font-bold rounded uppercase ${SEVERITY_CONFIG[selectedAnomaly.severity]?.bg} ${SEVERITY_CONFIG[selectedAnomaly.severity]?.text}`}>
+                <span className={`px-2 py-0.5 text-[9px] font-bold rounded ${SEVERITY_CONFIG[selectedAnomaly.severity]?.bg} ${SEVERITY_CONFIG[selectedAnomaly.severity]?.text}`}>
                   {selectedAnomaly.severity}
                 </span>
                 <span className="text-xs text-slate-500 font-semibold">{new Date(selectedAnomaly.date).toLocaleDateString()}</span>
@@ -192,7 +192,7 @@ const AnomalyDetection = () => {
                 </div>
                 {selectedAnomaly.cloudWatchCorrelation?.metricName && (
                   <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-100 space-y-1">
-                    <p className="text-[10px] font-bold text-indigo-700 uppercase tracking-wide">CloudWatch Correlation</p>
+                    <p className="text-[10px] font-bold text-indigo-700 tracking-wide">CloudWatch Correlation</p>
                     <p className="text-indigo-800 text-xs font-semibold">{selectedAnomaly.cloudWatchCorrelation.metricName}</p>
                     <p className="text-indigo-600 text-xs">{selectedAnomaly.cloudWatchCorrelation.description}</p>
                   </div>
@@ -201,7 +201,7 @@ const AnomalyDetection = () => {
 
               {selectedAnomaly.status === 'Active' && (
                 <div className="pt-3 border-t border-slate-100 space-y-2">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Resolve Anomaly</p>
+                  <p className="text-[10px] font-bold text-slate-500 tracking-wide">Resolve Anomaly</p>
                   <textarea
                     value={resolveReason}
                     onChange={e => setResolveReason(e.target.value)}
@@ -219,7 +219,7 @@ const AnomalyDetection = () => {
               )}
               {selectedAnomaly.status === 'Resolved' && (
                 <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg">
-                  <p className="text-[10px] font-bold text-emerald-700 uppercase mb-1">✓ Resolved</p>
+                  <p className="text-[10px] font-bold text-emerald-700 mb-1">✓ Resolved</p>
                   <p className="text-xs text-emerald-600">{selectedAnomaly.reason}</p>
                 </div>
               )}
@@ -250,7 +250,7 @@ const AnomalyDetection = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 tracking-wider">
                   <th className="pb-3">Severity</th>
                   <th className="pb-3">Service</th>
                   <th className="pb-3">Date</th>

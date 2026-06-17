@@ -77,7 +77,7 @@ const PointHistory = () => {
                                     {record.ticketTitle || record.note || 'Performance Update'}
                                 </p>
                                 <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                                    <span className={`text-[10px] font-bold uppercase tracking-wider ${meta.color}`}>
+                                    <span className={`text-[10px] font-bold tracking-wider ${meta.color}`}>
                                         {meta.label}
                                     </span>
                                     {record.efficiencyRatio && (

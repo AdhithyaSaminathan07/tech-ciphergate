@@ -272,19 +272,13 @@ const InternCertificate = () => {
               setActiveTab('generate');
               setIsViewMode(false);
             }}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'generate'
-              ? 'border-[#4a9d2d] text-[#4a9d2d]'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'generate' ? 'border-[#4a9d2d] text-[#4a9d2d]' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
           >
             Generate
           </button>
           <button
             onClick={() => setActiveTab('history')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'history'
-              ? 'border-[#4a9d2d] text-[#4a9d2d]'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'history' ? 'border-[#4a9d2d] text-[#4a9d2d]' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
           >
             History
           </button>

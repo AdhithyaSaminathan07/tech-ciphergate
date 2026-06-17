@@ -204,9 +204,7 @@ return (
 {filteredComments.map((comment) => (
   <div 
     key={comment._id} 
-    className={`bg-white border rounded-lg p-4 ${
-      comment.isNew ? 'border-l-4 border-l-blue-500' : 'border'
-    }`}
+    className={`bg-white border rounded-lg p-4 ${ comment.isNew ? 'border-l-4 border-l-blue-500' : 'border' }`}
   >
     <div className="flex items-center justify-between mb-2">
       <div className="flex items-center">

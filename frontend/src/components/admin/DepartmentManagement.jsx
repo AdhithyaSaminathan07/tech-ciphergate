@@ -231,10 +231,14 @@ const DepartmentManagement = () => {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Project & Department Management</h1>
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+        <div>
+          <h1 className="text-2xl font-display font-bold text-slate-900 tracking-tight">Project & Department Management</h1>
+          <p className="text-sm text-slate-500 mt-1 leading-snug md:hidden lg:block">Organize, track, and manage your teams and projects efficiently.</p>
+        </div>
         <Button 
           variant="primary" 
+          className="w-full md:w-auto flex items-center justify-center bg-[#0d9488] hover:bg-[#0f766e] text-white shadow-sm text-sm px-4 py-2 rounded-[10px] transition-all whitespace-nowrap"
           onClick={() => {
             setAddForm({
               name: '',
@@ -258,7 +262,7 @@ const DepartmentManagement = () => {
             setIsAddModalOpen(true);
           }}
         >
-          <FaPlus className="mr-2 inline" /> Add Project/Department
+          <FaPlus className="mr-1.5" /> Add Project/Department
         </Button>
       </div>
   
@@ -281,11 +285,7 @@ const DepartmentManagement = () => {
                 <div>
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="text-lg font-bold text-gray-900 truncate pr-2">{department.name}</h3>
-                    <span className={`inline-block px-2.5 py-0.5 text-xs font-semibold rounded-full ${
-                      department.departmentType === 'Product' ? 'bg-purple-100 text-purple-800' :
-                      department.departmentType === 'Department' ? 'bg-gray-100 text-gray-800' :
-                      'bg-blue-100 text-blue-800'
-                    }`}>
+                    <span className={`inline-block px-2.5 py-0.5 text-xs font-semibold rounded-full ${ department.departmentType === 'Product' ? 'bg-purple-100 text-purple-800' : department.departmentType === 'Department' ? 'bg-gray-100 text-gray-800' : 'bg-blue-100 text-blue-800' }`}>
                       {department.departmentType || 'Project'}
                     </span>
                   </div>
@@ -302,11 +302,7 @@ const DepartmentManagement = () => {
                           <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-medium">
                             Status: {department.projectStatus || 'In Progress'}
                           </span>
-                          <span className={`px-2 py-0.5 rounded font-medium ${
-                            department.projectPriority === 'Critical' ? 'bg-red-100 text-red-800' :
-                            department.projectPriority === 'High' ? 'bg-orange-100 text-orange-800' :
-                            'bg-yellow-100 text-yellow-800'
-                          }`}>
+                          <span className={`px-2 py-0.5 rounded font-medium ${ department.projectPriority === 'Critical' ? 'bg-red-100 text-red-800' : department.projectPriority === 'High' ? 'bg-orange-100 text-orange-800' : 'bg-yellow-100 text-yellow-800' }`}>
                             Priority: {department.projectPriority || 'Medium'}
                           </span>
                         </div>
@@ -362,13 +358,7 @@ const DepartmentManagement = () => {
 
                   <button
                     onClick={() => handleViewEmployees(department)}
-                    className="
-                      inline-flex items-center mt-2
-                      text-indigo-600 font-semibold text-sm
-                      hover:text-indigo-800 active:text-indigo-900
-                      cursor-pointer transition-colors duration-150
-                      focus:outline-none
-                    "
+                    className="inline-flex items-center mt-2 text-indigo-600 font-semibold text-sm hover:text-indigo-800 active:text-indigo-900 cursor-pointer transition-colors duration-150 focus:outline-none"
                   >
                     <FaUserFriends className="inline mr-1.5 align-middle" />
                     {department.workerCount || 0} Employee{(department.workerCount || 0) !== 1 ? 's' : ''}
@@ -427,11 +417,7 @@ const DepartmentManagement = () => {
                   key={tabKey}
                   type="button"
                   onClick={() => setActiveAddTab(tabKey)}
-                  className={`py-2 px-3 border-b-2 font-medium text-xs sm:text-sm transition-colors duration-150 ${
-                    isActive 
-                      ? 'border-indigo-600 text-indigo-600' 
-                      : 'border-transparent text-gray-500 hover:text-indigo-600 hover:border-gray-300'
-                  }`}
+                  className={`py-2 px-3 border-b-2 font-medium text-xs sm:text-sm transition-colors duration-150 ${ isActive ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-indigo-600 hover:border-gray-300' }`}
                 >
                   {tabLabel}
                 </button>
@@ -737,11 +723,7 @@ const DepartmentManagement = () => {
                     key={tabKey}
                     type="button"
                     onClick={() => setActiveEditTab(tabKey)}
-                    className={`py-2 px-3 border-b-2 font-medium text-xs sm:text-sm transition-colors duration-150 ${
-                      isActive 
-                        ? 'border-indigo-600 text-indigo-600' 
-                        : 'border-transparent text-gray-500 hover:text-indigo-600 hover:border-gray-300'
-                    }`}
+                    className={`py-2 px-3 border-b-2 font-medium text-xs sm:text-sm transition-colors duration-150 ${ isActive ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-indigo-600 hover:border-gray-300' }`}
                   >
                     {tabLabel}
                   </button>

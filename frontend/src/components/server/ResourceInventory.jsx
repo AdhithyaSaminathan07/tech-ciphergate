@@ -129,7 +129,7 @@ const ResourceInventory = () => {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 tracking-wider">
                       <th className="pb-3">Resource Name</th>
                       <th className="pb-3">Service</th>
                       <th className="pb-3">Region</th>
@@ -141,9 +141,7 @@ const ResourceInventory = () => {
                     {resources.map((item) => (
                       <tr 
                         key={item._id}
-                        className={`hover:bg-slate-50/40 transition ${
-                          selectedResource && selectedResource._id === item._id ? 'bg-teal-50/10' : ''
-                        }`}
+                        className={`hover:bg-slate-50/40 transition ${ selectedResource && selectedResource._id === item._id ? 'bg-teal-50/10' : '' }`}
                       >
                         <td className="py-3.5">
                           <div className="flex flex-col max-w-[200px] truncate">
@@ -154,16 +152,12 @@ const ResourceInventory = () => {
                         <td className="py-3.5">
                           <div className="flex items-center gap-1.5 font-semibold">
                             {getServiceIcon(item.type)}
-                            <span className="uppercase text-[10px]">{item.type}</span>
+                            <span className="text-[10px]">{item.type}</span>
                           </div>
                         </td>
                         <td className="py-3.5 text-slate-500 font-medium font-mono">{item.region}</td>
                         <td className="py-3.5">
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md uppercase border ${
-                            item.status === 'running' || item.status === 'active' || item.status === 'available'
-                              ? 'bg-emerald-50 border-emerald-100 text-emerald-800'
-                              : 'bg-amber-50 border-amber-100 text-amber-800'
-                          }`}>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${ item.status === 'running' || item.status === 'active' || item.status === 'available' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-amber-50 border-amber-100 text-amber-800' }`}>
                             {item.status}
                           </span>
                         </td>
@@ -231,7 +225,7 @@ const ResourceInventory = () => {
 
                 {/* Specs */}
                 <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Configuration Specifications</span>
+                  <span className="block text-[10px] font-bold text-slate-400 tracking-wide mb-1">Configuration Specifications</span>
                   {Object.entries(selectedResource.resourceMetadata || {}).map(([key, val]) => (
                     <div key={key} className="flex justify-between items-center text-xs">
                       <span className="text-slate-500 font-medium capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
@@ -242,7 +236,7 @@ const ResourceInventory = () => {
 
                 {/* Tags compliance */}
                 <div className="space-y-2">
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">Resource Tags Metadata</span>
+                  <span className="block text-[10px] font-bold text-slate-400 tracking-wide">Resource Tags Metadata</span>
                   {selectedResource.tags && Object.keys(selectedResource.tags).length > 0 ? (
                     <div className="flex flex-wrap gap-1.5">
                       {Object.entries(selectedResource.tags).map(([key, val]) => (
@@ -259,7 +253,7 @@ const ResourceInventory = () => {
                 {/* Container namespaces */}
                 {selectedResource.containerMetadata && selectedResource.containerMetadata.namespace && (
                   <div className="space-y-2 pt-2 border-t border-slate-100">
-                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">EKS Container Mapping</span>
+                    <span className="block text-[10px] font-bold text-slate-400 tracking-wide">EKS Container Mapping</span>
                     <div className="flex flex-col gap-1 text-xs">
                       <div className="flex justify-between">
                         <span className="text-slate-500">Namespace:</span>

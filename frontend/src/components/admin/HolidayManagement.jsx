@@ -351,9 +351,7 @@ const HolidayManagement = () => {
               </div>
               
               {holidays.map((holiday) => (
-                <Card key={holiday._id} className={`shadow-sm border transition-all hover:shadow-md ${
-                  isHolidayPast(holiday.date) ? 'bg-gray-50 opacity-75' : 'bg-white'
-                }`}>
+                <Card key={holiday._id} className={`shadow-sm border transition-all hover:shadow-md ${ isHolidayPast(holiday.date) ? 'bg-gray-50 opacity-75' : 'bg-white' }`}>
                   <div className="flex justify-between items-start w-full">
                     <div className="flex-1">
                       <div className="flex items-center mb-2">

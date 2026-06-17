@@ -142,29 +142,24 @@ const OptimizationCenter = () => {
               <div
                 key={rec._id}
                 onClick={() => selectRecommendation(rec)}
-                className={`bg-white/90 p-5 rounded-2xl border transition cursor-pointer hover:border-teal-500/30 hover:shadow-md ${
-                  selectedRec?._id === rec._id ? 'border-teal-500 ring-2 ring-teal-500/10' : 'border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.01)]'
-                }`}
+                className={`bg-white/90 p-5 rounded-2xl border transition cursor-pointer hover:border-teal-500/30 hover:shadow-md ${ selectedRec?._id === rec._id ? 'border-teal-500 ring-2 ring-teal-500/10' : 'border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.01)]' }`}
               >
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase bg-indigo-50 text-indigo-700 border border-indigo-100">
+                      <span className="px-2 py-0.5 rounded text-[9px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-100">
                         {rec.recommendationType}
                       </span>
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                        rec.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' :
-                        rec.status === 'Rejected' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${ rec.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : rec.status === 'Rejected' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700' }`}>
                         {rec.status}
                       </span>
                     </div>
                     <h3 className="text-sm font-bold text-slate-800 font-sans">{rec.resourceName || rec.resourceId}</h3>
-                    <p className="text-xs text-slate-400 font-medium">Type: <span className="uppercase">{rec.resourceType}</span> | Account ID: {rec.awsAccountId}</p>
+                    <p className="text-xs text-slate-400 font-medium">Type: <span className="">{rec.resourceType}</span> | Account ID: {rec.awsAccountId}</p>
                   </div>
 
                   <div className="text-left sm:text-right">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Monthly Savings</span>
+                    <span className="text-[10px] text-slate-400 font-bold tracking-wider block">Monthly Savings</span>
                     <span className="text-lg font-black text-emerald-600 font-mono">${rec.monthlySavings.toLocaleString()}</span>
                   </div>
                 </div>
@@ -172,9 +167,7 @@ const OptimizationCenter = () => {
                 <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-slate-50 text-[10px] font-bold text-slate-500">
                   <div>
                     <span className="text-slate-400 block font-semibold">Risk Level</span>
-                    <span className={`font-extrabold ${
-                      rec.riskLevel === 'High' ? 'text-rose-600' : rec.riskLevel === 'Medium' ? 'text-amber-600' : 'text-emerald-600'
-                    }`}>{rec.riskLevel}</span>
+                    <span className={`font-extrabold ${ rec.riskLevel === 'High' ? 'text-rose-600' : rec.riskLevel === 'Medium' ? 'text-amber-600' : 'text-emerald-600' }`}>{rec.riskLevel}</span>
                   </div>
                   <div>
                     <span className="text-slate-400 block font-semibold">Implementation Effort</span>
@@ -195,7 +188,7 @@ const OptimizationCenter = () => {
           {selectedRec ? (
             <div className="space-y-6">
               <div>
-                <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase bg-indigo-50 text-indigo-700">
+                <span className="px-2 py-0.5 rounded text-[9px] font-extrabold bg-indigo-50 text-indigo-700">
                   {selectedRec.recommendationType}
                 </span>
                 <h2 className="text-base font-bold text-slate-900 mt-2 font-sans">{selectedRec.resourceName || selectedRec.resourceId}</h2>
@@ -208,11 +201,11 @@ const OptimizationCenter = () => {
                   <h4 className="font-bold text-slate-800">Provisioning Adjustment</h4>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Current</span>
+                      <span className="text-[10px] text-slate-400 font-bold tracking-wider block">Current</span>
                       <span className="font-semibold text-rose-700">{selectedRec.currentDetails.instanceType || selectedRec.currentDetails.dbInstanceClass || 'Provisioned'}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Recommended</span>
+                      <span className="text-[10px] text-slate-400 font-bold tracking-wider block">Recommended</span>
                       <span className="font-semibold text-emerald-700 flex items-center gap-1">
                         <FiCornerDownRight />
                         {selectedRec.recommendedDetails.instanceType || selectedRec.recommendedDetails.dbInstanceClass || 'Downsized'}
@@ -224,15 +217,12 @@ const OptimizationCenter = () => {
 
               {/* Impact analysis metrics */}
               <div className="space-y-3">
-                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Impact Analysis</h4>
+                <h4 className="text-xs font-bold text-slate-700 tracking-wider">Impact Analysis</h4>
                 
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between py-1.5 border-b border-slate-50">
                     <span className="text-slate-400 font-semibold">Downtime Risk</span>
-                    <span className={`font-bold ${
-                      selectedRec.impactAnalysis?.downtimeRisk === 'High' ? 'text-rose-600' :
-                      selectedRec.impactAnalysis?.downtimeRisk === 'Medium' ? 'text-amber-600' : 'text-emerald-600'
-                    }`}>
+                    <span className={`font-bold ${ selectedRec.impactAnalysis?.downtimeRisk === 'High' ? 'text-rose-600' : selectedRec.impactAnalysis?.downtimeRisk === 'Medium' ? 'text-amber-600' : 'text-emerald-600' }`}>
                       {selectedRec.impactAnalysis?.downtimeRisk || 'None'}
                     </span>
                   </div>
@@ -253,7 +243,7 @@ const OptimizationCenter = () => {
 
               {/* Approvals Workflow Form */}
               <div className="pt-4 border-t border-slate-100 space-y-4">
-                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <h4 className="text-xs font-bold text-slate-700 tracking-wider flex items-center gap-1.5">
                   <FiShield />
                   <span>Workflow Approvals</span>
                 </h4>
@@ -302,7 +292,7 @@ const OptimizationCenter = () => {
               {selectedRec.status === 'Approved' && workflowDetails && (
                 <div className="pt-4 border-t border-slate-100 space-y-3">
                   <div className="flex justify-between items-center">
-                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <h4 className="text-xs font-bold text-slate-700 tracking-wider flex items-center gap-1.5">
                       <FiCode />
                       <span>IaC Templates</span>
                     </h4>

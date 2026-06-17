@@ -158,14 +158,14 @@ const AdminLogin = () => {
                     className="flex items-center gap-2 px-3 py-2 bg-white/50 backdrop-blur-sm border border-gray-200 rounded-xl text-gray-600 hover:text-[#0d9488] hover:bg-white transition-all shadow-sm active:scale-95 group"
                 >
                     <FaChevronLeft className="text-xs group-hover:-translate-x-1 transition-transform" />
-                    <span className="text-sm font-bold uppercase tracking-wider">Back</span>
+                    <span className="text-sm font-bold tracking-wider">Back</span>
                 </button>
 
                 <Link
                     to="/worker/login"
                     className="flex items-center gap-2 px-4 py-2 bg-teal-50 border border-teal-100 rounded-xl text-[#0d9488] hover:bg-[#0d9488] hover:text-white transition-all shadow-sm active:scale-95 group"
                 >
-                    <span className="text-sm font-black uppercase tracking-wider">Employee Side</span>
+                    <span className="text-sm font-black tracking-wider">Employee Side</span>
                     <FaChevronRight className="text-xs group-hover:translate-x-1 transition-transform" />
                 </Link>
             </div>

@@ -47,11 +47,7 @@ const Settings = () => {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className={`p-4 rounded-xl border text-sm flex items-center justify-between shadow-sm ${
-              message.type === 'error' 
-                ? 'bg-rose-50 border-rose-200 text-rose-800' 
-                : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-            }`}
+            className={`p-4 rounded-xl border text-sm flex items-center justify-between shadow-sm ${ message.type === 'error' ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800' }`}
           >
             <span>{message.text}</span>
             <button onClick={() => setMessage({ text: '', type: '' })} className="font-bold ml-4 hover:opacity-75">×</button>
@@ -72,7 +68,7 @@ const Settings = () => {
             <form onSubmit={handleSaveSettings} className="space-y-6">
               {/* Anomaly threshold slider */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-bold text-slate-500 tracking-wider mb-2">
                   Anomaly Cost Spike Threshold: {anomalyThreshold}%
                 </label>
                 <div className="flex items-center gap-4">
@@ -92,7 +88,7 @@ const Settings = () => {
 
               {/* Bucket configuration input */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">S3 Cost Lake Bucket Path</label>
+                <label className="block text-xs font-bold text-slate-500 tracking-wider mb-2">S3 Cost Lake Bucket Path</label>
                 <input
                   type="text"
                   value={bucketName}
@@ -105,16 +101,12 @@ const Settings = () => {
 
               {/* Sync scheduler choice */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Billing Schedulers Interval</label>
+                <label className="block text-xs font-bold text-slate-500 tracking-wider mb-3">Billing Schedulers Interval</label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {['6h', '12h', 'daily'].map((option) => (
                     <label 
                       key={option}
-                      className={`p-3.5 rounded-xl border flex flex-col justify-between cursor-pointer transition ${
-                        syncSchedule === option 
-                          ? 'border-teal-500/40 bg-teal-50/20 ring-1 ring-teal-500/10' 
-                          : 'border-slate-200 bg-slate-50/25 hover:bg-slate-50'
-                      }`}
+                      className={`p-3.5 rounded-xl border flex flex-col justify-between cursor-pointer transition ${ syncSchedule === option ? 'border-teal-500/40 bg-teal-50/20 ring-1 ring-teal-500/10' : 'border-slate-200 bg-slate-50/25 hover:bg-slate-50' }`}
                     >
                       <div className="flex justify-between items-center w-full">
                         <span className="text-xs font-bold text-slate-900 capitalize">

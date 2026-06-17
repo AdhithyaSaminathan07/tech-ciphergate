@@ -205,10 +205,7 @@ const WorkerLogin = () => {
         <motion.button
           key={i}
           onClick={() => setCurrentPage(i)}
-          className={`w-9 h-9 rounded-full flex items-center justify-center ${currentPage === i
-            ? 'bg-[#0d9488] text-white'
-            : 'bg-gray-200 text-black hover:bg-[#0d9488] hover:text-white'
-            } transition-colors border-2 border-[#0d9488]`}
+          className={`w-9 h-9 rounded-full flex items-center justify-center ${currentPage === i ? 'bg-[#0d9488] text-white' : 'bg-gray-200 text-black hover:bg-[#0d9488] hover:text-white' } transition-colors border-2 border-[#0d9488]`}
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
         >
@@ -281,14 +278,14 @@ const WorkerLogin = () => {
                 className="flex items-center gap-2 px-3 py-2 bg-white/50 backdrop-blur-sm border border-gray-200 rounded-xl text-gray-600 hover:text-[#0d9488] hover:bg-white transition-all shadow-sm active:scale-95 group"
             >
                 <FaChevronLeft className="text-xs group-hover:-translate-x-1 transition-transform" />
-                <span className="text-sm font-bold uppercase tracking-wider">Back</span>
+                <span className="text-sm font-bold tracking-wider">Back</span>
             </button>
 
             <button
                 onClick={() => navigate('/admin/login')}
                 className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white hover:bg-black transition-all shadow-md active:scale-95 group"
             >
-                <span className="text-sm font-black uppercase tracking-wider">Admin Side</span>
+                <span className="text-sm font-black tracking-wider">Admin Side</span>
                 <FaChevronRight className="text-xs group-hover:translate-x-1 transition-transform" />
             </button>
         </div>
@@ -400,14 +397,14 @@ const WorkerLogin = () => {
               className="flex items-center gap-2 px-3 py-2 bg-white/50 backdrop-blur-sm border border-gray-200 rounded-xl text-gray-600 hover:text-[#0d9488] hover:bg-white transition-all shadow-sm active:scale-95 group"
           >
               <FaChevronLeft className="text-xs group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-bold uppercase tracking-wider">Back</span>
+              <span className="text-sm font-bold tracking-wider">Back</span>
           </button>
 
           <button
               onClick={() => navigate('/admin/login')}
               className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white hover:bg-black transition-all shadow-md active:scale-95 group"
           >
-              <span className="text-sm font-black uppercase tracking-wider">Admin Side</span>
+              <span className="text-sm font-black tracking-wider">Admin Side</span>
               <FaChevronRight className="text-xs group-hover:translate-x-1 transition-transform" />
           </button>
       </div>
@@ -507,10 +504,7 @@ const WorkerLogin = () => {
                   transition={{ duration: 0.3, delay: index * 0.05 }}
                   onClick={() => setSelectedWorker(worker)}
                   whileHover={{ scale: 1.05, y: -5 }}
-                  className={`cursor-pointer p-4 rounded-lg text-center transition-all ${selectedWorker?._id === worker._id
-                    ? 'bg-white border-2 border-[#0d9488] shadow-lg shadow-[#0d9488]/20'
-                    : 'bg-white border border-gray-300 hover:border-[#0d9488]'
-                    }`}
+                  className={`cursor-pointer p-4 rounded-lg text-center transition-all ${selectedWorker?._id === worker._id ? 'bg-white border-2 border-[#0d9488] shadow-lg shadow-[#0d9488]/20' : 'bg-white border border-gray-300 hover:border-[#0d9488]' }`}
                 >
                   <div className="w-16 h-16 rounded-full mx-auto mb-3 overflow-hidden border-2 border-[#0d9488]/30">
                     <img

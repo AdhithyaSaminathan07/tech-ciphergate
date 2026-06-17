@@ -158,12 +158,7 @@ const PersonalBrainManager = ({ onIndexChange }) => {
               onDragLeave={() => setIsDragOver(false)}
               onDrop={handleFileDrop}
               onClick={() => !uploading && fileInputRef.current?.click()}
-              className={`relative border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all duration-200
-                ${isDragOver
-                  ? 'border-violet-400 bg-violet-50 scale-[1.01]'
-                  : 'border-slate-200 hover:border-violet-300 hover:bg-violet-50/30'
-                }
-                ${uploading ? 'opacity-60 cursor-not-allowed' : ''}`}
+              className={`relative border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all duration-200 ${isDragOver ? 'border-violet-400 bg-violet-50 scale-[1.01]' : 'border-slate-200 hover:border-violet-300 hover:bg-violet-50/30' } ${uploading ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
               <input
                 ref={fileInputRef}
@@ -235,7 +230,7 @@ const PersonalBrainManager = ({ onIndexChange }) => {
             ) : (
               <div className="space-y-2">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  <span className="text-[10px] font-bold text-slate-400 tracking-wider">
                     Indexed Files ({files.length})
                   </span>
                   <button

@@ -46,7 +46,7 @@ const WelcomeBanner = ({ userName, pendingReviews, totalTasks, completionRate, t
               <FaCrown className="text-amber-400 drop-shadow-sm" />
               Top Teams - Live Monthly Earnings
             </h2>
-            <span className="text-[10px] font-bold text-white bg-green-500/80 px-2 py-0.5 rounded-md uppercase tracking-wider">
+            <span className="text-[10px] font-bold text-white bg-green-500/80 px-2 py-0.5 rounded-md tracking-wider">
               Top 3 List
             </span>
           </div>
@@ -57,10 +57,7 @@ const WelcomeBanner = ({ userName, pendingReviews, totalTasks, completionRate, t
                 {topTeams.slice(0, 3).map((team, index) => (
                   <div key={index} className="flex items-center justify-between bg-white p-2 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all group">
                     <div className="flex items-center gap-3">
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${index === 0 ? 'bg-yellow-100 text-yellow-600' :
-                          index === 1 ? 'bg-slate-200 text-slate-600' :
-                            'bg-green-100 text-green-600'
-                        }`}>
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${index === 0 ? 'bg-yellow-100 text-yellow-600' : index === 1 ? 'bg-slate-200 text-slate-600' : 'bg-green-100 text-green-600' }`}>
                         {index === 0 ? <FaTrophy size={12} /> : index === 1 ? <FaMedal size={12} /> : index + 1}
                       </div>
                       <span className="font-bold text-slate-700 text-xs md:text-sm group-hover:text-green-600 transition-colors">
@@ -77,7 +74,7 @@ const WelcomeBanner = ({ userName, pendingReviews, totalTasks, completionRate, t
               </>
             ) : (
               <div className="py-8 text-center">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No earning data available</p>
+                <p className="text-xs font-bold text-slate-400 tracking-widest">No earning data available</p>
               </div>
             )}
           </div>

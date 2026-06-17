@@ -405,7 +405,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
               >
                 <div className="bg-teal-50 p-4 rounded-xl border border-teal-100 mb-6 flex items-center gap-3">
                   <div className="w-8 h-8 bg-teal-600 text-white rounded-lg flex items-center justify-center font-bold text-lg">!</div>
-                  <p className="text-xs text-teal-800 font-bold uppercase tracking-tight">Review and customize details for each document below.</p>
+                  <p className="text-xs text-teal-800 font-bold tracking-tight">Review and customize details for each document below.</p>
                 </div>
 
                 <div className="space-y-3">
@@ -421,7 +421,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
                           </div>
                           <div>
                             <h4 className={`font-bold text-sm ${expandedDoc === doc ? 'text-teal-700' : 'text-gray-700'}`}>{doc} Details</h4>
-                            <p className="text-[10px] text-gray-400 uppercase font-black">Click to {expandedDoc === doc ? 'collapse' : 'expand and edit'}</p>
+                            <p className="text-[10px] text-gray-400 font-black">Click to {expandedDoc === doc ? 'collapse' : 'expand and edit'}</p>
                           </div>
                         </div>
                         <div className={`transition-transform duration-300 ${expandedDoc === doc ? 'rotate-180' : ''}`}>
@@ -438,7 +438,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
                           {doc === 'Relieving Letter' && (
                             <div className="space-y-4">
                               <div className="form-group">
-                                <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Opening Statement</label>
+                                <label className="text-[10px] font-black text-gray-400 mb-1 block">Opening Statement</label>
                                 <textarea
                                   className="w-full p-4 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 outline-none"
                                   rows="3"
@@ -447,7 +447,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
                                 />
                               </div>
                               <div className="form-group">
-                                <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Conclusion</label>
+                                <label className="text-[10px] font-black text-gray-400 mb-1 block">Conclusion</label>
                                 <textarea
                                   className="w-full p-4 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 outline-none"
                                   rows="2"
@@ -461,7 +461,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
                           {doc === 'Experience Certificate' && (
                             <div className="space-y-4">
                               <div className="form-group">
-                                <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Certification Statement</label>
+                                <label className="text-[10px] font-black text-gray-400 mb-1 block">Certification Statement</label>
                                 <textarea
                                   className="w-full p-4 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 outline-none"
                                   rows="3"
@@ -471,7 +471,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
                                 <p className="text-[9px] text-gray-400 mt-1 italic">Note: Use **text** for bolding in the final PDF.</p>
                               </div>
                               <div className="form-group">
-                                <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Performance Acknowledgement</label>
+                                <label className="text-[10px] font-black text-gray-400 mb-1 block">Performance Acknowledgement</label>
                                 <textarea
                                   className="w-full p-4 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 outline-none"
                                   rows="3"
@@ -480,7 +480,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
                                 />
                               </div>
                               <div className="form-group">
-                                <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Closing Wishes</label>
+                                <label className="text-[10px] font-black text-gray-400 mb-1 block">Closing Wishes</label>
                                 <textarea
                                   className="w-full p-4 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 outline-none"
                                   rows="2"
@@ -533,13 +533,13 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
 
                               {(docData['Monthly Payslip'] || []).map((payslip, pIdx) => (
                                 <div key={pIdx} className="bg-white rounded-2xl border border-gray-100 p-6 space-y-6 relative">
-                                  <div className="absolute -top-3 left-4 bg-teal-600 text-white text-[9px] font-black px-2 py-1 rounded uppercase tracking-widest">
+                                  <div className="absolute -top-3 left-4 bg-teal-600 text-white text-[9px] font-black px-2 py-1 rounded tracking-widest">
                                     Month {pIdx + 1}
                                   </div>
 
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                                     <div className="form-group">
-                                      <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Pay Period</label>
+                                      <label className="text-[10px] font-black text-gray-400 mb-1 block">Pay Period</label>
                                       <input
                                         type="text"
                                         className="w-full p-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 outline-none"
@@ -552,7 +552,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
                                       />
                                     </div>
                                     <div className="form-group">
-                                      <label className="text-[10px] font-black text-gray-400 uppercase mb-1 block">Net Salary (Calculated)</label>
+                                      <label className="text-[10px] font-black text-gray-400 mb-1 block">Net Salary (Calculated)</label>
                                       <div className="w-full p-3 border border-gray-100 rounded-xl bg-teal-50 text-sm font-black text-teal-700 flex justify-between items-center">
                                         <span>Net Pay:</span>
                                         <span>₹{payslip.earnings?.reduce((sum, e) => sum + e.value, 0) - payslip.deductions?.reduce((sum, d) => sum + d.value, 0)}</span>
@@ -563,7 +563,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
                                   <div className="border-t border-gray-50 pt-4">
                                     <div className="grid grid-cols-2 gap-8">
                                       <div className="space-y-3">
-                                        <label className="text-[9px] font-bold text-teal-600 uppercase">Earnings</label>
+                                        <label className="text-[9px] font-bold text-teal-600">Earnings</label>
                                         <div className="space-y-2">
                                           {payslip.earnings?.map((item, idx) => (
                                             <div key={idx} className="flex items-center justify-between gap-4">
@@ -583,7 +583,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
                                         </div>
                                       </div>
                                       <div className="space-y-3">
-                                        <label className="text-[9px] font-bold text-rose-600 uppercase">Deductions</label>
+                                        <label className="text-[9px] font-bold text-rose-600">Deductions</label>
                                         <div className="space-y-2">
                                           {payslip.deductions?.map((item, idx) => (
                                             <div key={idx} className="flex items-center justify-between gap-4">
@@ -640,7 +640,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
                 </div>
 
                 <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-6">
-                  <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Contact Details</h4>
+                  <h4 className="text-xs font-black text-gray-400 tracking-widest mb-4">Contact Details</h4>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="form-group">
@@ -681,7 +681,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
 
                   <div className={`p-3 rounded-lg flex items-center gap-3 ${(!exitDetails.email && !exitDetails.phoneNumber) ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'}`}>
                     <div className={`w-2 h-2 rounded-full ${(!exitDetails.email && !exitDetails.phoneNumber) ? 'bg-amber-500' : 'bg-green-500'}`}></div>
-                    <span className="text-xs font-bold uppercase tracking-tight">
+                    <span className="text-xs font-bold tracking-tight">
                       {(!exitDetails.email && !exitDetails.phoneNumber) ? 'At least one contact method is required' : 'Contact validation successful'}
                     </span>
                   </div>
@@ -783,7 +783,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
             <div className="text-right text-sm font-bold text-[#4a9d2d] mb-12">
               {formatDate(exitDetails.relievingDate).toUpperCase()}
             </div>
-            <h1 className="text-center text-lg font-black text-[#4a9d2d] mb-16 uppercase tracking-widest">
+            <h1 className="text-center text-lg font-black text-[#4a9d2d] mb-16 tracking-widest">
               TO WHOMSOEVER IT MAY CONCERN
             </h1>
             <div className="text-md leading-relaxed text-justify font-medium text-gray-700 space-y-8">
@@ -829,7 +829,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
             <h1 className="text-center text-lg font-bold text-[#4a9d2d] underline mb-10">Official Relieving Letter</h1>
             <div className="mb-10">
               <div className="font-bold">TO,</div>
-              <div className="font-black text-xl uppercase">{worker?.name}</div>
+              <div className="font-black text-xl">{worker?.name}</div>
               <div className="font-bold text-gray-600">{worker?.rfid || worker?.username}</div>
               <div className="font-bold text-gray-600">{exitDetails.designation}</div>
             </div>
@@ -856,7 +856,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
               <div className="text-center mb-8">
                 <img src="/Invoicelogo.png" alt="Logo" className="h-16 mx-auto mb-2" />
                 <h2 className="text-[#4a9d2d] text-2xl font-black border-b-2 border-gray-800 inline-block px-8 pb-1">MONTHLY PAYSLIP</h2>
-                <p className="text-[10px] text-gray-500 font-bold mt-1 uppercase tracking-widest">{payslip.period}</p>
+                <p className="text-[10px] text-gray-500 font-bold mt-1 tracking-widest">{payslip.period}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-y-2 text-[11px] mb-8 border-b border-gray-100 pb-4">

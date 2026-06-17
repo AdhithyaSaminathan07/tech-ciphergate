@@ -1423,7 +1423,7 @@ support period.`;
                 name="invoiceType"
                 value={invoiceData.invoiceType}
                 onChange={handleInvoiceTypeChange}
-                className="text-3xl font-bold uppercase"
+                className="text-3xl font-bold"
                 style={{ color: '#00843d', background: 'white', border: 'none', outline: 'none' }}
               >
                 <option value="INVOICE">INVOICE</option>
@@ -1986,7 +1986,7 @@ support period.`;
                   onChange={() => handleCheckboxChange('terms')}
                   className="mr-2 h-4 w-4 text-green-600 rounded"
                 />
-                <h3 className="font-bold text-sm text-gray-700 uppercase">Terms & Conditions:</h3>
+                <h3 className="font-bold text-sm text-gray-700">Terms & Conditions:</h3>
               </div>
               <textarea
                 name="terms"
@@ -2060,7 +2060,7 @@ support period.`;
                   {/* --- END GST TOTALS --- */}
 
                   <tr style={{ backgroundColor: '#00843d' }}>
-                    <td className="py-2 px-3 font-bold text-sm text-right text-white uppercase">Grand Total :</td>
+                    <td className="py-2 px-3 font-bold text-sm text-right text-white">Grand Total :</td>
                     <td className="py-2 px-3 font-bold text-sm text-right text-white">₹{totals.grandTotal.toFixed(2)}</td>
                   </tr>
                 </tbody>
@@ -2079,7 +2079,7 @@ support period.`;
                   onChange={() => handleCheckboxChange('bankDetails')}
                   className="mr-2 h-4 w-4 text-green-600 rounded"
                 />
-                <h3 className="font-bold text-sm text-gray-700 uppercase">Payment Method:</h3>
+                <h3 className="font-bold text-sm text-gray-700">Payment Method:</h3>
               </div>
               <div className="grid grid-cols-1 gap-1 ml-6 text-sm">
                 <div>

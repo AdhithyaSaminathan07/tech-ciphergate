@@ -52,7 +52,7 @@ const SavingsOpportunities = () => {
             <FiPercent size={20} />
           </div>
           <div>
-            <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wide">Commitment Coverage</h3>
+            <h3 className="text-slate-500 text-xs font-bold tracking-wide">Commitment Coverage</h3>
             <p className="text-xl font-bold text-slate-900 mt-1">{coverageScore}%</p>
             <span className="text-[10px] text-slate-400 font-semibold">Percent of compute spend covered</span>
           </div>
@@ -64,7 +64,7 @@ const SavingsOpportunities = () => {
             <FiTrendingUp size={20} />
           </div>
           <div>
-            <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wide">Active Plan Coverage</h3>
+            <h3 className="text-slate-500 text-xs font-bold tracking-wide">Active Plan Coverage</h3>
             <p className="text-xl font-bold text-slate-900 mt-1">${hourlyCommitment > 0 ? `${hourlyCommitment.toFixed(2)}/hr` : '0.00/hr'}</p>
             <span className="text-[10px] text-slate-400 font-semibold">Current committed run rates</span>
           </div>
@@ -76,7 +76,7 @@ const SavingsOpportunities = () => {
             <FiDollarSign size={20} />
           </div>
           <div>
-            <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wide">Potential Monthly Savings</h3>
+            <h3 className="text-slate-500 text-xs font-bold tracking-wide">Potential Monthly Savings</h3>
             <p className="text-xl font-bold text-slate-900 mt-1">
               ${(savingsPlans.reduce((sum, item) => sum + item.monthlySavings, 0) || 0).toLocaleString()}
             </p>
@@ -138,7 +138,7 @@ const SavingsOpportunities = () => {
             savingsPlans.map(plan => (
               <div key={plan._id} className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-4">
                 <div className="space-y-1">
-                  <span className="px-2 py-0.5 rounded text-[8px] font-bold bg-indigo-50 text-indigo-700 uppercase">
+                  <span className="px-2 py-0.5 rounded text-[8px] font-bold bg-indigo-50 text-indigo-700">
                     {plan.recommendedDetails.type || 'Compute Savings Plan'}
                   </span>
                   <h3 className="text-xs font-bold text-slate-800 mt-1">AWS Compute Savings Plan Purchase</h3>

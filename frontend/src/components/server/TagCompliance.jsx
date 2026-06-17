@@ -57,7 +57,7 @@ const TagCompliance = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Overall Score Card */}
         <div className="bg-white/80 backdrop-blur-md p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between items-center text-center">
-          <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wide">Overall Tag Hygiene</h2>
+          <h2 className="text-sm font-bold text-slate-500 tracking-wide">Overall Tag Hygiene</h2>
           
           <div className="relative my-4 flex items-center justify-center">
             {/* Simple SVG Circular Progress */}
@@ -85,7 +85,7 @@ const TagCompliance = () => {
             </svg>
             <div className="absolute flex flex-col items-center">
               <span className="text-3xl font-extrabold text-slate-800 font-sans">{data.overallScore}%</span>
-              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Health Score</span>
+              <span className="text-[10px] text-slate-400 font-semibold tracking-wider">Health Score</span>
             </div>
           </div>
 
@@ -100,7 +100,7 @@ const TagCompliance = () => {
 
         {/* Required Tags Grid */}
         <div className="md:col-span-2 bg-white/80 backdrop-blur-md p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between">
-          <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-4">Required Key Coverage</h2>
+          <h2 className="text-sm font-bold text-slate-500 tracking-wide mb-4">Required Key Coverage</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {requiredTags.map(tag => {
               const score = data.tags[tag] || 0;
@@ -115,9 +115,7 @@ const TagCompliance = () => {
                   </div>
                   <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        score >= 80 ? 'bg-emerald-500' : score >= 50 ? 'bg-amber-500' : 'bg-rose-500'
-                      }`}
+                      className={`h-full rounded-full transition-all duration-500 ${ score >= 80 ? 'bg-emerald-500' : score >= 50 ? 'bg-amber-500' : 'bg-rose-500' }`}
                       style={{ width: `${score}%` }}
                     />
                   </div>
@@ -174,7 +172,7 @@ const TagCompliance = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 tracking-wider">
                   <th className="pb-3">Resource ID</th>
                   <th className="pb-3">Name</th>
                   <th className="pb-3">Type</th>

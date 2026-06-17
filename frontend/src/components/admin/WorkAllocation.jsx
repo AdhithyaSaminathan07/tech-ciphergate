@@ -237,13 +237,13 @@ const MultiSelect = ({ options, selected, onChange, placeholder }) => {
                         <div className="flex gap-2 mt-1.5">
                             <button
                                 onClick={(e) => { e.stopPropagation(); selectAll(); }}
-                                className="flex-1 text-[9px] font-black uppercase tracking-wider text-teal-600 bg-teal-50 hover:bg-teal-100 px-2 py-1 rounded-md border border-teal-100 transition-colors"
+                                className="flex-1 text-[9px] font-black tracking-wider text-teal-600 bg-teal-50 hover:bg-teal-100 px-2 py-1 rounded-md border border-teal-100 transition-colors"
                             >
                                 Select All ({filteredOptions.length})
                             </button>
                             <button
                                 onClick={(e) => { e.stopPropagation(); clearAll(); }}
-                                className="flex-1 text-[9px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 hover:bg-rose-100 px-2 py-1 rounded-md border border-rose-100 transition-colors"
+                                className="flex-1 text-[9px] font-black tracking-wider text-rose-600 bg-rose-50 hover:bg-rose-100 px-2 py-1 rounded-md border border-rose-100 transition-colors"
                             >
                                 Clear All
                             </button>
@@ -329,8 +329,8 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers }) =>
     return (
         <div className="space-y-5">
             <div className="flex flex-col gap-2">
-                <span className="text-gray-400 font-bold text-[10px] uppercase tracking-wider">Assign To</span>
-                <div className="flex gap-2 p-1 bg-gray-100 rounded-xl w-fit">
+                <span className="text-gray-400 font-bold text-[10px] tracking-wider">Assign To</span>
+                <div className="flex gap-2 p-1 bg-gray-100 rounded-xl w-full max-w-full md:w-fit overflow-x-auto no-scrollbar">
                     {['Team', 'Individual', 'Both'].map(type => (
                         <button
                             key={type}
@@ -345,7 +345,7 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers }) =>
 
             {(assignmentType === 'Team' || assignmentType === 'Both') && (
                 <div className="flex flex-col gap-2 animate-in slide-in-from-top-2 duration-300">
-                    <span className="text-gray-400 font-bold text-[10px] uppercase tracking-wider">Select Team</span>
+                    <span className="text-gray-400 font-bold text-[10px] tracking-wider">Select Team</span>
                     <Select value={selectedTicket.team || undefined} onValueChange={handleTeamChange}>
                         <SelectTrigger className="w-full bg-white border-gray-300 h-11 text-sm shadow-sm rounded-lg">
                             <SelectValue placeholder="Select a team..." />
@@ -379,7 +379,7 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers }) =>
 
             {(assignmentType === 'Individual' || assignmentType === 'Both') && (
                 <div className="flex flex-col gap-2 animate-in slide-in-from-top-2 duration-300">
-                    <span className="text-gray-400 font-bold text-[10px] uppercase tracking-wider">Select Employees</span>
+                    <span className="text-gray-400 font-bold text-[10px] tracking-wider">Select Employees</span>
                     <MultiSelect
                         options={workers.map(w => ({ id: w._id, name: w.name, status: w.status }))}
                         selected={currentAssigneeIds}
@@ -1502,7 +1502,7 @@ const WorkAllocation = () => {
                                             setFilterPriority('');
                                             setSearchTerm('');
                                         }}
-                                        className="text-[10px] text-rose-500 hover:text-rose-600 font-bold uppercase tracking-wider px-2 py-2 sm:py-0 text-center sm:text-left"
+                                        className="text-[10px] text-rose-500 hover:text-rose-600 font-bold tracking-wider px-2 py-2 sm:py-0 text-center sm:text-left"
                                     >
                                         Reset
                                     </button>
@@ -1551,48 +1551,48 @@ const WorkAllocation = () => {
 
             {/* ── Workforce Overview Bar ──────────────────────────────────────── */}
             <div className="px-3 lg:px-4 pt-3 pb-1">
-                <div className="flex flex-wrap gap-3">
+                <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-3">
 
                     {/* Stat: Total Employees */}
-                    <button onClick={() => setDrawerFilter('all')} className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-slate-200/60 shadow-sm min-w-[120px] hover:shadow-md hover:border-slate-300 transition-all cursor-pointer text-left">
+                    <button onClick={() => setDrawerFilter('all')} className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-slate-200/60 shadow-sm w-full sm:w-auto sm:min-w-[120px] hover:shadow-md hover:border-slate-300 transition-all cursor-pointer text-left">
                         <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
                             <Users className="w-4 h-4 text-slate-500" />
                         </div>
                         <div>
-                            <div className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider leading-none">Total</div>
+                            <div className="text-[11px] text-slate-400 font-semibold tracking-wider leading-none">Total</div>
                             <div className="text-lg font-black text-slate-800 leading-tight">{activeWorkers.length}</div>
                         </div>
                     </button>
 
                     {/* Stat: Assigned */}
-                    <button onClick={() => setDrawerFilter('assigned')} className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-blue-100 shadow-sm min-w-[120px] hover:shadow-md hover:border-blue-300 transition-all cursor-pointer text-left">
+                    <button onClick={() => setDrawerFilter('assigned')} className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-blue-100 shadow-sm w-full sm:w-auto sm:min-w-[120px] hover:shadow-md hover:border-blue-300 transition-all cursor-pointer text-left">
                         <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
                             <CheckSquare className="w-4 h-4 text-blue-500" />
                         </div>
                         <div>
-                            <div className="text-[11px] text-blue-400 font-semibold uppercase tracking-wider leading-none">Assigned</div>
+                            <div className="text-[11px] text-blue-400 font-semibold tracking-wider leading-none">Assigned</div>
                             <div className="text-lg font-black text-blue-700 leading-tight">{assignedDevelopers.length}</div>
                         </div>
                     </button>
 
                     {/* Stat: Idle */}
-                    <button onClick={() => setDrawerFilter('idle')} className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-emerald-100 shadow-sm min-w-[120px] hover:shadow-md hover:border-emerald-300 transition-all cursor-pointer text-left">
+                    <button onClick={() => setDrawerFilter('idle')} className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-emerald-100 shadow-sm w-full sm:w-auto sm:min-w-[120px] hover:shadow-md hover:border-emerald-300 transition-all cursor-pointer text-left">
                         <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
                             <User className="w-4 h-4 text-emerald-500" />
                         </div>
                         <div>
-                            <div className="text-[11px] text-emerald-500 font-semibold uppercase tracking-wider leading-none">Idle</div>
+                            <div className="text-[11px] text-emerald-500 font-semibold tracking-wider leading-none">Idle</div>
                             <div className="text-lg font-black text-emerald-700 leading-tight">{idleDevelopers.length}</div>
                         </div>
                     </button>
 
                     {/* Stat: Overloaded */}
-                    <button onClick={() => setDrawerFilter('overloaded')} className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-rose-100 shadow-sm min-w-[120px] hover:shadow-md hover:border-rose-300 transition-all cursor-pointer text-left">
+                    <button onClick={() => setDrawerFilter('overloaded')} className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-rose-100 shadow-sm w-full sm:w-auto sm:min-w-[120px] hover:shadow-md hover:border-rose-300 transition-all cursor-pointer text-left">
                         <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center shrink-0">
                             <AlertCircle className="w-4 h-4 text-rose-500" />
                         </div>
                         <div>
-                            <div className="text-[11px] text-rose-400 font-semibold uppercase tracking-wider leading-none">Overloaded</div>
+                            <div className="text-[11px] text-rose-400 font-semibold tracking-wider leading-none">Overloaded</div>
                             <div className="text-lg font-black text-rose-700 leading-tight">{overloadedDevelopers.length}</div>
                         </div>
                     </button>
@@ -1601,14 +1601,13 @@ const WorkAllocation = () => {
                     {idleDevelopers.length > 0 && (
                         <button
                             onClick={() => setDrawerFilter('idle')}
-
-                            className="flex items-center gap-3 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl px-4 py-2.5 border border-emerald-200/60 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all duration-200 group cursor-pointer text-left"
+                            className="flex items-center gap-3 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl px-4 py-2.5 border border-emerald-200/60 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all duration-200 group cursor-pointer text-left col-span-2 sm:col-span-1"
                         >
                             <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
                                 <Zap className="w-4 h-4 text-emerald-600" />
                             </div>
                             <div>
-                                <div className="text-[11px] text-emerald-600 font-bold uppercase tracking-wider leading-none mb-1">Available Now</div>
+                                <div className="text-[11px] text-emerald-600 font-bold tracking-wider leading-none mb-1">Available Now</div>
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                     {idleDevelopers.slice(0, 4).map(w => (
                                         <span key={w._id} className="text-[10px] font-semibold text-emerald-700 bg-white/70 px-1.5 py-0.5 rounded-md border border-emerald-200/50">
@@ -1677,14 +1676,11 @@ const WorkAllocation = () => {
                                             setModalFilterTeam(ticket.team || '');
                                             setIsModalOpen(true);
                                         }}
-                                        className={`p-4 rounded-xl border border-slate-200/60 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group active:scale-[0.98] bg-white relative
-                                            ${isOverdue(ticket.endDate, ticket.status) ? 'border-rose-200 shadow-rose-50' : 'shadow-[0_2px_8px_rgba(0,0,0,0.04)]'} 
-                                            ${status === 'To Do' ? 'border-l-4 border-l-slate-400' : status === 'In Progress' ? 'border-l-4 border-l-blue-500' : status === 'Review' ? 'border-l-4 border-l-purple-500' : 'border-l-4 border-l-emerald-500'}`}
+                                        className={`p-4 rounded-xl border border-slate-200/60 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group active:scale-[0.98] bg-white relative ${isOverdue(ticket.endDate, ticket.status) ? 'border-rose-200 shadow-rose-50' : 'shadow-[0_2px_8px_rgba(0,0,0,0.04)]'} ${status === 'To Do' ? 'border-l-4 border-l-slate-400' : status === 'In Progress' ? 'border-l-4 border-l-blue-500' : status === 'Review' ? 'border-l-4 border-l-purple-500' : 'border-l-4 border-l-emerald-500'}`}
                                     >
                                         <div className="flex justify-between items-start mb-3.5">
                                             {(ticket.startDate || ticket.endDate) && (
-                                                <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border 
-                                                    ${isOverdue(ticket.endDate, ticket.status) ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-slate-50 text-slate-500 border-slate-200/50'}`}>
+                                                <div className={`flex items-center gap-1.5 text-[10px] font-bold tracking-wider px-2 py-1 rounded-md border ${isOverdue(ticket.endDate, ticket.status) ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-slate-50 text-slate-500 border-slate-200/50'}`}>
                                                     <Clock className="w-3 h-3" />
                                                     {ticket.endDate ? new Date(ticket.endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'TBD'}
                                                 </div>
@@ -1710,7 +1706,7 @@ const WorkAllocation = () => {
                                             {/* Resolution Feedback (Match Image Orange Note Style) */}
                                             {ticket.feedback && (
                                                 <div className="px-3 py-2.5 bg-[#fff7ed] border border-[#ffedd5] rounded-lg text-[10px] text-[#9a3412] font-semibold leading-relaxed shadow-sm">
-                                                    <span className="text-[#c2410c] block mb-0.5 uppercase tracking-wider text-[9px]">Review Feedback:</span>
+                                                    <span className="text-[#c2410c] block mb-0.5 tracking-wider text-[9px]">Review Feedback:</span>
                                                     {ticket.feedback}
                                                 </div>
                                             )}
@@ -1718,7 +1714,7 @@ const WorkAllocation = () => {
                                             {/* Progress Section - Match Image */}
                                             {ticket.checklist && ticket.checklist.length > 0 && (
                                                 <div>
-                                                    <div className="flex justify-between items-center mb-1.5 text-[9px] text-slate-400 font-bold uppercase tracking-widest">
+                                                    <div className="flex justify-between items-center mb-1.5 text-[9px] text-slate-400 font-bold tracking-widest">
                                                         <span>PROGRESS</span>
                                                         <span className="text-slate-400">
                                                             {ticket.status === 'Done' ? 100 : (ticket.status === 'Review' ? 90 : (ticket.status === 'In Progress' ? 25 : 0))}%
@@ -1742,7 +1738,7 @@ const WorkAllocation = () => {
                                                                     e.stopPropagation();
                                                                     updateStatus(ticket._id, 'Done');
                                                                 }}
-                                                                className="flex-1 py-1.5 bg-[#f0fdfa] text-[#0d9488] text-[9px] font-bold uppercase rounded-lg border border-[#ccfbf1] hover:bg-[#0d9488] hover:text-white transition-all tracking-wider shadow-sm"
+                                                                className="flex-1 py-1.5 bg-[#f0fdfa] text-[#0d9488] text-[9px] font-bold rounded-lg border border-[#ccfbf1] hover:bg-[#0d9488] hover:text-white transition-all tracking-wider shadow-sm"
                                                             >
                                                                 Approve
                                                             </button>
@@ -1751,7 +1747,7 @@ const WorkAllocation = () => {
                                                                     e.stopPropagation();
                                                                     setRejectConfirm({ isOpen: true, ticket, reason: '' });
                                                                 }}
-                                                                className="px-2.5 py-1.5 bg-rose-50 text-rose-600 text-[9px] font-bold uppercase rounded-lg border border-rose-100 hover:bg-rose-500 hover:text-white transition-all shadow-sm"
+                                                                className="px-2.5 py-1.5 bg-rose-50 text-rose-600 text-[9px] font-bold rounded-lg border border-rose-100 hover:bg-rose-500 hover:text-white transition-all shadow-sm"
                                                             >
                                                                 Reject
                                                             </button>
@@ -1765,7 +1761,7 @@ const WorkAllocation = () => {
                                                                         const prevStatus = columns[columns.indexOf(status) - 1];
                                                                         updateStatus(ticket._id, prevStatus);
                                                                     }}
-                                                                    className="flex-1 py-1.5 bg-white text-slate-500 text-[10px] font-bold uppercase rounded-lg border border-slate-200 hover:bg-slate-50 hover:text-slate-800 transition-all tracking-wider shadow-sm"
+                                                                    className="flex-1 py-1.5 bg-white text-slate-500 text-[10px] font-bold rounded-lg border border-slate-200 hover:bg-slate-50 hover:text-slate-800 transition-all tracking-wider shadow-sm"
                                                                 >
                                                                     Move Back
                                                                 </button>
@@ -1777,7 +1773,7 @@ const WorkAllocation = () => {
                                                                         const nextStatus = columns[columns.indexOf(status) + 1];
                                                                         updateStatus(ticket._id, nextStatus);
                                                                     }}
-                                                                    className="flex-1 py-1.5 bg-blue-600 text-white text-[10px] font-bold uppercase rounded-lg border border-blue-700 hover:bg-blue-700 transition-all tracking-wider shadow-md shadow-blue-100"
+                                                                    className="flex-1 py-1.5 bg-blue-600 text-white text-[10px] font-bold rounded-lg border border-blue-700 hover:bg-blue-700 transition-all tracking-wider shadow-md shadow-blue-100"
                                                                 >
                                                                     Move Next
                                                                 </button>
@@ -1792,7 +1788,7 @@ const WorkAllocation = () => {
                                                             <div className="w-3.5 h-3.5 rounded border border-slate-300 flex items-center justify-center">
                                                                 <Check className="w-2 h-2" />
                                                             </div>
-                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Task</span>
+                                                            <span className="text-[10px] font-bold text-slate-400 tracking-tighter">Task</span>
                                                         </div>
                                                         <div className="w-3 h-[1px] bg-slate-200"></div>
                                                         <span className="text-[10px] font-bold text-slate-400 tracking-tighter">#{getTicketKey(ticket._id).split('-')[1]}</span>
@@ -1824,7 +1820,7 @@ const WorkAllocation = () => {
                                                                             <span className="text-slate-400">Active Tasks</span>
                                                                             <span className="font-bold">{activeTasks}</span>
                                                                         </div>
-                                                                        <div className={`mt-1 text-center py-0.5 rounded-md font-bold text-[9px] uppercase tracking-wider ${badge}`}>{label}</div>
+                                                                        <div className={`mt-1 text-center py-0.5 rounded-md font-bold text-[9px] tracking-wider ${badge}`}>{label}</div>
                                                                         <div className="absolute -bottom-1 right-4 w-2 h-2 bg-slate-900 rotate-45"></div>
                                                                     </div>
                                                                 )}
@@ -1861,7 +1857,7 @@ const WorkAllocation = () => {
                                             <button onClick={() => setInlineCreateStatus(null)} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors">
                                                 <X className="w-4 h-4" />
                                             </button>
-                                            <button onClick={() => saveInlineTicket(status)} className="bg-teal-600 text-white text-[10px] px-3 py-1.5 rounded-lg font-black uppercase tracking-wider hover:bg-teal-700 transition-colors shadow-lg shadow-teal-100">
+                                            <button onClick={() => saveInlineTicket(status)} className="bg-teal-600 text-white text-[10px] px-3 py-1.5 rounded-lg font-black tracking-wider hover:bg-teal-700 transition-colors shadow-lg shadow-teal-100">
                                                 Add Task
                                             </button>
                                         </div>
@@ -1872,7 +1868,7 @@ const WorkAllocation = () => {
                                         className="w-full py-2.5 rounded-xl text-slate-400 hover:text-teal-600 hover:bg-teal-50/50 flex items-center justify-center gap-2 transition-all duration-300 group/btn mt-1"
                                     >
                                         <Plus className="w-3.5 h-3.5 group-hover/btn:scale-110 transition-transform" />
-                                        <span className="text-[10px] font-bold uppercase tracking-widest">Add Task</span>
+                                        <span className="text-[10px] font-bold tracking-widest">Add Task</span>
                                     </button>
                                 )}
                             </div>
@@ -1889,19 +1885,19 @@ const WorkAllocation = () => {
                         {/* Header */}
                         <div className="px-6 py-4 lg:px-8 lg:py-5 flex justify-between items-center text-gray-600 shrink-0 border-b border-gray-100 bg-gray-50/30">
                             <div className="flex items-center gap-4">
-                                <div className="flex items-center space-x-2 text-xs font-bold bg-white px-3 py-2 rounded-xl shadow-sm border border-gray-200 uppercase tracking-widest text-teal-600">
+                                <div className="flex items-center space-x-2 text-xs font-bold bg-white px-3 py-2 rounded-xl shadow-sm border border-gray-200 tracking-widest text-teal-600">
                                     <IssueIcon type={selectedTicket.issueType} />
                                     <span>{selectedTicket._id === 'new' ? 'New Workspace' : `Task: ${selectedTicket._id.substring(selectedTicket._id.length - 6).toUpperCase()}`}</span>
                                 </div>
                                 {selectedTicket.team && (
-                                    <div className="bg-teal-50 text-teal-700 px-3 py-2 rounded-xl text-[10px] font-bold uppercase border border-teal-100 flex items-center gap-1.5 shadow-sm">
+                                    <div className="bg-teal-50 text-teal-700 px-3 py-2 rounded-xl text-[10px] font-bold border border-teal-100 flex items-center gap-1.5 shadow-sm">
                                         <Users className="w-3.5 h-3.5" /> Team: {selectedTicket.team}
                                     </div>
                                 )}
                             </div>
                             <div className="flex items-center space-x-3">
                                 <div className="flex items-center gap-2 mr-2">
-                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Phase Status:</span>
+                                    <span className="text-[10px] font-bold text-gray-400 tracking-wider">Phase Status:</span>
                                     <Select value={selectedTicket.status} onValueChange={(val) => updateSelectedTicket({ status: val })}>
                                         <SelectTrigger className="bg-white border border-gray-200 h-9 px-3 text-xs font-bold shadow-sm rounded-xl w-36 focus:ring-1 focus:ring-teal-500">
                                             <SelectValue />
@@ -1916,7 +1912,7 @@ const WorkAllocation = () => {
                                 {/* AI Second Brain Button */}
                                 <button
                                     onClick={() => setShowBrainModal(true)}
-                                    className="flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:from-violet-700 hover:to-indigo-700 transition-all shadow-md shadow-violet-100 active:scale-95 mr-1"
+                                    className="flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-3.5 py-2 rounded-xl text-[10px] font-black tracking-widest hover:from-violet-700 hover:to-indigo-700 transition-all shadow-md shadow-violet-100 active:scale-95 mr-1"
                                     title="Upload chat files to AI Second Brain"
                                 >
                                     <Brain className="w-3.5 h-3.5" />
@@ -2011,7 +2007,7 @@ const WorkAllocation = () => {
                                     <div className="shrink-0 mb-3 lg:mb-4">
                                         <div className="flex items-center gap-2 mb-1.5">
                                             <AlignLeft className="w-3.5 h-3.5 text-teal-600" />
-                                            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Workspace Definition</span>
+                                            <span className="text-[9px] font-bold text-gray-400 tracking-widest">Workspace Definition</span>
                                         </div>
                                         <TitleInput
                                             initialValue={selectedTicket.title}
@@ -2093,7 +2089,7 @@ const WorkAllocation = () => {
                                         </div>
                                         <button
                                             onClick={() => addChecklistItem()}
-                                            className="mt-2 flex items-center justify-center gap-2 text-teal-600 hover:bg-teal-600 hover:text-white text-[10px] font-extrabold uppercase tracking-widest transition-all p-2.5 bg-white border border-dashed border-teal-200 rounded-xl group shadow-sm active:scale-95"
+                                            className="mt-2 flex items-center justify-center gap-2 text-teal-600 hover:bg-teal-600 hover:text-white text-[10px] font-extrabold tracking-widest transition-all p-2.5 bg-white border border-dashed border-teal-200 rounded-xl group shadow-sm active:scale-95"
                                         >
                                             <Plus className="w-4 h-4 transition-transform group-hover:rotate-90" /> Add Next Point
                                         </button>
@@ -2105,17 +2101,17 @@ const WorkAllocation = () => {
                                             <div className="bg-gray-50/50 px-4 py-2 border-b border-gray-100 flex items-center justify-between">
                                                 <div className="flex items-center gap-2">
                                                     <LayoutDashboard className="w-4 h-4 text-teal-600" />
-                                                    <h3 className="text-[10px] font-extrabold text-gray-500 uppercase tracking-widest">Resource Timeline & Tags</h3>
+                                                    <h3 className="text-[10px] font-extrabold text-gray-500 tracking-widest">Resource Timeline & Tags</h3>
                                                 </div>
                                                 <div className="flex items-center gap-1.5">
                                                     <span className={`w-2 h-2 rounded-full ${isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'bg-red-500 animate-pulse' : 'bg-teal-500'}`}></span>
-                                                    <span className="text-[8px] font-bold text-gray-400 uppercase">{isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'Overdue' : 'Active'}</span>
+                                                    <span className="text-[8px] font-bold text-gray-400">{isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'Overdue' : 'Active'}</span>
                                                 </div>
                                             </div>
 
                                             <div className="p-2 lg:p-3 space-y-2 lg:space-y-3">
                                                 <div className="flex flex-col gap-1.5">
-                                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-tight flex items-center gap-1.5">
+                                                    <label className="text-[10px] font-bold text-gray-400 tracking-tight flex items-center gap-1.5">
                                                         <Calendar className="w-3 h-3 text-teal-600" /> Timeline Period
                                                     </label>
                                                     <div className="flex items-center gap-2 bg-gray-50/80 p-1 rounded-xl border border-gray-100">
@@ -2127,7 +2123,7 @@ const WorkAllocation = () => {
                                                                 onClick={(e) => e.target.showPicker?.()}
                                                                 className="w-full bg-white border border-gray-100 rounded-lg p-2 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-teal-500 shadow-sm cursor-pointer"
                                                             />
-                                                            <span className="absolute -top-4 left-1 text-[8px] font-bold text-teal-600/50 uppercase">Start</span>
+                                                            <span className="absolute -top-4 left-1 text-[8px] font-bold text-teal-600/50">Start</span>
                                                         </div>
                                                         <div className="text-gray-300 font-bold">→</div>
                                                         <div className="relative flex-1">
@@ -2138,7 +2134,7 @@ const WorkAllocation = () => {
                                                                 onClick={(e) => e.target.showPicker?.()}
                                                                 className={`w-full border-none rounded-lg p-2 text-xs font-bold outline-none focus:ring-2 focus:ring-teal-500 shadow-sm cursor-pointer ${isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-white text-gray-700 border border-gray-100'}`}
                                                             />
-                                                            <span className="absolute -top-4 left-1 text-[8px] font-bold text-teal-600/50 uppercase">End</span>
+                                                            <span className="absolute -top-4 left-1 text-[8px] font-bold text-teal-600/50">End</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -2146,7 +2142,7 @@ const WorkAllocation = () => {
                                                 <div className="h-0.5 bg-gray-50 mx-1"></div>
 
                                                 <div className="flex flex-col gap-2">
-                                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-tight flex items-center gap-1.5">
+                                                    <label className="text-[10px] font-bold text-gray-400 tracking-tight flex items-center gap-1.5">
                                                         <Zap className="w-3 h-3 text-orange-500" /> Priority Matrix
                                                     </label>
                                                     <div className="flex gap-2">
@@ -2154,9 +2150,7 @@ const WorkAllocation = () => {
                                                             <button
                                                                 key={p}
                                                                 onClick={() => updateSelectedTicket({ priority: p })}
-                                                                className={`px-3 py-1.5 rounded-xl text-[10px] font-extrabold uppercase transition-all flex-1 border-2 ${selectedTicket.priority === p
-                                                                    ? (p === 'High' ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-100' : p === 'Medium' ? 'bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-100' : 'bg-blue-500 border-blue-500 text-white shadow-lg shadow-blue-100')
-                                                                    : 'bg-white border-gray-100 text-gray-400 hover:border-gray-200 hover:bg-gray-50'}`}
+                                                                className={`px-3 py-1.5 rounded-xl text-[10px] font-extrabold transition-all flex-1 border-2 ${selectedTicket.priority === p ? (p === 'High' ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-100' : p === 'Medium' ? 'bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-100' : 'bg-blue-500 border-blue-500 text-white shadow-lg shadow-blue-100') : 'bg-white border-gray-100 text-gray-400 hover:border-gray-200 hover:bg-gray-50'}`}
                                                             >
                                                                 {p}
                                                             </button>
@@ -2198,15 +2192,15 @@ const WorkAllocation = () => {
                                                             <div className="flex items-center justify-between">
                                                                 <div className="flex items-center gap-1.5">
                                                                     <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                                                                    <span className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Quick Assign</span>
+                                                                    <span className="text-[10px] font-extrabold text-gray-500 tracking-wider">Quick Assign</span>
                                                                 </div>
-                                                                <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tight">Click to add/remove</span>
+                                                                <span className="text-[8px] text-slate-400 font-bold tracking-tight">Click to add/remove</span>
                                                             </div>
                                                             <div className="space-y-3 max-h-[140px] overflow-y-auto pr-1 custom-scrollbar">
                                                                 {/* Idle developers first */}
                                                                 {idleDevelopers.length > 0 && (
                                                                     <div>
-                                                                        <div className="text-[8px] font-black text-emerald-600 uppercase tracking-wider mb-1">● Idle ({idleDevelopers.length})</div>
+                                                                        <div className="text-[8px] font-black text-emerald-600 tracking-wider mb-1">● Idle ({idleDevelopers.length})</div>
                                                                         <div className="flex flex-wrap gap-1.5">
                                                                             {idleDevelopers.slice(0, 6).map(w => {
                                                                                 const isSelected = currentAssigneeIds.includes(w._id);
@@ -2228,7 +2222,7 @@ const WorkAllocation = () => {
                                                                 {/* Busy developers */}
                                                                 {assignedDevelopers.length > 0 && (
                                                                     <div>
-                                                                        <div className="text-[8px] font-black text-amber-600 uppercase tracking-wider mb-1">● Busy ({assignedDevelopers.length})</div>
+                                                                        <div className="text-[8px] font-black text-amber-600 tracking-wider mb-1">● Busy ({assignedDevelopers.length})</div>
                                                                         <div className="flex flex-wrap gap-1.5">
                                                                             {assignedDevelopers.slice(0, 6).map(w => {
                                                                                 const { activeTasks } = getWorkerLoad(w._id);
@@ -2269,7 +2263,7 @@ const WorkAllocation = () => {
                                                         <Cpu className="w-4 h-4 animate-pulse" />
                                                     </div>
                                                     <div>
-                                                        <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                                                        <h3 className="text-xs font-black text-slate-700 tracking-wider flex items-center gap-1">
                                                             AI Task Assistant
                                                             <Sparkles className="w-3 h-3 text-amber-500 fill-amber-500" />
                                                         </h3>
@@ -2300,25 +2294,21 @@ const WorkAllocation = () => {
                                                 <div className="space-y-4">
                                                     <div className="grid grid-cols-2 gap-2 bg-white/70 p-2.5 rounded-xl border border-slate-100">
                                                         <div className="text-[10px]">
-                                                            <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Priority</span>
-                                                            <span className={`font-extrabold uppercase ${aiAnalysisResult.priority === 'High' ? 'text-red-500' :
-                                                                aiAnalysisResult.priority === 'Medium' ? 'text-orange-500' : 'text-blue-500'
-                                                                }`}>{aiAnalysisResult.priority}</span>
+                                                            <span className="text-slate-400 font-bold block tracking-tight">AI Priority</span>
+                                                            <span className={`font-extrabold ${aiAnalysisResult.priority === 'High' ? 'text-red-500' : aiAnalysisResult.priority === 'Medium' ? 'text-orange-500' : 'text-blue-500' }`}>{aiAnalysisResult.priority}</span>
                                                         </div>
                                                         <div className="text-[10px]">
-                                                            <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Complexity</span>
-                                                            <span className={`font-extrabold uppercase ${aiAnalysisResult.complexity === 'High' ? 'text-purple-600' :
-                                                                aiAnalysisResult.complexity === 'Medium' ? 'text-indigo-600' : 'text-slate-600'
-                                                                }`}>{aiAnalysisResult.complexity}</span>
+                                                            <span className="text-slate-400 font-bold block tracking-tight">AI Complexity</span>
+                                                            <span className={`font-extrabold ${aiAnalysisResult.complexity === 'High' ? 'text-purple-600' : aiAnalysisResult.complexity === 'Medium' ? 'text-indigo-600' : 'text-slate-600' }`}>{aiAnalysisResult.complexity}</span>
                                                         </div>
                                                         <div className="text-[10px] col-span-2 mt-1.5 pt-1.5 border-t border-slate-100/60 flex justify-between items-center">
                                                             <div>
-                                                                <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Est. Time</span>
+                                                                <span className="text-slate-400 font-bold block tracking-tight">AI Est. Time</span>
                                                                 <span className="font-extrabold text-slate-700">{aiAnalysisResult.estimatedHours} hrs <span className="text-slate-400 font-normal">({(aiAnalysisResult.estimatedHours / 8).toFixed(1)} Days)</span></span>
                                                             </div>
                                                             <button
                                                                 onClick={handleApplySpecs}
-                                                                className="px-2.5 py-1 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-100 rounded-lg text-[9px] font-extrabold uppercase transition-colors"
+                                                                className="px-2.5 py-1 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-100 rounded-lg text-[9px] font-extrabold transition-colors"
                                                             >
                                                                 Apply
                                                             </button>
@@ -2328,10 +2318,10 @@ const WorkAllocation = () => {
                                                     {aiAnalysisResult.subtasks && aiAnalysisResult.subtasks.length > 0 && (
                                                         <div className="space-y-1.5 bg-white/70 p-2.5 rounded-xl border border-slate-100">
                                                             <div className="flex items-center justify-between mb-1">
-                                                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Suggested Subtasks</span>
+                                                                <span className="text-[10px] font-black text-slate-500 tracking-wider">Suggested Subtasks</span>
                                                                 <button
                                                                     onClick={handleMergeSubtasks}
-                                                                    className="px-2.5 py-1 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-100 rounded-lg text-[9px] font-extrabold uppercase transition-colors"
+                                                                    className="px-2.5 py-1 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-100 rounded-lg text-[9px] font-extrabold transition-colors"
                                                                 >
                                                                     Merge
                                                                 </button>
@@ -2365,7 +2355,7 @@ const WorkAllocation = () => {
                                                                             </div>
                                                                             <button
                                                                                 onClick={() => handleMergeSingleSubtask(sub, i)}
-                                                                                className="opacity-0 group-hover/subtask:opacity-100 px-1.5 py-0.5 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded text-[9px] font-black uppercase transition-all shrink-0 ml-1 flex items-center gap-0.5 shadow-sm"
+                                                                                className="opacity-0 group-hover/subtask:opacity-100 px-1.5 py-0.5 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded text-[9px] font-black transition-all shrink-0 ml-1 flex items-center gap-0.5 shadow-sm"
                                                                                 title="Add single subtask to checklist"
                                                                             >
                                                                                 <Plus className="w-2.5 h-2.5" />
@@ -2380,7 +2370,7 @@ const WorkAllocation = () => {
 
                                                     {aiAnalysisResult.recommendations && aiAnalysisResult.recommendations.length > 0 && (
                                                         <div className="space-y-2 bg-white/70 p-2.5 rounded-xl border border-slate-100">
-                                                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">AI Recommended Assignees</span>
+                                                            <span className="text-[10px] font-black text-slate-500 tracking-wider block mb-1">AI Recommended Assignees</span>
                                                             <div className="space-y-2">
                                                                 {aiAnalysisResult.recommendations.map((rec, i) => {
                                                                     const isAssigned = (selectedTicket.assignees || []).some(a => (typeof a === 'object' ? a._id : a) === rec.developerId);
@@ -2393,10 +2383,7 @@ const WorkAllocation = () => {
                                                                                 </div>
                                                                                 <button
                                                                                     onClick={() => handleAssignDev(rec.developerId)}
-                                                                                    className={`px-2.5 py-1 rounded-lg text-[9px] font-extrabold uppercase transition-colors ${isAssigned
-                                                                                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
-                                                                                        : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm'
-                                                                                        }`}
+                                                                                    className={`px-2.5 py-1 rounded-lg text-[9px] font-extrabold transition-colors ${isAssigned ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm' }`}
                                                                                     disabled={isAssigned}
                                                                                 >
                                                                                     {isAssigned ? 'Assigned' : 'Assign'}
@@ -2446,7 +2433,7 @@ const WorkAllocation = () => {
                                             <div className="flex flex-col gap-2 pt-1 mb-2 bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
                                                 <div className="flex items-center gap-2">
                                                     <HelpCircle className="w-3 h-3 text-teal-600" />
-                                                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Employee Query</span>
+                                                    <span className="text-[9px] font-bold text-gray-400 tracking-widest">Employee Query</span>
                                                 </div>
                                                 <div className="w-full bg-teal-50 border border-teal-100 rounded-xl p-3 text-xs font-medium text-teal-800">
                                                     {selectedTicket.workerQuery}
@@ -2457,7 +2444,7 @@ const WorkAllocation = () => {
                                         <div className="flex flex-col gap-2 pt-1 bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
                                             <div className="flex items-center gap-2">
                                                 <MessageSquare className="w-3 h-3 text-orange-500" />
-                                                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Resolution Feedback</span>
+                                                <span className="text-[9px] font-bold text-gray-400 tracking-widest">Resolution Feedback</span>
                                             </div>
                                             <AutoGrowingTextarea
                                                 value={selectedTicket.feedback || ''}
@@ -2470,7 +2457,7 @@ const WorkAllocation = () => {
                                         {selectedTicket._id !== 'new' && (
                                             <button
                                                 onClick={() => handleDeleteTicket(selectedTicket)}
-                                                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-red-100 bg-red-50/30 text-red-600 hover:bg-red-500 hover:text-white transition-all font-bold text-[9px] uppercase tracking-widest group shadow-sm active:scale-95 animate-in fade-in duration-200"
+                                                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-red-100 bg-red-50/30 text-red-600 hover:bg-red-500 hover:text-white transition-all font-bold text-[9px] tracking-widest group shadow-sm active:scale-95 animate-in fade-in duration-200"
                                             >
                                                 <Trash2 className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" /> Permanently Delete
                                             </button>
@@ -2489,7 +2476,7 @@ const WorkAllocation = () => {
                                                 <div className="bg-white border border-teal-100/50 rounded-2xl p-4 shadow-sm relative overflow-hidden flex flex-col justify-center">
                                                     <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
                                                     <div className="flex justify-between items-center mb-3">
-                                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                                                        <span className="text-xs font-bold text-gray-400 tracking-widest flex items-center gap-1.5">
                                                             <BarChart2 className="w-3.5 h-3.5 text-teal-500" />
                                                             Overall Completion
                                                         </span>
@@ -2509,7 +2496,7 @@ const WorkAllocation = () => {
                                                 <div className="bg-white border border-teal-100/50 rounded-2xl p-4 shadow-sm relative overflow-hidden flex flex-col justify-between">
                                                     <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
                                                     <div className="flex justify-between items-center mb-3">
-                                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                                                        <span className="text-xs font-bold text-gray-400 tracking-widest flex items-center gap-1.5">
                                                             <Paperclip className="w-3.5 h-3.5 text-teal-500" />
                                                             Task References
                                                         </span>
@@ -2523,7 +2510,7 @@ const WorkAllocation = () => {
                                                         />
                                                         <button
                                                             onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
-                                                            className="text-[10px] font-extrabold uppercase bg-teal-50 text-teal-600 hover:bg-teal-100 px-2 py-1 rounded-lg border border-teal-100 transition-colors"
+                                                            className="text-[10px] font-extrabold bg-teal-50 text-teal-600 hover:bg-teal-100 px-2 py-1 rounded-lg border border-teal-100 transition-colors"
                                                         >
                                                             Upload
                                                         </button>
@@ -2540,10 +2527,7 @@ const WorkAllocation = () => {
                                                             const files = e.dataTransfer.files;
                                                             await uploadTaskRefFiles(files, selectedTicket._id);
                                                         }}
-                                                        className={`text-center py-2 px-3 border border-dashed rounded-xl transition-all cursor-pointer ${isDraggingTaskRef
-                                                            ? 'border-teal-500 bg-teal-50/50'
-                                                            : 'border-gray-200 hover:border-teal-400 hover:bg-gray-50/30'
-                                                            }`}
+                                                        className={`text-center py-2 px-3 border border-dashed rounded-xl transition-all cursor-pointer ${isDraggingTaskRef ? 'border-teal-500 bg-teal-50/50' : 'border-gray-200 hover:border-teal-400 hover:bg-gray-50/30' }`}
                                                         onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
                                                     >
                                                         <p className="text-[10px] font-bold text-gray-400">
@@ -2586,7 +2570,7 @@ const WorkAllocation = () => {
                                                 <div className="bg-white border border-teal-100/50 rounded-2xl p-4 shadow-sm relative overflow-hidden flex flex-col justify-between min-h-[140px]">
                                                     <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
                                                     <div className="flex justify-between items-center mb-3">
-                                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                                                        <span className="text-xs font-bold text-gray-400 tracking-widest flex items-center gap-1.5">
                                                             <Paperclip className="w-3.5 h-3.5 text-teal-500" />
                                                             Task References
                                                         </span>
@@ -2600,7 +2584,7 @@ const WorkAllocation = () => {
                                                         />
                                                         <button
                                                             onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
-                                                            className="text-[10px] font-extrabold uppercase bg-teal-50 text-teal-600 hover:bg-teal-100 px-2 py-1 rounded-lg border border-teal-100 transition-colors"
+                                                            className="text-[10px] font-extrabold bg-teal-50 text-teal-600 hover:bg-teal-100 px-2 py-1 rounded-lg border border-teal-100 transition-colors"
                                                         >
                                                             Upload
                                                         </button>
@@ -2617,10 +2601,7 @@ const WorkAllocation = () => {
                                                             const files = e.dataTransfer.files;
                                                             await uploadTaskRefFiles(files, selectedTicket._id);
                                                         }}
-                                                        className={`text-center py-4 px-3 border border-dashed rounded-xl transition-all cursor-pointer ${isDraggingTaskRef
-                                                            ? 'border-teal-500 bg-teal-50/50'
-                                                            : 'border-gray-200 hover:border-teal-400 hover:bg-gray-50/30'
-                                                            }`}
+                                                        className={`text-center py-4 px-3 border border-dashed rounded-xl transition-all cursor-pointer ${isDraggingTaskRef ? 'border-teal-500 bg-teal-50/50' : 'border-gray-200 hover:border-teal-400 hover:bg-gray-50/30' }`}
                                                         onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
                                                     >
                                                         <p className="text-[10px] font-bold text-gray-400">
@@ -2665,14 +2646,14 @@ const WorkAllocation = () => {
                                                 <div className="w-8 h-8 bg-teal-100 rounded-lg flex items-center justify-center">
                                                     <Users className="w-4 h-4 text-teal-600" />
                                                 </div>
-                                                <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Resource Execution Graph</h3>
+                                                <h3 className="text-xs font-bold text-gray-700 tracking-wider">Resource Execution Graph</h3>
                                             </div>
 
                                             <div className="flex-1 overflow-y-auto custom-scrollbar pr-3 space-y-4 pb-6">
                                                 {isFetchingCompletions ? (
                                                     <div className="flex flex-col items-center justify-center py-12 text-gray-400">
                                                         <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                                                        <p className="text-xs font-bold uppercase tracking-widest">Loading Analytics...</p>
+                                                        <p className="text-xs font-bold tracking-widest">Loading Analytics...</p>
                                                     </div>
                                                 ) : selectedTicket.assignees?.length > 0 ? (
                                                     selectedTicket.checklist?.map((item, idx) => {
@@ -2732,17 +2713,17 @@ const WorkAllocation = () => {
                                                                                 <div className="flex items-center gap-3 shrink-0 ml-auto">
                                                                                     {/* Status Badge */}
                                                                                     {isDone ? (
-                                                                                        <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-green-100 shadow-sm">
+                                                                                        <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-1.5 rounded-xl text-[10px] font-black border border-green-100 shadow-sm">
                                                                                             <CheckCircle2 className="w-3.5 h-3.5" /> Done
                                                                                         </span>
                                                                                     ) : (
-                                                                                        <span className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-600 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-orange-100 shadow-sm">
+                                                                                        <span className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-600 px-3 py-1.5 rounded-xl text-[10px] font-black border border-orange-100 shadow-sm">
                                                                                             <Clock className="w-3.5 h-3.5" /> Pending
                                                                                         </span>
                                                                                     )}
 
                                                                                     {/* Proof Status Button */}
-                                                                                    <span className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-600 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-orange-100 hover:bg-orange-100 transition-all shadow-sm cursor-pointer" onClick={() => triggerReferenceUpload(selectedTicket._id === 'new' ? tempTicketId : selectedTicket._id, selectedTicket._id === 'new' ? idx : (item._id || idx), workerId)}>
+                                                                                    <span className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-600 px-3 py-1.5 rounded-xl text-[10px] font-black border border-orange-100 hover:bg-orange-100 transition-all shadow-sm cursor-pointer" onClick={() => triggerReferenceUpload(selectedTicket._id === 'new' ? tempTicketId : selectedTicket._id, selectedTicket._id === 'new' ? idx : (item._id || idx), workerId)}>
                                                                                         <Paperclip className="w-3.5 h-3.5" /> {comp?.referenceFiles?.length > 0 ? 'REF ✓' : 'REF'}
                                                                                     </span>
 
@@ -2750,7 +2731,7 @@ const WorkAllocation = () => {
                                                                                     {hasProof && (
                                                                                         <button
                                                                                             onClick={() => setProofViewer({ isOpen: true, files: comp.proofFiles, userName: worker.name, subTaskText: item.text })}
-                                                                                            className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-teal-700 transition-all shadow-md shadow-teal-100 active:scale-95 ml-2 group"
+                                                                                            className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-xl text-[10px] font-black hover:bg-teal-700 transition-all shadow-md shadow-teal-100 active:scale-95 ml-2 group"
                                                                                         >
                                                                                             <Eye className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" /> View
                                                                                         </button>
@@ -2766,7 +2747,7 @@ const WorkAllocation = () => {
                                                 ) : (
                                                     <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
                                                         <Users className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-                                                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">No Execution Data</p>
+                                                        <p className="text-xs font-bold text-gray-400 tracking-widest">No Execution Data</p>
                                                     </div>
                                                 )}
                                             </div>
@@ -2866,13 +2847,13 @@ const WorkAllocation = () => {
                                     <div className="flex gap-3 pt-2">
                                         <button
                                             onClick={() => setRejectConfirm({ isOpen: false, ticket: null, reason: '' })}
-                                            className="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all active:scale-95"
+                                            className="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl font-bold text-xs tracking-widest transition-all active:scale-95"
                                         >
                                             Cancel
                                         </button>
                                         <button
                                             onClick={handleRejectSubmit}
-                                            className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-bold text-xs uppercase tracking-widest transition-all shadow-lg shadow-red-200 active:scale-95"
+                                            className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-bold text-xs tracking-widest transition-all shadow-lg shadow-red-200 active:scale-95"
                                         >
                                             Confirm Reject
                                         </button>
@@ -2917,7 +2898,7 @@ const WorkAllocation = () => {
                                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
                                                         <div className="bg-white text-gray-800 p-2.5 rounded-full shadow-lg hover:scale-110 transition-transform flex items-center gap-2">
                                                             <Eye className="w-5 h-5" />
-                                                            <span className="text-[10px] font-bold uppercase pr-1">Preview</span>
+                                                            <span className="text-[10px] font-bold pr-1">Preview</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -2929,15 +2910,15 @@ const WorkAllocation = () => {
                                                     <div className="w-12 h-12 bg-white rounded-xl shadow-sm border border-gray-100 flex items-center justify-center text-red-500 mb-3">
                                                         <FileText className="w-6 h-6" />
                                                     </div>
-                                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">PDF DOCUMENT</p>
-                                                    <p className="text-[10px] text-blue-600 font-bold mt-1 uppercase">Click to Preview</p>
+                                                    <p className="text-[10px] font-bold text-gray-400 tracking-widest">PDF DOCUMENT</p>
+                                                    <p className="text-[10px] text-blue-600 font-bold mt-1">Click to Preview</p>
                                                 </div>
                                             ) : (
                                                 <div className="aspect-video bg-gray-50 flex flex-col items-center justify-center p-6 text-center border-b border-gray-100">
                                                     <div className="w-12 h-12 bg-white rounded-xl shadow-sm border border-gray-100 flex items-center justify-center text-teal-600 mb-3">
                                                         <Paperclip className="w-6 h-6" />
                                                     </div>
-                                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{file.type?.split('/')[1] || 'FILE'}</p>
+                                                    <p className="text-[10px] font-bold text-gray-400 tracking-widest">{file.type?.split('/')[1] || 'FILE'}</p>
                                                 </div>
                                             )}
                                             <div className="p-3 flex justify-between items-center bg-white mt-auto">
@@ -3073,13 +3054,13 @@ const WorkAllocation = () => {
                                                         href={getFullFileUrl(file.url)}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
-                                                        className="text-[10px] font-bold text-teal-600 hover:text-teal-700 uppercase"
+                                                        className="text-[10px] font-bold text-teal-600 hover:text-teal-700"
                                                     >
                                                         Full View
                                                     </a>
                                                     <button
                                                         onClick={() => handleDeleteReference(refManager.ticketId, refManager.subTaskId, refManager.workerId, file._id)}
-                                                        className="text-[10px] font-bold text-red-500 hover:text-red-600 uppercase"
+                                                        className="text-[10px] font-bold text-red-500 hover:text-red-600"
                                                     >
                                                         Delete
                                                     </button>
@@ -3112,10 +3093,7 @@ const WorkAllocation = () => {
                                         const files = e.dataTransfer.files;
                                         await uploadRefFiles(files, refManager.ticketId, refManager.subTaskId, refManager.workerId);
                                     }}
-                                    className={`text-center py-12 rounded-xl border-2 border-dashed cursor-pointer transition-all ${isDraggingRef
-                                        ? 'border-teal-500 bg-teal-50/50'
-                                        : 'border-gray-200 hover:border-teal-400 hover:bg-gray-50/50'
-                                        }`}
+                                    className={`text-center py-12 rounded-xl border-2 border-dashed cursor-pointer transition-all ${isDraggingRef ? 'border-teal-500 bg-teal-50/50' : 'border-gray-200 hover:border-teal-400 hover:bg-gray-50/50' }`}
                                 >
                                     <ImagePlus className={`w-12 h-12 mx-auto mb-3 transition-colors ${isDraggingRef ? 'text-teal-500' : 'text-gray-300'}`} />
                                     <p className="text-sm font-bold text-gray-600 mb-1">
@@ -3164,10 +3142,7 @@ const WorkAllocation = () => {
                         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-gradient-to-r from-slate-50 to-slate-100/50">
                             <div>
                                 <div className="flex items-center gap-2">
-                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${drawerFilter === 'idle' ? 'bg-emerald-100' :
-                                        drawerFilter === 'assigned' ? 'bg-blue-100' :
-                                            drawerFilter === 'overloaded' ? 'bg-rose-100' : 'bg-slate-100'
-                                        }`}>
+                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${drawerFilter === 'idle' ? 'bg-emerald-100' : drawerFilter === 'assigned' ? 'bg-blue-100' : drawerFilter === 'overloaded' ? 'bg-rose-100' : 'bg-slate-100' }`}>
                                         {drawerFilter === 'idle' ? <Zap className="w-3.5 h-3.5 text-emerald-600" /> :
                                             drawerFilter === 'assigned' ? <CheckSquare className="w-3.5 h-3.5 text-blue-600" /> :
                                                 drawerFilter === 'overloaded' ? <AlertCircle className="w-3.5 h-3.5 text-rose-600" /> :
@@ -3217,7 +3192,7 @@ const WorkAllocation = () => {
                                         <button
                                             key={tab.key}
                                             onClick={() => setDrawerFilter(tab.key)}
-                                            className={`flex-1 py-1.5 px-2 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all ${isActive ? activeClasses[tab.color] : inactiveClasses[tab.color]}`}
+                                            className={`flex-1 py-1.5 px-2 rounded-lg text-[10px] font-black tracking-wider border transition-all ${isActive ? activeClasses[tab.color] : inactiveClasses[tab.color]}`}
                                         >
                                             {tab.label} <span className={`ml-0.5 ${isActive ? 'opacity-80' : 'opacity-60'}`}>({tab.count})</span>
                                         </button>
@@ -3228,9 +3203,9 @@ const WorkAllocation = () => {
 
                         {/* Column Headers */}
                         <div className="px-5 py-2 grid grid-cols-[1fr_auto_auto] gap-3 bg-slate-50/50 border-b border-slate-100">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Developer</span>
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider text-center">Tasks</span>
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider text-center">Done/Mo</span>
+                            <span className="text-[9px] font-black text-slate-400 tracking-wider">Developer</span>
+                            <span className="text-[9px] font-black text-slate-400 tracking-wider text-center">Tasks</span>
+                            <span className="text-[9px] font-black text-slate-400 tracking-wider text-center">Done/Mo</span>
                         </div>
 
                         {/* Developer List */}
@@ -3264,7 +3239,7 @@ const WorkAllocation = () => {
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center justify-between mt-2">
-                                                    <span className={`text-[9px] font-black uppercase tracking-wider flex items-center gap-1`}>
+                                                    <span className={`text-[9px] font-black tracking-wider flex items-center gap-1`}>
                                                         <span className={`w-1.5 h-1.5 rounded-full ${dot}`}></span>
                                                         <span className="text-slate-500">{label}</span>
                                                     </span>
@@ -3283,7 +3258,7 @@ const WorkAllocation = () => {
                                                             setModalFilterTeam(w.department || '');
                                                             setIsModalOpen(true);
                                                         }}
-                                                        className="text-[9px] font-black uppercase tracking-wider text-teal-600 hover:text-teal-700 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-lg border border-teal-200 transition-colors flex items-center gap-1"
+                                                        className="text-[9px] font-black tracking-wider text-teal-600 hover:text-teal-700 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-lg border border-teal-200 transition-colors flex items-center gap-1"
                                                     >
                                                         <Plus className="w-3 h-3" />
                                                         Assign Task
@@ -3301,19 +3276,19 @@ const WorkAllocation = () => {
                             <div className="grid grid-cols-4 gap-2 text-center">
                                 <div>
                                     <div className="text-lg font-black text-slate-800">{activeWorkers.length}</div>
-                                    <div className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">Total</div>
+                                    <div className="text-[9px] text-slate-400 font-semibold tracking-wider">Total</div>
                                 </div>
                                 <div>
                                     <div className="text-lg font-black text-blue-600">{assignedDevelopers.length}</div>
-                                    <div className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">Assigned</div>
+                                    <div className="text-[9px] text-slate-400 font-semibold tracking-wider">Assigned</div>
                                 </div>
                                 <div>
                                     <div className="text-lg font-black text-emerald-600">{idleDevelopers.length}</div>
-                                    <div className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">Idle</div>
+                                    <div className="text-[9px] text-slate-400 font-semibold tracking-wider">Idle</div>
                                 </div>
                                 <div>
                                     <div className="text-lg font-black text-rose-600">{overloadedDevelopers.length}</div>
-                                    <div className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">Overloaded</div>
+                                    <div className="text-[9px] text-slate-400 font-semibold tracking-wider">Overloaded</div>
                                 </div>
                             </div>
                         </div>
@@ -3376,17 +3351,17 @@ const StatsBreakdownModal = ({ isOpen, onClose, tickets, workers, columns }) => 
                     {/* Team Summary Section */}
                     <section>
                         <div className="flex items-center gap-2 mb-4 border-l-4 border-teal-500 pl-3">
-                            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Team-wise Performance</h3>
+                            <h3 className="text-sm font-bold text-gray-900 tracking-wider">Team-wise Performance</h3>
                         </div>
                         <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
                             <table className="w-full text-left border-collapse">
                                 <thead className="bg-gray-50/80">
                                     <tr>
-                                        <th className="py-3.5 px-4 text-[11px] font-extrabold text-gray-400 uppercase tracking-widest border-b border-gray-100">Department / Team</th>
+                                        <th className="py-3.5 px-4 text-[11px] font-extrabold text-gray-400 tracking-widest border-b border-gray-100">Department / Team</th>
                                         {columns.map(col => (
-                                            <th key={col} className="py-3.5 px-4 text-[11px] font-extrabold text-gray-400 uppercase tracking-widest text-center border-b border-gray-100">{col}</th>
+                                            <th key={col} className="py-3.5 px-4 text-[11px] font-extrabold text-gray-400 tracking-widest text-center border-b border-gray-100">{col}</th>
                                         ))}
-                                        <th className="py-3.5 px-4 text-[11px] font-extrabold text-gray-400 uppercase tracking-widest text-center border-b border-gray-100 bg-teal-50/50 text-teal-600">Total</th>
+                                        <th className="py-3.5 px-4 text-[11px] font-extrabold text-gray-400 tracking-widest text-center border-b border-gray-100 bg-teal-50/50 text-teal-600">Total</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50">
@@ -3422,18 +3397,18 @@ const StatsBreakdownModal = ({ isOpen, onClose, tickets, workers, columns }) => 
                     {/* Individual Summary Section */}
                     <section>
                         <div className="flex items-center gap-2 mb-4 border-l-4 border-blue-500 pl-3">
-                            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Employee Task Breakdown</h3>
+                            <h3 className="text-sm font-bold text-gray-900 tracking-wider">Employee Task Breakdown</h3>
                         </div>
                         <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
                             <table className="w-full text-left border-collapse">
                                 <thead className="bg-gray-50/80">
                                     <tr>
-                                        <th className="py-3.5 px-4 text-[11px] font-extrabold text-gray-400 uppercase tracking-widest border-b border-gray-100">Employee Name</th>
-                                        <th className="py-3.5 px-4 text-[11px] font-extrabold text-gray-400 uppercase tracking-widest border-b border-gray-100">Team</th>
+                                        <th className="py-3.5 px-4 text-[11px] font-extrabold text-gray-400 tracking-widest border-b border-gray-100">Employee Name</th>
+                                        <th className="py-3.5 px-4 text-[11px] font-extrabold text-gray-400 tracking-widest border-b border-gray-100">Team</th>
                                         {columns.map(col => (
-                                            <th key={col} className="py-3.5 px-4 text-[11px] font-extrabold text-gray-400 uppercase tracking-widest text-center border-b border-gray-100">{col}</th>
+                                            <th key={col} className="py-3.5 px-4 text-[11px] font-extrabold text-gray-400 tracking-widest text-center border-b border-gray-100">{col}</th>
                                         ))}
-                                        <th className="py-3.5 px-4 text-[11px] font-extrabold text-gray-400 uppercase tracking-widest text-center border-b border-gray-100 bg-blue-50/50 text-blue-600">Total</th>
+                                        <th className="py-3.5 px-4 text-[11px] font-extrabold text-gray-400 tracking-widest text-center border-b border-gray-100 bg-blue-50/50 text-blue-600">Total</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50">
@@ -3443,7 +3418,7 @@ const StatsBreakdownModal = ({ isOpen, onClose, tickets, workers, columns }) => 
                                                 <div className="text-sm font-bold text-gray-700 group-hover:text-blue-700 transition-colors">{ps.name}</div>
                                             </td>
                                             <td className="py-4 px-4">
-                                                <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-gray-100 text-gray-500 uppercase tracking-tight">
+                                                <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-gray-100 text-gray-500 tracking-tight">
                                                     {ps.team}
                                                 </span>
                                             </td>
@@ -3520,7 +3495,7 @@ const DeletedTicketsModal = ({ isOpen, onClose, tickets, loading }) => {
                                 <div key={ticket._id} className="p-4 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-all">
                                     <div className="flex justify-between items-start mb-2">
                                         <div className="text-sm font-bold text-gray-800">{ticket.title}</div>
-                                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                        <div className="text-[10px] font-bold text-gray-400 tracking-wider">
                                             Deleted: {ticket.deletedAt ? new Date(ticket.deletedAt).toLocaleString('en-GB') : 'N/A'}
                                         </div>
                                     </div>
@@ -3547,7 +3522,7 @@ const DeletedTicketsModal = ({ isOpen, onClose, tickets, loading }) => {
                                     {/* Checklist */}
                                     {ticket.checklist && ticket.checklist.length > 0 && (
                                         <div className="mt-3 pl-3 border-l-2 border-slate-200 space-y-1">
-                                            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Checklist</div>
+                                            <div className="text-[9px] font-bold text-slate-400 tracking-widest mb-1">Checklist</div>
                                             {ticket.checklist.map((item, idx) => (
                                                 <div key={idx} className="text-xs text-slate-600 flex items-center gap-1.5">
                                                     <span className={item.completed ? 'text-teal-500' : 'text-slate-300'}>

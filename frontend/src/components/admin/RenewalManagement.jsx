@@ -235,7 +235,7 @@ const RenewalManagement = () => {
       align: 'text-left',
       render: (record) => (
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-[#f0fdfa] border border-[#ccfbf1] flex items-center justify-center text-[#0d9488] font-bold text-xs uppercase shadow-sm">
+          <div className="w-10 h-10 rounded-full bg-[#f0fdfa] border border-[#ccfbf1] flex items-center justify-center text-[#0d9488] font-bold text-xs shadow-sm">
             {record.client_name.substring(0, 2)}
           </div>
           <div className="flex flex-col">
@@ -260,7 +260,7 @@ const RenewalManagement = () => {
             {renderStatusBadge(record.domain_status)}
           </div>
           <div className="flex items-center gap-2 text-[10px] text-gray-400 font-medium">
-            <span className="bg-gray-100 px-1.5 py-0.5 rounded uppercase">{record.domain_registrar}</span>
+            <span className="bg-gray-100 px-1.5 py-0.5 rounded">{record.domain_registrar}</span>
             <span className="flex items-center gap-1"><Calendar size={10} /> {dayjs(record.domain_expiry_date).format('DD/MM/YY')}</span>
           </div>
         </div>
@@ -279,7 +279,7 @@ const RenewalManagement = () => {
             {renderStatusBadge(record.server_status)}
           </div>
           <div className="flex items-center gap-2 text-[10px] text-gray-400 font-medium">
-            <span className="bg-gray-100 px-1.5 py-0.5 rounded uppercase">{record.server_plan}</span>
+            <span className="bg-gray-100 px-1.5 py-0.5 rounded">{record.server_plan}</span>
             <span className="flex items-center gap-1"><Timer size={10} /> {getDaysLeft(record.server_expiry_date)}d</span>
           </div>
         </div>
@@ -297,7 +297,7 @@ const RenewalManagement = () => {
         return days !== null ? (
           <div className="flex flex-col items-center">
             <span className={`text-lg font-bold tracking-tight ${isCritical ? 'text-red-500' : 'text-gray-900'}`}>{days}</span>
-            <span className={`text-[9px] uppercase font-bold tracking-widest ${isCritical ? 'text-red-400' : 'text-gray-400'}`}>
+            <span className={`text-[9px] font-bold tracking-widest ${isCritical ? 'text-red-400' : 'text-gray-400'}`}>
               {isCritical ? 'CRITICAL' : 'DAYS'}
             </span>
           </div>
@@ -358,7 +358,7 @@ const RenewalManagement = () => {
       >
         <div className="flex justify-between items-start mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-[#f0fdfa] border border-[#ccfbf1] flex items-center justify-center text-[#0d9488] font-bold text-lg uppercase shadow-sm">
+            <div className="w-12 h-12 rounded-xl bg-[#f0fdfa] border border-[#ccfbf1] flex items-center justify-center text-[#0d9488] font-bold text-lg shadow-sm">
               {record.client_name.substring(0, 2)}
             </div>
             <div>
@@ -370,18 +370,18 @@ const RenewalManagement = () => {
           </div>
           <div className="flex flex-col items-end">
             <span className={`text-xl font-black ${isCritical ? 'text-red-500' : 'text-gray-900'}`}>{days || '-'}</span>
-            <span className="text-[9px] uppercase font-bold text-gray-400 tracking-widest">Days Left</span>
+            <span className="text-[9px] font-bold text-gray-400 tracking-widest">Days Left</span>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4 mb-5">
           <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-1">Domain</p>
+            <p className="text-[10px] text-gray-400 font-bold tracking-wider mb-1">Domain</p>
             <div className="text-xs font-bold text-gray-700 truncate">{record.domain_name || 'N/A'}</div>
             {record.domain_status && <div className="mt-1">{renderStatusBadge(record.domain_status)}</div>}
           </div>
           <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-1">Server</p>
+            <p className="text-[10px] text-gray-400 font-bold tracking-wider mb-1">Server</p>
             <div className="text-xs font-bold text-gray-700 truncate">{record.server_provider || 'N/A'}</div>
             {record.server_status && <div className="mt-1">{renderStatusBadge(record.server_status)}</div>}
           </div>
@@ -413,26 +413,25 @@ const RenewalManagement = () => {
     );
   };
 
-  return (
-    <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+    <div className="max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 pb-8">
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4 mt-2 md:mt-0">
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Renewal Management</h1>
-          <p className="text-gray-500 mt-1">Monitor and manage your service timelines efficiently.</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">Renewal Management</h1>
+          <p className="text-sm text-gray-500 mt-1">Monitor and manage your service timelines efficiently.</p>
         </div>
-        <div className="flex items-center space-x-3">
-          <Button variant="outline" onClick={exportCSV} className="flex items-center shadow-sm">
-            <Download className="mr-2" size={16} /> Export CSV
+        <div className="grid grid-cols-2 sm:flex sm:items-center gap-3">
+          <Button variant="outline" onClick={exportCSV} className="flex justify-center items-center shadow-sm whitespace-nowrap text-xs sm:text-sm !py-2.5">
+            <Download className="mr-1.5" size={14} /> Export CSV
           </Button>
-          <Button variant="primary" onClick={() => { setEditingRenewal(null); setIsModalOpen(true); }} className="flex items-center shadow-md !bg-[#0d9488] !border-[#0d9488]">
-            <FaPlus className="mr-2" /> Add Renewal
+          <Button variant="primary" onClick={() => { setEditingRenewal(null); setIsModalOpen(true); }} className="flex justify-center items-center shadow-md !bg-[#0d9488] !border-[#0d9488] whitespace-nowrap text-xs sm:text-sm !py-2.5">
+            <FaPlus className="mr-1.5" /> Add Renewal
           </Button>
         </div>
       </div>
 
       {/* Modern Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6">
         {[
           { label: 'Total Assets', value: stats.total, icon: Globe, iconColor: 'text-slate-400' },
           { label: 'Expiring Soon', value: stats.expiringSoon, icon: Clock, iconColor: 'text-amber-500' },
@@ -441,22 +440,24 @@ const RenewalManagement = () => {
         ].map((stat, idx) => (
           <div 
             key={idx}
-            className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md"
+            className="bg-white p-3 sm:p-6 rounded-2xl border border-gray-200 shadow-sm transition-all hover:shadow-md flex flex-col justify-between"
           >
-            <div className="flex justify-between items-start mb-4">
-              <div className={`p-2 rounded-xl bg-slate-50 ${stat.iconColor}`}>
-                <stat.icon size={22} />
+            <div className="flex justify-between items-start mb-2 sm:mb-4">
+              <div className={`p-1.5 sm:p-2 rounded-xl bg-slate-50 ${stat.iconColor}`}>
+                <stat.icon size={18} className="sm:w-[22px] sm:h-[22px]" />
               </div>
             </div>
-            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">{stat.label}</p>
-            <p className="text-3xl font-black text-slate-900 mt-1">{stat.value}</p>
+            <div>
+              <p className="text-slate-500 text-[9px] sm:text-xs font-bold tracking-widest truncate">{stat.label}</p>
+              <p className="text-2xl sm:text-3xl font-black text-slate-900 mt-0.5">{stat.value}</p>
+            </div>
           </div>
         ))}
       </div>
 
       {/* Advanced Control Bar */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Search Box */}
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -466,7 +467,7 @@ const RenewalManagement = () => {
               type="text"
               name="search"
               placeholder="Search client, domain..."
-              className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0d9488] focus:border-transparent transition-all"
+              className="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-[10px] text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0d9488] focus:border-transparent transition-all"
               value={filters.search}
               onChange={handleFilterChange}
             />
@@ -515,7 +516,7 @@ const RenewalManagement = () => {
           <div className="flex items-center">
             <button 
               onClick={() => setFilters({search: '', type: 'All Types', status: 'All Status', startDate: '', endDate: ''})} 
-              className="w-full px-4 py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-600 font-bold text-xs uppercase tracking-widest rounded-xl transition-all border border-gray-200"
+              className="w-full px-4 py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-600 font-bold text-xs tracking-widest rounded-xl transition-all border border-gray-200"
             >
               Reset Filters
             </button>

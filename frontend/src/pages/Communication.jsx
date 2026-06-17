@@ -235,134 +235,56 @@ const Communication = () => {
   return (
     <div style={{ height: 'calc(100vh - 65px)', display: 'flex', flexDirection: 'column', background: '#fff' }}>
 
-      {/* tab bar */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        borderBottom: '1px solid #e2e8f0',
-        background: '#f8fafc',
-        flexShrink: 0,
-        paddingRight: '16px'
-      }}>
-        <div style={{ display: 'flex' }}>
-          {tabs.map(tab => {
-            const active = activeTab === tab.key;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 7,
-                  padding: '11px 22px', border: 'none', cursor: 'pointer',
-                  fontSize: 13, fontWeight: 500,
-                  background: active ? '#fff' : 'transparent',
-                  color: active ? '#0d9488' : '#64748b',
-                  borderBottom: active ? '2px solid #0d9488' : '2px solid transparent',
-                  outline: 'none', transition: 'color 0.15s, border-color 0.15s',
-                }}
-              >
-                <span style={{ color: active ? '#0d9488' : '#94a3b8' }}>{tab.icon}</span>
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Right Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {/* Dedicated Isolated Iframe Refresh Button */}
-          {showRefreshButton && activeInstagramAccount && (
-            <button
-              onClick={handleRefresh}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 12px',
-                borderRadius: '6px',
-                border: '1px solid #e2e8f0',
-                background: '#fff',
-                color: '#475569',
-                cursor: 'pointer',
-                fontSize: '12px',
-                fontWeight: '600',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                transition: 'all 0.15s',
-              }}
-              onMouseOver={e => {
-                e.currentTarget.style.borderColor = '#cbd5e1';
-                e.currentTarget.style.background = '#f8fafc';
-              }}
-              onMouseOut={e => {
-                e.currentTarget.style.borderColor = '#e2e8f0';
-                e.currentTarget.style.background = '#fff';
-              }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 4s linear infinite paused' }}>
-                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-              </svg>
-              {refreshButtonLabel}
-            </button>
-          )}
-
-          {/* View Mode Toggle */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            background: '#e2e8f0',
-            borderRadius: '20px',
-            padding: '2px',
-            gap: '2px',
-            boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.1)'
-          }}>
+      {/* UK Style Modern Header */}
+      <div className="comm-header-uk">
+        {/* Top: Mode Switcher (Segmented Control) */}
+        <div className="comm-mode-switcher">
             <button
               onClick={() => handleModeChange('chat')}
-              style={{
-                padding: '6px 14px',
-                borderRadius: '18px',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '12px',
-                fontWeight: '600',
-                background: viewMode === 'chat' ? '#0d9488' : 'transparent',
-                color: viewMode === 'chat' ? '#fff' : '#64748b',
-                transition: 'all 0.2s ease',
-                outline: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
+              className={`comm-mode-btn ${viewMode === 'chat' ? 'active' : ''}`}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
               Chats
             </button>
             <button
               onClick={() => handleModeChange('comments')}
-              style={{
-                padding: '6px 14px',
-                borderRadius: '18px',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '12px',
-                fontWeight: '600',
-                background: viewMode === 'comments' ? '#0d9488' : 'transparent',
-                color: viewMode === 'comments' ? '#fff' : '#64748b',
-                transition: 'all 0.2s ease',
-                outline: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
+              className={`comm-mode-btn ${viewMode === 'comments' ? 'active' : ''}`}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
               </svg>
               Comments
             </button>
+        </div>
+
+        {/* Bottom: Sub-tabs & Actions */}
+        <div className="comm-sub-header">
+          <div className="comm-tabs-pills">
+            {tabs.map(tab => {
+              const active = activeTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`comm-pill-btn ${active ? 'active' : ''}`}
+                >
+                  <span className="comm-pill-icon">{tab.icon}</span>
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
+          
+          {showRefreshButton && activeInstagramAccount && (
+             <button onClick={handleRefresh} className="comm-refresh-btn">
+               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 4s linear infinite paused' }}>
+                 <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+               </svg>
+               <span className="comm-refresh-text">{refreshButtonLabel}</span>
+             </button>
+          )}
         </div>
       </div>
 
@@ -413,7 +335,186 @@ const Communication = () => {
         />
       </div>
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .comm-header-uk {
+          display: flex;
+          flex-direction: column;
+          background: #ffffff;
+          border-bottom: 1px solid #f1f5f9;
+          padding: 16px 20px;
+          gap: 20px;
+        }
+
+        /* Segmented Control - Sleek Pill */
+        .comm-mode-switcher {
+          display: flex;
+          background: #f1f5f9;
+          border-radius: 9999px;
+          padding: 4px;
+          width: 100%;
+          box-shadow: inset 0 2px 4px rgba(0,0,0,0.03);
+        }
+        .comm-mode-btn {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 10px 16px;
+          border-radius: 9999px;
+          border: none;
+          background: transparent;
+          color: #64748b;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          outline: none;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .comm-mode-btn:hover {
+          color: #334155;
+        }
+        .comm-mode-btn.active {
+          background: #ffffff;
+          color: #0d9488;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+          transform: scale(1.02);
+        }
+
+        /* Sub-Header */
+        .comm-sub-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          width: 100%;
+          flex-wrap: wrap;
+        }
+
+        /* Tabs as Sleek Cards */
+        .comm-tabs-pills {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+          flex: 1;
+          scrollbar-width: none;
+        }
+        .comm-tabs-pills::-webkit-scrollbar { display: none; }
+        
+        .comm-pill-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 10px 20px;
+          border-radius: 16px;
+          border: 1px solid #e2e8f0;
+          background: #ffffff;
+          color: #64748b;
+          font-size: 13.5px;
+          font-weight: 600;
+          cursor: pointer;
+          outline: none;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+        }
+        .comm-pill-btn:hover {
+          border-color: #cbd5e1;
+          background: #f8fafc;
+          transform: translateY(-1px);
+        }
+        .comm-pill-btn.active {
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          border-color: transparent;
+          color: #ffffff;
+          box-shadow: 0 8px 16px -4px rgba(16, 185, 129, 0.4);
+          transform: translateY(-2px);
+        }
+        .comm-pill-btn.active .comm-pill-icon {
+          color: #ffffff;
+        }
+        .comm-pill-icon {
+          display: flex;
+          color: inherit;
+        }
+
+        /* Refresh Button - Modern */
+        .comm-refresh-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 10px 20px;
+          border-radius: 16px;
+          border: 1px solid #e2e8f0;
+          background: #ffffff;
+          color: #475569;
+          font-size: 13.5px;
+          font-weight: 600;
+          cursor: pointer;
+          outline: none;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+        }
+        .comm-refresh-btn:hover {
+          background: #f8fafc;
+          border-color: #cbd5e1;
+          transform: translateY(-1px);
+          box-shadow: 0 6px 12px -2px rgba(0,0,0,0.05);
+        }
+
+        /* Mobile specific adjustments */
+        @media (max-width: 650px) {
+          .comm-header-uk {
+            padding: 16px;
+            gap: 16px;
+          }
+          .comm-sub-header {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 16px;
+          }
+          .comm-tabs-pills {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            width: 100%;
+          }
+          .comm-pill-btn {
+            flex-direction: column;
+            gap: 8px;
+            padding: 14px 8px;
+            font-size: 12px;
+            border-radius: 16px;
+            text-align: center;
+            height: 100%;
+          }
+          .comm-pill-icon svg {
+            width: 22px;
+            height: 22px;
+          }
+          .comm-refresh-btn {
+            width: 100%;
+            padding: 14px;
+            border-radius: 16px;
+            font-size: 13px;
+          }
+          .comm-refresh-text {
+            display: inline;
+          }
+          .comm-mode-switcher {
+            padding: 6px;
+            border-radius: 9999px;
+          }
+          .comm-mode-btn {
+            padding: 10px 12px;
+            font-size: 13px;
+            border-radius: 9999px;
+          }
+        }
+      `}</style>
     </div>
   );
 };

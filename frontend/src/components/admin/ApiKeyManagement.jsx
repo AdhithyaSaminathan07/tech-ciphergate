@@ -312,7 +312,7 @@ const ApiKeyManagement = () => {
                                                             />
                                                             <div className="absolute right-0 mt-8 w-72 bg-white rounded-2xl border border-slate-200 shadow-xl z-50 p-2 text-left animate-in fade-in slide-in-from-top-2 duration-150">
                                                                 <div className="px-3 py-2 border-b border-slate-100 mb-1">
-                                                                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Target Endpoint</label>
+                                                                    <label className="block text-[10px] font-bold text-slate-400 tracking-wider mb-1">Target Endpoint</label>
                                                                     <select 
                                                                         value={selectedEndpoint} 
                                                                         onChange={(e) => setSelectedEndpoint(e.target.value)}
@@ -398,7 +398,7 @@ const ApiKeyManagement = () => {
                                     <td className="px-6 py-4">
                                         <div className="flex flex-wrap gap-1 max-w-[220px]">
                                             {formatPermissions(apiKey.permissions).map(p => (
-                                                <span key={p} className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100 whitespace-nowrap">
+                                                <span key={p} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100 whitespace-nowrap">
                                                     {p}
                                                 </span>
                                             ))}
@@ -475,7 +475,7 @@ const ApiKeyManagement = () => {
                         </div>
                         <form onSubmit={handleCreateKey} className="p-6 space-y-5">
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Client / App Name</label>
+                                <label className="block text-xs font-bold text-slate-500 tracking-widest mb-2">Client / App Name</label>
                                 <input 
                                     type="text"
                                     required
@@ -486,7 +486,7 @@ const ApiKeyManagement = () => {
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Tenant Subdomain</label>
+                                <label className="block text-xs font-bold text-slate-500 tracking-widest mb-2">Tenant Subdomain</label>
                                 <input 
                                     type="text"
                                     required
@@ -497,7 +497,7 @@ const ApiKeyManagement = () => {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Key Lifespan</label>
+                                    <label className="block text-xs font-bold text-slate-500 tracking-widest mb-2">Key Lifespan</label>
                                     <select 
                                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm text-slate-700 cursor-pointer"
                                         value={formData.expiryDays}
@@ -510,7 +510,7 @@ const ApiKeyManagement = () => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Permission Profile</label>
+                                    <label className="block text-xs font-bold text-slate-500 tracking-widest mb-2">Permission Profile</label>
                                     <select 
                                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm text-slate-700 cursor-pointer"
                                         value={permissionType}
@@ -526,7 +526,7 @@ const ApiKeyManagement = () => {
 
                             {permissionType === 'custom' && (
                                 <div className="space-y-3 mt-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-150 max-h-64 overflow-y-auto">
-                                    <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-2">Select Scopes</label>
+                                    <label className="block text-[10px] font-extrabold tracking-widest text-slate-400 mb-2">Select Scopes</label>
                                     <div className="grid grid-cols-1 gap-2">
                                         {AVAILABLE_MODULES.map(module => (
                                             <div key={module.id} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl hover:border-slate-200/80 transition-all shadow-sm">
@@ -621,7 +621,7 @@ const ApiKeyManagement = () => {
                                 return (
                                     <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-6 text-left relative overflow-hidden">
                                         <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/5 rounded-full -mr-8 -mt-8 pointer-events-none" />
-                                        <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Key to be revoked</span>
+                                        <span className="block text-[10px] font-bold text-slate-400 tracking-widest mb-1.5">Key to be revoked</span>
                                         <span className="block text-sm font-bold text-slate-800 truncate mb-1">{targetKey.clientName}</span>
                                         <div className="flex items-center gap-1.5 font-mono text-xs text-slate-500 bg-white border border-slate-200/60 rounded-lg px-2.5 py-1.5 w-fit mt-2">
                                             <FiKey size={12} className="text-slate-400" />
@@ -683,7 +683,7 @@ const ApiKeyManagement = () => {
                         <div className="p-6 space-y-5">
                             {/* Key display field */}
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Your Secret API Key</label>
+                                <label className="block text-xs font-bold text-slate-500 tracking-widest mb-2">Your Secret API Key</label>
                                 <div className="flex items-center justify-between gap-3 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-4 font-mono text-sm text-slate-800 break-all select-all font-semibold relative group">
                                     <span className="text-blue-700">{generatedKeyData.key}</span>
                                     <button 
@@ -704,7 +704,7 @@ const ApiKeyManagement = () => {
                             {/* Options to Copy with/without Endpoint */}
                             <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-150 space-y-4">
                                 <div className="flex items-center justify-between border-b border-slate-150 pb-3">
-                                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Quick Integration Snippets</span>
+                                    <span className="text-xs font-bold text-slate-700 tracking-wider">Quick Integration Snippets</span>
                                     <select 
                                         value={selectedEndpoint} 
                                         onChange={(e) => setSelectedEndpoint(e.target.value)}
