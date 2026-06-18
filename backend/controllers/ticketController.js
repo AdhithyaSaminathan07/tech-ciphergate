@@ -105,6 +105,7 @@ exports.createTicket = async (req, res) => {
             referenceFiles: referenceFiles || []
         });
 
+        newTicket._reviewerId = req.user?._id;
         const savedTicket = await newTicket.save();
 
         // Update any completions created with temp ID
@@ -232,6 +233,7 @@ exports.updateTicket = async (req, res) => {
             }
         }
 
+        ticket._reviewerId = req.user?._id;
         const updatedTicket = await ticket.save();
         await updatedTicket.populate([
             { path: 'assignee', select: 'name username status' },

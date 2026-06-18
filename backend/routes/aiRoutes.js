@@ -8,14 +8,17 @@ const {
   reindexData,
   uploadPersonalBrainFiles,
   getPersonalBrainFiles,
-  deletePersonalBrainFile
+  deletePersonalBrainFile,
+  getPersonalBrainManifest,
+  syncPersonalBrainFiles,
+  finalizePersonalBrainSync
 } = require('../controllers/aiController');
 const { protect, adminOnly } = require('../middleware/authMiddleware');
 
-// Multer config: memory storage, 20MB per file limit, up to 20 files
+// Multer config: memory storage, 50MB per file limit, up to 20 files
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024, files: 20 },
+  limits: { fileSize: 50 * 1024 * 1024, files: 20 },
   fileFilter: (req, file, cb) => {
     const allowedExts = /\.(txt|md|pdf|json)$/i;
     if (allowedExts.test(file.originalname)) {
@@ -40,6 +43,9 @@ router.get('/audit-logs', protect, getAiAuditLogs);
 // ─── Personal Brain Routes (Admin Only) ──────────────────────────────────────
 router.post('/personal-brain/upload', protect, adminOnly, upload.array('files', 20), uploadPersonalBrainFiles);
 router.get('/personal-brain', protect, adminOnly, getPersonalBrainFiles);
+router.get('/personal-brain/folder-manifest', protect, adminOnly, getPersonalBrainManifest);
+router.post('/personal-brain/folder-sync', protect, adminOnly, upload.array('files', 20), syncPersonalBrainFiles);
+router.post('/personal-brain/folder-sync/finalize', protect, adminOnly, finalizePersonalBrainSync);
 router.delete('/personal-brain/:id', protect, adminOnly, deletePersonalBrainFile);
 
 module.exports = router;

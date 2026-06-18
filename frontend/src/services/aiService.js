@@ -152,3 +152,47 @@ export const deletePersonalBrainFile = async (id) => {
     throw error.response?.data || new Error('Failed to delete brain file');
   }
 };
+
+export const getPersonalBrainFolderManifest = async () => {
+  try {
+    const token = getAuthToken();
+    const response = await api.get('/ai/personal-brain/folder-manifest', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Failed to load folder manifest');
+  }
+};
+
+export const syncPersonalBrainFolderBatch = async (entries, syncId) => {
+  try {
+    const token = getAuthToken();
+    const formData = new FormData();
+    entries.forEach(entry => formData.append('files', entry.file, entry.file.name));
+    formData.append('metadata', JSON.stringify(entries.map(entry => ({
+      relativePath: entry.relativePath,
+      lastModified: entry.file.lastModified
+    }))));
+    formData.append('syncId', syncId);
+    const response = await api.post('/ai/personal-brain/folder-sync', formData, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Folder batch sync failed');
+  }
+};
+
+export const finalizePersonalBrainFolderSync = async (relativePaths) => {
+  try {
+    const token = getAuthToken();
+    const response = await api.post('/ai/personal-brain/folder-sync/finalize', {
+      relativePaths,
+      confirmEmpty: relativePaths.length === 0
+    }, { headers: { Authorization: `Bearer ${token}` } });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || new Error('Folder sync could not be finalized');
+  }
+};

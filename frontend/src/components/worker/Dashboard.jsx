@@ -247,6 +247,16 @@ const Dashboard = () => {
     let totalDeductionVal = 0;
 
     const taskPenalties = salaryData.delayedTasks.map(task => {
+      if (task.protectionState !== undefined) {
+        return {
+          ...task,
+          taskDeduction: task.taskDeduction,
+          period: task.period,
+          overdueWorkingDays: task.overdueWorkingDays,
+          protectionState: task.protectionState
+        };
+      }
+
       const start = new Date(task.endDate);
       start.setDate(start.getDate() + 1);
       start.setHours(0, 0, 0, 0);
@@ -292,8 +302,12 @@ const Dashboard = () => {
       };
     });
 
-    return { taskPenalties, totalTaskPenalty: totalDeductionVal };
-  }, [salaryData.delayedTasks, salaryData.report]);
+    const totalTaskPenalty = salaryData.taskPenalty !== undefined
+      ? salaryData.taskPenalty
+      : taskPenalties.reduce((sum, t) => sum + t.taskDeduction, 0);
+
+    return { taskPenalties, totalTaskPenalty };
+  }, [salaryData.delayedTasks, salaryData.report, salaryData.taskPenalty]);
 
   if (isLoading) {
     return (
@@ -409,8 +423,8 @@ const Dashboard = () => {
                         >
                           <div className="space-y-1 mt-1 mb-1 max-h-24 overflow-y-auto pr-1 pl-2">
                             {calculatedTaskPenalties.taskPenalties.map((task, index) => (
-                              <div key={index} className="p-1.5 bg-rose-50/60 border border-rose-100/60 rounded-lg text-[10px] leading-relaxed">
-                                <div className="flex justify-between font-bold mb-0.5">
+                              <div key={index} className="p-2 bg-rose-50/60 border border-rose-100/60 rounded-lg text-[10px] leading-relaxed flex flex-col gap-1">
+                                <div className="flex justify-between font-bold">
                                   <span className="text-slate-700 truncate max-w-[70%]">{task.title}</span>
                                   <span className="text-rose-600">−₹{Math.round(task.taskDeduction).toLocaleString('en-IN')}</span>
                                 </div>
@@ -418,6 +432,20 @@ const Dashboard = () => {
                                   <span>{task.period}</span>
                                   <span>{task.overdueWorkingDays}d late</span>
                                 </div>
+                                {task.protectionState && (
+                                  <div className="flex justify-between items-center mt-1 pt-1 border-t border-rose-100/40">
+                                    <span className="text-slate-400 font-semibold text-[9px] uppercase tracking-wider">Salary Protection</span>
+                                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase border ${
+                                      task.protectionState === 'Submitted on time' ? 'bg-teal-50 text-teal-700 border-teal-200' :
+                                      task.protectionState === 'Awaiting review' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                      task.protectionState === 'Deduction active' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                                      task.protectionState === 'Approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                      'bg-slate-50 text-slate-500 border-slate-200'
+                                    }`}>
+                                      {task.protectionState === 'None' ? 'On Track' : task.protectionState}
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>

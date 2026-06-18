@@ -166,6 +166,51 @@ const isOverdue = (endDate, status) => {
     return end < today;
 };
 
+const getDateStr = (date) => {
+    if (!date) return '';
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return '';
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(d);
+};
+
+const getProtectionState = (ticket) => {
+    if (ticket.status === 'Done') {
+        return 'Approved';
+    }
+    const dueDateStr = ticket.endDate ? getDateStr(ticket.endDate) : '';
+    if (!dueDateStr) {
+        return 'None';
+    }
+
+    const cycles = ticket.reviewCycles || [];
+    if (cycles.length > 0) {
+        const lastCycle = cycles[cycles.length - 1];
+        if (lastCycle.decision === 'Pending') {
+            const subDateStr = getDateStr(lastCycle.submissionTime);
+            if (subDateStr && subDateStr <= dueDateStr) {
+                return 'Submitted on time';
+            } else {
+                return 'Awaiting review';
+            }
+        } else if (lastCycle.decision === 'Rejected') {
+            return 'Deduction active';
+        } else if (lastCycle.decision === 'Approved') {
+            return 'Approved';
+        }
+    } else {
+        const todayStr = getDateStr(new Date());
+        if (todayStr > dueDateStr) {
+            return 'Deduction active';
+        }
+    }
+    return 'None';
+};
+
 const MultiSelect = ({ options, selected, onChange, placeholder }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
@@ -263,7 +308,7 @@ const MultiSelect = ({ options, selected, onChange, placeholder }) => {
                                     <div className="flex flex-col">
                                         <span className="text-sm font-medium">{opt.name}</span>
                                     </div>
-                                    {selected.includes(opt.id) && <Check className="w-4 h-4" />}
+                                    {selected.includes(opt.id) && <Check className="w-3.5 h-3.5" />}
                                 </div>
                             ))
                         )}
@@ -363,7 +408,7 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers }) =>
                     {selectedTicket.team && (
                         <div className="flex items-center justify-between gap-2 px-3 py-2 bg-teal-50 border border-teal-100 rounded-lg text-teal-700 text-[11px] font-bold mt-1">
                             <div className="flex items-center gap-1.5">
-                                <Users className="w-3.5 h-3.5" />
+                                <Users className="w-3 h-3" />
                                 Team: {selectedTicket.team} ({teamMembersCount} members)
                             </div>
                             <button
@@ -401,6 +446,9 @@ const WorkAllocation = () => {
     const [filterTeam, setFilterTeam] = useState('');
     const [filterPriority, setFilterPriority] = useState('');
     const [showFiltersMobile, setShowFiltersMobile] = useState(false);
+    // Month filter — defaults to current month (YYYY-MM), empty string = all months
+    const currentMonthValue = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`; })();
+    const [filterMonth, setFilterMonth] = useState(currentMonthValue);
     const [modalFilterTeam, setModalFilterTeam] = useState('');
     const { subdomain } = useContext(appContext);
     const { socket } = useSocket();
@@ -448,6 +496,7 @@ const WorkAllocation = () => {
 
     const [dragOverCol, setDragOverCol] = useState(null);
     const [touchDraggedTicket, setTouchDraggedTicket] = useState(null);
+    const [activeMobileTab, setActiveMobileTab] = useState('To Do');
 
     // Delete Confirmation State
     const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, ticket: null });
@@ -1304,7 +1353,19 @@ const WorkAllocation = () => {
             }
         }
 
-        return matchesSearch && matchesAssignee && matchesPriority && matchesTeam;
+        // Month filter: match tasks whose createdAt, startDate, or endDate falls in the selected month
+        let matchesMonth = true;
+        if (filterMonth) {
+            const [fy, fm] = filterMonth.split('-').map(Number);
+            const inMonth = (dateStr) => {
+                if (!dateStr) return false;
+                const d = new Date(dateStr);
+                return d.getFullYear() === fy && (d.getMonth() + 1) === fm;
+            };
+            matchesMonth = inMonth(t.createdAt) || inMonth(t.startDate) || inMonth(t.endDate);
+        }
+
+        return matchesSearch && matchesAssignee && matchesPriority && matchesTeam && matchesMonth;
     });
 
     // ─── Workload Engine (memoized for performance with large teams) ───────────
@@ -1419,19 +1480,19 @@ const WorkAllocation = () => {
                         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-3 flex-1">
                             {/* Search box and Mobile Filter Toggle */}
                             <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
-                                <div className="relative flex-1 md:w-64 border border-slate-200 rounded-xl bg-white shadow-sm focus-within:border-teal-500 transition-all h-10 flex items-center shrink-0">
-                                    <Search className="w-3.5 h-3.5 absolute left-3.5 text-slate-400" />
+                                <div className="relative flex-1 md:w-64 border border-slate-200 rounded-xl bg-white shadow-sm focus-within:border-teal-500 transition-all h-8 sm:h-10 flex items-center shrink-0">
+                                    <Search className="w-3 h-3 absolute left-3 text-slate-400" />
                                     <input
                                         type="text"
                                         placeholder="Search tasks..."
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full pl-10 pr-3 py-2 bg-transparent text-xs font-semibold text-slate-700 outline-none placeholder:text-slate-300"
+                                        className="w-full pl-8 pr-3 py-1.5 bg-transparent text-[10px] sm:text-xs font-semibold text-slate-700 outline-none placeholder:text-slate-300"
                                     />
                                 </div>
                                 <button
                                     onClick={() => setShowFiltersMobile(!showFiltersMobile)}
-                                    className="md:hidden flex items-center justify-center h-10 w-10 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl border border-slate-200 transition-all active:scale-95 shrink-0"
+                                    className="md:hidden flex items-center justify-center h-8 w-8 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl border border-slate-200 transition-all active:scale-95 shrink-0"
                                     title="Toggle Filters"
                                 >
                                     <Filter className={`w-4 h-4 transition-transform ${showFiltersMobile ? 'text-teal-600' : 'text-slate-400'}`} />
@@ -1439,10 +1500,10 @@ const WorkAllocation = () => {
                             </div>
 
                             {/* Dropdowns - Collapsed by default on mobile, always visible on desktop */}
-                            <div className={`${showFiltersMobile ? 'flex' : 'hidden md:flex'} flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 w-full md:w-auto`}>
-                                <div className="w-full sm:w-[190px] shrink-0">
+                            <div className={`${showFiltersMobile ? 'flex' : 'hidden md:flex'} flex-row flex-wrap items-center gap-2 w-full md:w-auto mt-2 md:mt-0`}>
+                                <div className="w-[calc(50%-4px)] sm:w-[190px] shrink-0">
                                     <Select value={filterAssignee} onValueChange={(val) => setFilterAssignee(val === "all_assignees" ? "" : val)}>
-                                        <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-10 text-xs font-semibold text-slate-600">
+                                        <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
                                             <SelectValue placeholder="All Employees" />
                                         </SelectTrigger>
                                         <SelectContent className="z-[200]">
@@ -1453,7 +1514,7 @@ const WorkAllocation = () => {
                                                 const { dot, text } = workloadColor(activeTasks);
                                                 return (
                                                     <SelectItem key={w._id} value={w._id}>
-                                                        <span className="flex items-center gap-2">
+                                                        <span className="flex items-center gap-2 text-[10px] sm:text-xs">
                                                             <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`}></span>
                                                             <span>{w.name}</span>
                                                             <span className={`text-[10px] font-bold ml-auto ${text}`}>({activeTasks})</span>
@@ -1466,43 +1527,70 @@ const WorkAllocation = () => {
                                 </div>
 
 
-                                <div className="w-full sm:w-[140px] shrink-0">
+                                <div className="w-[calc(50%-4px)] sm:w-[140px] shrink-0">
                                     <Select value={filterTeam} onValueChange={(val) => setFilterTeam(val === "all_teams" ? "" : val)}>
-                                        <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-10 text-xs font-semibold text-slate-600">
+                                        <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
                                             <SelectValue placeholder="All Teams" />
                                         </SelectTrigger>
                                         <SelectContent className="z-[200]">
                                             <SelectItem value="all_teams">All Teams</SelectItem>
                                             {[...new Set(workers.filter(w => w.status !== 'Relieved').map(w => w.department).filter(Boolean))].map(team => (
-                                                <SelectItem key={team} value={team}>{team}</SelectItem>
+                                                <SelectItem key={team} value={team} className="text-[10px] sm:text-xs">{team}</SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>
                                 </div>
 
-                                <div className="w-full sm:w-[120px] shrink-0">
+                                <div className="w-[calc(50%-4px)] sm:w-[120px] shrink-0">
                                     <Select value={filterPriority} onValueChange={(val) => setFilterPriority(val === "all_priorities" ? "" : val)}>
-                                        <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-10 text-xs font-semibold text-slate-600">
+                                        <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
                                             <SelectValue placeholder="Priority" />
                                         </SelectTrigger>
                                         <SelectContent className="z-[200]">
-                                            <SelectItem value="all_priorities">Priority</SelectItem>
-                                            <SelectItem value="High">High</SelectItem>
-                                            <SelectItem value="Medium">Medium</SelectItem>
-                                            <SelectItem value="Low">Low</SelectItem>
+                                            <SelectItem value="all_priorities" className="text-[10px] sm:text-xs">Priority</SelectItem>
+                                            <SelectItem value="High" className="text-[10px] sm:text-xs">High</SelectItem>
+                                            <SelectItem value="Medium" className="text-[10px] sm:text-xs">Medium</SelectItem>
+                                            <SelectItem value="Low" className="text-[10px] sm:text-xs">Low</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
 
-                                {(filterAssignee || filterTeam || filterPriority || searchTerm) && (
+                                {/* Month Filter */}
+                                <div className="w-[calc(50%-4px)] sm:w-[140px] shrink-0">
+                                    <Select
+                                        value={filterMonth || 'all_months'}
+                                        onValueChange={(val) => setFilterMonth(val === 'all_months' ? '' : val)}
+                                    >
+                                        <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
+                                            <SelectValue placeholder="This Month" />
+                                        </SelectTrigger>
+                                        <SelectContent className="z-[200]">
+                                            <SelectItem value="all_months" className="text-[10px] sm:text-xs">All Months</SelectItem>
+                                            {(() => {
+                                                const months = [];
+                                                const now = new Date();
+                                                for (let i = 0; i < 12; i++) {
+                                                    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                                                    const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                                                    const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+                                                    months.push(<SelectItem key={val} value={val} className="text-[10px] sm:text-xs">{label}</SelectItem>);
+                                                }
+                                                return months;
+                                            })()}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {(filterAssignee || filterTeam || filterPriority || searchTerm || filterMonth !== currentMonthValue) && (
                                     <button
                                         onClick={() => {
                                             setFilterAssignee('');
                                             setFilterTeam('');
                                             setFilterPriority('');
                                             setSearchTerm('');
+                                            setFilterMonth(currentMonthValue);
                                         }}
-                                        className="text-[10px] text-rose-500 hover:text-rose-600 font-bold uppercase tracking-wider px-2 py-2 sm:py-0 text-center sm:text-left"
+                                        className="w-[calc(50%-4px)] sm:w-auto text-[10px] text-rose-500 hover:text-rose-600 font-bold uppercase tracking-wider px-2 py-2 rounded-xl bg-rose-50/50 hover:bg-rose-50 border border-rose-100/30 sm:border-none sm:bg-transparent text-center sm:text-left h-8 sm:h-auto flex items-center justify-center transition-all"
                                     >
                                         Reset
                                     </button>
@@ -1514,9 +1602,9 @@ const WorkAllocation = () => {
                         <div className="grid grid-cols-2 sm:flex sm:flex-row items-center gap-2 sm:gap-3 shrink-0 w-full lg:w-auto mt-1.5 lg:mt-0">
                             <button
                                 onClick={() => setIsStatsModalOpen(true)}
-                                className="order-2 sm:order-none bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold h-10 px-4 rounded-xl flex items-center justify-center text-xs transition-all border border-slate-200 w-full sm:w-auto"
+                                className="order-2 sm:order-none bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold h-8 sm:h-10 px-3 sm:px-4 rounded-xl flex items-center justify-center text-[10px] sm:text-xs transition-all border border-slate-200 w-full sm:w-auto"
                             >
-                                <BarChart2 className="w-4 h-4 mr-2 text-slate-400" />
+                                <BarChart2 className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
                                 <span>Dashboard</span>
                             </button>
                             <button
@@ -1530,18 +1618,18 @@ const WorkAllocation = () => {
                                     setModalFilterTeam('');
                                     setIsModalOpen(true);
                                 }}
-                                className="col-span-2 order-1 sm:order-none bg-blue-600 hover:bg-blue-700 text-white font-bold h-10 px-6 rounded-xl flex items-center justify-center text-xs transition-all shadow-lg shadow-blue-100 active:scale-95 w-full sm:w-auto"
+                                className="col-span-2 order-1 sm:order-none bg-blue-600 hover:bg-blue-700 text-white font-bold h-8 sm:h-10 px-4 sm:px-6 rounded-xl flex items-center justify-center text-[10px] sm:text-xs transition-all shadow-lg shadow-blue-100 active:scale-95 w-full sm:w-auto"
                             >
-                                <Plus className="w-4 h-4 mr-2" /> New Task
+                                <Plus className="w-3.5 h-3.5 mr-1.5" /> New Task
                             </button>
                             <button
                                 onClick={() => {
                                     fetchDeletedTickets();
                                     setIsDeletedModalOpen(true);
                                 }}
-                                className="order-3 sm:order-none bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold h-10 px-4 rounded-xl flex items-center justify-center text-xs transition-all border border-slate-200 w-full sm:w-auto"
+                                className="order-3 sm:order-none bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold h-8 sm:h-10 px-3 sm:px-4 rounded-xl flex items-center justify-center text-[10px] sm:text-xs transition-all border border-slate-200 w-full sm:w-auto"
                             >
-                                <History className="w-4 h-4 mr-2 text-slate-400" />
+                                <History className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
                                 <span>Deleted Tasks</span>
                             </button>
                         </div>
@@ -1551,7 +1639,7 @@ const WorkAllocation = () => {
 
             {/* ── Workforce Overview Bar ──────────────────────────────────────── */}
             <div className="px-3 lg:px-4 pt-3 pb-1">
-                <div className="flex flex-wrap gap-3">
+                <div className="flex md:flex-wrap overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 scrollbar-none gap-3">
 
                     {/* Stat: Total Employees */}
                     <button onClick={() => setDrawerFilter('all')} className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-slate-200/60 shadow-sm min-w-[120px] hover:shadow-md hover:border-slate-300 transition-all cursor-pointer text-left">
@@ -1628,13 +1716,36 @@ const WorkAllocation = () => {
 
             {/* Kanban Board Area - Grid layout for true equal-width columns */}
             <div className="flex-1 p-3 lg:p-4 pt-3 scroll-smooth overflow-x-auto">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 min-h-[calc(100vh-280px)] pb-6 w-full">
+                {/* Mobile Status Tabs */}
+                <div className="md:hidden flex overflow-x-auto space-x-1.5 p-2 bg-slate-100 rounded-xl mb-3 scrollbar-none">
+                    {columns.map(status => {
+                        const count = filteredTickets.filter(t => t.status === status).length;
+                        const isActive = activeMobileTab === status;
+                        return (
+                            <button
+                                key={status}
+                                onClick={() => setActiveMobileTab(status)}
+                                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all duration-200 border ${
+                                    isActive
+                                        ? 'bg-white text-slate-800 shadow-sm border-slate-200'
+                                        : 'bg-transparent text-slate-500 border-transparent hover:text-slate-700'
+                                }`}
+                            >
+                                <span className={`w-2 h-2 rounded-full ${status === 'To Do' ? 'bg-slate-400' : status === 'In Progress' ? 'bg-blue-500' : status === 'Review' ? 'bg-purple-500' : 'bg-emerald-500'}`}></span>
+                                <span>{status}</span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${isActive ? 'bg-slate-100 text-slate-600' : 'bg-slate-200/50 text-slate-400'}`}>{count}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 min-h-[calc(100vh-280px)] pb-6 w-full">
 
                     {columns.map(status => (
                         <div
                             key={status}
                             data-status={status}
-                            className={`flex flex-col min-w-0 bg-[#f1f5f9]/80 rounded-2xl border border-slate-200/50 transition-all duration-300 group/column ${dragOverCol === status ? 'bg-slate-200/50 ring-2 ring-teal-500/20' : ''}`}
+                            className={`flex flex-col min-w-0 bg-[#f1f5f9]/80 rounded-2xl border border-slate-200/50 transition-all duration-300 group/column ${activeMobileTab === status ? 'flex' : 'hidden md:flex'} ${dragOverCol === status ? 'bg-slate-200/50 ring-2 ring-teal-500/20' : ''}`}
                             onDragOver={(e) => handleDragOver(e, status)}
                             onDragLeave={(e) => handleDragLeave(e, status)}
                             onDrop={(e) => handleDrop(e, status)}
@@ -1662,12 +1773,24 @@ const WorkAllocation = () => {
                                     <div
                                         key={ticket._id}
                                         id={ticket._id}
-                                        draggable
+                                        draggable={window.innerWidth >= 768}
                                         onDragStart={(e) => handleDragStart(e, ticket._id)}
                                         onDragEnd={(e) => handleDragEnd(e, ticket._id)}
-                                        onTouchStart={(e) => handleTouchStart(e, ticket._id)}
-                                        onTouchMove={handleTouchMove}
-                                        onTouchEnd={handleTouchEnd}
+                                        onTouchStart={(e) => {
+                                            if (window.innerWidth >= 768) {
+                                                handleTouchStart(e, ticket._id);
+                                            }
+                                        }}
+                                        onTouchMove={(e) => {
+                                            if (window.innerWidth >= 768) {
+                                                handleTouchMove(e);
+                                            }
+                                        }}
+                                        onTouchEnd={(e) => {
+                                            if (window.innerWidth >= 768) {
+                                                handleTouchEnd(e);
+                                            }
+                                        }}
                                         onClick={() => {
                                             setSelectedTicket({
                                                 ...ticket,
@@ -1682,13 +1805,26 @@ const WorkAllocation = () => {
                                             ${status === 'To Do' ? 'border-l-4 border-l-slate-400' : status === 'In Progress' ? 'border-l-4 border-l-blue-500' : status === 'Review' ? 'border-l-4 border-l-purple-500' : 'border-l-4 border-l-emerald-500'}`}
                                     >
                                         <div className="flex justify-between items-start mb-3.5">
-                                            {(ticket.startDate || ticket.endDate) && (
-                                                <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border 
-                                                    ${isOverdue(ticket.endDate, ticket.status) ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-slate-50 text-slate-500 border-slate-200/50'}`}>
-                                                    <Clock className="w-3 h-3" />
-                                                    {ticket.endDate ? new Date(ticket.endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'TBD'}
-                                                </div>
-                                            )}
+                                            <div className="flex flex-wrap gap-1.5 items-center max-w-[85%]">
+                                                {(ticket.startDate || ticket.endDate) && (
+                                                    <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border shrink-0
+                                                        ${isOverdue(ticket.endDate, ticket.status) ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-slate-50 text-slate-500 border-slate-200/50'}`}>
+                                                        <Clock className="w-3 h-3" />
+                                                        {ticket.endDate ? new Date(ticket.endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'TBD'}
+                                                    </div>
+                                                )}
+                                                {ticket.endDate && (
+                                                    <span className={`px-2 py-1 text-[9px] font-extrabold uppercase rounded-md border tracking-wider transition-all duration-300 shrink-0 ${
+                                                        getProtectionState(ticket) === 'Submitted on time' ? 'bg-teal-50 text-teal-700 border-teal-200 shadow-sm shadow-teal-50/50 animate-pulse' :
+                                                        getProtectionState(ticket) === 'Awaiting review' ? 'bg-amber-50 text-amber-700 border-amber-200 shadow-sm shadow-amber-50/50' :
+                                                        getProtectionState(ticket) === 'Deduction active' ? 'bg-rose-50 text-rose-700 border-rose-200 shadow-sm shadow-rose-50/50' :
+                                                        getProtectionState(ticket) === 'Approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm shadow-emerald-50/50' :
+                                                        'bg-slate-50 text-slate-500 border-slate-200'
+                                                    }`}>
+                                                        {getProtectionState(ticket) === 'None' ? 'On Track' : getProtectionState(ticket)}
+                                                    </span>
+                                                )}
+                                            </div>
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -1884,26 +2020,37 @@ const WorkAllocation = () => {
             {/* Full-Screen Workspace Task Modal */}
             {isModalOpen && selectedTicket && (
                 <div className="fixed inset-0 bg-black/60 z-[600] flex flex-col items-center justify-center backdrop-blur-sm transition-all duration-300 p-2">
-                    <div className="bg-white rounded-2xl lg:rounded-3xl shadow-2xl w-full max-w-[97vw] h-[96vh] flex flex-col animate-in zoom-in-95 duration-300 overflow-hidden border border-white/20">
+                    <div className="bg-white rounded-2xl lg:rounded-3xl shadow-2xl w-full max-w-[97vw] h-[96vh] flex flex-col animate-in zoom-in-95 duration-300 overflow-y-auto md:overflow-hidden border border-white/20">
 
                         {/* Header */}
-                        <div className="px-6 py-4 lg:px-8 lg:py-5 flex justify-between items-center text-gray-600 shrink-0 border-b border-gray-100 bg-gray-50/30">
-                            <div className="flex items-center gap-4">
-                                <div className="flex items-center space-x-2 text-xs font-bold bg-white px-3 py-2 rounded-xl shadow-sm border border-gray-200 uppercase tracking-widest text-teal-600">
+                        <div className="px-3 py-3 sm:px-6 md:px-8 flex flex-col md:flex-row justify-between items-stretch md:items-center text-gray-600 shrink-0 border-b border-gray-100 bg-gray-50/30 gap-3">
+                            <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap">
+                                <div className="flex items-center space-x-1 text-[10px] sm:text-xs font-bold bg-white px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg shadow-sm border border-gray-200 uppercase tracking-widest text-teal-600">
                                     <IssueIcon type={selectedTicket.issueType} />
                                     <span>{selectedTicket._id === 'new' ? 'New Workspace' : `Task: ${selectedTicket._id.substring(selectedTicket._id.length - 6).toUpperCase()}`}</span>
                                 </div>
                                 {selectedTicket.team && (
-                                    <div className="bg-teal-50 text-teal-700 px-3 py-2 rounded-xl text-[10px] font-bold uppercase border border-teal-100 flex items-center gap-1.5 shadow-sm">
+                                    <div className="bg-teal-50 text-teal-700 px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg text-[9px] sm:text-[10px] font-bold uppercase border border-teal-100 flex items-center gap-1 shadow-sm">
                                         <Users className="w-3.5 h-3.5" /> Team: {selectedTicket.team}
                                     </div>
                                 )}
+                                {selectedTicket._id !== 'new' && selectedTicket.endDate && (
+                                    <div className={`px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg text-[9px] sm:text-[10px] font-extrabold uppercase border flex items-center gap-1 shadow-sm ${
+                                        getProtectionState(selectedTicket) === 'Submitted on time' ? 'bg-teal-50 text-teal-700 border-teal-100 shadow-sm animate-pulse' :
+                                        getProtectionState(selectedTicket) === 'Awaiting review' ? 'bg-amber-50 text-amber-700 border-amber-100 shadow-sm' :
+                                        getProtectionState(selectedTicket) === 'Deduction active' ? 'bg-rose-50 text-rose-700 border-rose-100 shadow-sm' :
+                                        getProtectionState(selectedTicket) === 'Approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm' :
+                                        'bg-slate-50 text-slate-500 border-slate-200'
+                                    }`}>
+                                        Salary Protection: {getProtectionState(selectedTicket) === 'None' ? 'On Track' : getProtectionState(selectedTicket)}
+                                    </div>
+                                )}
                             </div>
-                            <div className="flex items-center space-x-3">
-                                <div className="flex items-center gap-2 mr-2">
-                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Phase Status:</span>
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-slate-600">
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-wider">Phase Status:</span>
                                     <Select value={selectedTicket.status} onValueChange={(val) => updateSelectedTicket({ status: val })}>
-                                        <SelectTrigger className="bg-white border border-gray-200 h-9 px-3 text-xs font-bold shadow-sm rounded-xl w-36 focus:ring-1 focus:ring-teal-500">
+                                        <SelectTrigger className="bg-white border border-gray-200 h-7 sm:h-9 px-2 sm:px-3 text-[10px] sm:text-xs font-bold shadow-sm rounded-lg w-28 sm:w-36 focus:ring-1 focus:ring-teal-500">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent className="z-[700]">
@@ -1916,10 +2063,10 @@ const WorkAllocation = () => {
                                 {/* AI Second Brain Button */}
                                 <button
                                     onClick={() => setShowBrainModal(true)}
-                                    className="flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:from-violet-700 hover:to-indigo-700 transition-all shadow-md shadow-violet-100 active:scale-95 mr-1"
+                                    className="flex items-center gap-1 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:from-violet-700 hover:to-indigo-700 transition-all shadow-md shadow-violet-100 active:scale-95"
                                     title="Upload chat files to AI Second Brain"
                                 >
-                                    <Brain className="w-3.5 h-3.5" />
+                                    <Brain className="w-3 h-3" />
                                     <span>AI Second Brain</span>
                                 </button>
                                 {selectedTicket._id === 'new' && (
@@ -1965,13 +2112,13 @@ const WorkAllocation = () => {
                                                 setLoading(false);
                                             }
                                         }}
-                                        className="bg-teal-600 text-white px-6 py-2.5 rounded-xl text-xs font-bold hover:bg-teal-700 transition-all shadow-md active:scale-[0.98] flex items-center gap-2 group disabled:opacity-50"
+                                        className="bg-teal-600 text-white px-3 py-1.5 sm:px-6 sm:py-2.5 rounded-lg text-[10px] sm:text-xs font-bold hover:bg-teal-700 transition-all shadow-md active:scale-[0.98] flex items-center gap-1.5 group disabled:opacity-50"
                                     >
                                         <Check className="w-4 h-4" /> Create Workspace
                                     </button>
                                 )}
-                                <button onClick={() => setIsModalOpen(false)} className="p-2.5 hover:bg-red-50 hover:text-red-500 rounded-xl text-gray-400 transition-all bg-gray-100 border border-gray-200">
-                                    <X className="w-5 h-5" />
+                                <button onClick={() => setIsModalOpen(false)} className="p-1.5 sm:p-2.5 rounded-lg text-gray-400 transition-all bg-gray-100 border border-gray-200 hover:bg-red-50 hover:text-red-500">
+                                    <X className="w-4 h-4 sm:w-5 sm:h-5" />
                                 </button>
                             </div>
 
@@ -2003,7 +2150,7 @@ const WorkAllocation = () => {
                         </div>
 
                         {/* Body - Responsive Layout */}
-                        <div className="flex-1 overflow-hidden bg-white">
+                        <div className="flex-1 overflow-y-auto md:overflow-hidden bg-white">
                             <div className="grid grid-cols-1 md:grid-cols-[28%_44%_28%] md:h-full divide-y md:divide-y-0 md:divide-x divide-gray-100">
 
                                 {/* 🔹 COLUMN 1: Task Input & Checklist (LEFT) */}
@@ -2118,27 +2265,27 @@ const WorkAllocation = () => {
                                                     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-tight flex items-center gap-1.5">
                                                         <Calendar className="w-3 h-3 text-teal-600" /> Timeline Period
                                                     </label>
-                                                    <div className="flex items-center gap-2 bg-gray-50/80 p-1 rounded-xl border border-gray-100">
-                                                        <div className="relative flex-1">
+                                                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-gray-50/80 p-2 sm:p-1 rounded-xl border border-gray-100">
+                                                        <div className="flex-1 flex flex-col sm:relative gap-1 sm:gap-0 pt-1.5 sm:pt-0">
+                                                            <span className="sm:absolute -top-3.5 left-1 text-[8px] font-bold text-teal-600/50 uppercase">Start Date</span>
                                                             <input
                                                                 type="date"
                                                                 value={selectedTicket.startDate || ''}
                                                                 onChange={(e) => updateSelectedTicket({ startDate: e.target.value })}
                                                                 onClick={(e) => e.target.showPicker?.()}
-                                                                className="w-full bg-white border border-gray-100 rounded-lg p-2 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-teal-500 shadow-sm cursor-pointer"
+                                                                className="w-full bg-white border border-gray-100 rounded-lg p-1.5 text-[10px] sm:text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-teal-500 shadow-sm cursor-pointer"
                                                             />
-                                                            <span className="absolute -top-4 left-1 text-[8px] font-bold text-teal-600/50 uppercase">Start</span>
                                                         </div>
-                                                        <div className="text-gray-300 font-bold">→</div>
-                                                        <div className="relative flex-1">
+                                                        <div className="text-gray-300 font-bold text-center hidden sm:block">→</div>
+                                                        <div className="flex-1 flex flex-col sm:relative gap-1 sm:gap-0 pt-1.5 sm:pt-0">
+                                                            <span className="sm:absolute -top-3.5 left-1 text-[8px] font-bold text-teal-600/50 uppercase">End Date</span>
                                                             <input
                                                                 type="date"
                                                                 value={selectedTicket.endDate || ''}
                                                                 onChange={(e) => updateSelectedTicket({ endDate: e.target.value })}
                                                                 onClick={(e) => e.target.showPicker?.()}
-                                                                className={`w-full border-none rounded-lg p-2 text-xs font-bold outline-none focus:ring-2 focus:ring-teal-500 shadow-sm cursor-pointer ${isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-white text-gray-700 border border-gray-100'}`}
+                                                                className={`w-full rounded-lg p-1.5 text-[10px] sm:text-xs font-bold outline-none focus:ring-2 focus:ring-teal-500 shadow-sm cursor-pointer ${isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-white text-gray-700 border border-gray-100'}`}
                                                             />
-                                                            <span className="absolute -top-4 left-1 text-[8px] font-bold text-teal-600/50 uppercase">End</span>
                                                         </div>
                                                     </div>
                                                 </div>

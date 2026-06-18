@@ -11,6 +11,57 @@ const { syncBrainItem, calculateDeveloperExpertise, deleteBrainItem } = require(
 const asyncHandler = require('express-async-handler');
 const crypto = require('crypto');
 const pdfParse = require('pdf-parse');
+const PERSONAL_BRAIN_EXTENSIONS = new Set(['txt', 'md', 'pdf', 'json']);
+
+const extractPersonalBrainText = async (file, ext) => {
+  if (ext === 'pdf') {
+    const pdfData = await pdfParse(file.buffer);
+    return pdfData.text;
+  }
+  return file.buffer.toString('utf-8');
+};
+
+const normalizeRelativePath = (value) => {
+  const normalized = String(value || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!normalized || normalized.split('/').some(part => part === '..')) {
+    throw new Error('Invalid folder-relative file path');
+  }
+  return normalized;
+};
+
+const upsertPersonalBrainFile = async ({ file, subdomain, uploadedBy, sourceType = 'manual_upload', relativePath, lastModified, syncId }) => {
+  const displayPath = sourceType === 'connected_folder'
+    ? normalizeRelativePath(relativePath || file.originalname)
+    : file.originalname;
+  const ext = displayPath.split('.').pop().toLowerCase();
+  if (!PERSONAL_BRAIN_EXTENSIONS.has(ext)) throw new Error('Unsupported file type');
+
+  const textContent = await extractPersonalBrainText(file, ext);
+  if (!textContent || !textContent.trim()) throw new Error('File appears to be empty or could not be read.');
+
+  const basename = displayPath.split('/').pop();
+  const title = basename.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
+  const noteData = {
+    subdomain,
+    title,
+    content: textContent.trim(),
+    fileType: ext,
+    originalFilename: sourceType === 'connected_folder' ? `connected-folder/${displayPath}` : displayPath,
+    fileSize: file.size,
+    uploadedBy,
+    sourceType,
+    sourceRelativePath: sourceType === 'connected_folder' ? displayPath : undefined,
+    sourceLastModified: sourceType === 'connected_folder' ? Number(lastModified || 0) : null,
+    syncId: syncId || null,
+    tags: [ext, 'personal-note', 'manager-brain', sourceType]
+  };
+  const query = sourceType === 'connected_folder'
+    ? { subdomain, sourceType, sourceRelativePath: displayPath }
+    : { subdomain, originalFilename: displayPath };
+  const savedNote = await PersonalNote.findOneAndUpdate(query, noteData, { upsert: true, new: true, setDefaultsOnInsert: true });
+  await syncBrainItem('personal_note', savedNote, subdomain);
+  return savedNote;
+};
 
 // Helper to extract JSON from text safely
 const extractJson = (text) => {
@@ -94,15 +145,31 @@ const analyzeTask = asyncHandler(async (req, res) => {
    - Stats: ${r.metadata?.stats?.totalCommits || 0} commits, ${r.metadata?.stats?.totalPRs || 0} PRs, ${r.metadata?.stats?.openIssues || 0} open issues`
   ).join('\n\n');
 
-  // 5. Search Second Brain for context (Hybrid retrieval search)
+  // 5. Search Second Brain for context — personal_note (folder) items fetched first, then hybrid search
+  let folderNoteResults = [];
   let searchResults = [];
+
+  // Priority 1: Always pull the latest personal_note (connected folder) items as primary context
+  try {
+    folderNoteResults = await SecondBrainItem.find({
+      subdomain,
+      type: 'personal_note'
+    })
+    .sort({ updatedAt: -1 })
+    .limit(6)
+    .lean();
+  } catch (err) {
+    console.log('[AI Search] personal_note fetch failed:', err.message);
+  }
+
+  // Priority 2: Text-index search across all types for task-relevant context
   try {
     searchResults = await SecondBrainItem.find(
       { $text: { $search: title }, subdomain, type: { $ne: 'github_repo_intelligence' } },
       { score: { $meta: "textScore" } }
     )
     .sort({ score: { $meta: "textScore" } })
-    .limit(3)
+    .limit(6)
     .lean();
   } catch (err) {
     console.log('[AI Search] Text search failed or index not ready, falling back to regex.');
@@ -116,15 +183,24 @@ const analyzeTask = asyncHandler(async (req, res) => {
         type: { $ne: 'github_repo_intelligence' },
         $or: words.map(w => ({ content: { $regex: new RegExp(w, 'i') } }))
       })
-      .limit(3)
+      .limit(6)
       .lean();
     }
   }
 
-  // Format context block strings
-  const contextStr = searchResults.map((r, i) => 
-    `Context Block ${i + 1} [Type: ${r.type}]:\nTitle: ${r.title}\nContent: ${truncateText(r.content, 900)}`
-  ).join('\n\n');
+  // Merge: folder notes first (deduplicated), then general search results
+  const folderNoteIds = new Set(folderNoteResults.map(r => String(r._id)));
+  const dedupedSearch = searchResults.filter(r => !folderNoteIds.has(String(r._id)));
+  const allContext = [...folderNoteResults, ...dedupedSearch].slice(0, 8);
+
+  // Format context block strings — folder notes get a prominent label
+  const contextStr = allContext.map((r, i) => {
+    const isFolder = r.type === 'personal_note';
+    const label = isFolder
+      ? `📁 MANAGER FOLDER FILE ${i + 1} [Priority Context]`
+      : `Context Block ${i + 1} [Type: ${r.type}]`;
+    return `${label}:\nTitle: ${r.title}\nContent: ${truncateText(r.content, 2000)}`;
+  }).join('\n\n');
 
   // Format developer profiles list with weighted scores
   const rankedWorkers = workers
@@ -176,7 +252,9 @@ Analyze the user's task and output:
      ✓ Active workload: 1 task (workload check)
      ✓ High Git contributions score: 95 (git commits check)
 
-IMPORTANT: The retrieved company context may include [Manager Personal Note] entries — these are the manager's own saved discussions and decisions with LLMs. Give these notes HIGH weight when they are relevant to the task, as they represent the manager's direct knowledge, design decisions, and preferences for this team.
+IMPORTANT: The retrieved context includes 📁 MANAGER FOLDER FILE entries — these are the manager's own documents, notes, and knowledge files synced from their connected Second Brain folder. You MUST give these files THE HIGHEST PRIORITY when making recommendations. They represent the manager's direct knowledge, architecture decisions, team preferences, processes, and standards for this organization. Use them deeply and explicitly reference them in your reasoning.
+
+Also, any [Manager Personal Note] entries are the manager's saved discussions and decisions with LLMs and carry HIGH weight.
 
 You MUST respond ONLY with a JSON object in this exact format, with no preamble or codeblock formatting:
 {
@@ -271,6 +349,24 @@ const searchSecondBrain = asyncHandler(async (req, res) => {
   const queryText = q.trim();
   let results = [];
 
+  // Always fetch personal_note (folder) items first — they are highest-priority context
+  let folderItems = [];
+  try {
+    folderItems = await SecondBrainItem.find({ subdomain, type: 'personal_note' })
+      .sort({ updatedAt: -1 })
+      .limit(6)
+      .lean();
+    folderItems = folderItems.map(r => ({
+      _id: r.itemRef,
+      title: r.title,
+      content: r.content,
+      type: r.type,
+      score: 99 // highest priority
+    }));
+  } catch (err) {
+    console.log('[AI Search] personal_note priority fetch failed:', err.message);
+  }
+
   try {
     // Primary: MongoDB Text Index Search
     results = await SecondBrainItem.find(
@@ -278,7 +374,7 @@ const searchSecondBrain = asyncHandler(async (req, res) => {
       { score: { $meta: "textScore" } }
     )
     .sort({ score: { $meta: "textScore" } })
-    .limit(10)
+    .limit(12)
     .lean();
 
     // Map Mongoose results to simple structures
@@ -299,7 +395,6 @@ const searchSecondBrain = asyncHandler(async (req, res) => {
     if (words.length > 0) {
       const regexResults = await SecondBrainItem.find({
         subdomain,
-        itemRef: { $not: { $in: results.map(r => r._id) } }, // avoid duplicates
         $or: words.map(w => ({
           $or: [
             { title: { $regex: new RegExp(w, 'i') } },
@@ -308,7 +403,7 @@ const searchSecondBrain = asyncHandler(async (req, res) => {
           ]
         }))
       })
-      .limit(10 - results.length)
+      .limit(12 - results.length)
       .lean();
 
       const mappedRegex = regexResults.map(r => ({
@@ -316,24 +411,33 @@ const searchSecondBrain = asyncHandler(async (req, res) => {
         title: r.title,
         content: r.content,
         type: r.type,
-        score: 1.0 // Flat score for regex matches
+        score: 1.0
       }));
 
       results = [...results, ...mappedRegex];
     }
   }
 
+  // Merge folder items first (deduplicated by _id)
+  const folderIds = new Set(folderItems.map(r => String(r._id)));
+  const dedupedResults = results.filter(r => !folderIds.has(String(r._id)));
+  results = [...folderItems, ...dedupedResults].slice(0, 14);
+
   let answer = '';
   if (req.query.ask === 'true') {
-    const systemPrompt = `You are the CipherGate AI Second Brain Assistant.
-Answer the user's question using ONLY the provided company context (projects, tickets, wikis, workers).
+    const systemPrompt = `You are the CipherGate AI Second Brain Assistant powered by DeepSeek.
+Answer the user's question using the provided company context.
+Context items labeled 📁 FOLDER FILE are the manager's own synced documents — treat them as the most authoritative source and reference them explicitly in your answer.
 If the context does not contain enough information, politely say so but offer whatever clues you can find.
 Always answer in clean, concise GitHub-style markdown. Keep your answer highly structured, engaging, and professional.
 Use bolding, list bullets, and tables where appropriate to present findings.`;
     
-    const contextStr = results.map((r, i) => 
-      `[Item ${i + 1} - Type: ${r.type}]\nTitle: ${r.title}\nContent: ${r.content}`
-    ).join('\n\n');
+    const contextStr = results.map((r, i) => {
+      const label = r.type === 'personal_note'
+        ? `📁 FOLDER FILE ${i + 1}`
+        : `[Item ${i + 1} - Type: ${r.type}]`;
+      return `${label}\nTitle: ${r.title}\nContent: ${truncateText(r.content, 2000)}`;
+    }).join('\n\n');
     
     const userPrompt = `Question: ${queryText}
     
@@ -582,7 +686,7 @@ const getPersonalBrainFiles = asyncHandler(async (req, res) => {
   }
 
   const notes = await PersonalNote.find({ subdomain })
-    .select('title originalFilename fileType fileSize tags createdAt updatedAt')
+    .select('title originalFilename fileType fileSize tags sourceType sourceRelativePath sourceLastModified createdAt updatedAt')
     .sort({ updatedAt: -1 })
     .lean();
 
@@ -620,6 +724,94 @@ const deletePersonalBrainFile = asyncHandler(async (req, res) => {
   res.json({ message: `"${note.originalFilename}" removed from Second Brain.`, deletedId: id });
 });
 
+// @desc Return connected-folder manifest used by the browser to upload changes only
+const getPersonalBrainManifest = asyncHandler(async (req, res) => {
+  const subdomain = req.user?.subdomain;
+  const notes = await PersonalNote.find({ subdomain, sourceType: 'connected_folder' })
+    .select('sourceRelativePath sourceLastModified fileSize updatedAt')
+    .lean();
+  res.json(notes.map(note => ({
+    relativePath: note.sourceRelativePath,
+    lastModified: note.sourceLastModified || 0,
+    size: note.fileSize || 0,
+    updatedAt: note.updatedAt
+  })));
+});
+
+// @desc Upload a batch of new/changed files from a connected browser folder
+const syncPersonalBrainFiles = asyncHandler(async (req, res) => {
+  const subdomain = req.user?.subdomain;
+  if (!subdomain || subdomain === 'main') {
+    res.status(400);
+    throw new Error('Subdomain is missing or invalid');
+  }
+  let metadata;
+  try {
+    metadata = JSON.parse(req.body.metadata || '[]');
+  } catch (_) {
+    res.status(400);
+    throw new Error('Invalid sync metadata');
+  }
+  if (!req.files?.length || metadata.length !== req.files.length) {
+    res.status(400);
+    throw new Error('Each synchronized file requires matching metadata');
+  }
+
+  const indexed = [];
+  const errors = [];
+  for (let i = 0; i < req.files.length; i += 1) {
+    const file = req.files[i];
+    try {
+      const note = await upsertPersonalBrainFile({
+        file,
+        subdomain,
+        uploadedBy: req.user._id,
+        sourceType: 'connected_folder',
+        relativePath: metadata[i].relativePath,
+        lastModified: metadata[i].lastModified,
+        syncId: req.body.syncId
+      });
+      indexed.push({ relativePath: note.sourceRelativePath, fileSize: note.fileSize });
+    } catch (error) {
+      errors.push({ relativePath: metadata[i]?.relativePath || file.originalname, error: error.message });
+    }
+  }
+  res.status(errors.length ? 207 : 200).json({ indexed, errors });
+});
+
+// @desc Finalize a successful folder scan and remove files no longer present locally
+const finalizePersonalBrainSync = asyncHandler(async (req, res) => {
+  const subdomain = req.user?.subdomain;
+  const relativePaths = Array.isArray(req.body.relativePaths)
+    ? req.body.relativePaths.map(normalizeRelativePath)
+    : null;
+  if (!relativePaths || relativePaths.length > 10000) {
+    res.status(400);
+    throw new Error('A valid completed folder manifest is required');
+  }
+
+  const staleNotes = await PersonalNote.find({
+    subdomain,
+    sourceType: 'connected_folder',
+    ...(relativePaths.length ? { sourceRelativePath: { $nin: relativePaths } } : {})
+  });
+  if (!relativePaths.length) {
+    // An empty manifest is valid only when explicitly confirmed by the client.
+    if (req.body.confirmEmpty !== true) {
+      res.status(400);
+      throw new Error('Empty folder synchronization requires confirmation');
+    }
+  }
+
+  for (const note of staleNotes) {
+    await SecondBrainItem.deleteOne({ itemRef: note._id, subdomain });
+  }
+  if (staleNotes.length) {
+    await PersonalNote.deleteMany({ _id: { $in: staleNotes.map(note => note._id) }, subdomain });
+  }
+  res.json({ deleted: staleNotes.length, completedAt: new Date().toISOString() });
+});
+
 module.exports = {
   analyzeTask,
   searchSecondBrain,
@@ -629,5 +821,8 @@ module.exports = {
   getAiAuditLogs,
   uploadPersonalBrainFiles,
   getPersonalBrainFiles,
-  deletePersonalBrainFile
+  deletePersonalBrainFile,
+  getPersonalBrainManifest,
+  syncPersonalBrainFiles,
+  finalizePersonalBrainSync
 };

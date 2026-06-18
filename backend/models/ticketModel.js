@@ -12,6 +12,29 @@ const statusHistorySchema = new mongoose.Schema({
     }
 }, { _id: false });
 
+const reviewCycleSchema = new mongoose.Schema({
+    submissionTime: {
+        type: Date,
+        required: true
+    },
+    decision: {
+        type: String,
+        enum: ['Pending', 'Approved', 'Rejected'],
+        default: 'Pending'
+    },
+    decisionTime: {
+        type: Date
+    },
+    reviewer: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Admin'
+    },
+    feedback: {
+        type: String,
+        trim: true
+    }
+}, { _id: false });
+
 const ticketSchema = new mongoose.Schema({
     title: {
         type: String,
@@ -45,6 +68,7 @@ const ticketSchema = new mongoose.Schema({
         default: 'To Do'
     },
     statusHistory: [statusHistorySchema],
+    reviewCycles: [reviewCycleSchema],
     issueType: {
         type: String,
         enum: ['Task', 'Bug', 'Story', 'Epic'],
@@ -147,13 +171,46 @@ const ticketSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
-// Middleware to record status history
+// Middleware to record status history and review cycles
 ticketSchema.pre('save', function (next) {
     if (this.isModified('status')) {
+        const prevStatus = this.statusHistory && this.statusHistory.length > 0
+            ? this.statusHistory[this.statusHistory.length - 1].status
+            : null;
+
         this.statusHistory.push({
             status: this.status,
             changedAt: new Date()
         });
+
+        // Review cycles transitions
+        if (this.status === 'Review' && prevStatus !== 'Review') {
+            this.reviewCycles.push({
+                submissionTime: new Date(),
+                decision: 'Pending',
+                decisionTime: null,
+                reviewer: null,
+                feedback: ''
+            });
+        } else if (prevStatus === 'Review' && this.status === 'Done') {
+            const lastCycle = this.reviewCycles[this.reviewCycles.length - 1];
+            if (lastCycle && lastCycle.decision === 'Pending') {
+                lastCycle.decision = 'Approved';
+                lastCycle.decisionTime = new Date();
+                lastCycle.reviewer = this._reviewerId || null;
+                lastCycle.feedback = this.feedback || '';
+                // Set actualCompletionDate to the approved submission time
+                this.actualCompletionDate = lastCycle.submissionTime;
+            }
+        } else if (prevStatus === 'Review' && (this.status === 'In Progress' || this.status === 'To Do')) {
+            const lastCycle = this.reviewCycles[this.reviewCycles.length - 1];
+            if (lastCycle && lastCycle.decision === 'Pending') {
+                lastCycle.decision = 'Rejected';
+                lastCycle.decisionTime = new Date();
+                lastCycle.reviewer = this._reviewerId || null;
+                lastCycle.feedback = this.feedback || '';
+            }
+        }
     }
 
     // If it's a new document and status is not yet in history
@@ -162,6 +219,15 @@ ticketSchema.pre('save', function (next) {
             status: this.status || 'To Do',
             changedAt: new Date()
         }];
+        if (this.status === 'Review') {
+            this.reviewCycles = [{
+                submissionTime: new Date(),
+                decision: 'Pending',
+                decisionTime: null,
+                reviewer: null,
+                feedback: ''
+            }];
+        }
     }
 
     next();

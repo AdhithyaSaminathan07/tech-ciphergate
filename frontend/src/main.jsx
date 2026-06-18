@@ -6,6 +6,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
+import './toastSetup.jsx'
 
 import { registerSW } from 'virtual:pwa-register'
 
@@ -24,7 +25,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <AuthProvider>
       <BrowserRouter>
         <App />
-        <ToastContainer position="top-right" autoClose={3000} />
+        <ToastContainer position="top-right" autoClose={false} hideProgressBar={true} closeButton={false} icon={false} newestOnTop={true} />
       </BrowserRouter>
     </AuthProvider>
   </React.StrictMode>,

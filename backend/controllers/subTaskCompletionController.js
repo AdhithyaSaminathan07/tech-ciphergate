@@ -85,6 +85,7 @@ exports.upsertCompletion = async (req, res) => {
         if (requiredCompletionsCount > 0 && allCompletions.length >= requiredCompletionsCount) {
             if (ticket.status !== 'Done' && ticket.status !== 'Review') {
                 ticket.status = 'Review';
+                ticket._reviewerId = req.user._id;
                 await ticket.save();
 
                 // Populate for complete UI update on worker side
@@ -289,6 +290,7 @@ exports.reviewCompletion = async (req, res) => {
         if (status === 'Rejected') {
             if (ticket && ticket.status === 'Review') {
                 ticket.status = 'In Progress';
+                ticket._reviewerId = req.user._id;
                 await ticket.save();
 
                 // Populate for complete UI update on worker side

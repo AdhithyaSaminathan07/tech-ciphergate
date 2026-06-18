@@ -25,6 +25,24 @@ const personalNoteSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  sourceType: {
+    type: String,
+    enum: ['manual_upload', 'connected_folder'],
+    default: 'manual_upload',
+    index: true
+  },
+  sourceRelativePath: {
+    type: String,
+    trim: true
+  },
+  sourceLastModified: {
+    type: Number,
+    default: null
+  },
+  syncId: {
+    type: String,
+    default: null
+  },
   fileSize: {
     type: Number,
     default: 0
@@ -44,6 +62,10 @@ const personalNoteSchema = new mongoose.Schema({
 
 // Compound index to prevent duplicates per subdomain + filename
 personalNoteSchema.index({ subdomain: 1, originalFilename: 1 }, { unique: true });
+personalNoteSchema.index(
+  { subdomain: 1, sourceType: 1, sourceRelativePath: 1 },
+  { unique: true, partialFilterExpression: { sourceType: 'connected_folder' } }
+);
 
 // Text search index
 personalNoteSchema.index({

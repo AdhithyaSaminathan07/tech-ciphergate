@@ -10,6 +10,7 @@ const SalaryProject = require('../models/SalaryProject');
 const ProjectPaymentLedger = require('../models/ProjectPaymentLedger');
 const { calculateWorkerProductivity } = require('../utils/productivityCalculator');
 const Ticket = require('../models/ticketModel');
+const { calculateTaskPenalties } = require('../utils/salaryPenaltyCalculator');
 
 // ─── Helper: Calculate 5X Unauthorized Absence Penalty ─────────────────────
 // Applies ONLY to past days where employee was absent (no punch-in),
@@ -672,10 +673,7 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
     // Calculate final salary after deducting fines
     const finalSalaryWithFines = Math.max(0, finalSalaryWithBonus - totalFinesAmount);
 
-    // Fetch all tasks for this worker that were ever delayed or are currently overdue
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
+    // Fetch all tasks for this worker
     const allTasks = await Ticket.find({
       $or: [
         { assignee: id },
@@ -684,39 +682,12 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
       subdomain: worker.subdomain
     });
 
-    const delayedTasks = allTasks.filter(task => {
-      if (!task.endDate) return false;
-      const deadline = new Date(task.endDate);
-      deadline.setHours(0, 0, 0, 0);
-
-      if (task.status === 'Done') {
-        // Find when it was marked as Done
-        const doneEntry = task.statusHistory
-          .filter(h => h.status === 'Done')
-          .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
-
-        if (doneEntry) {
-          const doneDate = new Date(doneEntry.changedAt);
-          doneDate.setHours(0, 0, 0, 0);
-          return doneDate > deadline;
-        }
-        return false;
-      } else {
-        // Not Done yet, check if it's past deadline
-        return today > deadline;
-      }
-    }).map(task => {
-      const doneEntry = task.statusHistory
-        .filter(h => h.status === 'Done')
-        .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
-
-      return {
-        _id: task._id,
-        title: task.title,
-        endDate: task.endDate,
-        doneDate: doneEntry ? doneEntry.changedAt : null,
-        status: task.status
-      };
+    const { taskPenalties: delayedTasks, totalTaskPenalty: taskPenalty } = calculateTaskPenalties({
+      worker,
+      tickets: allTasks,
+      report,
+      fromDate,
+      toDate
     });
 
     const isCurrentlyViolating = delayedTasks.some(t => t.status !== 'Done');
@@ -800,6 +771,7 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
       isCurrentlyViolating,
       earliestDeadline,
       delayedTasks,
+      taskPenalty,
       projectBreakdown,
       // 5X Unauthorized Absence Penalty — stored separately for display
       unauthorizedAbsencePenalties,
@@ -971,10 +943,7 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
 
     const finalSalaryWithFines = Math.max(0, finalSalaryWithBonus - totalFinesAmount);
 
-    // Fetch all tasks for this worker that were ever delayed or are currently overdue
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
+    // Fetch all tasks for this worker
     const allTasks = await Ticket.find({
       $or: [
         { assignee: id },
@@ -983,37 +952,12 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
       subdomain: worker.subdomain
     });
 
-    const delayedTasks = allTasks.filter(task => {
-      if (!task.endDate) return false;
-      const deadline = new Date(task.endDate);
-      deadline.setHours(0, 0, 0, 0);
-
-      if (task.status === 'Done') {
-        const doneEntry = task.statusHistory
-          .filter(h => h.status === 'Done')
-          .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
-
-        if (doneEntry) {
-          const doneDate = new Date(doneEntry.changedAt);
-          doneDate.setHours(0, 0, 0, 0);
-          return doneDate > deadline;
-        }
-        return false;
-      } else {
-        return today > deadline;
-      }
-    }).map(task => {
-      const doneEntry = task.statusHistory
-        .filter(h => h.status === 'Done')
-        .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
-
-      return {
-        _id: task._id,
-        title: task.title,
-        endDate: task.endDate,
-        doneDate: doneEntry ? doneEntry.changedAt : null,
-        status: task.status
-      };
+    const { taskPenalties: delayedTasks, totalTaskPenalty: taskPenalty } = calculateTaskPenalties({
+      worker,
+      tickets: allTasks,
+      report,
+      fromDate: start,
+      toDate: end
     });
 
     const isCurrentlyViolating = delayedTasks.some(t => t.status !== 'Done');
@@ -1097,6 +1041,7 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
       isCurrentlyViolating,
       earliestDeadline,
       delayedTasks,
+      taskPenalty,
       projectBreakdown,
       // 5X Unauthorized Absence Penalty — stored separately for display
       unauthorizedAbsencePenalties,
@@ -1633,70 +1578,17 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
       const finalSalaryAfterUnauthorizedPenalty = Math.max(0, finalSalaryWithFines - totalUnauthorizedPenalty);
 
       // Task Penalty
-      const delayedTasks = allTickets.filter(task => {
-        if (!task.endDate) return false;
-        const isAssignee = task.assignee?.toString() === workerId ||
+      const workerTickets = allTickets.filter(task => {
+        return task.assignee?.toString() === workerId ||
           (Array.isArray(task.assignees) && task.assignees.some(a => a.toString() === workerId));
-        if (!isAssignee) return false;
-
-        const deadline = new Date(task.endDate);
-        deadline.setHours(0, 0, 0, 0);
-
-        if (task.status === 'Done') {
-          const doneEntry = (task.statusHistory || [])
-            .filter(h => h.status === 'Done')
-            .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
-
-          if (doneEntry) {
-            const doneDate = new Date(doneEntry.changedAt);
-            doneDate.setHours(0, 0, 0, 0);
-            return doneDate > deadline;
-          }
-          return false;
-        } else {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          return today > deadline;
-        }
-      }).map(task => {
-        const doneEntry = (task.statusHistory || [])
-          .filter(h => h.status === 'Done')
-          .sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
-        return {
-          _id: task._id,
-          title: task.title,
-          endDate: task.endDate,
-          doneDate: doneEntry ? doneEntry.changedAt : null,
-          status: task.status
-        };
       });
 
-      // Calculate penalty using the same logic as frontend
-      const parseSalary = (str) => {
-        if (!str) return 0;
-        const cleaned = String(str).replace(/[^0-9.]/g, '');
-        return parseFloat(cleaned) || 0;
-      };
-
-      const claimedDays = new Set();
-      let taskPenalty = 0;
-
-      delayedTasks.forEach(task => {
-        const start = new Date(task.endDate);
-        start.setDate(start.getDate() + 1);
-        start.setHours(0, 0, 0, 0);
-        const end = task.doneDate ? new Date(task.doneDate) : new Date();
-        end.setHours(23, 59, 59, 999);
-
-        (report.report || []).forEach(day => {
-          const dDate = new Date(`${day.date}, ${reportYear}`);
-          if (dDate >= start && dDate <= end) {
-            if (!claimedDays.has(day.date)) {
-              claimedDays.add(day.date);
-              taskPenalty += parseSalary(day.totalSalary);
-            }
-          }
-        });
+      const { taskPenalties: delayedTasks, totalTaskPenalty: taskPenalty } = calculateTaskPenalties({
+        worker,
+        tickets: workerTickets,
+        report,
+        fromDate,
+        toDate
       });
 
       // ─── PROJECT ADJUSTMENT for bulk ──
@@ -1892,54 +1784,17 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
           )
         : { totalUnauthorizedPenalty: 0 };
 
-      const delayedTasks = allTickets.filter(task => {
-        if (!task.endDate) return false;
-        const isAssignee = task.assignee?.toString() === workerId ||
+      const workerTickets = allTickets.filter(task => {
+        return task.assignee?.toString() === workerId ||
           (Array.isArray(task.assignees) && task.assignees.some(a => a.toString() === workerId));
-        if (!isAssignee) return false;
-        const deadline = new Date(task.endDate);
-        deadline.setHours(0, 0, 0, 0);
-        if (task.status === 'Done') {
-          const doneEntry = (task.statusHistory || []).filter(h => h.status === 'Done').sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
-          if (doneEntry) {
-            const doneDate = new Date(doneEntry.changedAt);
-            doneDate.setHours(0, 0, 0, 0);
-            return doneDate > deadline;
-          }
-          return false;
-        } else {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          return today > deadline;
-        }
-      }).map(task => {
-        const doneEntry = (task.statusHistory || []).filter(h => h.status === 'Done').sort((a, b) => new Date(b.changedAt) - new Date(a.changedAt))[0];
-        return { endDate: task.endDate, doneDate: doneEntry ? doneEntry.changedAt : null };
       });
 
-      const parseSalary = (str) => {
-        if (!str) return 0;
-        const cleaned = String(str).replace(/[^0-9.]/g, '');
-        return parseFloat(cleaned) || 0;
-      };
-
-      const claimedDays = new Set();
-      let taskPenalty = 0;
-      delayedTasks.forEach(task => {
-        const start = new Date(task.endDate);
-        start.setDate(start.getDate() + 1);
-        start.setHours(0, 0, 0, 0);
-        const end = task.doneDate ? new Date(task.doneDate) : new Date();
-        end.setHours(23, 59, 59, 999);
-        (report.report || []).forEach(day => {
-          const dDate = new Date(`${day.date}, ${reportYear}`);
-          if (dDate >= start && dDate <= end) {
-            if (!claimedDays.has(day.date)) {
-              claimedDays.add(day.date);
-              taskPenalty += parseSalary(day.totalSalary);
-            }
-          }
-        });
+      const { totalTaskPenalty: taskPenalty } = calculateTaskPenalties({
+        worker,
+        tickets: workerTickets,
+        report,
+        fromDate,
+        toDate
       });
 
       const totalFinalSalary = Math.max(0, finalSalaryWithFines - totalUnauthorizedPenalty);

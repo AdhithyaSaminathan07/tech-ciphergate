@@ -40,10 +40,58 @@ const isOverdue = (endDate, status) => {
     return end < today;
 };
 
+const getDateStr = (date) => {
+    if (!date) return '';
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return '';
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(d);
+};
+
+const getProtectionState = (ticket) => {
+    if (ticket.status === 'Done') {
+        return 'Approved';
+    }
+    const dueDateStr = ticket.endDate ? getDateStr(ticket.endDate) : '';
+    if (!dueDateStr) {
+        return 'None';
+    }
+
+    const cycles = ticket.reviewCycles || [];
+    if (cycles.length > 0) {
+        const lastCycle = cycles[cycles.length - 1];
+        if (lastCycle.decision === 'Pending') {
+            const subDateStr = getDateStr(lastCycle.submissionTime);
+            if (subDateStr && subDateStr <= dueDateStr) {
+                return 'Submitted on time';
+            } else {
+                return 'Awaiting review';
+            }
+        } else if (lastCycle.decision === 'Rejected') {
+            return 'Deduction active';
+        } else if (lastCycle.decision === 'Approved') {
+            return 'Approved';
+        }
+    } else {
+        const todayStr = getDateStr(new Date());
+        if (todayStr > dueDateStr) {
+            return 'Deduction active';
+        }
+    }
+    return 'None';
+};
+
 const WorkerWorkAllocation = () => {
     const [tickets, setTickets] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    // Month filter — defaults to current month (YYYY-MM), empty string = all months
+    const currentMonthValue = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`; })();
+    const [filterMonth, setFilterMonth] = useState(currentMonthValue);
     const { subdomain } = useContext(appContext);
     const { user } = useAuth();
     const { socket } = useSocket();
@@ -54,6 +102,7 @@ const WorkerWorkAllocation = () => {
 
     const [dragOverCol, setDragOverCol] = useState(null);
     const [touchDraggedTicket, setTouchDraggedTicket] = useState(null);
+    const [activeMobileTab, setActiveMobileTab] = useState('To Do');
 
     // Completion states
     const [ticketCompletions, setTicketCompletions] = useState([]);
@@ -171,7 +220,7 @@ const WorkerWorkAllocation = () => {
         try {
             const ticketsData = await getTickets({ subdomain, assignee: user._id });
             setTickets(ticketsData);
-            
+
             // Sync selected ticket if open
             if (selectedTicket) {
                 const updated = ticketsData.find(t => t._id === selectedTicket._id);
@@ -358,55 +407,106 @@ const WorkerWorkAllocation = () => {
         }
     };
 
-    const filteredTickets = tickets.filter(t =>
-        t.title.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredTickets = tickets.filter(t => {
+        const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase());
+        // Month filter: match tasks whose createdAt, startDate, or endDate falls in selected month
+        let matchesMonth = true;
+        if (filterMonth) {
+            const [fy, fm] = filterMonth.split('-').map(Number);
+            const inMonth = (dateStr) => {
+                if (!dateStr) return false;
+                const d = new Date(dateStr);
+                return d.getFullYear() === fy && (d.getMonth() + 1) === fm;
+            };
+            matchesMonth = inMonth(t.createdAt) || inMonth(t.startDate) || inMonth(t.endDate);
+        }
+        return matchesSearch && matchesMonth;
+    });
 
     if (loading) return <Spinner />;
 
     return (
         <div className="flex flex-col h-full bg-white text-gray-800">
             {/* Header Area */}
-            <div className="p-4 md:p-6 pb-4">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+            <div className="p-3 md:p-6 pb-2 md:pb-4">
+                <div className="flex justify-between items-center gap-4 mb-2 md:mb-3">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-800">My Tasks</h1>
-                        <p className="text-gray-500 text-sm mt-1">Manage and update status of your assigned tasks.</p>
+                        <h1 className="text-xl md:text-2xl font-bold text-gray-800">My Tasks</h1>
+                        <p className="hidden md:block text-gray-500 text-sm mt-1">Manage and update status of your assigned tasks.</p>
                     </div>
-                </div>
-
-                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-white gap-4 mb-2 pb-2">
-                    <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-                        <div className="relative w-full sm:w-48 border border-gray-300 rounded-lg focus-within:border-teal-500 focus-within:ring-1 focus-within:ring-teal-500 transition-all">
+                    <div className="flex items-center gap-2 shrink-0">
+                        {/* Month filter dropdown */}
+                        <select
+                            value={filterMonth}
+                            onChange={(e) => setFilterMonth(e.target.value)}
+                            className="h-8 md:h-10 text-[10px] md:text-xs font-semibold text-slate-600 bg-white border border-gray-300 rounded-xl px-2 shadow-sm outline-none focus:border-teal-500 transition-all cursor-pointer"
+                        >
+                            <option value="">All Months</option>
+                            {(() => {
+                                const opts = [];
+                                const now = new Date();
+                                for (let i = 0; i < 12; i++) {
+                                    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                                    const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                                    const label = d.toLocaleString('default', { month: 'short', year: 'numeric' });
+                                    opts.push(<option key={val} value={val}>{label}</option>);
+                                }
+                                return opts;
+                            })()}
+                        </select>
+                        {/* Search bar */}
+                        <div className="relative w-28 sm:w-40 md:w-64 border border-gray-300 rounded-xl bg-white shadow-sm focus-within:border-teal-500 transition-all h-8 md:h-10 flex items-center">
+                            <Search className="w-3 h-3 md:w-4 md:h-4 absolute left-2.5 md:left-3.5 text-gray-400" />
                             <input
                                 type="text"
                                 placeholder="Search tasks..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-10 pr-3 py-2 bg-transparent text-sm font-medium text-gray-700 outline-none"
+                                className="w-full pl-7 md:pl-10 pr-8 py-1 md:py-2 bg-transparent text-[10px] md:text-xs font-semibold text-gray-700 outline-none placeholder:text-gray-300"
                             />
-                            <Search className="w-4 h-4 absolute left-3 top-2.5 text-gray-400" />
+                            {searchTerm && (
+                                <button
+                                    onClick={() => setSearchTerm('')}
+                                    className="absolute right-2 text-[9px] md:text-xs text-red-500 hover:text-red-700 font-bold uppercase tracking-wider"
+                                >
+                                    Clear
+                                </button>
+                            )}
                         </div>
-                        {searchTerm && (
-                            <button
-                                onClick={() => setSearchTerm('')}
-                                className="text-sm text-red-500 hover:text-red-700 font-medium whitespace-nowrap px-2"
-                            >
-                                Clear search
-                            </button>
-                        )}
                     </div>
                 </div>
             </div>
 
             {/* Kanban Board Area */}
             <div className="flex-1 p-3 lg:p-4 pt-3 bg-white scroll-smooth overflow-x-auto">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 min-h-[60vh] pb-4 w-full">
+                {/* Mobile Status Tabs */}
+                <div className="md:hidden flex overflow-x-auto space-x-1.5 p-2 bg-slate-100 rounded-xl mb-3 scrollbar-none">
+                    {columns.map(status => {
+                        const count = filteredTickets.filter(t => t.status === status).length;
+                        const isActive = activeMobileTab === status;
+                        return (
+                            <button
+                                key={status}
+                                onClick={() => setActiveMobileTab(status)}
+                                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all duration-200 border ${isActive
+                                        ? 'bg-white text-slate-800 shadow-sm border-slate-200'
+                                        : 'bg-transparent text-slate-500 border-transparent hover:text-slate-700'
+                                    }`}
+                            >
+                                <span className={`w-2 h-2 rounded-full ${status === 'To Do' ? 'bg-slate-400' : status === 'In Progress' ? 'bg-blue-500' : status === 'Review' ? 'bg-purple-500' : 'bg-emerald-500'}`}></span>
+                                <span>{status}</span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${isActive ? 'bg-slate-100 text-slate-600' : 'bg-slate-200/50 text-slate-400'}`}>{count}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 min-h-[60vh] pb-4 w-full">
                     {columns.map(status => (
                         <div
                             key={status}
                             data-status={status}
-                            className={`flex flex-col bg-gray-50/70 border border-gray-100 rounded-2xl min-w-0 transition-all ${dragOverCol === status ? 'bg-teal-50 border-teal-200 border-dashed' : ''}`}
+                            className={`flex flex-col bg-gray-50/70 border border-gray-100 rounded-2xl min-w-0 transition-all ${activeMobileTab === status ? 'flex' : 'hidden md:flex'} ${dragOverCol === status ? 'bg-teal-50 border-teal-200 border-dashed' : ''}`}
                             onDragOver={(e) => handleDragOver(e, status)}
                             onDragLeave={(e) => handleDragLeave(e, status)}
                             onDrop={(e) => handleDrop(e, status)}
@@ -425,12 +525,24 @@ const WorkerWorkAllocation = () => {
                                     <div
                                         key={ticket._id}
                                         id={ticket._id}
-                                        draggable={status !== 'Done' && status !== 'Review'}
+                                        draggable={status !== 'Done' && status !== 'Review' && window.innerWidth >= 768}
                                         onDragStart={(e) => handleDragStart(e, ticket._id)}
                                         onDragEnd={(e) => handleDragEnd(e, ticket._id)}
-                                        onTouchStart={(e) => handleTouchStart(e, ticket._id)}
-                                        onTouchMove={handleTouchMove}
-                                        onTouchEnd={handleTouchEnd}
+                                        onTouchStart={(e) => {
+                                            if (window.innerWidth >= 768) {
+                                                handleTouchStart(e, ticket._id);
+                                            }
+                                        }}
+                                        onTouchMove={(e) => {
+                                            if (window.innerWidth >= 768) {
+                                                handleTouchMove(e);
+                                            }
+                                        }}
+                                        onTouchEnd={(e) => {
+                                            if (window.innerWidth >= 768) {
+                                                handleTouchEnd(e);
+                                            }
+                                        }}
                                         onClick={() => { setSelectedTicket(ticket); setIsModalOpen(true); }}
                                         className={`p-4 rounded-xl shadow-sm border cursor-pointer hover:shadow-md hover:border-teal-100 active:cursor-grabbing transition-all group active:scale-[0.98] 
                                             ${isOverdue(ticket.endDate, ticket.status) ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'} 
@@ -440,6 +552,16 @@ const WorkerWorkAllocation = () => {
                                             {ticket.team && (
                                                 <span key="team-badge" className="bg-teal-600 text-white text-[10px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider flex items-center gap-1 shadow-sm">
                                                     <Users className="w-2.5 h-2.5" /> Team: {ticket.team}
+                                                </span>
+                                            )}
+                                            {ticket.endDate && (
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider flex items-center gap-1 border shadow-sm ${getProtectionState(ticket) === 'Submitted on time' ? 'bg-teal-50 text-teal-700 border-teal-200 shadow-sm shadow-teal-50/50 animate-pulse' :
+                                                        getProtectionState(ticket) === 'Awaiting review' ? 'bg-amber-50 text-amber-700 border-amber-200 shadow-sm shadow-amber-50/50' :
+                                                            getProtectionState(ticket) === 'Deduction active' ? 'bg-rose-50 text-rose-700 border-rose-200 shadow-sm shadow-rose-50/50' :
+                                                                getProtectionState(ticket) === 'Approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm shadow-emerald-50/50' :
+                                                                    'bg-slate-50 text-slate-500 border-slate-200'
+                                                    }`}>
+                                                    Salary: {getProtectionState(ticket) === 'None' ? 'On Track' : getProtectionState(ticket)}
                                                 </span>
                                             )}
                                             {ticket.labels && ticket.labels.map(lbl => (
@@ -551,23 +673,35 @@ const WorkerWorkAllocation = () => {
             {/* Responsive Detail Modal */}
             {isModalOpen && selectedTicket && (
                 <div className="fixed inset-0 bg-black/40 z-[600] flex flex-col items-center justify-center sm:p-6 backdrop-blur-sm transition-opacity">
-                    <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-[1300px] h-[95vh] sm:h-[90vh] flex flex-col mt-auto sm:mt-0 overflow-hidden">
+                    <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-[1300px] h-[95vh] sm:h-[90vh] flex flex-col mt-auto sm:mt-0 overflow-y-auto md:overflow-hidden">
 
                         {/* Header */}
-                        <div className="px-6 py-4 flex justify-between items-center text-gray-600 shrink-0 border-b border-gray-100 bg-gray-50/50">
-                            <div className="flex items-center space-x-2 text-sm font-semibold bg-white px-3 py-1.5 rounded-lg shadow-sm border border-gray-200">
-                                <IssueIcon type={selectedTicket.issueType} />
-                                <span className="uppercase text-gray-700">{selectedTicket.issueType}</span>
+                        <div className="px-3 py-3 sm:px-6 md:px-8 flex flex-col md:flex-row justify-between items-stretch md:items-center text-gray-600 shrink-0 border-b border-gray-100 bg-gray-50/50 gap-3">
+                            <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap">
+                                <div className="flex items-center space-x-1 text-[10px] sm:text-xs font-bold bg-white px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg shadow-sm border border-gray-200 uppercase tracking-widest text-teal-600">
+                                    <IssueIcon type={selectedTicket.issueType} />
+                                    <span className="uppercase text-gray-700">{selectedTicket.issueType}</span>
+                                </div>
+                                {selectedTicket.endDate && (
+                                    <div className={`px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg text-[9px] sm:text-[10px] font-extrabold uppercase border flex items-center gap-1 shadow-sm ${getProtectionState(selectedTicket) === 'Submitted on time' ? 'bg-teal-50 text-teal-700 border-teal-100 shadow-sm animate-pulse' :
+                                            getProtectionState(selectedTicket) === 'Awaiting review' ? 'bg-amber-50 text-amber-700 border-amber-100 shadow-sm' :
+                                                getProtectionState(selectedTicket) === 'Deduction active' ? 'bg-rose-50 text-rose-700 border-rose-100 shadow-sm' :
+                                                    getProtectionState(selectedTicket) === 'Approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm' :
+                                                        'bg-slate-50 text-slate-500 border-slate-200'
+                                        }`}>
+                                        Salary Protection: {getProtectionState(selectedTicket) === 'None' ? 'On Track' : getProtectionState(selectedTicket)}
+                                    </div>
+                                )}
                             </div>
-                            <div className="flex items-center space-x-1">
-                                <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors bg-gray-100">
-                                    <X className="w-5 h-5" />
+                            <div className="flex items-center space-x-1 self-end md:self-auto">
+                                <button onClick={() => setIsModalOpen(false)} className="p-1.5 sm:p-2 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors bg-gray-100">
+                                    <X className="w-4 h-4 sm:w-5 sm:h-5" />
                                 </button>
                             </div>
                         </div>
 
                         {/* Body */}
-                        <div className="flex flex-col md:flex-row flex-1 overflow-hidden font-sans">
+                        <div className="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-hidden font-sans">
                             {/* Main Content Area */}
                             <div className="w-full md:w-[65%] overflow-y-auto px-6 py-6 md:border-r border-gray-100 custom-scrollbar">
                                 <h2 className="w-full text-2xl font-bold text-gray-800 p-3 -ml-3 mb-6">
@@ -811,7 +945,7 @@ const WorkerWorkAllocation = () => {
                                             ) : (
                                                 <p className="text-xs text-gray-500 mb-3">Have any doubts about this task? Ask here.</p>
                                             )}
-                                            
+
                                             <div className="flex gap-2">
                                                 <input
                                                     type="text"
@@ -824,7 +958,7 @@ const WorkerWorkAllocation = () => {
                                                         const input = document.getElementById('workerQueryInput');
                                                         const query = input.value.trim();
                                                         if (!query) return;
-                                                        
+
                                                         try {
                                                             await updateTicket(selectedTicket._id, { workerQuery: query, subdomain });
                                                             setSelectedTicket({ ...selectedTicket, workerQuery: query });
@@ -991,7 +1125,7 @@ const WorkerWorkAllocation = () => {
                                 <h3 className="text-sm font-bold text-gray-800">Reference File Preview</h3>
                                 <p className="text-xs text-gray-500 font-medium">{refViewer.name}</p>
                             </div>
-                            <button 
+                            <button
                                 onClick={() => setRefViewer({ isOpen: false, url: '', name: '' })}
                                 className="p-2 hover:bg-gray-200 rounded-full transition-colors"
                             >
@@ -1000,19 +1134,19 @@ const WorkerWorkAllocation = () => {
                         </div>
                         <div className="flex-1 overflow-auto p-6 flex items-center justify-center bg-gray-100">
                             {refViewer.url.match(/\.(jpeg|jpg|gif|png|webp)$/i) || refViewer.url.includes('blob:') ? (
-                                <img 
-                                    src={refViewer.url} 
-                                    alt="Reference" 
-                                    className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-sm" 
+                                <img
+                                    src={refViewer.url}
+                                    alt="Reference"
+                                    className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-sm"
                                 />
                             ) : (
                                 <div className="text-center p-8 bg-white rounded-xl shadow-sm max-w-sm">
                                     <FileText className="w-12 h-12 text-teal-600 mx-auto mb-3" />
                                     <p className="text-sm font-bold text-gray-800 mb-1">No preview available</p>
                                     <p className="text-xs text-gray-500 mb-4">This file type cannot be previewed directly.</p>
-                                    <a 
-                                        href={refViewer.url} 
-                                        target="_blank" 
+                                    <a
+                                        href={refViewer.url}
+                                        target="_blank"
                                         rel="noopener noreferrer"
                                         className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg text-xs font-bold uppercase hover:bg-teal-700 transition-colors"
                                     >
