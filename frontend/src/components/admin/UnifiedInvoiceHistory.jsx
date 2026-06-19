@@ -151,9 +151,24 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, 
       'Closure agreement': 'closureDetails'
     };
 
+    let newStatus = targetStage;
+    let newStageData = stageData;
+
+    // Revert status if all proofs were deleted
+    if (!stageData || (!stageData.proof && (!stageData.proofs || stageData.proofs.length === 0))) {
+      newStageData = null;
+      if (targetStage === 'Payment Received') {
+        newStatus = 'Invoice';
+      } else if (targetStage === 'Work completion') {
+        newStatus = 'Payment Received';
+      } else if (targetStage === 'Closure agreement') {
+        newStatus = 'Work completion';
+      }
+    }
+
     const updateData = {
-      status: targetStage,
-      [stageFieldMap[targetStage]]: stageData
+      status: newStatus,
+      [stageFieldMap[targetStage]]: newStageData
     };
 
     const success = await performStatusUpdate(selectedInvoiceForStage._id, updateData);
@@ -171,10 +186,10 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, 
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-4 bg-white font-sans">
+    <div className="w-full bg-white font-sans">
       {loading && (
         <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0d9488] mx-auto"></div>
           <p className="mt-4 text-gray-500">Loading invoices...</p>
         </div>
       )}
@@ -232,7 +247,7 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, 
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {localInvoices.map((invoice) => (
-                  <tr key={invoice._id} className="hover:bg-blue-50/40 transition-colors">
+                  <tr key={invoice._id} className="hover:bg-teal-50/20 transition-colors">
                     <td className="py-3.5 px-4 text-sm font-semibold text-gray-900 truncate">{invoice.invoiceNo}</td>
                     <td className="py-3.5 px-4 text-sm text-gray-500">{invoice.invoiceDate || formatDate(invoice.createdAt)}</td>
                     <td className="py-3.5 px-4 text-sm">
@@ -240,7 +255,7 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, 
                       {invoice.customerContact && <div className="text-xs text-gray-400 truncate">{invoice.customerContact}</div>}
                     </td>
                     <td className="py-3.5 px-4 text-center">
-                      <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-bold ${ invoice.invoiceType === 'TAX INVOICE' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700' }`}>
+                      <span className={`inline-block px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${ invoice.invoiceType === 'TAX INVOICE' ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-teal-50 text-[#0d9488] border border-teal-100' }`}>
                         {invoice.invoiceType}
                       </span>
                     </td>
@@ -261,10 +276,10 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, 
                                 <button
                                   onClick={() => handleStatusUpdate(invoice._id, stage)}
                                   title={stage}
-                                  className={`rounded-full transition-all duration-200 flex-shrink-0 ${ isCurrent ? 'w-4 h-4 bg-blue-600 ring-[3px] ring-blue-200 shadow-sm' : isCompleted ? 'w-3 h-3 bg-blue-500' : 'w-3 h-3 bg-gray-200 hover:bg-gray-300' }`}
+                                  className={`rounded-full transition-all duration-200 flex-shrink-0 ${ isCurrent ? 'w-4 h-4 bg-[#0d9488] ring-[3px] ring-teal-100 shadow-sm' : isCompleted ? 'w-3 h-3 bg-teal-500' : 'w-3 h-3 bg-gray-200 hover:bg-gray-300' }`}
                                 />
                                 {index < STAGES.length - 1 && (
-                                  <div className={`w-5 h-[2px] flex-shrink-0 ${ index < currentIdx ? 'bg-blue-500' : 'bg-gray-200' }`} />
+                                  <div className={`w-5 h-[2px] flex-shrink-0 ${ index < currentIdx ? 'bg-teal-500' : 'bg-gray-200' }`} />
                                 )}
                               </div>
                             );
@@ -272,7 +287,7 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, 
                         </div>
                         {/* Stage label + proof icons row */}
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold text-blue-700 tracking-wider leading-none">
+                          <span className="text-[10px] font-bold text-[#0d9488] tracking-wider leading-none">
                             {invoice.status || 'Invoice'}
                           </span>
                           <div className="flex items-center gap-1">
@@ -285,42 +300,42 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, 
                                   {paymentProofs.length > 0 && (
                                     <button
                                       onClick={() => openGallery(paymentProofs, 'Payment Proof')}
-                                      className="relative bg-blue-50 hover:bg-blue-100 p-0.5 rounded transition-colors"
+                                      className="relative inline-flex items-center justify-center w-5 h-5 bg-teal-50 hover:bg-teal-100 rounded transition-colors"
                                       title={`Payment Proof${paymentProofs.length > 1 ? `s (${paymentProofs.length})` : ''}`}
                                     >
-                                      <svg className="w-3.5 h-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <svg className="w-3.5 h-3.5 text-teal-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                       </svg>
                                       {paymentProofs.length > 1 && (
-                                        <span className="absolute -top-1.5 -right-1.5 bg-blue-600 text-white text-[7px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 leading-none">{paymentProofs.length}</span>
+                                        <span className="absolute -top-1 -right-1 bg-[#0d9488] text-white text-[7px] font-bold rounded-full min-w-[12px] h-[12px] flex items-center justify-center px-0.5 leading-none">{paymentProofs.length}</span>
                                       )}
                                     </button>
                                   )}
                                   {workProofs.length > 0 && (
                                     <button
                                       onClick={() => openGallery(workProofs, 'Work Completion Proof')}
-                                      className="relative bg-green-50 hover:bg-green-100 p-0.5 rounded transition-colors"
+                                      className="relative inline-flex items-center justify-center w-5 h-5 bg-green-50 hover:bg-green-100 rounded transition-colors"
                                       title={`Work Proof${workProofs.length > 1 ? `s (${workProofs.length})` : ''}`}
                                     >
-                                      <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <svg className="w-3.5 h-3.5 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                       </svg>
                                       {workProofs.length > 1 && (
-                                        <span className="absolute -top-1.5 -right-1.5 bg-green-600 text-white text-[7px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 leading-none">{workProofs.length}</span>
+                                        <span className="absolute -top-1 -right-1 bg-green-600 text-white text-[7px] font-bold rounded-full min-w-[12px] h-[12px] flex items-center justify-center px-0.5 leading-none">{workProofs.length}</span>
                                       )}
                                     </button>
                                   )}
                                   {closureProofs.length > 0 && (
                                     <button
                                       onClick={() => openGallery(closureProofs, 'Closure Proof')}
-                                      className="relative bg-purple-50 hover:bg-purple-100 p-0.5 rounded transition-colors"
+                                      className="relative inline-flex items-center justify-center w-5 h-5 bg-purple-50 hover:bg-purple-100 rounded transition-colors"
                                       title={`Closure Proof${closureProofs.length > 1 ? `s (${closureProofs.length})` : ''}`}
                                     >
-                                      <svg className="w-3.5 h-3.5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <svg className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                       </svg>
                                       {closureProofs.length > 1 && (
-                                        <span className="absolute -top-1.5 -right-1.5 bg-purple-600 text-white text-[7px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 leading-none">{closureProofs.length}</span>
+                                        <span className="absolute -top-1 -right-1 bg-purple-600 text-white text-[7px] font-bold rounded-full min-w-[12px] h-[12px] flex items-center justify-center px-0.5 leading-none">{closureProofs.length}</span>
                                       )}
                                     </button>
                                   )}
@@ -335,7 +350,7 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, 
                       <div className="flex justify-center items-center gap-3">
                         <button
                           onClick={() => onEditInvoice(invoice)}
-                          className="text-blue-600 hover:text-blue-800 text-sm font-semibold transition-colors"
+                          className="text-[#0d9488] hover:text-[#0f766e] text-sm font-semibold transition-colors"
                         >
                           Edit
                         </button>
@@ -363,6 +378,10 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, 
         onConfirm={handleStageConfirm}
         invoiceNo={selectedInvoiceForStage?.invoiceNo}
         stage={targetStage}
+        existingDetails={selectedInvoiceForStage ? selectedInvoiceForStage[
+          targetStage === 'Payment Received' ? 'paymentDetails' :
+          targetStage === 'Work completion' ? 'workDetails' : 'closureDetails'
+        ] : null}
       />
 
       {/* Image Gallery Preview Modal - supports multiple proofs */}

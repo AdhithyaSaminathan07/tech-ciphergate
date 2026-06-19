@@ -8,6 +8,7 @@ import Spinner from '../common/Spinner';
 import { getWorkers, getWorkerById } from '../../services/workerService';
 import { putAttendance, getWorkerLastAttendance } from '../../services/attendanceService';
 import { getCurrentPosition, isWorkerInAllowedLocation } from '../../services/geolocationService';
+import { AlertCircle, MapPin, Smile, UserCheck, CheckCircle2, ShieldAlert } from 'lucide-react';
 
 const FaceAttendance = ({ subdomain, isOpen, onClose, workerMode = false, currentWorker = null, onAttendanceMarked }) => {
   const webcamRef = useRef(null);
@@ -532,67 +533,85 @@ const FaceAttendance = ({ subdomain, isOpen, onClose, workerMode = false, curren
         title="Face Attendance"
         size="md"
       >
-        <div className="py-4">
+        <div className="py-2">
           {!isModelLoaded ? (
-            <div className="flex flex-col items-center justify-center py-8">
-              <Spinner size="lg" />
-              <p className="mt-4 text-gray-600">Loading face recognition models...</p>
-              <p className="mt-2 text-sm text-gray-500">This may take a few moments</p>
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <Spinner size="lg" className="text-teal-600" />
+              <p className="mt-4 text-base font-semibold text-slate-800">Initializing Biometric Models</p>
+              <p className="mt-1 text-sm text-slate-400 max-w-[280px]">Setting up face detection and landmarks recognition. Please wait...</p>
             </div>
           ) : isLoading ? (
-            <div className="flex flex-col items-center justify-center py-8">
-              <Spinner size="lg" />
-              <p className="mt-4 text-gray-600">Loading employee data...</p>
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <Spinner size="lg" className="text-teal-600" />
+              <p className="mt-4 text-base font-semibold text-slate-800">Loading Database</p>
+              <p className="mt-1 text-sm text-slate-400">Syncing registered employee face descriptors...</p>
             </div>
           ) : showConfirmation && matchedWorker ? (
-            <div className="text-center py-4">
-              <div className="flex justify-center mb-4">
-                {matchedWorker.photo ? (
+            <div className="text-center py-6 px-4 bg-slate-50/50 rounded-2xl border border-slate-100/50">
+              <div className="flex justify-center mb-5">
+                <div className="relative">
                   <img
-                    src={matchedWorker.photo}
+                    src={matchedWorker.photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(matchedWorker.name)}&background=10B981&color=fff`}
                     alt={matchedWorker.name}
-                    className="w-24 h-24 rounded-full object-cover border-2 border-green-500"
+                    className="w-24 h-24 rounded-full object-cover border-4 border-emerald-500 shadow-md"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(matchedWorker.name)}&background=10B981&color=fff`;
+                    }}
                   />
-                ) : (
-                  <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center border-2 border-green-500">
-                    <span className="text-2xl font-bold text-gray-600">
-                      {matchedWorker.name.charAt(0)}
-                    </span>
+                  <div className="absolute -bottom-1.5 -right-1.5 bg-emerald-500 text-white p-1 rounded-full border-2 border-white shadow-sm">
+                    <CheckCircle2 size={16} />
                   </div>
-                )}
+                </div>
               </div>
-              <h3 className="text-xl font-semibold mb-2 text-gray-800">Attendance Marked</h3>
-              <p className="text-gray-700 mb-1">Name: {matchedWorker.name}</p>
-              <p className="text-gray-700 mb-6">ID: {matchedWorker.rfid}</p>
-              <p className="text-lg font-semibold mb-6">
-                <span className={attendanceType === 'Punch In' ? 'text-green-600' : 'text-red-600'}>
+              <h3 className="text-xl font-bold text-slate-900 mb-1">Attendance Recorded!</h3>
+              <p className="text-sm font-semibold text-slate-700">{matchedWorker.name}</p>
+              <p className="font-mono text-xs text-slate-400 mb-4">ID: {matchedWorker.rfid}</p>
+              <div className="inline-block mb-5">
+                <span className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold shadow-sm ${
+                  attendanceType === 'Punch In' 
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
+                    : 'bg-rose-50 text-rose-700 border border-rose-100'
+                }`}>
                   {attendanceType}
                 </span>
-              </p>
-              <div className="mt-4">
-                <p className="text-gray-600">Please wait 2 minutes before punching again</p>
+              </div>
+              <div className="pt-4 border-t border-slate-200/60">
+                <p className="text-xs text-slate-400">Please wait 2 minutes before your next punch.</p>
               </div>
             </div>
           ) : (
             <div className="face-attendance-container">
               {/* Location Information */}
               {locationChecked && (
-                <div className={`mb-4 p-3 rounded-md text-center ${ locationAllowed ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200' }`}>
-                  <p className="font-medium">
-                    {locationAllowed 
-                      ? '✓ You are within the allowed attendance area' 
-                      : '✗ You are outside the allowed attendance area'}
-                  </p>
+                <div className={`mb-5 p-4 rounded-2xl border text-center shadow-sm flex flex-col items-center gap-1.5 ${ 
+                  locationAllowed 
+                    ? 'bg-emerald-50/70 text-emerald-800 border-emerald-100' 
+                    : 'bg-rose-50/70 text-rose-800 border-rose-100' 
+                }`}>
+                  <div className="flex items-center gap-1.5 font-bold text-sm">
+                    {locationAllowed ? (
+                      <>
+                        <MapPin size={16} className="text-emerald-600" />
+                        <span>Inside Authorized Location Boundary</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldAlert size={16} className="text-rose-600" />
+                        <span>Outside Allowed Location Boundary</span>
+                      </>
+                    )}
+                  </div>
                   {currentLocation && (
-                    <p className="text-sm mt-1">
-                      Current location: {currentLocation.latitude.toFixed(6)}, {currentLocation.longitude.toFixed(6)} 
+                    <p className="text-xs font-mono text-slate-500">
+                      GPS: {currentLocation.latitude.toFixed(6)}, {currentLocation.longitude.toFixed(6)} 
                       (±{Math.round(currentLocation.accuracy)}m)
                     </p>
                   )}
                 </div>
               )}
 
-              <div className="webcam-container relative mb-4">
+              <div className="webcam-container relative mb-5 overflow-hidden rounded-2xl border-2 border-slate-100 shadow-lg bg-slate-950">
                 <Webcam
                   audio={false}
                   ref={webcamRef}
@@ -603,35 +622,45 @@ const FaceAttendance = ({ subdomain, isOpen, onClose, workerMode = false, curren
                     height: { ideal: 480 },
                     frameRate: { ideal: 30, min: 15 }
                   }}
-                  className="w-full rounded-lg"
+                  className="w-full h-auto object-cover aspect-video"
                 />
-                <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full" />
+                <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full pointer-events-none" />
               </div>
 
-              <div className="text-center mb-4">
-                <div className="inline-block p-2 bg-blue-100 rounded-full">
-                  <div className="w-4 h-4 bg-blue-500 rounded-full animate-pulse"></div>
+              <div className="text-center mb-5">
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-full shadow-sm">
+                  <span className="relative flex h-2 w-2">
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isProcessing ? 'bg-indigo-400' : 'bg-emerald-400'}`}></span>
+                    <span className={`relative inline-flex rounded-full h-2 w-2 ${isProcessing ? 'bg-indigo-500' : 'bg-emerald-500'}`}></span>
+                  </span>
+                  <span className="text-xs font-bold text-slate-600 tracking-wide uppercase">
+                    {isProcessing ? 'Recognizing...' : 'Live Camera Scanner'}
+                  </span>
                 </div>
-                <p className="text-sm text-gray-600 mt-2">
-                  {isProcessing ? 'Recognizing face...' : 'Position your face within the circular frame'}
+                <p className="text-sm font-semibold text-slate-700 mt-2">
+                  {isProcessing ? 'Analyzing biometric landmarks...' : 'Align face within the visual overlay'}
                 </p>
               </div>
 
               {error && (
-                <div className="mb-4 p-3 text-center text-red-600 bg-red-50 rounded-md border border-red-200">
-                  {error}
+                <div className="mb-5 p-4 text-sm text-rose-700 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-2">
+                  <AlertCircle size={16} className="text-rose-500 flex-shrink-0" />
+                  <span className="font-semibold text-left">{error}</span>
                 </div>
               )}
 
-              <div className="text-center text-gray-600 mb-4">
-                <p className="font-medium">Face Recognition Status</p>
-                <p className="text-sm mt-1">
-                  {isProcessing ? 'Analyzing facial features...' : 'Waiting for face detection'}
-                </p>
+              <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                <span className="font-semibold">Security Status</span>
+                <span className="font-mono bg-slate-200/80 px-2 py-0.5 rounded text-slate-650 font-medium">
+                  {isProcessing ? 'Verifying descriptor...' : 'Waiting...'}
+                </span>
               </div>
 
-              <div className="mt-4 text-center text-sm text-gray-500">
-                <p>Registered employees with face data: {workers.length}</p>
+              <div className="mt-4 text-center">
+                <p className="text-xs font-semibold text-slate-400 flex items-center justify-center gap-1">
+                  <Smile size={13} className="text-slate-400" />
+                  <span>Enrolled employees face models: {workers.length}</span>
+                </p>
               </div>
             </div>
           )}

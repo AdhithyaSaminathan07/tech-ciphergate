@@ -15,6 +15,7 @@ const {
   getCostsAttribution,
   getTopResources,
   getTagCompliance,
+  getCommitmentCoverage,
   getRecommendations,
   getRecommendationById,
   approveRecommendation,
@@ -24,9 +25,16 @@ const {
   getForecasts,
   getAuditLogs,
   chatWithAgent,
-  getCostLakeStatus
+  getCostLakeStatus,
+  getSettings,
+  updateSettings,
+  getBudgets,
+  createOrUpdateBudget,
+  deleteBudget,
+  exportReport
 } = require('../controllers/serverController');
 const { protect, adminOnly } = require('../middleware/authMiddleware');
+
 
 // Mount routes with admin protection
 router.route('/accounts')
@@ -72,6 +80,9 @@ router.route('/costs/top-resources')
 router.route('/costs/tag-compliance')
   .get(protect, adminOnly, getTagCompliance);
 
+router.route('/costs/commitment-coverage')
+  .get(protect, adminOnly, getCommitmentCoverage);
+
 // Optimization Recommendations & Approvals routes
 router.route('/recommendations')
   .get(protect, adminOnly, getRecommendations);
@@ -103,5 +114,23 @@ router.route('/chat')
 router.route('/audit-logs')
   .get(protect, adminOnly, getAuditLogs);
 
+// Phase 10: Reports Export route
+router.route('/reports/export')
+  .get(protect, adminOnly, exportReport);
+
+// AWS Settings route
+router.route('/settings')
+  .get(protect, adminOnly, getSettings)
+  .post(protect, adminOnly, updateSettings);
+
+// Budgets CRUD routes
+router.route('/budgets')
+  .get(protect, adminOnly, getBudgets)
+  .post(protect, adminOnly, createOrUpdateBudget);
+
+router.route('/budgets/:id')
+  .delete(protect, adminOnly, deleteBudget);
+
 module.exports = router;
+
 

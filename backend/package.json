@@ -9,15 +9,20 @@
         "dev": "nodemon server.js",
         "migrate:holidays": "node migrations/updateHolidaysForEmployeeSpecific.js",
         "test:aws": "node tests/awsConnection.test.js",
-        "test:sync": "node tests/syncAws.test.js"
+        "test:sync": "node tests/syncAws.test.js",
+        "test:organizations": "node tests/awsOrganizationsException.test.js"
     },
     "dependencies": {
         "@aws-sdk/client-athena": "^3.500.0",
+        "@aws-sdk/client-cloudwatch": "^3.1072.0",
         "@aws-sdk/client-cost-explorer": "^3.1069.0",
         "@aws-sdk/client-ec2": "^3.500.0",
+        "@aws-sdk/client-eks": "^3.1072.0",
+        "@aws-sdk/client-elastic-load-balancing-v2": "^3.1072.0",
         "@aws-sdk/client-glue": "^3.1069.0",
         "@aws-sdk/client-iam": "^3.1069.0",
         "@aws-sdk/client-organizations": "^3.500.0",
+        "@aws-sdk/client-rds": "^3.1072.0",
         "@aws-sdk/client-s3": "^3.1069.0",
         "@aws-sdk/client-sts": "^3.500.0",
         "@mtproto/core": "^6.3.0",

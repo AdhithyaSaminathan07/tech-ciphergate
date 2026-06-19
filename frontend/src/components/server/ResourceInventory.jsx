@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getInventory } from '../../services/serverService';
+import { getInventory, getAccounts } from '../../services/serverService';
 import { FiSearch, FiLayers, FiMapPin, FiCpu, FiDatabase, FiCloud, FiServer, FiActivity, FiInfo } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 
@@ -11,6 +11,7 @@ const ResourceInventory = () => {
   const [region, setRegion] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [selectedResource, setSelectedResource] = useState(null);
+  const [availableRegions, setAvailableRegions] = useState([]);
 
   const fetchInventory = async (page = 1) => {
     setIsLoading(true);
@@ -31,6 +32,26 @@ const ResourceInventory = () => {
       setIsLoading(false);
     }
   };
+
+  // Fetch available regions from connected accounts (dynamically discovered via EC2 DescribeRegions)
+  useEffect(() => {
+    const loadRegions = async () => {
+      try {
+        const accounts = await getAccounts();
+        const connectedAccounts = accounts.filter(a => a.connectionStatus === 'Connected');
+        const regionSet = new Set();
+        connectedAccounts.forEach(acc => {
+          if (Array.isArray(acc.regions)) {
+            acc.regions.forEach(r => regionSet.add(r));
+          }
+        });
+        setAvailableRegions(Array.from(regionSet).sort());
+      } catch (err) {
+        console.warn('Could not load account regions for filter:', err.message);
+      }
+    };
+    loadRegions();
+  }, []);
 
   useEffect(() => {
     fetchInventory(1);
@@ -94,16 +115,21 @@ const ResourceInventory = () => {
             <option value="eks">EKS Containers</option>
           </select>
 
-          {/* Region Selector */}
+          {/* Region Selector — populated dynamically from connected account regions */}
           <select
             value={region}
             onChange={(e) => setRegion(e.target.value)}
             className="px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
           >
             <option value="">All Regions</option>
-            <option value="us-east-1">US East (N. Virginia)</option>
-            <option value="us-west-2">US West (Oregon)</option>
-            <option value="eu-west-1">Europe (Ireland)</option>
+            {availableRegions.length > 0 ? (
+              availableRegions.map(r => (
+                <option key={r} value={r}>{r}</option>
+              ))
+            ) : (
+              // Fallback shown while accounts are loading or if no accounts are connected
+              <option disabled value="">— No regions discovered —</option>
+            )}
           </select>
         </div>
       </div>

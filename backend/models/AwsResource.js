@@ -13,8 +13,9 @@ const awsResourceSchema = new mongoose.Schema({
   },
   resourceId: {
     type: String,
-    required: true,
-    unique: true
+    required: true
+    // NOTE: Not globally unique — two different tenants/accounts may share a resource ID pattern.
+    // Uniqueness is enforced by the compound index below.
   },
   name: {
     type: String,
@@ -54,6 +55,11 @@ const awsResourceSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Compound index: same resource type scoped by tenant
 awsResourceSchema.index({ subdomain: 1, type: 1 });
+
+// Compound unique index: resourceId must be unique per AWS account (not globally)
+// This replaces the old `resourceId: { unique: true }` which caused cross-tenant collisions
+awsResourceSchema.index({ resourceId: 1, awsAccountId: 1 }, { unique: true });
 
 module.exports = mongoose.model('AwsResource', awsResourceSchema);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import uploadUtils from '../../utils/uploadUtils';
 
-const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage }) => {
+const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage, existingDetails }) => {
   const [file, setFile] = useState(null);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(false);
@@ -10,6 +10,31 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage }) => {
   const hiddenInputRef = useRef(null);
   const [isPasteFocused, setIsPasteFocused] = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
+  const [existingProofs, setExistingProofs] = useState([]);
+
+  // Load existing details if any when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      if (existingDetails) {
+        setDate(existingDetails.date ? new Date(existingDetails.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+        
+        let proofsList = [];
+        if (existingDetails.proofs && existingDetails.proofs.length > 0) {
+          proofsList = existingDetails.proofs.map(p => {
+            if (typeof p === 'string') return { url: p };
+            return { url: p.url || p.proof || '', date: p.date };
+          });
+        } else if (existingDetails.proof) {
+          proofsList = [{ url: existingDetails.proof, date: existingDetails.date }];
+        }
+        setExistingProofs(proofsList);
+      } else {
+        setDate(new Date().toISOString().split('T')[0]);
+        setExistingProofs([]);
+      }
+      setFile(null);
+    }
+  }, [isOpen, existingDetails]);
 
   // Auto-focus the hidden input when opened to capture paste events immediately
   useEffect(() => {
@@ -76,6 +101,10 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage }) => {
     }
   };
 
+  const handleRemoveExistingProof = (index) => {
+    setExistingProofs(prev => prev.filter((_, i) => i !== index));
+  };
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -89,19 +118,33 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!file || !date) {
-      alert('Please select a file and date');
+    if (!file && existingProofs.length === 0) {
+      const confirmRevert = window.confirm("You have removed all proofs. This will reset the progress of this stage. Do you want to continue?");
+      if (!confirmRevert) return;
+      onConfirm(null);
       return;
     }
 
     try {
       setLoading(true);
-      const proofUrl = await uploadUtils(file);
-      if (proofUrl) {
-        onConfirm({ date, proof: proofUrl });
-      } else {
-        alert('Upload failed. Please try again.');
+      let updatedProofs = [...existingProofs];
+      
+      if (file) {
+        const proofUrl = await uploadUtils(file);
+        if (proofUrl) {
+          updatedProofs.push({ date, url: proofUrl });
+        } else {
+          alert('Upload failed. Please try again.');
+          setLoading(false);
+          return;
+        }
       }
+      
+      onConfirm({
+        date,
+        proofs: updatedProofs,
+        proof: updatedProofs[0]?.url || null
+      });
     } catch (error) {
       console.error('Upload failed:', error);
       alert('Failed to upload proof');
@@ -113,7 +156,7 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage }) => {
   const getStageConfig = () => {
     switch (stage) {
       case 'Payment Received':
-        return { title: 'Payment Details', label: 'Received Date', color: 'blue' };
+        return { title: 'Payment Details', label: 'Received Date', color: 'teal' };
       case 'Work completion':
         return { title: 'Work Completion', label: 'Completion Date', color: 'green' };
       case 'Closure agreement':
@@ -124,7 +167,21 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage }) => {
   };
 
   const config = getStageConfig();
-  const colorClass = config.color === 'blue' ? 'blue' : config.color === 'green' ? 'green' : 'purple';
+  const colorClass = config.color === 'teal' ? 'teal' : config.color === 'green' ? 'green' : config.color === 'purple' ? 'purple' : 'gray';
+
+  const getButtonStyles = () => {
+    switch (colorClass) {
+      case 'teal':
+        return 'bg-[#0d9488] hover:bg-[#0f766e] shadow-teal-600/10';
+      case 'green':
+        return 'bg-green-600 hover:bg-green-700 shadow-green-600/10';
+      case 'purple':
+        return 'bg-purple-600 hover:bg-purple-700 shadow-purple-600/10';
+      default:
+        return 'bg-gray-600 hover:bg-gray-700 shadow-gray-600/10';
+    }
+  };
+  const buttonStyleClass = getButtonStyles();
 
   return (
     <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center z-[100] animate-in fade-in duration-200">
@@ -149,13 +206,42 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage }) => {
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0d9488] focus:outline-none transition-all"
               required
             />
           </div>
+
+          {/* Existing Proofs List */}
+          {existingProofs.length > 0 && (
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1.5">Currently Uploaded Proofs</label>
+              <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100 mb-2 max-h-36 overflow-y-auto pr-1">
+                {existingProofs.map((p, idx) => (
+                  <div key={idx} className="relative group rounded-lg border border-slate-200 overflow-hidden bg-white flex items-center justify-center h-20 shadow-sm">
+                    <img 
+                      src={p.url || p.proof} 
+                      alt="Uploaded proof" 
+                      className="w-full h-full object-cover cursor-zoom-in hover:scale-105 transition-transform" 
+                      onClick={() => setPreviewImage({ url: p.url || p.proof, name: `Proof ${idx + 1}` })}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveExistingProof(idx)}
+                      className="absolute top-1 right-1 p-1 bg-rose-50 text-rose-600 rounded-md hover:bg-rose-100 transition-colors shadow-sm"
+                      title="Delete Proof"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           
           <div>
-            <label className="block text-sm font-bold text-gray-700 mb-1.5">Upload Proof</label>
+            <label className="block text-sm font-bold text-gray-700 mb-1.5">Upload Additional Proof</label>
             {file ? (
               <div className="flex flex-col items-center justify-center p-4 border border-gray-200 bg-gray-50 rounded-xl">
                 <div className="flex items-center gap-3 w-full">
@@ -174,7 +260,7 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage }) => {
                   <button 
                     type="button"
                     onClick={() => setFile(null)}
-                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                    className="p-2 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
                   >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -185,15 +271,14 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage }) => {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Left: Click/Drag-drop Upload */}
-                <div className="relative border-2 border-dashed border-gray-300 rounded-xl p-4 hover:border-blue-500 transition-all group text-center flex flex-col items-center justify-center gap-2 cursor-pointer bg-white">
+                <div className="relative border-2 border-dashed border-gray-300 rounded-xl p-4 hover:border-[#0d9488] transition-all group text-center flex flex-col items-center justify-center gap-2 cursor-pointer bg-white">
                   <input
                     type="file"
                     onChange={(e) => setFile(e.target.files[0])}
                     accept="image/*"
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    required
                   />
-                  <svg className="h-8 w-8 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="h-8 w-8 text-gray-400 group-hover:text-[#0d9488] transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                   </svg>
                   <div>
@@ -204,7 +289,7 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage }) => {
 
                 {/* Right: Paste Clipboard */}
                 <div 
-                  className={`relative border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center gap-2 text-center transition-all select-none group ${isPasteFocused ? 'border-blue-500 bg-blue-50/40 shadow-inner' : 'border-gray-300 hover:border-blue-500 hover:bg-blue-50/10'}`}
+                  className={`relative border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center gap-2 text-center transition-all select-none group ${isPasteFocused ? 'border-[#0d9488] bg-teal-50/20 shadow-inner' : 'border-gray-300 hover:border-[#0d9488] hover:bg-teal-50/5'}`}
                 >
                   <textarea
                     ref={hiddenInputRef}
@@ -214,12 +299,12 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage }) => {
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer resize-none z-10"
                     disabled={loading}
                   />
-                  <svg className={`h-8 w-8 transition-transform z-0 ${isPasteFocused ? 'text-blue-600 animate-bounce' : 'text-gray-400 group-hover:scale-110'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className={`h-8 w-8 transition-transform z-0 ${isPasteFocused ? 'text-[#0d9488] animate-bounce' : 'text-gray-400 group-hover:scale-110'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                   <div className="z-0">
                     <p className="text-xs font-bold text-gray-700">Paste Screenshot</p>
-                    <p className={`text-[10px] mt-0.5 transition-colors ${isPasteFocused ? 'text-blue-600 font-semibold' : 'text-gray-400'}`}>
+                    <p className={`text-[10px] mt-0.5 transition-colors ${isPasteFocused ? 'text-[#0d9488] font-semibold' : 'text-gray-400'}`}>
                       {isPasteFocused ? "Press Ctrl+V to paste!" : "Click & press Ctrl+V"}
                     </p>
                   </div>
@@ -239,7 +324,7 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage }) => {
             <button
               type="submit"
               disabled={loading}
-              className={`flex-1 px-4 py-3 bg-${colorClass}-600 text-white rounded-xl font-bold hover:bg-${colorClass}-700 transition-colors shadow-lg shadow-${colorClass}-100 disabled:bg-gray-400 disabled:shadow-none`}
+              className={`flex-1 px-4 py-3 text-white rounded-xl font-bold transition-all shadow-lg hover:scale-[1.01] active:scale-[0.99] disabled:bg-gray-400 disabled:shadow-none disabled:scale-100 ${buttonStyleClass}`}
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">

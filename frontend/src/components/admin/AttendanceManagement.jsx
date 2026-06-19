@@ -1,5 +1,4 @@
 import React, { Fragment, useRef, useState, useEffect, useContext, useCallback } from 'react';
-import { FaDownload, FaPlus, FaExclamationTriangle, FaCamera, FaChevronDown } from 'react-icons/fa';
 import Button from '../common/Button';
 import Modal from '../common/Modal';
 import Webcam from "react-webcam";
@@ -13,7 +12,7 @@ import { Link } from 'react-router-dom';
 import FaceAttendance from './FaceAttendance';
 import api from '../../services/api';
 import BottomSheet from '../common/BottomSheet';
-import { Filter, Search, RotateCcw } from 'lucide-react';
+import { Filter, Search, RotateCcw, Plus, Camera, Download, AlertTriangle, ChevronDown, Hash, Building2 } from 'lucide-react';
 
 const AttendanceManagement = () => {
     const [worker, setWorker] = useState({ rfid: "" });
@@ -451,16 +450,16 @@ const AttendanceManagement = () => {
             accessor: 'name',
             render: (record) => (
                 <div className="flex items-center">
-                    {record?.photo && (
-                        <img
-                            src={record.photo
-                                ? record.photo
-                                : `https://ui-avatars.com/api/?name=${encodeURIComponent(record.name)}`}
-                            alt="Employee"
-                            className="w-8 h-8 rounded-full mr-2"
-                        />
-                    )}
-                    <Link to={`/admin/attendance/${record.worker?._id}`} className="text-blue-600 hover:underline">
+                    <img
+                        src={record?.photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(record?.name || 'U')}&background=0d9488&color=fff`}
+                        alt="Employee"
+                        className="w-8 h-8 rounded-full object-cover mr-2.5 shadow-sm border border-slate-150"
+                        onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(record?.name || 'U')}&background=0d9488&color=fff`;
+                        }}
+                    />
+                    <Link to={`/admin/attendance/${record.worker?._id}`} className="text-slate-800 font-semibold hover:text-teal-600 transition-colors">
                         {record?.name || 'Unknown'}
                     </Link>
                 </div>
@@ -469,26 +468,39 @@ const AttendanceManagement = () => {
         {
             header: 'Employee ID',
             accessor: 'rfid',
-            render: (record) => record?.rfid || 'Unknown'
+            render: (record) => (
+                <span className="font-mono text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200/60 px-2 py-1 rounded-md">
+                    {record?.rfid || 'Unknown'}
+                </span>
+            )
         },
         {
             header: 'Department',
             accessor: 'departmentName',
-            render: (record) => record?.departmentName || 'N/A'
+            render: (record) => (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-50 text-teal-700 border border-teal-100">
+                    {record?.departmentName || 'N/A'}
+                </span>
+            )
         },
         {
             header: 'Date',
             accessor: 'date',
-            render: (record) => record.date || 'Unknown'
+            render: (record) => (
+                <span className="text-sm text-slate-600 font-medium">
+                    {record.date || 'Unknown'}
+                </span>
+            )
         },
         {
             header: 'In Time',
             accessor: 'inTimes',
             render: (record) => (
-                <div className="text-center">
-                    {record.inTimes.map((inPunch, index) => ( // Changed 'time' to 'inPunch' for clarity
-                        // Access 'inPunch.time' instead of just 'inPunch'
-                        <div key={index} className="text-green-600 text-center">{inPunch.time}</div>
+                <div className="flex flex-wrap justify-center gap-1">
+                    {record.inTimes.map((inPunch, index) => (
+                        <span key={index} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                            {inPunch.time}
+                        </span>
                     ))}
                 </div>
             )
@@ -497,19 +509,22 @@ const AttendanceManagement = () => {
             header: 'Out Time',
             accessor: 'outTimes',
             render: (record) => (
-                <div className="text-center">
+                <div className="flex flex-wrap justify-center gap-1">
                     {record.outTimes.map((outPunch, index) => (
-                        <div
-                            key={index}
-                            // Apply gray color if isMissed is true, otherwise red
-                            // Keep 'text-red-500' if not missed for consistency, as per original.
-                            className={`flex items-center justify-center ${outPunch.isMissed ? 'text-gray-500' : 'text-red-500'}`}
-                        >
-                            {/* MODIFIED LINE: Conditionally render the time */}
-                            {outPunch.time !== '-' ? outPunch.time : ''}
-                            {/* Display triangle icon only if isMissed is true AND it's not just a placeholder hyphen */}
-                            {outPunch.isMissed && outPunch.time !== '-' && ( // Ensure icon only shows with a time, not for empty placeholder
-                                <FaExclamationTriangle className="ml-2 text-orange-500" title="Missed Out Punch or Incomplete Pair" />
+                        <div key={index} className="inline-flex items-center justify-center">
+                            {outPunch.time !== '-' ? (
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                                    outPunch.isMissed 
+                                        ? 'bg-amber-50 text-amber-700 border-amber-100' 
+                                        : 'bg-rose-50 text-rose-700 border-rose-100'
+                                }`}>
+                                    {outPunch.time}
+                                    {outPunch.isMissed && (
+                                        <AlertTriangle size={12} className="ml-1 text-amber-500" title="Missed Out Punch or Incomplete Pair" />
+                                    )}
+                                </span>
+                            ) : (
+                                <span className="text-slate-300 font-light">—</span>
                             )}
                         </div>
                     ))}
@@ -519,7 +534,11 @@ const AttendanceManagement = () => {
         {
             header: 'Duration',
             accessor: 'duration',
-            render: (record) => record.duration || '00:00:00'
+            render: (record) => (
+                <span className="font-mono text-xs font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded border border-slate-200">
+                    {record.duration || '00:00:00'}
+                </span>
+            )
         }
     ];
 
@@ -528,31 +547,34 @@ const AttendanceManagement = () => {
             <div className="flex justify-between md:justify-end items-center mb-4 md:mb-6">
                 <h1 className="text-2xl font-bold admin-mobile-title md:hidden">Attendance Management</h1>
                 {/* Desktop buttons - hidden on mobile */}
-                <div className='hidden md:flex space-x-6 justify-center items-center'>
+                <div className='hidden md:flex space-x-4 justify-center items-center'>
                     {accessControl.addAttendance && (
                         <Button
                             variant="primary"
-                            className="flex items-center"
+                            className="flex items-center gap-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white border-0 shadow-sm transition-all duration-200"
                             onClick={() => setIsModalOpen(true)}
                         >
-                            <FaPlus className="mr-2" />Attendance
+                            <Plus size={16} />
+                            <span>Attendance</span>
                         </Button>
                     )}
                     {accessControl.faceAttendance && (
                         <Button
                             variant="primary"
-                            className="flex items-center"
+                            className="flex items-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white border-0 shadow-sm transition-all duration-200"
                             onClick={() => setIsFaceAttendanceOpen(true)}
                         >
-                            <FaCamera className="mr-2" />Face Attendance
+                            <Camera size={16} />
+                            <span>Face Attendance</span>
                         </Button>
                     )}
                     <Button
                         variant="primary"
-                        className="flex items-center"
+                        className="flex items-center gap-2 bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-800 hover:to-slate-900 text-white border-0 shadow-sm transition-all duration-200"
                         onClick={downloadAttendanceCSV}
                     >
-                        <FaDownload className="mr-2" />Download
+                        <Download size={16} />
+                        <span>Download</span>
                     </Button>
                 </div>
             </div>
@@ -563,30 +585,30 @@ const AttendanceManagement = () => {
                     {accessControl.addAttendance && (
                         <Button
                             variant="primary"
-                            className="flex flex-col items-center justify-center py-3"
+                            className="flex flex-col items-center justify-center py-3 bg-gradient-to-b from-teal-500 to-teal-600 text-white border-0 shadow-sm rounded-2xl"
                             onClick={() => setIsModalOpen(true)}
                         >
-                            <FaPlus className="text-xl mb-1" />
-                            <span className="text-xs">Attendance</span>
+                            <Plus size={20} className="mb-1" />
+                            <span className="text-xs font-semibold">Attendance</span>
                         </Button>
                     )}
                     {accessControl.faceAttendance && (
                         <Button
                             variant="primary"
-                            className="flex flex-col items-center justify-center py-3"
+                            className="flex flex-col items-center justify-center py-3 bg-gradient-to-b from-cyan-500 to-cyan-600 text-white border-0 shadow-sm rounded-2xl"
                             onClick={() => setIsFaceAttendanceOpen(true)}
                         >
-                            <FaCamera className="text-xl mb-1" />
-                            <span className="text-xs">Face</span>
+                            <Camera size={20} className="mb-1" />
+                            <span className="text-xs font-semibold">Face</span>
                         </Button>
                     )}
                     <Button
                         variant="primary"
-                        className="flex flex-col items-center justify-center py-3"
+                        className="flex flex-col items-center justify-center py-3 bg-gradient-to-b from-slate-600 to-slate-700 text-white border-0 shadow-sm rounded-2xl"
                         onClick={downloadAttendanceCSV}
                     >
-                        <FaDownload className="text-xl mb-1" />
-                        <span className="text-xs">Download</span>
+                        <Download size={20} className="mb-1" />
+                        <span className="text-xs font-semibold">Download</span>
                     </Button>
                 </div>
             </div>
@@ -599,29 +621,35 @@ const AttendanceManagement = () => {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                         <input
                             type="text"
-                            className="form-input pl-10"
+                            className="form-input pl-10 h-10 text-sm border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                             placeholder="Search by name..."
                             value={searchName}
                             onChange={(e) => setSearchName(e.target.value)}
                         />
                     </div>
-                    <input
-                        type="text"
-                        className="form-input"
-                        placeholder="Filter by RFID..."
-                        value={filterRfid}
-                        onChange={(e) => setFilterRfid(e.target.value)}
-                    />
-                    <input
-                        type="text"
-                        className="form-input"
-                        placeholder="Filter by department..."
-                        value={filterDepartment}
-                        onChange={(e) => setFilterDepartment(e.target.value)}
-                    />
+                    <div className="relative">
+                        <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                            type="text"
+                            className="form-input pl-10 h-10 text-sm border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                            placeholder="Filter by RFID..."
+                            value={filterRfid}
+                            onChange={(e) => setFilterRfid(e.target.value)}
+                        />
+                    </div>
+                    <div className="relative">
+                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                            type="text"
+                            className="form-input pl-10 h-10 text-sm border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                            placeholder="Filter by department..."
+                            value={filterDepartment}
+                            onChange={(e) => setFilterDepartment(e.target.value)}
+                        />
+                    </div>
                     <input
                         type="date"
-                        className="form-input"
+                        className="form-input h-10 text-sm border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                         placeholder="Filter by date..."
                         value={filterDate}
                         onChange={(e) => setFilterDate(e.target.value)}
@@ -738,7 +766,7 @@ const AttendanceManagement = () => {
                                     ) : (
                                         <>
                                             Load More
-                                            <FaChevronDown className="ml-2" />
+                                            <ChevronDown className="ml-2" size={16} />
                                         </>
                                     )}
                                 </button>
@@ -788,16 +816,19 @@ const AttendanceManagement = () => {
                         </div>
 
                     ) : (
-                        <form onSubmit={handleSubmit} className="mb-4">
-                            <input
-                                ref={inputRef}
-                                type="text"
-                                value={worker.rfid}
-                                onChange={e => setWorker({ rfid: e.target.value })}
-                                placeholder="RFID"
-                                className="border p-2 mb-2 w-full"
-                                list="rfid-suggestions"
-                            />
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div className="relative">
+                                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                <input
+                                    ref={inputRef}
+                                    type="text"
+                                    value={worker.rfid}
+                                    onChange={e => setWorker({ rfid: e.target.value })}
+                                    placeholder="Enter RFID number..."
+                                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none text-slate-700 transition-all placeholder:text-slate-450"
+                                    list="rfid-suggestions"
+                                />
+                            </div>
                             <datalist id="rfid-suggestions">
                                 {uniqueRfids.map((rfid, index) => (
                                     <option key={index} value={rfid} />
@@ -806,7 +837,7 @@ const AttendanceManagement = () => {
                             <Button
                                 type="submit"
                                 variant="primary"
-                                className="w-full flex items-center justify-center"
+                                className="w-full flex items-center justify-center bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white border-0 shadow-sm py-2.5 rounded-xl text-sm font-semibold transition-all duration-200"
                                 disabled={isDetectingAction}
                             >
                                 {isDetectingAction ? (
@@ -817,14 +848,17 @@ const AttendanceManagement = () => {
                             </Button>
                         </form>
                     )}
-                    <Webcam
-                        ref={webcamRef}
-                        style={{ width: '100%', maxWidth: 400, margin: '0 auto', border: '1px solid #ddd' }}
-                        videoConstraints={{ facingMode: 'environment' }}
-                    />
+                    <div className="relative overflow-hidden rounded-2xl border border-slate-200 shadow-md max-w-[400px] mx-auto my-5 bg-slate-900">
+                        <Webcam
+                            ref={webcamRef}
+                            className="w-full h-auto object-cover aspect-video"
+                            videoConstraints={{ facingMode: 'environment' }}
+                        />
+                    </div>
                     {qrText && (
-                        <div style={{ marginTop: 20 }}>
-                            <h1 className="text-lg text-center">RFID: {qrText}</h1>
+                        <div className="mt-4 p-3 bg-slate-50 border border-slate-100 rounded-xl text-center shadow-sm">
+                            <span className="text-xs font-semibold text-slate-450 uppercase tracking-wider block mb-1">Detected RFID</span>
+                            <span className="font-mono text-base font-bold text-slate-800">{qrText}</span>
                         </div>
                     )}
                 </Modal>

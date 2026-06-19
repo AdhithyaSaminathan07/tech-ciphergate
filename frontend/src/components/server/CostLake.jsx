@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FiRefreshCw, FiDatabase, FiCloud, FiServer, FiCheckCircle, FiAlertCircle, FiSettings, FiActivity } from 'react-icons/fi';
+import { FiRefreshCw, FiDatabase, FiCloud, FiServer, FiCheckCircle, FiAlertCircle, FiSettings, FiActivity, FiInfo } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getCostLakeStatus, triggerSync } from '../../services/serverService';
 
@@ -50,6 +50,7 @@ const CostLake = () => {
   const getStatusBadge = (statusName) => {
     const successStates = ['Configured', 'Active', 'Cataloged', 'Ready'];
     const pendingStates = ['Idle', 'Ready', 'Waiting', 'Pending'];
+    const neutralStates = ['Not Configured'];
 
     if (successStates.includes(statusName)) {
       return (
@@ -61,6 +62,12 @@ const CostLake = () => {
       return (
         <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100">
           <FiActivity size={10} /> {statusName}
+        </span>
+      );
+    } else if (neutralStates.includes(statusName)) {
+      return (
+        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+          <FiInfo size={10} /> {statusName}
         </span>
       );
     } else {
@@ -132,49 +139,114 @@ const CostLake = () => {
             </p>
           </div>
 
+          {status?.cur?.accountCount > 0 && (
+            <div className="p-4 bg-teal-50/50 border border-teal-200/50 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs text-teal-900">
+              <div>
+                <div className="flex items-center gap-1.5 font-bold text-teal-800">
+                  <FiCheckCircle className="text-teal-600" />
+                  <span>AWS Account Connected</span>
+                </div>
+                <p className="text-slate-500 mt-1">
+                  Organizations: <span className="font-semibold text-slate-700">Not Configured (Optional)</span>
+                </p>
+              </div>
+              <span className="px-2.5 py-1 bg-teal-600 text-white font-bold rounded-lg text-[10px]">
+                Healthy Connection
+              </span>
+            </div>
+          )}
+
           <div className="border-t border-slate-100 pt-6 space-y-4">
-            <h3 className="text-xs font-bold text-slate-700 tracking-wider">Setup Instructions</h3>
+            <h3 className="text-xs font-bold text-slate-700 tracking-wider">
+              {status?.cur?.accountCount > 0 ? "Next Steps to Complete Setup" : "Setup Instructions"}
+            </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/50 space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-teal-100 text-teal-800 text-xs font-bold flex items-center justify-center">1</span>
-                  <h4 className="text-xs font-bold text-slate-800">Connect AWS Account</h4>
-                </div>
-                <p className="text-[11px] text-slate-500 leading-normal pl-7">
-                  Add and verify your AWS account using cross-account Role assumption.
-                </p>
-              </div>
+              {status?.cur?.accountCount > 0 ? (
+                <>
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/50 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-teal-100 text-teal-800 text-xs font-bold flex items-center justify-center">1</span>
+                      <h4 className="text-xs font-bold text-slate-800">Configure CUR</h4>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-normal pl-7">
+                      Enable Parquet-based Cost & Usage Reports in your AWS console.
+                    </p>
+                  </div>
 
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/50 space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-teal-100 text-teal-800 text-xs font-bold flex items-center justify-center">2</span>
-                  <h4 className="text-xs font-bold text-slate-800">Setup CUR Delivery</h4>
-                </div>
-                <p className="text-[11px] text-slate-500 leading-normal pl-7">
-                  Configure AWS billing to deliver Parquet Cost & Usage Reports to your S3 bucket.
-                </p>
-              </div>
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/50 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-teal-100 text-teal-800 text-xs font-bold flex items-center justify-center">2</span>
+                      <h4 className="text-xs font-bold text-slate-800">Configure S3 Cost Lake</h4>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-normal pl-7">
+                      Set up the target S3 bucket for delivery of Parquet CUR logs.
+                    </p>
+                  </div>
 
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/50 space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-teal-100 text-teal-800 text-xs font-bold flex items-center justify-center">3</span>
-                  <h4 className="text-xs font-bold text-slate-800">Glue Catalog Database</h4>
-                </div>
-                <p className="text-[11px] text-slate-500 leading-normal pl-7">
-                  Run a crawler to catalog the Parquet tables as <code>cur_billing_catalog</code> database.
-                </p>
-              </div>
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/50 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-teal-100 text-teal-800 text-xs font-bold flex items-center justify-center">3</span>
+                      <h4 className="text-xs font-bold text-slate-800">Configure Glue</h4>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-normal pl-7">
+                      Create AWS Glue database catalog partitions to index the billing bucket logs.
+                    </p>
+                  </div>
 
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/50 space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-teal-100 text-teal-800 text-xs font-bold flex items-center justify-center">4</span>
-                  <h4 className="text-xs font-bold text-slate-800">Ingest Billing Data</h4>
-                </div>
-                <p className="text-[11px] text-slate-500 leading-normal pl-7">
-                  Sync cost data to fetch the Athena records and build billing summaries.
-                </p>
-              </div>
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/50 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-teal-100 text-teal-800 text-xs font-bold flex items-center justify-center">4</span>
+                      <h4 className="text-xs font-bold text-slate-800">Configure Athena & Sync</h4>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-normal pl-7">
+                      Query cost details via Athena and trigger manual billing data sync.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/50 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-teal-100 text-teal-800 text-xs font-bold flex items-center justify-center">1</span>
+                      <h4 className="text-xs font-bold text-slate-800">Connect AWS Account</h4>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-normal pl-7">
+                      Add and verify your AWS account using cross-account Role assumption.
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/50 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-teal-100 text-teal-800 text-xs font-bold flex items-center justify-center">2</span>
+                      <h4 className="text-xs font-bold text-slate-800">Setup CUR Delivery</h4>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-normal pl-7">
+                      Configure AWS billing to deliver Parquet Cost & Usage Reports to your S3 bucket.
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/50 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-teal-100 text-teal-800 text-xs font-bold flex items-center justify-center">3</span>
+                      <h4 className="text-xs font-bold text-slate-800">Glue Catalog Database</h4>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-normal pl-7">
+                      Run a crawler to catalog the Parquet tables as <code>cur_billing_catalog</code> database.
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/50 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-teal-100 text-teal-800 text-xs font-bold flex items-center justify-center">4</span>
+                      <h4 className="text-xs font-bold text-slate-800">Ingest Billing Data</h4>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-normal pl-7">
+                      Sync cost data to fetch the Athena records and build billing summaries.
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 

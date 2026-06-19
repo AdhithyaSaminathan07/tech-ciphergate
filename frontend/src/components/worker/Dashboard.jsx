@@ -12,8 +12,11 @@ import Spinner from '../common/Spinner';
 import CustomTaskForm from './CustomTaskForm';
 import { readNotification } from '../../services/notificationService';
 import appContext from '../../context/AppContext';
-import { FiShield, FiX } from 'react-icons/fi';
-import { FaMoneyBillAlt, FaCamera, FaTasks, FaHistory, FaBell, FaExclamationTriangle, FaTrophy, FaChevronDown, FaChevronUp, FaWallet, FaArrowRight, FaCrown, FaMedal, FaArrowCircleUp, FaClipboardList, FaClipboardCheck } from 'react-icons/fa';
+import { 
+  Camera, IdCard, ChevronDown, ChevronUp, Wallet, ArrowRight, Trophy, 
+  Medal, Award, AlertTriangle, Bell, ClipboardList, CheckSquare, 
+  ArrowUpCircle, ClipboardCheck, Shield, X, Calendar 
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import CountUp from 'react-countup';
 import api from '../../services/api';
@@ -42,8 +45,8 @@ const SectionHeader = ({ title, sub, action, actionLink }) => (
     </div>
     {action && actionLink && (
       <Link to={actionLink}
-        className="text-[11px] font-bold text-dash-green hover:opacity-80 flex items-center gap-1 flex-shrink-0 transition-opacity">
-        {action} <FaArrowRight size={10} />
+        className="text-[11px] font-bold text-[#0d9488] hover:text-[#0f766e] flex items-center gap-1 flex-shrink-0 transition-colors">
+        {action} <ArrowRight size={10} />
       </Link>
     )}
   </div>
@@ -322,77 +325,95 @@ const Dashboard = () => {
       <div className="max-w-[1600px] mx-auto flex flex-col gap-4 md:gap-8">
         
         {/* Header / Greeting */}
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-2">
-            <h1 className="text-base md:text-lg font-semibold text-slate-900 tracking-tight">
-              Welcome back, {user?.name || user?.username}
-            </h1>
-            <div className="flex items-center gap-1.5 text-[10px] text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-100 shadow-sm">
-              <span className="w-1 h-1 rounded-full bg-teal-500 animate-pulse"></span>
-              Live
-            </div>
-          </div>
-          <p className="text-[11px] text-slate-400">
-            You are in the <span className="font-medium text-slate-600">{user?.department}</span> department.
-          </p>
-        </div>
-
-        {/* Top Grid: Attendance, Salary, Top Team Earnings, Performance */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+        <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm flex items-center justify-between relative overflow-hidden">
+          {/* Subtle background glow accents */}
+          <div className="absolute right-0 top-0 w-32 h-32 bg-teal-500/5 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute left-1/3 bottom-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl pointer-events-none" />
           
+          <div className="flex flex-col gap-1.5 z-10">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight leading-none">
+                Welcome back, {user?.name || user?.username}
+              </h1>
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full shadow-sm">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                </span>
+                Live
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 font-medium">
+              Active Member of the <span className="text-teal-600 font-bold bg-teal-50/50 border border-teal-100/50 px-2 py-0.5 rounded-md uppercase tracking-wider text-[10px]">{user?.department || 'Ciphergate'}</span> department
+            </p>
+          </div>
+          
+          {/* Calendar Date Widget */}
+          <div className="hidden md:flex flex-col items-end text-right z-10 border-l border-slate-100 pl-6 shrink-0">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+              <Calendar size={11} className="text-slate-400" />
+              <span>Today's Date</span>
+            </span>
+            <span className="text-base font-bold text-slate-700 mt-1">
+              {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+            </span>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* 1. Attendance Card */}
-          <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
+          <div className="bg-white rounded-3xl p-6 border border-slate-100/80 shadow-sm flex flex-col justify-between transition-all duration-300 hover:shadow-md">
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-bold text-slate-400 tracking-widest">Attendance</p>
-                <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Check-in</span>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-xs font-black text-slate-400 uppercase tracking-wider">Attendance</p>
+                <span className="inline-flex items-center px-2.5 py-0.5 text-[10px] font-bold text-emerald-750 bg-emerald-50 border border-emerald-100 rounded-full">Check-in</span>
               </div>
-              <p className="text-[11px] text-slate-400 mb-4 leading-relaxed">
+              <p className="text-xs text-slate-400 leading-relaxed">
                 Scan your face or RFID badge below to log daily attendance.
               </p>
-              <div className="grid grid-cols-2 gap-3 mt-4">
+              <div className="grid grid-cols-2 gap-4 mt-6">
                 {accessControl.faceAttendance && (
                   <button
                     onClick={() => setShowFaceAttendance(true)}
-                    className="flex flex-col items-center justify-center py-7 px-3 bg-slate-50 hover:bg-teal-50/50 hover:border-teal-200 border border-slate-100 rounded-xl transition-all group duration-200 text-center gap-3"
+                    className="flex flex-col items-center justify-center p-4 bg-slate-50/60 hover:bg-teal-50/50 border border-slate-100 hover:border-teal-200 rounded-2xl transition-all duration-200 group gap-3.5 select-none"
                   >
-                    <div className="w-9 h-9 rounded-lg bg-teal-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
-                      <FaCamera size={15} />
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+                      <Camera size={18} />
                     </div>
-                    <span className="text-xs font-bold text-slate-800">Face ID</span>
+                    <span className="text-xs font-bold text-slate-700">Face ID</span>
                   </button>
                 )}
                 {accessControl.rfidAttendance && (
                   <button
                     onClick={() => setShowRFIDAttendance(true)}
-                    className="flex flex-col items-center justify-center py-7 px-3 bg-slate-50 hover:bg-teal-50/50 hover:border-teal-200 border border-slate-100 rounded-xl transition-all group duration-200 text-center gap-3"
+                    className="flex flex-col items-center justify-center p-4 bg-slate-50/60 hover:bg-teal-50/50 border border-slate-100 hover:border-teal-200 rounded-2xl transition-all duration-200 group gap-3.5 select-none"
                   >
-                    <div className="w-9 h-9 rounded-lg bg-slate-700 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
-                      <FaHistory size={15} />
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-r from-slate-700 to-slate-800 text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+                      <IdCard size={18} />
                     </div>
-                    <span className="text-xs font-bold text-slate-800">RFID</span>
+                    <span className="text-xs font-bold text-slate-700">RFID</span>
                   </button>
                 )}
               </div>
             </div>
-            <div className="text-[10px] text-slate-305 text-center mt-5">
-              Access verified securely via organization nodes
+            <div className="text-[10px] font-semibold text-slate-400 text-center mt-6 pt-4 border-t border-slate-50 flex items-center justify-center gap-1.5">
+              <Shield className="text-slate-400" size={13} />
+              <span>Access verified securely via node</span>
             </div>
           </div>
 
           {/* 2. Salary Card */}
-          <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
+          <div className="bg-white rounded-3xl p-6 border border-slate-100/80 shadow-sm flex flex-col justify-between transition-all duration-300 hover:shadow-md">
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-bold text-slate-400 tracking-widest">Salary - Current Month</p>
-                <span className="text-[10px] bg-slate-50 text-slate-500 px-2 py-0.5 rounded-full font-bold">Estimated</span>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-xs font-black text-slate-400 uppercase tracking-wider">Salary - Current Month</p>
+                <span className="inline-flex items-center px-2.5 py-0.5 text-[10px] font-bold text-slate-550 bg-slate-50 border border-slate-150 rounded-full">Estimated</span>
               </div>
               <div className="space-y-3">
                 {/* Deduction breakdown lines */}
                 <div className="space-y-1.5 text-xs font-semibold">
-                  <div className="flex justify-between items-center text-slate-505">
+                  <div className="flex justify-between items-center text-slate-500">
                     <span>Base Salary</span>
-                    <span className="text-slate-850 font-bold">₹{Math.round(salaryData.baseSalary).toLocaleString('en-IN')}</span>
+                    <span className="text-slate-800 font-bold">₹{Math.round(salaryData.baseSalary).toLocaleString('en-IN')}</span>
                   </div>
                   <div 
                     onClick={() => {
@@ -400,12 +421,12 @@ const Dashboard = () => {
                         setShowDeductionBreakdown(!showDeductionBreakdown);
                       }
                     }}
-                    className={`flex justify-between items-center text-slate-500 ${calculatedTaskPenalties.taskPenalties.length > 0 ? 'cursor-pointer hover:bg-slate-50/80 p-0.5 rounded transition-all select-none' : ''}`}
+                    className={`flex justify-between items-center text-slate-500 ${calculatedTaskPenalties.taskPenalties.length > 0 ? 'cursor-pointer hover:bg-slate-50/85 p-0.5 rounded transition-all select-none' : ''}`}
                   >
-                    <span className="flex items-center gap-1 text-rose-400">
+                    <span className="flex items-center gap-1 text-rose-500">
                       <span className="text-slate-400">−</span> Task Delay Penalties
                       {calculatedTaskPenalties.taskPenalties.length > 0 && (
-                        <FaChevronDown className={`text-slate-400 transition-transform duration-200 ${showDeductionBreakdown ? 'rotate-180' : ''}`} size={8} />
+                        <ChevronDown className={`text-slate-400 transition-transform duration-200 ${showDeductionBreakdown ? 'rotate-180' : ''}`} size={10} />
                       )}
                     </span>
                     <span className="text-rose-500 font-bold">−₹{Math.round(calculatedTaskPenalties.totalTaskPenalty).toLocaleString('en-IN')}</span>
@@ -423,7 +444,7 @@ const Dashboard = () => {
                         >
                           <div className="space-y-1 mt-1 mb-1 max-h-24 overflow-y-auto pr-1 pl-2">
                             {calculatedTaskPenalties.taskPenalties.map((task, index) => (
-                              <div key={index} className="p-2 bg-rose-50/60 border border-rose-100/60 rounded-lg text-[10px] leading-relaxed flex flex-col gap-1">
+                              <div key={index} className="p-2 bg-rose-50/60 border border-rose-100/60 rounded-xl text-[10px] leading-relaxed flex flex-col gap-1">
                                 <div className="flex justify-between font-bold">
                                   <span className="text-slate-700 truncate max-w-[70%]">{task.title}</span>
                                   <span className="text-rose-600">−₹{Math.round(task.taskDeduction).toLocaleString('en-IN')}</span>
@@ -458,11 +479,11 @@ const Dashboard = () => {
                     <>
                       <div 
                         onClick={() => setShowUnauthorizedBreakdown(!showUnauthorizedBreakdown)}
-                        className="flex justify-between items-center text-slate-500 cursor-pointer hover:bg-slate-50/80 p-0.5 rounded transition-all select-none"
+                        className="flex justify-between items-center text-slate-500 cursor-pointer hover:bg-slate-50/85 p-0.5 rounded transition-all select-none"
                       >
                         <span className="flex items-center gap-1 text-orange-500 font-bold">
                           <span className="text-slate-400">−</span> Unapproved Leave Penalties
-                          <FaChevronDown className={`text-slate-400 transition-transform duration-200 ${showUnauthorizedBreakdown ? 'rotate-180' : ''}`} size={8} />
+                          <ChevronDown className={`text-slate-400 transition-transform duration-200 ${showUnauthorizedBreakdown ? 'rotate-180' : ''}`} size={10} />
                         </span>
                         <span className="text-rose-500 font-bold">
                           −₹{Math.round(salaryData.totalUnauthorizedPenalty).toLocaleString('en-IN')}
@@ -537,9 +558,9 @@ const Dashboard = () => {
                       )}
 
                       {/* Final Payout hero */}
-                      <div className="bg-teal-50/60 rounded-xl p-3 border border-teal-100 flex items-center justify-between">
+                      <div className="bg-teal-50/60 rounded-2xl p-3.5 border border-teal-100/50 flex items-center justify-between">
                         <div>
-                          <span className="block text-[10px] text-teal-600 font-black tracking-wider">Final Payout</span>
+                          <span className="block text-[10px] text-teal-600 font-black tracking-wider uppercase">Final Payout</span>
                           <span className="text-xl font-black text-teal-700 tracking-tight">
                             ₹{Math.round(displayFinalPayout).toLocaleString('en-IN')}
                           </span>
@@ -548,7 +569,7 @@ const Dashboard = () => {
                           </span>
                         </div>
                         <div className="w-9 h-9 rounded-full bg-teal-100 text-teal-600 flex items-center justify-center">
-                          <FaWallet size={14} />
+                          <Wallet size={14} />
                         </div>
                       </div>
                     </>
@@ -557,7 +578,7 @@ const Dashboard = () => {
 
                 {/* No deductions message */}
                 {salaryData.totalDeductions === 0 && calculatedTaskPenalties.taskPenalties.length === 0 && salaryData.totalUnauthorizedPenalty === 0 && (
-                  <div className="text-[10px] text-teal-600 text-center font-semibold py-1">
+                  <div className="text-[10px] text-teal-600 text-center font-bold py-1">
                     🎉 Perfect record this month!
                   </div>
                 )}
@@ -566,29 +587,33 @@ const Dashboard = () => {
           </div>
 
           {/* 3. Top Team Earnings Card */}
-          <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
+          <div className="bg-white rounded-3xl p-6 border border-slate-100/80 shadow-sm flex flex-col justify-between transition-all duration-300 hover:shadow-md">
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-bold text-slate-400 tracking-widest">Top Team Earnings</p>
-                <span className="text-[10px] bg-slate-50 text-slate-500 px-2 py-0.5 rounded-full font-bold">Monthly Rank</span>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-xs font-black text-slate-400 uppercase tracking-wider">Top Team Earnings</p>
+                <span className="inline-flex items-center px-2.5 py-0.5 text-[10px] font-bold text-slate-550 bg-slate-50 border border-slate-150 rounded-full">Monthly Rank</span>
               </div>
-              <div className="space-y-3 mt-3.5">
+              <div className="space-y-3.5 mt-4">
                 {topTeams && topTeams.length > 0 ? (
                   (() => {
                     const maxVal = Math.max(...topTeams.map(t => t.amount || 1));
                     return topTeams.slice(0, 3).map((team, index) => {
-                      const medals = ['🥇', '🥈', '🥉'];
+                      const medals = [
+                        <div className="w-5 h-5 rounded-full bg-amber-50 border border-amber-250 text-amber-600 flex items-center justify-center text-[10px] shrink-0"><Trophy size={11} /></div>,
+                        <div className="w-5 h-5 rounded-full bg-slate-100 border border-slate-200 text-slate-500 flex items-center justify-center text-[10px] shrink-0"><Medal size={11} /></div>,
+                        <div className="w-5 h-5 rounded-full bg-orange-50 border border-orange-200 text-orange-650 flex items-center justify-center text-[10px] shrink-0"><Award size={11} /></div>
+                      ];
                       const itemColors = index === 0 ? 'bg-amber-50/40 text-amber-900 border-amber-100/70' :
                                        index === 1 ? 'bg-slate-50/50 text-slate-800 border-slate-200/70' :
-                                       'bg-orange-50/40 text-orange-900 border-orange-100/70';
+                                       'bg-orange-50/45 text-orange-900 border-orange-100/70';
                       const barColors = index === 0 ? 'bg-amber-500' :
                                         index === 1 ? 'bg-slate-400' :
                                         'bg-orange-400';
                       return (
-                        <div key={index} className={`flex flex-col p-3.5 rounded-xl border transition-all gap-2 ${itemColors}`}>
+                        <div key={index} className={`flex flex-col p-3 rounded-2xl border transition-all gap-2 ${itemColors}`}>
                           <div className="flex items-center justify-between min-w-0">
                             <div className="flex items-center gap-2 min-w-0">
-                              <span className="text-xs flex-shrink-0">{medals[index] || `#${index + 1}`}</span>
+                              {medals[index] || <span className="text-xs shrink-0 font-bold">#{index + 1}</span>}
                               <span className="text-xs font-bold text-slate-700 truncate">{team.name}</span>
                             </div>
                             <span className="text-xs font-extrabold text-slate-800 flex-shrink-0">
@@ -613,7 +638,7 @@ const Dashboard = () => {
                 )}
               </div>
             </div>
-            <div className="text-[10px] text-slate-300 text-center mt-4">
+            <div className="text-[10px] font-medium text-slate-400 text-center mt-5">
               Real-time standing analytics
             </div>
           </div>
@@ -629,10 +654,10 @@ const Dashboard = () => {
           {/* Row 1: Rankings, Fines, Notification */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Mini Leaderboard */}
-            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+            <div className="bg-white rounded-3xl p-6 border border-slate-100/80 shadow-sm transition-all duration-300 hover:shadow-md hover:border-slate-200/80">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-slate-50 text-amber-600 flex items-center justify-center border border-slate-100">
-                  <FaTrophy size={14} />
+                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100/70 shadow-sm">
+                  <Trophy size={14} />
                 </div>
                 <h2 className="text-lg font-bold text-slate-900">Rankings</h2>
               </div>
@@ -640,10 +665,10 @@ const Dashboard = () => {
             </div>
 
             {/* My Fines */}
-            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+            <div className="bg-white rounded-3xl p-6 border border-slate-100/80 shadow-sm transition-all duration-300 hover:shadow-md hover:border-slate-200/80">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-700 flex items-center justify-center border border-slate-100">
-                  <FaExclamationTriangle size={14} />
+                <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-100/70 shadow-sm">
+                  <AlertTriangle size={14} />
                 </div>
                 <h2 className="text-lg font-bold text-slate-900">My Fines</h2>
               </div>
@@ -651,17 +676,17 @@ const Dashboard = () => {
             </div>
 
             {/* Latest Notification */}
-            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+            <div className="bg-white rounded-3xl p-6 border border-slate-100/80 shadow-sm transition-all duration-300 hover:shadow-md hover:border-slate-200/80">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-700 flex items-center justify-center border border-slate-100">
-                  <FaBell size={14} />
+                <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center border border-teal-100/70 shadow-sm">
+                  <Bell size={14} />
                 </div>
                 <h2 className="text-lg font-bold text-slate-900">Latest Notification</h2>
               </div>
               {notifications.length > 0 ? (
-                <div className="p-4 bg-slate-50 rounded-xl">
-                  <p className="text-sm text-slate-700 mb-2">{notifications[0]?.messageData}</p>
-                  <p className="text-xs text-slate-400 font-medium">{new Date(notifications[0]?.createdAt).toLocaleString()}</p>
+                <div className="p-4 bg-teal-50/30 border border-teal-100/50 rounded-2xl">
+                  <p className="text-sm text-slate-700 mb-2 font-medium">{notifications[0]?.messageData}</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{new Date(notifications[0]?.createdAt).toLocaleString()}</p>
                 </div>
               ) : (
                 <p className="text-sm text-slate-400 text-center py-4">No notifications found</p>
@@ -672,10 +697,10 @@ const Dashboard = () => {
           {/* Row 2: Forms Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Submit Custom Task */}
-            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+            <div className="bg-white rounded-3xl p-6 border border-slate-100/80 shadow-sm transition-all duration-300 hover:shadow-md hover:border-slate-200/80">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-700 flex items-center justify-center border border-slate-100">
-                  <FaClipboardList size={14} />
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100/70 shadow-sm">
+                  <ClipboardList size={14} />
                 </div>
                 <h2 className="text-lg font-bold text-slate-900">Submit Custom Task</h2>
               </div>
@@ -683,10 +708,10 @@ const Dashboard = () => {
             </div>
 
             {/* Submit Task */}
-            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+            <div className="bg-white rounded-3xl p-6 border border-slate-100/80 shadow-sm transition-all duration-300 hover:shadow-md hover:border-slate-200/80">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-700 flex items-center justify-center border border-slate-100">
-                  <FaTasks size={14} />
+                <div className="w-8 h-8 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center border border-violet-100/70 shadow-sm">
+                  <CheckSquare size={14} />
                 </div>
                 <h2 className="text-lg font-bold text-slate-900">Submit Task</h2>
               </div>
@@ -697,10 +722,10 @@ const Dashboard = () => {
           {/* Row 3: Activity & Scoreboard */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Your Recent Activity */}
-            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+            <div className="bg-white rounded-3xl p-6 border border-slate-100/80 shadow-sm transition-all duration-300 hover:shadow-md hover:border-slate-200/80">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-700 flex items-center justify-center border border-slate-100">
-                  <FaClipboardCheck size={14} />
+                <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center border border-teal-100/70 shadow-sm">
+                  <ClipboardCheck size={14} />
                 </div>
                 <h2 className="text-lg font-bold text-slate-900">Your Recent Activity</h2>
               </div>
@@ -710,21 +735,21 @@ const Dashboard = () => {
                 ) : (
                   <>
                     {(showAllRecentTasks ? tasks : tasks.slice(0, 5)).map((task) => (
-                      <div key={task._id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                      <div key={task._id} className="flex items-center justify-between p-3.5 bg-slate-50/50 hover:bg-slate-50 border border-slate-100/60 rounded-2xl transition-all duration-200">
                         <div className="flex items-center gap-3">
-                          <span className="text-sm font-bold text-teal-600">+{task.points}</span>
+                          <span className="text-sm font-extrabold text-teal-600 bg-teal-50 border border-teal-100 px-2 py-0.5 rounded-lg">+{task.points}</span>
                           <div>
-                            <p className="text-sm font-semibold text-slate-700">{task.topics?.[0]?.name || task.description || 'Task Submission'}</p>
-                            <p className="text-xs text-slate-400">{new Date(task.createdAt).toLocaleString()}</p>
+                            <p className="text-xs font-bold text-slate-700">{task.topics?.[0]?.name || task.description || 'Task Submission'}</p>
+                            <p className="text-[10px] text-slate-400 font-semibold mt-0.5">{new Date(task.createdAt).toLocaleString()}</p>
                           </div>
                         </div>
-                        <span className="text-xs font-semibold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100">Verified</span>
+                        <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-100 shadow-sm">Verified</span>
                       </div>
                     ))}
                     {tasks.length > 5 && (
                       <button
                         onClick={() => setShowAllRecentTasks(!showAllRecentTasks)}
-                        className="w-full text-xs font-semibold text-slate-500 hover:text-teal-600 transition-colors py-2"
+                        className="w-full text-xs font-bold text-slate-500 hover:text-teal-600 transition-colors py-2"
                       >
                         {showAllRecentTasks ? 'Show Less' : `View All ${tasks.length} Tasks`}
                       </button>
@@ -735,10 +760,10 @@ const Dashboard = () => {
             </div>
 
             {/* Department Scoreboard */}
-            <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+            <div className="bg-white rounded-3xl p-6 border border-slate-100/80 shadow-sm transition-all duration-300 hover:shadow-md hover:border-slate-200/80">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-700 flex items-center justify-center border border-slate-100">
-                  <FaArrowCircleUp size={14} />
+                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100/70 shadow-sm">
+                  <ArrowUpCircle size={14} />
                 </div>
                 <h2 className="text-lg font-bold text-slate-900">Department Scoreboard</h2>
               </div>
@@ -749,10 +774,10 @@ const Dashboard = () => {
         </div>
 
         {/* Point History Section */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+        <div className="bg-white rounded-3xl p-6 border border-slate-100/80 shadow-sm transition-all duration-300 hover:shadow-md hover:border-slate-200/80">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-8 h-8 rounded-lg bg-slate-50 text-emerald-600 flex items-center justify-center border border-slate-100">
-              <FaTrophy size={14} />
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100/70 shadow-sm">
+              <Trophy size={14} />
             </div>
             <h2 className="text-lg font-bold text-slate-900">Performance Activity</h2>
           </div>
@@ -786,7 +811,7 @@ const Dashboard = () => {
                 <div className="p-6 pb-4 flex justify-between items-start border-b border-slate-50">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-[#0d9488]">
-                      <FiShield size={20} className="stroke-[2.5]" />
+                      <Shield size={20} className="stroke-[2.5]" />
                     </div>
                     <div>
                       <h3 className="text-base font-extrabold text-slate-900 leading-tight">
@@ -801,7 +826,7 @@ const Dashboard = () => {
                     onClick={handleDismissBugBounty}
                     className="p-1.5 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded-lg transition-colors"
                   >
-                    <FiX size={16} />
+                    <X size={16} />
                   </button>
                 </div>
 

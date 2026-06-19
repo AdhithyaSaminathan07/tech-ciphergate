@@ -104,9 +104,76 @@ const updateSettings = asyncHandler(async (req, res) => {
     res.json(user.notificationSettings);
 });
 
+// @desc    Test push notification for a user (diagnostic)
+// @route   POST /api/user-notifications/test-push
+// @access  Private
+const testPushNotification = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const clientPermission = req.body.permissionStatus || 'unknown';
+    
+    const subscriptions = await PushSubscription.find({ userId });
+    
+    let sentCount = 0;
+    let failedCount = 0;
+    let removedCount = 0;
+    const errorDetails = [];
+
+    if (!subscriptions || subscriptions.length === 0) {
+        return res.status(404).json({
+            success: false,
+            permissionStatus: clientPermission,
+            subscriptionCount: 0,
+            notificationsSent: 0,
+            notificationsFailed: 0,
+            expiredSubscriptionsRemoved: 0,
+            errorDetails: ['No active push subscriptions found in database for this user. Please register/subscribe first.']
+        });
+    }
+
+    const webPush = require('../utils/pushHelper');
+    const payload = JSON.stringify({
+        title: 'Diagnostic Test',
+        body: 'This is a diagnostic push notification from CipherGate.',
+        url: '/admin/github-tracker',
+        type: 'diagnostic',
+        playSound: true
+    });
+
+    for (const sub of subscriptions) {
+        try {
+            await webPush.sendNotification(sub.subscription, payload);
+            sentCount++;
+        } catch (error) {
+            failedCount++;
+            errorDetails.push({
+                endpoint: sub.subscription?.endpoint,
+                statusCode: error.statusCode,
+                message: error.message
+            });
+            // Clean up invalid/expired subscriptions
+            if (error.statusCode === 404 || error.statusCode === 410 || error.statusCode === 403) {
+                await PushSubscription.findByIdAndDelete(sub._id);
+                removedCount++;
+            }
+        }
+    }
+
+    res.json({
+        success: failedCount === 0,
+        permissionStatus: clientPermission,
+        subscriptionCount: subscriptions.length,
+        notificationsSent: sentCount,
+        notificationsFailed: failedCount,
+        expiredSubscriptionsRemoved: removedCount,
+        errorDetails: errorDetails.length > 0 ? errorDetails : undefined
+    });
+});
+
 module.exports = {
     getNotifications,
     markAsRead,
     subscribePush,
-    updateSettings
+    updateSettings,
+    testPushNotification
 };
+

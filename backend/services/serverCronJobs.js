@@ -52,9 +52,10 @@ const initializeServerCronJobs = () => {
       for (const account of accounts) {
         try {
           await anomalyService.evaluateAnomalies(account.subdomain, account.awsAccountId);
-          console.log(`[Cron] ✅ Anomaly scan complete for account ${account.awsAccountId}`);
+          await anomalyService.evaluateBudgetsAndAlerts(account.subdomain, account.awsAccountId);
+          console.log(`[Cron] ✅ Anomaly scan and budget checks complete for account ${account.awsAccountId}`);
         } catch (accountError) {
-          console.error(`[Cron] ❌ Anomaly scan failed for account ${account.awsAccountId}:`, accountError.message);
+          console.error(`[Cron] ❌ Anomaly scan and budget checks failed for account ${account.awsAccountId}:`, accountError.message);
         }
       }
     } catch (error) {
@@ -126,10 +127,13 @@ const initializeServerCronJobs = () => {
   });
 
   // ──────────────────────────────────────────────────────────
-  // JOB 6: Connection Integrity Validation — runs every 6 hours
+  // JOB 6: Connection Integrity Validation — runs every 6 hours at :30
+  // Offset by 30 minutes from JOB 4 (inventory refresh at :00) to avoid
+  // concurrent heavy DB/AWS SDK load on the same schedule tick.
   // Verifies STS AssumeRole access and Organization listing permissions
   // ──────────────────────────────────────────────────────────
-  cron.schedule('0 */6 * * *', async () => {
+  cron.schedule('30 */6 * * *', async () => {
+
     console.log('[Cron] ▶ Running connection integrity validations (STS & Organizations)...');
     try {
       const accounts = await AwsAccount.find({});
@@ -141,31 +145,17 @@ const initializeServerCronJobs = () => {
         // Skip validation if account has never been verified (still in Pending state)
         if (account.connectionStatus === 'Pending') continue;
 
+        let isStsOk = false;
         try {
           // 1. Verify STS AssumeRole credentials
-          const verification = await awsService.verifyCredentials(
+          await awsService.verifyCredentials(
             account.iamRoleArn,
             account.externalId,
             account.awsAccountId
           );
-
-          // 2. Verify Organization access (if it has orgId)
-          if (account.orgId) {
-            await awsService.discoverOrganizationAccounts(
-              account.awsAccountId,
-              account.iamRoleArn,
-              account.externalId
-            );
-          }
-
-          // If validation succeeded:
-          account.connectionStatus = 'Connected';
-          account.errorMessage = null;
-          account.lastVerifiedAt = new Date();
-          await account.save();
-
+          isStsOk = true;
         } catch (validationError) {
-          // Set status to Failed but DO NOT disconnect or delete the settings
+          // STS verification failed: this means account status MUST be Failed!
           account.connectionStatus = 'Failed';
           account.errorMessage = validationError.message;
           await account.save();
@@ -179,7 +169,39 @@ const initializeServerCronJobs = () => {
             newState: account.toObject()
           });
           await audit.save();
-          console.error(`[Cron] ❌ Validation failed for account ${account.awsAccountId}: ${validationError.message}`);
+          console.error(`[Cron] ❌ STS validation failed for account ${account.awsAccountId}: ${validationError.message}`);
+        }
+
+        if (isStsOk) {
+          // If STS validation succeeded, the account connection is Connected
+          account.connectionStatus = 'Connected';
+          account.errorMessage = null;
+          account.lastVerifiedAt = new Date();
+
+          // 2. Separate Organization access check (if it has orgId)
+          if (account.orgId) {
+            try {
+              await awsService.discoverOrganizationAccounts(
+                account.awsAccountId,
+                account.iamRoleArn,
+                account.externalId
+              );
+            } catch (orgError) {
+              const isOrgNotInUse = orgError.name === 'AWSOrganizationsNotInUseException' || 
+                                    orgError.message.includes('AWSOrganizationsNotInUseException') ||
+                                    orgError.message.includes('is not enrolled in AWS Organizations');
+              if (isOrgNotInUse) {
+                console.log(`[Cron] Account ${account.awsAccountId} is not enrolled in AWS Organizations (standalone). Clearing org configuration.`);
+                account.orgId = null;
+                account.isOrgMaster = false;
+              } else {
+                // If it is another error (e.g. AccessDenied), we log it but do NOT mark the whole account status as Failed,
+                // since AWS Organizations is an optional feature and STS AssumeRole is verified.
+                console.error(`[Cron] AWS Organizations scan failed for connected account ${account.awsAccountId}: ${orgError.message}`);
+              }
+            }
+          }
+          await account.save();
         }
       }
     } catch (error) {
@@ -188,12 +210,13 @@ const initializeServerCronJobs = () => {
   });
 
   console.log('✅ AWS FinOps Cron Jobs Initialized:');
-  console.log('   • 01:00 AM daily  → Billing cost sync');
-  console.log('   • 02:00 AM daily  → Anomaly detection');
-  console.log('   • 02:30 AM daily  → Forecast recalculation');
-  console.log('   • Every 6 hours   → Resource inventory refresh');
-  console.log('   • Sunday 03:00 AM → Optimization recommendations');
-  console.log('   • Every 6 hours   → Connection integrity validation');
+  console.log('   • 01:00 AM daily    → Billing cost sync');
+  console.log('   • 02:00 AM daily    → Anomaly detection');
+  console.log('   • 02:30 AM daily    → Forecast recalculation');
+  console.log('   • Every 6h at :00   → Resource inventory refresh');
+  console.log('   • Sunday 03:00 AM   → Optimization recommendations');
+  console.log('   • Every 6h at :30   → Connection integrity validation (offset from Job 4)');
+
 };
 
 module.exports = {

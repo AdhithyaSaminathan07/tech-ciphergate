@@ -275,13 +275,35 @@ const InvoiceManagement = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between md:justify-end gap-4 mb-2">
-        <h1 className="text-2xl font-bold text-gray-800 md:hidden">Invoice Management</h1>
-        <div className="flex gap-3">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-0 mb-4">
+        {/* Tabs for different invoice types */}
+        <nav className="-mb-px flex space-x-6 md:space-x-8 overflow-x-auto scrollbar-none">
+          {[
+            { id: 'advanced-invoice', label: 'Advanced Invoice' },
+            { id: 'invoice-history', label: 'Invoice History' },
+            { id: 'unified-history', label: 'All Invoices' },
+            { id: 'delete-history', label: 'Delete History' }
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`whitespace-nowrap py-4 px-1 border-b-2 font-bold text-sm transition-all duration-200 ${
+                activeTab === tab.id
+                  ? 'border-[#0d9488] text-[#0d9488]'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+
+        {/* Action buttons on the right */}
+        <div className="flex gap-3 flex-shrink-0 mb-2 md:mb-0">
           {(activeTab === 'invoice-history' || activeTab === 'unified-history') && (
             <button
               onClick={downloadSalesReport}
-              className="flex items-center gap-2 bg-green-50 text-green-700 hover:bg-green-100 font-bold py-2 px-4 rounded-xl border border-green-200 transition-all shadow-sm"
+              className="flex items-center gap-2 bg-[#f0fdf4] text-[#166534] hover:bg-[#dcfce7] font-bold py-2 px-4 rounded-xl border border-[#bbf7d0] transition-all shadow-sm text-sm"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -294,9 +316,9 @@ const InvoiceManagement = () => {
               setEditingInvoice(null);
               setActiveTab('advanced-invoice');
             }}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-xl transition-all shadow-lg shadow-blue-200"
+            className="flex items-center gap-2 bg-[#0d9488] hover:bg-[#0f766e] text-white font-bold py-2.5 px-6 rounded-xl transition-all shadow-md shadow-teal-600/10 hover:shadow-lg hover:shadow-teal-600/15 hover:scale-[1.02] active:scale-[0.98] text-sm animate-in fade-in"
           >
-            <span className="text-xl">+</span> Create New Invoice
+            <span className="text-xl font-normal">+</span> Create New Invoice
           </button>
         </div>
       </div>
@@ -310,7 +332,7 @@ const InvoiceManagement = () => {
             <select
               value={gstFilter}
               onChange={(e) => handleGstFilterChange(e.target.value)}
-              className="bg-transparent border-none text-sm font-bold text-blue-600 focus:ring-0 cursor-pointer pr-8"
+              className="bg-transparent border-none text-sm font-bold text-[#0d9488] focus:ring-0 cursor-pointer pr-8"
             >
               <option value="all">All Invoices</option>
               <option value="gst">GST Only</option>
@@ -331,7 +353,7 @@ const InvoiceManagement = () => {
               <button
                 key={option.id}
                 onClick={() => handleFilterChange(option.id)}
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${filterType === option.id ? 'bg-blue-50 text-blue-600 shadow-inner' : 'text-gray-500 hover:text-gray-700' }`}
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${filterType === option.id ? 'bg-teal-50 text-[#0d9488] shadow-inner' : 'text-gray-500 hover:text-gray-700' }`}
               >
                 {option.label}
               </button>
@@ -355,7 +377,7 @@ const InvoiceManagement = () => {
               />
               <button
                 onClick={applyCustomFilter}
-                className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-md"
+                className="bg-[#0d9488] text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-[#0f766e] transition-colors shadow-md"
               >
                 Apply
               </button>
@@ -383,40 +405,10 @@ const InvoiceManagement = () => {
       {/* Loading indicator */}
       {loading && (
         <div className="flex flex-col items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0d9488]"></div>
           <p className="mt-4 text-gray-500 font-medium">Fetching your invoices...</p>
         </div>
       )}
-
-      {/* Tabs for different invoice types */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
-          <button
-            onClick={() => setActiveTab('advanced-invoice')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'advanced-invoice' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
-          >
-            Advanced Invoice
-          </button>
-          <button
-            onClick={() => setActiveTab('invoice-history')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'invoice-history' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
-          >
-            Invoice History
-          </button>
-          <button
-            onClick={() => setActiveTab('unified-history')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'unified-history' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
-          >
-            All Invoices
-          </button>
-          <button
-            onClick={() => setActiveTab('delete-history')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'delete-history' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
-          >
-            Delete History
-          </button>
-        </nav>
-      </div>
 
       {/* Content based on active tab */}
       <div className="mt-6">

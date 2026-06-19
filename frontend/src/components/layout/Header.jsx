@@ -63,6 +63,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
     const [aiAnswerResults, setAiAnswerResults] = useState([]);
     const [typedAnswer, setTypedAnswer] = useState('');
     const typingTimerRef = useRef(null);
+    const [imgError, setImgError] = useState(false);
 
     // Reset AI search state when the search overlay is closed or query cleared
     useEffect(() => {
@@ -548,8 +549,13 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                         </div>
 
                                         <div className={`relative h-9 w-9 md:h-10 md:w-10 rounded-xl overflow-hidden shadow-md transition-all duration-300 group-hover:shadow-teal-500/10 group-hover:scale-105 border-2 ${isProfileOpen ? 'border-teal-500 shadow-teal-500/20' : 'border-white'}`}>
-                                            {user.photo ? (
-                                                <img src={getFullFileUrl(user.photo)} alt="Profile" className="w-full h-full object-cover" />
+                                            {user.photo && !imgError ? (
+                                                <img 
+                                                    src={getFullFileUrl(user.photo)} 
+                                                    alt="Profile" 
+                                                    className="w-full h-full object-cover" 
+                                                    onError={() => setImgError(true)}
+                                                />
                                             ) : (
                                                 <div className="w-full h-full bg-slate-900 flex items-center justify-center text-white font-black text-sm">
                                                     {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
@@ -577,8 +583,13 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                                     <div className="relative flex items-center gap-3">
                                                         <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center border border-white/20 p-0.5 shadow-lg flex-shrink-0">
                                                             <div className="w-full h-full rounded-lg overflow-hidden flex items-center justify-center">
-                                                                {user.photo ? (
-                                                                    <img src={getFullFileUrl(user.photo)} alt="Profile" className="w-full h-full object-cover" />
+                                                                {user.photo && !imgError ? (
+                                                                    <img 
+                                                                        src={getFullFileUrl(user.photo)} 
+                                                                        alt="Profile" 
+                                                                        className="w-full h-full object-cover" 
+                                                                        onError={() => setImgError(true)}
+                                                                    />
                                                                 ) : (
                                                                     <span className="text-sm font-black">{user.name ? user.name.charAt(0).toUpperCase() : 'U'}</span>
                                                                 )}

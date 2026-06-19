@@ -38,8 +38,8 @@ const startCronJobs = () => {
     timezone: "Asia/Kolkata"
   });
 
-  // Background GitHub Synchronization every 15 minutes
-  cron.schedule('*/15 * * * *', async () => {
+  // Background GitHub Synchronization once per day (at midnight Asia/Kolkata)
+  cron.schedule('0 0 * * *', async () => {
     try {
       const { runBackgroundGitHubSync } = require('./githubSyncService');
       await runBackgroundGitHubSync();

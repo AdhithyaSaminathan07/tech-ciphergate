@@ -233,9 +233,24 @@ const AwsOrganizations = () => {
                 </div>
 
                 {masterAccount.errorMessage && (
-                  <div className="p-2.5 bg-rose-50 border border-rose-100 rounded-lg text-[10px] text-rose-800 font-mono leading-relaxed">
-                    Error: {masterAccount.errorMessage}
-                  </div>
+                  masterAccount.errorMessage.includes("not enrolled") || masterAccount.errorMessage.includes("not enabled") ? (
+                    <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl text-xs text-blue-800 font-medium leading-relaxed flex flex-col gap-2 shadow-sm">
+                      <div className="flex items-center gap-2 font-bold text-blue-900">
+                        <FiInfo className="text-blue-600 shrink-0" size={16} />
+                        <span>Information</span>
+                      </div>
+                      <p className="pl-6 font-semibold">AWS Organizations is not enabled for this AWS account.</p>
+                      <div className="pl-6 text-[11px] text-blue-700/90 leading-normal space-y-1">
+                        <div>• Account connection is healthy.</div>
+                        <div>• FinOps and Cost Lake can still be used.</div>
+                        <div>• Enable AWS Organizations only if you need multi-account consolidated billing.</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 bg-rose-50 border border-rose-100 rounded-lg text-[10px] text-rose-800 font-mono leading-relaxed">
+                      Error: {masterAccount.errorMessage}
+                    </div>
+                  )
                 )}
 
                 <button

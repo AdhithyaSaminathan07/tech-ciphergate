@@ -221,4 +221,31 @@ if (
 // Start the server
 startServer();
 
-// Trigger restart final - Connection string updated
+// Global process error handling to prevent silent crashes and PM2 restart loops
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('========================================================================');
+  console.error('❌ UNHANDLED PROMISE REJECTION');
+  console.error('------------------------------------------------------------------------');
+  console.error('Promise:', promise);
+  console.error('Reason:', reason instanceof Error ? reason.stack : reason);
+  console.error('System Metrics:');
+  console.error('  Uptime:', Math.floor(process.uptime()), 'seconds');
+  console.error('  Memory Usage:', JSON.stringify(process.memoryUsage()));
+  console.error('========================================================================');
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('========================================================================');
+  console.error('🚨 UNCAUGHT EXCEPTION CRASH');
+  console.error('------------------------------------------------------------------------');
+  console.error('Error Details:', error.stack || error);
+  console.error('System Metrics:');
+  console.error('  Uptime:', Math.floor(process.uptime()), 'seconds');
+  console.error('  Memory Usage:', JSON.stringify(process.memoryUsage()));
+  console.error('Restarting Process due to Uncaught Exception.');
+  console.error('========================================================================');
+  
+  // Exit the process so PM2 can perform a clean restart
+  process.exit(1);
+});
+

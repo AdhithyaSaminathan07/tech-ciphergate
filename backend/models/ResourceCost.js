@@ -27,6 +27,15 @@ const resourceCostSchema = new mongoose.Schema({
   },
   service: {
     type: String,
+    required: true,
+    index: true
+  },
+  region: {
+    type: String,
+    required: true
+  },
+  usageType: {
+    type: String,
     required: true
   },
   usageAmount: {
@@ -36,6 +45,11 @@ const resourceCostSchema = new mongoose.Schema({
   usageUnit: {
     type: String,
     default: 'Units'
+  },
+  tags: {
+    type: Map,
+    of: String,
+    default: {}
   },
   containerNamespace: {
     type: String,
@@ -50,4 +64,8 @@ const resourceCostSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Compound unique index per resource line item to prevent double ingestion
+resourceCostSchema.index({ subdomain: 1, awsAccountId: 1, resourceId: 1, date: 1, usageType: 1 }, { unique: true });
+
 module.exports = mongoose.model('ResourceCost', resourceCostSchema);
+

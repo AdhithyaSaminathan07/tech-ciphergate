@@ -328,4 +328,84 @@ export const getCostLakeStatus = async () => {
   }
 };
 
+// ── Settings Persistence ─────────────────────────────────────────────────────
+export const getSettings = async () => {
+  try {
+    const token = getAuthToken();
+    const response = await api.get('/server/settings', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching settings:', error);
+    throw error.response?.data || new Error('Failed to fetch settings');
+  }
+};
+
+export const updateSettings = async (settingsData) => {
+  try {
+    const token = getAuthToken();
+    const response = await api.post('/server/settings', settingsData, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error updating settings:', error);
+    throw error.response?.data || new Error('Failed to update settings');
+  }
+};
+
+export const getCommitmentCoverage = async () => {
+  try {
+    const token = getAuthToken();
+    const response = await api.get('/server/costs/commitment-coverage', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching commitment coverage:', error);
+    throw error.response?.data || new Error('Failed to fetch commitment coverage');
+  }
+};
+
+export const getBudgets = async () => {
+  try {
+    const token = getAuthToken();
+    const response = await api.get('/server/budgets', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching budgets:', error);
+    throw error.response?.data || new Error('Failed to fetch budgets');
+  }
+};
+
+export const createOrUpdateBudget = async (budgetData) => {
+  try {
+    const token = getAuthToken();
+    const response = await api.post('/server/budgets', budgetData, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error saving budget:', error);
+    throw error.response?.data || new Error('Failed to save budget');
+  }
+};
+
+export const deleteBudget = async (id) => {
+  try {
+    const token = getAuthToken();
+    const response = await api.delete(`/server/budgets/${id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error deleting budget:', error);
+    throw error.response?.data || new Error('Failed to delete budget');
+  }
+};
+
+
 

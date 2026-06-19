@@ -246,7 +246,7 @@ const TechnicalDashboard = () => {
                   <div>
                     <h4 className="text-xs font-bold text-slate-800">S3 Storage Lake Location</h4>
                     <p className="text-[11px] text-slate-500 font-mono mt-0.5 truncate max-w-[280px]">
-                      s3://{lakeStatus?.s3?.bucket || 'cg-finops-cost-lake'}
+                      {lakeStatus?.s3?.bucket ? `s3://${lakeStatus.s3.bucket}` : 'Not Configured'}
                     </p>
                     <div className="flex gap-2 text-[10px] text-slate-400 mt-1">
                       <span>Cost History: {lakeStatus?.s3?.costHistoryRecords || 0} rows</span>

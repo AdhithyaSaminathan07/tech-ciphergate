@@ -256,45 +256,26 @@ const AdminLayout = () => {
       label: 'Server Module',
       icon: <FaServer />,
       isDropdown: true,
-      children: (() => {
-        // Feature flag: controls which sidebar items are visible
-        // Set VITE_SERVER_MODULE_PHASE=1 in .env to show Phase 1 items only
-        const phase = Number(import.meta.env.VITE_SERVER_MODULE_PHASE || 99);
+      children: [
+          // ── AWS FOUNDATION ────────────────────────────────────────────────────
+          { isSubHeader: true, label: 'AWS FOUNDATION' },
+          { to: '/admin/server/dashboard/executive', label: 'Executive Dashboard', icon: <FaChartPie /> },
+          { to: '/admin/server/dashboard/technical', label: 'Technical Dashboard', icon: <FaChartLine /> },
+          { to: '/admin/server/organizations',       label: 'AWS Organizations',   icon: <FaSitemap /> },
+          { to: '/admin/server/accounts',            label: 'AWS Accounts',        icon: <FaCloud /> },
+          { to: '/admin/server/cost-lake',           label: 'Cost Lake',           icon: <FaFolderOpen /> },
+          { to: '/admin/server/settings',            label: 'Settings',            icon: <FaCog /> },
 
-        const allItems = [
-          // ── Phase 1: AWS Data Foundation ──────────────────────────────────────
-          { isSubHeader: true, label: 'Phase 1: Foundation', phase: 1 },
-          { to: '/admin/server/dashboard/executive', label: 'Executive Dashboard', icon: <FaChartPie />,       phase: 1 },
-          { to: '/admin/server/dashboard/technical', label: 'Technical Dashboard', icon: <FaChartLine />,     phase: 1 },
-          { to: '/admin/server/organizations',       label: 'AWS Organizations',   icon: <FaSitemap />,       phase: 1 },
-          { to: '/admin/server/accounts',            label: 'AWS Accounts',         icon: <FaCloud />,         phase: 1 },
-          { to: '/admin/server/cost-lake',           label: 'Cost Lake',            icon: <FaFolderOpen />,   phase: 1 },
-          { to: '/admin/server/settings',            label: 'Settings',             icon: <FaCog />,          phase: 1 },
-
-          // ── Phase 2-3: Resource & Cost Analytics ─────────────────────────────
-          { isSubHeader: true, label: 'Phase 2: Analytics', phase: 2 },
-          { to: '/admin/server/resource-inventory',   label: 'Resource Inventory',   icon: <FaBoxes />,        phase: 2 },
-          { to: '/admin/server/resource-relationships',label: 'Resource Relationships',icon: <FaNetworkWired />,phase: 2 },
-          { to: '/admin/server/cost-analytics',       label: 'Cost Explorer',        icon: <FaChartLine />,    phase: 2 },
-          { to: '/admin/server/cost-attribution',     label: 'Cost Attribution',     icon: <FaFolderOpen />,   phase: 2 },
-          { to: '/admin/server/tag-compliance',       label: 'Tag Compliance',       icon: <FaClipboardList />,phase: 2 },
-
-          // ── Phase 5-6: Optimization & Intelligence ──────────────────────────
-          { isSubHeader: true, label: 'Phase 3: Intelligence', phase: 5 },
-          { to: '/admin/server/optimization',  label: 'Optimization Center', icon: <FaLightbulb />,       phase: 5 },
-          { to: '/admin/server/savings-plans', label: 'Savings Plans',       icon: <FaPiggyBank />,       phase: 5 },
-          { to: '/admin/server/anomalies',     label: 'Anomaly Detection',   icon: <FaExclamationTriangle />, phase: 6 },
-          { to: '/admin/server/forecasting',   label: 'Forecasting',         icon: <FaChartBar />,            phase: 6 },
-
-          // ── Phase 7-8: AI & Reports ───────────────────────────────────────────
-          { isSubHeader: true, label: 'Phase 4: AI & Reports', phase: 7 },
-          { to: '/admin/server/chat',          label: 'AI FinOps Chat',      icon: <FaRobot />, phase: 7 },
-          { to: '/admin/server/reports',       label: 'Reports',             icon: <FaFileAlt />,      phase: 8 },
-          { to: '/admin/server/audit-logs',    label: 'Audit Logs',          icon: <FaClipboardList />,phase: 8 },
-        ];
-
-        return allItems.filter(item => item.phase <= phase);
-      })(),
+          // ── FINOPS PLATFORM ───────────────────────────────────────────────────
+          { isSubHeader: true, label: 'FINOPS PLATFORM' },
+          { to: '/admin/server/cost-attribution',     label: 'Cost Attribution',    icon: <FaFolderOpen /> },
+          { to: '/admin/server/resource-inventory',   label: 'Resource Analytics',  icon: <FaBoxes /> },
+          { to: '/admin/server/savings-plans',        label: 'Savings Opportunities', icon: <FaPiggyBank /> },
+          { to: '/admin/server/forecasting',          label: 'Forecasting',         icon: <FaChartBar /> },
+          { to: '/admin/server/anomalies',            label: 'Anomaly Center',      icon: <FaExclamationTriangle /> },
+          { to: '/admin/server/chat',                 label: 'FinOps Assistant',    icon: <FaRobot /> },
+          { to: '/admin/server/reports',              label: 'Reports',             icon: <FaFileAlt /> },
+        ],
     },
     {
       label: 'Comms & Requests',

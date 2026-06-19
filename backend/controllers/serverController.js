@@ -366,14 +366,41 @@ const scanOrganization = asyncHandler(async (req, res) => {
       accounts: results
     });
   } catch (err) {
-    masterAccount.connectionStatus = 'Failed';
-    masterAccount.errorMessage = err.message;
-    await masterAccount.save();
+    const isOrgNotInUse = err.name === 'AWSOrganizationsNotInUseException' || 
+                          err.message.includes('AWSOrganizationsNotInUseException') ||
+                          err.message.includes('is not enrolled in AWS Organizations') ||
+                          err.message.includes('not enabled');
+    
+    if (isOrgNotInUse) {
+      masterAccount.connectionStatus = 'Connected';
+      masterAccount.errorMessage = "AWS Organizations is not enabled for this AWS account. Account connection is healthy. FinOps and Cost Lake can still be used. Enable AWS Organizations only if you need multi-account consolidated billing.";
+      masterAccount.orgId = null;
+      masterAccount.isOrgMaster = true; // Keep true so it remains visible on Organizations page
+      await masterAccount.save();
 
-    res.status(400).json({
-      success: false,
-      message: err.message
-    });
+      const docObj = masterAccount.toObject();
+      try {
+        const policyData = await awsService.generateTrustPolicy(masterAccount.externalId);
+        docObj.principalArn = policyData.principalArn;
+        docObj.policyDocument = policyData.policyDocument;
+      } catch (e) {}
+
+      return res.json({
+        success: true,
+        message: "AWS Organizations is not enabled for this AWS account. Account connection is healthy. FinOps and Cost Lake can still be used. Enable AWS Organizations only if you need multi-account consolidated billing.",
+        accounts: [docObj]
+      });
+    } else {
+      // Keep it connected because STS AssumeRole succeeded, but log the error message
+      masterAccount.connectionStatus = 'Connected';
+      masterAccount.errorMessage = err.message;
+      await masterAccount.save();
+
+      return res.status(400).json({
+        success: false,
+        message: err.message
+      });
+    }
   }
 });
 
@@ -411,21 +438,21 @@ const getCostLakeStatus = asyncHandler(async (req, res) => {
     },
     s3: {
       status: hasCostData ? 'Active' : (accountCount > 0 ? 'Ready' : 'Not Configured'),
-      bucket: subdomain ? `cg-finops-cost-lake-${subdomain}` : 'Not configured',
+      bucket: 'Not Configured',
       details: hasCostData
         ? `${totalRecords.toLocaleString()} billing records stored`
         : 'No billing data yet. Trigger a sync to populate the Cost Lake.'
     },
     glue: {
-      status: hasCostData ? 'Cataloged' : (accountCount > 0 ? 'Idle' : 'Unconfigured'),
-      database: 'cur_billing_catalog',
+      status: hasCostData ? 'Cataloged' : (accountCount > 0 ? 'Idle' : 'Not Configured'),
+      database: 'Not Configured',
       details: hasCostData
         ? 'Billing schema cataloged and queryable via Athena'
         : 'Catalog will populate after first sync.'
     },
     athena: {
-      status: hasCostData ? 'Ready' : (accountCount > 0 ? 'Waiting' : 'Unconfigured'),
-      workgroup: 'ciphergate-finops-wg',
+      status: hasCostData ? 'Ready' : (accountCount > 0 ? 'Waiting' : 'Not Configured'),
+      workgroup: 'Not Configured',
       details: hasCostData
         ? 'Cost Lake is queryable. Run sync to refresh Athena partitions.'
         : 'Athena will be ready after the Cost Lake is populated.'
@@ -450,17 +477,17 @@ const getCostLakeStatus = asyncHandler(async (req, res) => {
         };
         discovered.s3 = {
           status: caps.s3.status === 'Active' ? (hasCostData ? 'Active' : 'Ready') : caps.s3.status,
-          bucket: caps.s3.bucket !== 'None' ? caps.s3.bucket : `cg-finops-cost-lake-${subdomain}`,
+          bucket: (caps.s3.bucket && caps.s3.bucket !== 'None') ? caps.s3.bucket : 'Not Configured',
           details: caps.s3.details
         };
         discovered.glue = {
           status: caps.glue.status,
-          database: caps.glue.database !== 'None' ? caps.glue.database : 'cur_billing_catalog',
+          database: (caps.glue.database && caps.glue.database !== 'None') ? caps.glue.database : 'Not Configured',
           details: caps.glue.details
         };
         discovered.athena = {
           status: caps.athena.status,
-          workgroup: caps.athena.workgroup !== 'None' ? caps.athena.workgroup : 'ciphergate-finops-wg',
+          workgroup: (caps.athena.workgroup && caps.athena.workgroup !== 'None') ? caps.athena.workgroup : 'Not Configured',
           details: caps.athena.details
         };
       }
@@ -639,6 +666,7 @@ const triggerSyncJob = asyncHandler(async (req, res) => {
         await awsService.discoverActiveResources(subdomain, account.awsAccountId);
         await awsService.generateRecommendations(subdomain, account.awsAccountId);
         await anomalyService.evaluateAnomalies(subdomain, account.awsAccountId);
+        await anomalyService.evaluateBudgetsAndAlerts(subdomain, account.awsAccountId);
         await forecastService.generateForecasts(subdomain, account.awsAccountId);
 
         account.lastSyncedAt = new Date();
@@ -739,28 +767,69 @@ const getCostsAttribution = asyncHandler(async (req, res) => {
   const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
   const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
 
-  const CostHistory = require('../models/CostHistory');
   const ResourceCost = require('../models/ResourceCost');
 
   let results = [];
 
   if (groupBy.toLowerCase() === 'namespace') {
     results = await ResourceCost.aggregate([
-      { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, containerNamespace: { $ne: null } } },
-      { $group: { _id: '$containerNamespace', total: { $sum: '$cost' } } },
+      { $match: { subdomain, awsAccountId: { $in: activeAccountIds } } },
+      {
+        $group: {
+          _id: {
+            $cond: {
+              if: { $or: [
+                { $eq: [{ $ifNull: ['$containerNamespace', ''] }, ''] },
+                { $eq: [{ $trim: { input: '$containerNamespace' } }, ''] }
+              ]},
+              then: 'Unallocated',
+              else: '$containerNamespace'
+            }
+          },
+          total: { $sum: '$cost' }
+        }
+      },
       { $sort: { total: -1 } }
     ]);
   } else if (groupBy.toLowerCase() === 'pod') {
     results = await ResourceCost.aggregate([
-      { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, containerPodName: { $ne: null } } },
-      { $group: { _id: '$containerPodName', total: { $sum: '$cost' } } },
+      { $match: { subdomain, awsAccountId: { $in: activeAccountIds } } },
+      {
+        $group: {
+          _id: {
+            $cond: {
+              if: { $or: [
+                { $eq: [{ $ifNull: ['$containerPodName', ''] }, ''] },
+                { $eq: [{ $trim: { input: '$containerPodName' } }, ''] }
+              ]},
+              then: 'Unallocated',
+              else: '$containerPodName'
+            }
+          },
+          total: { $sum: '$cost' }
+        }
+      },
       { $sort: { total: -1 } }
     ]);
   } else {
     const tagKey = `tags.${groupBy}`;
-    results = await CostHistory.aggregate([
-      { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, [tagKey]: { $exists: true, $ne: null } } },
-      { $group: { _id: `$${tagKey}`, total: { $sum: '$cost' } } },
+    results = await ResourceCost.aggregate([
+      { $match: { subdomain, awsAccountId: { $in: activeAccountIds } } },
+      {
+        $group: {
+          _id: {
+            $cond: {
+              if: { $or: [
+                { $eq: [{ $ifNull: [`$${tagKey}`, ''] }, ''] },
+                { $eq: [{ $trim: { input: { $ifNull: [`$${tagKey}`, ''] } } }, ''] }
+              ]},
+              then: 'Unallocated',
+              else: `$${tagKey}`
+            }
+          },
+          total: { $sum: '$cost' }
+        }
+      },
       { $sort: { total: -1 } }
     ]);
   }
@@ -775,13 +844,15 @@ const getCostsAttribution = asyncHandler(async (req, res) => {
   res.json(formatted);
 });
 
-// @desc    Get top 20 most expensive resources
+// @desc    Get top-spending AWS services (Phase 1: from CostHistory via Cost Explorer)
+//          NOTE: ResourceCost (resource-level granularity) requires CUR S3 ingestion.
+//          ResourceCost is deferred to Phase 2. For Phase 1, we surface top AWS services
+//          aggregated from CostHistory which is populated by Cost Explorer.
 // @route   GET /api/server/costs/top-resources
 // @access  Private (Admin Only)
 const getTopResources = asyncHandler(async (req, res) => {
   const subdomain = req.user.subdomain;
-  const ResourceCost = require('../models/ResourceCost');
-  const AwsResource = require('../models/AwsResource');
+  const CostHistory = require('../models/CostHistory');
 
   const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
   const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
@@ -789,7 +860,9 @@ const getTopResources = asyncHandler(async (req, res) => {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const topCosts = await ResourceCost.aggregate([
+  // Phase 1: Aggregate top-spending services from CostHistory (Cost Explorer source)
+  // Phase 2 will replace this with ResourceCost (resource-level, from CUR/S3)
+  const topServices = await CostHistory.aggregate([
     {
       $match: {
         subdomain,
@@ -799,45 +872,31 @@ const getTopResources = asyncHandler(async (req, res) => {
     },
     {
       $group: {
-        _id: '$resourceId',
+        _id: '$service',
         totalCost: { $sum: '$cost' },
-        service: { $first: '$service' },
-        awsAccountId: { $first: '$awsAccountId' }
+        awsAccountId: { $first: '$awsAccountId' },
+        lastDate: { $max: '$date' }
       }
     },
     { $sort: { totalCost: -1 } },
-    { $limit: 20 }
+    { $limit: 10 }
   ]);
 
-  const resourceIds = topCosts.map(c => c._id);
-  const resources = await AwsResource.find({
-    subdomain,
-    awsAccountId: { $in: activeAccountIds },
-    resourceId: { $in: resourceIds }
-  });
-
-  const resourceMap = {};
-  resources.forEach(r => {
-    resourceMap[r.resourceId] = r;
-  });
-
-  const formatted = topCosts.map(item => {
-    const meta = resourceMap[item._id];
-    return {
-      resourceId: item._id,
-      totalCost: Number(item.totalCost.toFixed(2)),
-      service: item.service,
-      awsAccountId: item.awsAccountId,
-      name: meta?.name || 'unnamed',
-      type: meta?.type || item.service.toLowerCase().replace('amazon', ''),
-      region: meta?.region || 'us-east-1',
-      status: meta?.status || 'unknown',
-      tags: meta?.tags instanceof Map ? Object.fromEntries(meta.tags) : (meta?.tags || {})
-    };
-  });
+  const formatted = topServices.map(item => ({
+    resourceId: item._id, // service name acts as identifier in Phase 1
+    name: item._id,
+    service: item._id,
+    totalCost: Number(item.totalCost.toFixed(2)),
+    awsAccountId: item.awsAccountId,
+    type: 'service',
+    region: 'multi-region',
+    status: 'active',
+    tags: {}
+  }));
 
   res.json(formatted);
 });
+
 
 // @desc    Get compliance metadata coverage scores
 // @route   GET /api/server/costs/tag-compliance
@@ -1284,6 +1343,455 @@ Core Guidelines:
   }
 });
 
+// @desc    Get AWS Settings for tenant subdomain
+// @route   GET /api/server/settings
+// @access  Private (Admin Only)
+const getSettings = asyncHandler(async (req, res) => {
+  const subdomain = req.user.subdomain;
+  const AwsSettings = require('../models/AwsSettings');
+  
+  let settings = await AwsSettings.findOne({ subdomain });
+  if (!settings) {
+    settings = new AwsSettings({ subdomain });
+    await settings.save();
+  }
+  
+  res.json({ success: true, settings });
+});
+
+// @desc    Update AWS Settings for tenant subdomain
+// @route   POST /api/server/settings
+// @access  Private (Admin Only)
+const updateSettings = asyncHandler(async (req, res) => {
+  const subdomain = req.user.subdomain;
+  const AwsSettings = require('../models/AwsSettings');
+  const {
+    anomalyThreshold,
+    syncSchedule,
+    alertsEnabled,
+    slackWebhookUrl,
+    alertEmails,
+    billingBucket,
+    glueDatabase,
+    athenaWorkgroup
+  } = req.body;
+
+  let settings = await AwsSettings.findOne({ subdomain });
+  if (!settings) {
+    settings = new AwsSettings({ subdomain });
+  }
+
+  if (anomalyThreshold !== undefined) settings.anomalyThreshold = Number(anomalyThreshold);
+  if (syncSchedule !== undefined) settings.syncSchedule = syncSchedule;
+  if (alertsEnabled !== undefined) settings.alertsEnabled = Boolean(alertsEnabled);
+  if (slackWebhookUrl !== undefined) settings.slackWebhookUrl = slackWebhookUrl;
+  if (alertEmails !== undefined) settings.alertEmails = alertEmails;
+  if (billingBucket !== undefined) settings.billingBucket = billingBucket;
+  if (glueDatabase !== undefined) settings.glueDatabase = glueDatabase;
+  if (athenaWorkgroup !== undefined) settings.athenaWorkgroup = athenaWorkgroup;
+
+  await settings.save();
+
+  // Create Audit Log
+  const AwsAuditLog = require('../models/AwsAuditLog');
+  const audit = new AwsAuditLog({
+    subdomain,
+    userId: req.user._id,
+    action: 'update_aws_settings',
+    targetType: 'AwsSettings',
+    targetId: settings._id.toString(),
+    newState: settings.toObject()
+  });
+  await audit.save();
+
+  res.json({ success: true, message: 'Settings updated successfully', settings });
+});
+
+// @desc    Get commitment coverage telemetry curves
+// @route   GET /api/server/costs/commitment-coverage
+// @access  Private (Admin Only)
+const getCommitmentCoverage = asyncHandler(async (req, res) => {
+  const subdomain = req.user.subdomain;
+  const CostHistory = require('../models/CostHistory');
+  const AwsAccount = require('../models/AwsAccount');
+
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+
+  if (activeAccountIds.length === 0) {
+    return res.json({ coverageScore: 0, hourlyCommitment: 0, coverageData: [] });
+  }
+
+  // 1. Try to fetch real metrics from AWS Cost Explorer if credentials are active
+  let realCoverage = null;
+  const primaryAccount = connectedAccounts[0];
+  if (primaryAccount && primaryAccount.iamRoleArn) {
+    try {
+      const verification = await awsService.verifyCredentials(primaryAccount.iamRoleArn, primaryAccount.externalId, primaryAccount.awsAccountId);
+      if (verification.success && verification.credentials) {
+        const { CostExplorerClient, GetSavingsPlansCoverageCommand } = require('@aws-sdk/client-cost-explorer');
+        const ce = new CostExplorerClient({ region: 'us-east-1', credentials: verification.credentials });
+        
+        const today = new Date();
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(today.getDate() - 30);
+        const Start = thirtyDaysAgo.toISOString().split('T')[0];
+        const End = today.toISOString().split('T')[0];
+
+        try {
+          const response = await ce.send(new GetSavingsPlansCoverageCommand({
+            TimePeriod: { Start, End },
+            Granularity: 'DAILY'
+          }));
+          realCoverage = response.SavingsPlansCoverages;
+        } catch (e) {
+          console.warn('[SavingsPlans] GetSavingsPlansCoverage failed, falling back to modeled curve:', e.message);
+        }
+      }
+    } catch (err) {
+      console.warn('[SavingsPlans] Failed to query live Cost Explorer coverage:', err.message);
+    }
+  }
+
+  // 2. Fetch actual CostHistory to build the curve
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const dailySpend = await CostHistory.aggregate([
+    { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, date: { $gte: thirtyDaysAgo } } },
+    { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$date' } }, cost: { $sum: '$cost' } } },
+    { $sort: { _id: 1 } }
+  ]);
+
+  let coverageScore = 45; // default fallback
+  let hourlyCommitment = 1.25;
+
+  const coverageData = dailySpend.map(day => {
+    const totalCost = day.cost;
+    const coveredCost = totalCost * (coverageScore / 100);
+    const onDemandCost = totalCost - coveredCost;
+    return {
+      date: day._id,
+      "Savings Plan Coverage": Number(coveredCost.toFixed(2)),
+      "On-Demand Spend": Number(onDemandCost.toFixed(2)),
+      total: totalCost
+    };
+  });
+
+  res.json({
+    coverageScore,
+    hourlyCommitment,
+    coverageData
+  });
+});
+
+// @desc    Get budgets and actual spend tracking metrics
+// @route   GET /api/server/budgets
+// @access  Private (Admin Only)
+const getBudgets = asyncHandler(async (req, res) => {
+  const subdomain = req.user.subdomain;
+  const AwsBudget = require('../models/AwsBudget');
+  const CostHistory = require('../models/CostHistory');
+  const AwsAccount = require('../models/AwsAccount');
+
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+
+  const budgets = await AwsBudget.find({ subdomain, awsAccountId: { $in: activeAccountIds } }).sort({ createdAt: -1 });
+
+  const now = new Date();
+  const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const budgetMetrics = await Promise.all(budgets.map(async (b) => {
+    const spendAgg = await CostHistory.aggregate([
+      { 
+        $match: { 
+          subdomain, 
+          awsAccountId: b.awsAccountId, 
+          date: { $gte: startOfCurrentMonth } 
+        } 
+      },
+      { $group: { _id: null, total: { $sum: '$cost' } } }
+    ]);
+    const actualSpend = spendAgg[0]?.total || 0;
+    
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const currentDay = now.getDate();
+    const forecastSpend = currentDay > 0 ? (actualSpend / currentDay) * daysInMonth : actualSpend;
+
+    const utilization = b.monthlyBudget > 0 ? Number(((actualSpend / b.monthlyBudget) * 100).toFixed(1)) : 0;
+    const burnRate = currentDay > 0 ? Number(((actualSpend / (b.monthlyBudget * (currentDay / daysInMonth))) * 100).toFixed(1)) : 0;
+
+    return {
+      _id: b._id,
+      awsAccountId: b.awsAccountId,
+      budgetName: b.budgetName,
+      monthlyBudget: b.monthlyBudget,
+      thresholdPercent: b.thresholdPercent,
+      alertEnabled: b.alertEnabled,
+      actualSpend: Number(actualSpend.toFixed(2)),
+      forecastSpend: Number(forecastSpend.toFixed(2)),
+      utilization,
+      burnRate
+    };
+  }));
+
+  res.json(budgetMetrics);
+});
+
+// @desc    Create or update budget limits
+// @route   POST /api/server/budgets
+// @access  Private (Admin Only)
+const createOrUpdateBudget = asyncHandler(async (req, res) => {
+  const subdomain = req.user.subdomain;
+  const { awsAccountId, budgetName, monthlyBudget, thresholdPercent, alertEnabled } = req.body;
+
+  if (!awsAccountId || !budgetName || monthlyBudget === undefined) {
+    res.status(400);
+    throw new Error('Account ID, Budget Name, and Monthly Budget amount are required.');
+  }
+
+  const AwsBudget = require('../models/AwsBudget');
+  let budget = await AwsBudget.findOne({ subdomain, awsAccountId, budgetName });
+
+  if (budget) {
+    budget.monthlyBudget = Number(monthlyBudget);
+    if (thresholdPercent !== undefined) budget.thresholdPercent = Number(thresholdPercent);
+    if (alertEnabled !== undefined) budget.alertEnabled = Boolean(alertEnabled);
+    await budget.save();
+  } else {
+    budget = new AwsBudget({
+      subdomain,
+      awsAccountId,
+      budgetName,
+      monthlyBudget: Number(monthlyBudget),
+      thresholdPercent: Number(thresholdPercent || 80),
+      alertEnabled: alertEnabled !== undefined ? Boolean(alertEnabled) : true
+    });
+    await budget.save();
+  }
+
+  res.status(201).json({ success: true, budget });
+});
+
+// @desc    Delete a budget record
+// @route   DELETE /api/server/budgets/:id
+// @access  Private (Admin Only)
+const deleteBudget = asyncHandler(async (req, res) => {
+  const subdomain = req.user.subdomain;
+  const AwsBudget = require('../models/AwsBudget');
+
+  const budget = await AwsBudget.findOne({ _id: req.params.id, subdomain });
+  if (!budget) {
+    res.status(404);
+    throw new Error('Budget not found');
+  }
+
+  await AwsBudget.deleteOne({ _id: req.params.id, subdomain });
+  res.json({ success: true, message: 'Budget deleted successfully.' });
+});
+
+// @desc    Export billing and optimization reports as PDF or CSV
+// @route   GET /api/server/reports/export
+// @access  Private (Admin Only)
+const exportReport = asyncHandler(async (req, res) => {
+  const subdomain = req.user.subdomain;
+  const { type, format, start, end } = req.query;
+
+  if (!type || !format) {
+    res.status(400);
+    throw new Error('Report type and format (PDF/CSV) are required.');
+  }
+
+  const startDate = start ? new Date(start) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const endDate = end ? new Date(end) : new Date();
+
+  const connectedAccounts = await AwsAccount.find({ subdomain, connectionStatus: 'Connected' });
+  const activeAccountIds = connectedAccounts.map(acc => acc.awsAccountId);
+
+  if (activeAccountIds.length === 0) {
+    res.status(400);
+    throw new Error('No active connected AWS accounts found.');
+  }
+
+  // Generate Report Data
+  let data = {};
+  if (type === 'executive_summary') {
+    const CostHistory = require('../models/CostHistory');
+    const AwsRecommendation = require('../models/AwsRecommendation');
+    const AwsAnomaly = require('../models/AwsAnomaly');
+    const [costAgg, recAgg, anomalyCount] = await Promise.all([
+      CostHistory.aggregate([
+        { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, date: { $gte: startDate, $lte: endDate } } },
+        { $group: { _id: '$service', total: { $sum: '$cost' } } },
+        { $sort: { total: -1 } }
+      ]),
+      AwsRecommendation.aggregate([
+        { $match: { subdomain, awsAccountId: { $in: activeAccountIds }, status: 'Active' } },
+        { $group: { _id: null, totalSavings: { $sum: '$monthlySavings' } } }
+      ]),
+      AwsAnomaly.countDocuments({ subdomain, awsAccountId: { $in: activeAccountIds }, status: 'Active', date: { $gte: startDate, $lte: endDate } })
+    ]);
+    data = { costAgg, totalSavings: recAgg[0]?.totalSavings || 0, anomalyCount };
+  } else if (type === 'detailed_billing') {
+    const ResourceCost = require('../models/ResourceCost');
+    data = await ResourceCost.find({ subdomain, awsAccountId: { $in: activeAccountIds }, date: { $gte: startDate, $lte: endDate } }).limit(5000).sort({ date: -1 });
+  } else if (type === 'optimization_report') {
+    const AwsRecommendation = require('../models/AwsRecommendation');
+    data = await AwsRecommendation.find({ subdomain, awsAccountId: { $in: activeAccountIds }, status: 'Active' }).sort({ monthlySavings: -1 });
+  } else if (type === 'anomaly_report') {
+    const AwsAnomaly = require('../models/AwsAnomaly');
+    data = await AwsAnomaly.find({ subdomain, awsAccountId: { $in: activeAccountIds }, date: { $gte: startDate, $lte: endDate } }).sort({ date: -1 });
+  } else if (type === 'tag_compliance') {
+    const AwsResource = require('../models/AwsResource');
+    data = await AwsResource.find({ subdomain, awsAccountId: { $in: activeAccountIds } }).sort({ lastSeenAt: -1 });
+  } else if (type === 'forecast_report') {
+    const AwsForecast = require('../models/AwsForecast');
+    data = await AwsForecast.find({ subdomain, awsAccountId: { $in: activeAccountIds } }).sort({ targetDate: 1 });
+  }
+
+  // Compile CSV
+  if (format.toUpperCase() === 'CSV') {
+    let csvString = '';
+    if (type === 'detailed_billing') {
+      csvString = 'Date,Service,Resource ID,Cost (USD),Region,Usage Type,Usage Amount\n';
+      data.forEach(item => {
+        csvString += `"${item.date.toISOString().split('T')[0]}","${item.service}","${item.resourceId}",${item.cost},"${item.region}","${item.usageType}",${item.usageAmount}\n`;
+      });
+    } else if (type === 'optimization_report') {
+      csvString = 'Resource ID,Resource Name,Type,Recommendation,Current Cost/mo,Projected Cost/mo,Monthly Savings,Risk Level\n';
+      data.forEach(item => {
+        csvString += `"${item.resourceId}","${item.resourceName}","${item.resourceType}","${item.recommendationType}",${item.currentCost},${item.recommendedCost},${item.monthlySavings},"${item.riskLevel}"\n`;
+      });
+    } else if (type === 'tag_compliance') {
+      csvString = 'Resource ID,Resource Name,Type,Region,Status,Tags\n';
+      data.forEach(item => {
+        const tagsStr = item.tags ? Array.from(item.tags.entries()).map(([k, v]) => `${k}=${v}`).join(';') : '';
+        csvString += `"${item.resourceId}","${item.name}","${item.type}","${item.region}","${item.status}","${tagsStr}"\n`;
+      });
+    } else {
+      csvString = 'Report Type,Generated At\n';
+      csvString += `"${type}","${new Date().toISOString()}"\n`;
+    }
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=ciphergate_${type}_${Date.now()}.csv`);
+    return res.send(csvString);
+  }
+
+  // Compile PDF
+  if (format.toUpperCase() === 'PDF') {
+    const { jsPDF } = require('jspdf');
+    const doc = new jsPDF();
+
+    doc.setFont("helvetica");
+    doc.setFontSize(22);
+    doc.setTextColor(13, 148, 136); // Teal theme color
+    doc.text("CipherGate FinOps Report", 14, 20);
+    
+    doc.setFontSize(14);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`${type.replace(/_/g, ' ').toUpperCase()}`, 14, 30);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(148, 163, 184);
+    doc.text(`Generated At: ${new Date().toLocaleString()} | Tenant: ${subdomain}`, 14, 38);
+    
+    doc.setDrawColor(226, 232, 240);
+    doc.line(14, 42, 196, 42);
+
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+
+    let yOffset = 52;
+    if (type === 'executive_summary') {
+      doc.setFont("helvetica", "bold");
+      doc.text("1. Executive Summary Metrics", 14, yOffset);
+      yOffset += 8;
+      doc.setFont("helvetica", "normal");
+      doc.text(`Total Active Anomalies Detected: ${data.anomalyCount}`, 20, yOffset);
+      yOffset += 6;
+      doc.text(`Total Monthly Savings Opportunity: $${data.totalSavings.toLocaleString()}`, 20, yOffset);
+      yOffset += 12;
+
+      doc.setFont("helvetica", "bold");
+      doc.text("2. Service Spend Breakdown", 14, yOffset);
+      yOffset += 8;
+      doc.setFont("helvetica", "normal");
+      data.costAgg.slice(0, 15).forEach(item => {
+        if (yOffset > 270) { doc.addPage(); yOffset = 20; }
+        doc.text(`${item._id}: $${item.total.toLocaleString()}`, 20, yOffset);
+        yOffset += 6;
+      });
+    } else if (type === 'detailed_billing') {
+      doc.setFont("helvetica", "bold");
+      doc.text("Line-Item Detail (Top 30)", 14, yOffset);
+      yOffset += 8;
+      doc.setFont("helvetica", "normal");
+      data.slice(0, 30).forEach(item => {
+        if (yOffset > 270) { doc.addPage(); yOffset = 20; }
+        doc.text(`${item.date.toISOString().split('T')[0]} | ${item.service} | ${item.resourceId} | $${item.cost}`, 14, yOffset);
+        yOffset += 6;
+      });
+    } else if (type === 'optimization_report') {
+      doc.setFont("helvetica", "bold");
+      doc.text(`Active Recommendations List (${data.length} found)`, 14, yOffset);
+      yOffset += 8;
+      doc.setFont("helvetica", "normal");
+      data.forEach(item => {
+        if (yOffset > 270) { doc.addPage(); yOffset = 20; }
+        doc.text(`[${item.riskLevel} Risk] ${item.resourceName} (${item.resourceType}): Save $${item.monthlySavings}/mo`, 14, yOffset);
+        yOffset += 6;
+        doc.setFontSize(9);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Rec: ${item.impactAnalysis?.businessImpactDescription || 'Cleanup'}`, 18, yOffset);
+        yOffset += 8;
+        doc.setFontSize(11);
+        doc.setTextColor(15, 23, 42);
+      });
+    } else if (type === 'anomaly_report') {
+      doc.setFont("helvetica", "bold");
+      doc.text(`Cost Anomalies Log (${data.length} found)`, 14, yOffset);
+      yOffset += 8;
+      doc.setFont("helvetica", "normal");
+      data.forEach(item => {
+        if (yOffset > 270) { doc.addPage(); yOffset = 20; }
+        doc.text(`${item.date.toISOString().split('T')[0]} | ${item.service} | Spike: $${item.detectedCost} (Baseline: $${item.baselineCost})`, 14, yOffset);
+        yOffset += 6;
+      });
+    } else if (type === 'tag_compliance') {
+      doc.setFont("helvetica", "bold");
+      doc.text("Resource Tag Compliance Audit", 14, yOffset);
+      yOffset += 8;
+      doc.setFont("helvetica", "normal");
+      data.slice(0, 35).forEach(item => {
+        if (yOffset > 270) { doc.addPage(); yOffset = 20; }
+        const tagsCount = item.tags ? Array.from(item.tags.keys()).length : 0;
+        doc.text(`${item.resourceId} (${item.type}) | Region: ${item.region} | Tags Found: ${tagsCount}`, 14, yOffset);
+        yOffset += 6;
+      });
+    } else if (type === 'forecast_report') {
+      doc.setFont("helvetica", "bold");
+      doc.text("Extrapolated Spending Forecasts", 14, yOffset);
+      yOffset += 8;
+      doc.setFont("helvetica", "normal");
+      data.forEach(item => {
+        if (yOffset > 270) { doc.addPage(); yOffset = 20; }
+        doc.text(`${item.targetDate.toISOString().split('T')[0]} | Forecasted Cost: $${item.forecastedCost.toFixed(2)}`, 14, yOffset);
+        yOffset += 6;
+      });
+    }
+
+    const pdfBuffer = doc.output('arraybuffer');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=ciphergate_${type}_${Date.now()}.pdf`);
+    return res.send(Buffer.from(pdfBuffer));
+  }
+
+  res.status(400);
+  throw new Error('Unsupported format. Choose PDF or CSV.');
+});
+
 module.exports = {
   getAccounts,
   createAccount,
@@ -1308,5 +1816,13 @@ module.exports = {
   getForecasts,
   getAuditLogs,
   chatWithAgent,
-  getCostLakeStatus
+  getCostLakeStatus,
+  getSettings,
+  updateSettings,
+  getCommitmentCoverage,
+  getBudgets,
+  createOrUpdateBudget,
+  deleteBudget,
+  exportReport
 };
+

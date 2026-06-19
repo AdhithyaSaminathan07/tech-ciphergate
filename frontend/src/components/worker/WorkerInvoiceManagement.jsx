@@ -104,57 +104,49 @@ const WorkerInvoiceManagement = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-800">Invoice Management</h1>
-        <button 
-          onClick={() => {
-            setEditingInvoice(null);
-            setActiveTab('advanced-invoice');
-          }}
-          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-        >
-          Create New Invoice
-        </button>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-0 mb-4">
+        {/* Tabs for different invoice types */}
+        <nav className="-mb-px flex space-x-6 md:space-x-8 overflow-x-auto scrollbar-none">
+          {[
+            { id: 'advanced-invoice', label: 'Advanced Invoice' },
+            { id: 'invoice-history', label: 'Invoice History' },
+            { id: 'delete-history', label: 'Delete History' }
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`whitespace-nowrap py-4 px-1 border-b-2 font-bold text-sm transition-all duration-200 ${
+                activeTab === tab.id
+                  ? 'border-[#0d9488] text-[#0d9488]'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+
+        {/* Action buttons on the right */}
+        <div className="flex gap-3 flex-shrink-0 mb-2 md:mb-0">
+          <button
+            onClick={() => {
+              setEditingInvoice(null);
+              setActiveTab('advanced-invoice');
+            }}
+            className="flex items-center gap-2 bg-[#0d9488] hover:bg-[#0f766e] text-white font-bold py-2.5 px-6 rounded-xl transition-all shadow-md shadow-teal-600/10 hover:shadow-lg hover:shadow-teal-600/15 hover:scale-[1.02] active:scale-[0.98] text-sm animate-in fade-in"
+          >
+            <span className="text-xl font-normal">+</span> Create New Invoice
+          </button>
+        </div>
       </div>
 
       {/* Loading indicator */}
       {loading && (
-        <div className="text-center py-4">
-          <p>Loading invoices...</p>
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0d9488] mx-auto"></div>
+          <p className="mt-2 text-gray-500 font-medium">Loading invoices...</p>
         </div>
       )}
-
-      {/* Error message */}
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-          <strong className="font-bold">Error: </strong>
-          <span className="block sm:inline">{error}</span>
-        </div>
-      )}
-
-      {/* Tabs for different invoice types */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
-          <button
-            onClick={() => setActiveTab('advanced-invoice')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${ activeTab === 'advanced-invoice' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
-          >
-            Advanced Invoice
-          </button>
-          <button
-            onClick={() => setActiveTab('invoice-history')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${ activeTab === 'invoice-history' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
-          >
-            Invoice History
-          </button>
-          <button
-            onClick={() => setActiveTab('delete-history')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${ activeTab === 'delete-history' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
-          >
-            Delete History
-          </button>
-        </nav>
-      </div>
 
       {/* Content based on active tab */}
       <div className="mt-6">

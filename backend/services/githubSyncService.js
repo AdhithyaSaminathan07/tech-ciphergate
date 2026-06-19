@@ -191,6 +191,8 @@ const runBackgroundGitHubSync = async (targetSubdomain = null, jobId = null) => 
 
             let processedCount = 0;
             let failedCount = 0;
+            let upToDateCount = 0;
+            let updatedCount = 0;
             const syncedReposDetails = [];
 
             // Process repositories concurrently (concurrency limit = 5)
@@ -228,10 +230,11 @@ const runBackgroundGitHubSync = async (targetSubdomain = null, jobId = null) => 
                         new Date(repoMeta.updated_at).getTime() === new Date(cachedRepo.data.updated_at).getTime();
 
                     if (isUpToDate) {
-                        console.log(`[Sync Service] Repo ${owner}/${repo} is up to date in cache.`);
+                        upToDateCount++;
                         repoDetails = cachedRepo.data;
                     } else {
-                        console.log(`[Sync Service] Repo ${owner}/${repo} changed or uncached. Fetching from remote...`);
+                        updatedCount++;
+                        console.log(`[Sync Service] [NEW/UPDATED] Repo ${owner}/${repo} changed or uncached. Fetching from remote...`);
 
                         // Query branches, contributors, commits, pulls, and languages
                         const [branchesRes, contributorsRes, commitsRes, pullsRes, languagesRes] = await Promise.all([
@@ -296,9 +299,14 @@ const runBackgroundGitHubSync = async (targetSubdomain = null, jobId = null) => 
                         }
                     );
                 } finally {
+                    const totalProcessed = processedCount + failedCount;
+                    if (totalProcessed % 10 === 0 || totalProcessed === uniqueRepos.length) {
+                        console.log(`[Sync Service] Progress: ${totalProcessed}/${uniqueRepos.length} repos processed (Up-to-date: ${upToDateCount}, Updated: ${updatedCount}, Failed: ${failedCount})`);
+                    }
+
                     job.repositoriesProcessed = processedCount;
                     job.repositoriesFailed = failedCount;
-                    job.progress = `${processedCount + failedCount} / ${uniqueRepos.length}`;
+                    job.progress = `${totalProcessed} / ${uniqueRepos.length}`;
                     await GitHubSyncJob.updateOne(
                         { _id: job._id },
                         {

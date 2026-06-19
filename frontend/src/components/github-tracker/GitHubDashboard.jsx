@@ -4,7 +4,8 @@ import LiveGitHubStats from "./LiveGitHubStats"
 import LiveLeaderboard from "./LiveLeaderboard"
 import LiveRepositories from "./LiveRepositories"
 import RepoChat from "./RepoChat"
-import { Users, Trophy, Code } from "lucide-react"
+import PushDiagnostic from "./PushDiagnostic"
+import { Users, Trophy, Code, Activity } from "lucide-react"
 
 export default function GitHubDashboard() {
     // No longer need to pass username as prop since backend uses authenticated user
@@ -40,7 +41,7 @@ export default function GitHubDashboard() {
                 <RepoChat />
 
                 <Tabs defaultValue="overview" className="space-y-6">
-                    <TabsList className="grid w-full md:w-auto grid-cols-3 bg-gray-100 rounded-lg p-1">
+                    <TabsList className="grid w-full md:w-auto grid-cols-4 bg-gray-100 rounded-lg p-1">
                         <TabsTrigger value="overview" className="data-[state=active]:bg-white data-[state=active]:shadow font-medium flex gap-2 items-center">
                             <Users className="w-4 h-4" /> Overview
                         </TabsTrigger>
@@ -49,6 +50,9 @@ export default function GitHubDashboard() {
                         </TabsTrigger>
                         <TabsTrigger value="repositories" className="data-[state=active]:bg-white data-[state=active]:shadow font-medium flex gap-2 items-center">
                             <Code className="w-4 h-4" /> Repositories
+                        </TabsTrigger>
+                        <TabsTrigger value="diagnostics" className="data-[state=active]:bg-white data-[state=active]:shadow font-medium flex gap-2 items-center">
+                            <Activity className="w-4 h-4" /> Push Status
                         </TabsTrigger>
                     </TabsList>
 
@@ -62,6 +66,10 @@ export default function GitHubDashboard() {
 
                     <TabsContent value="repositories" className="space-y-8 animate-in fade-in-50 duration-500">
                         <LiveRepositories />
+                    </TabsContent>
+
+                    <TabsContent value="diagnostics" className="space-y-8 animate-in fade-in-50 duration-500">
+                        <PushDiagnostic />
                     </TabsContent>
                 </Tabs>
             </main>

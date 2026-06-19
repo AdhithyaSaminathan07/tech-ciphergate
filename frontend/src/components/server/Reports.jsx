@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import api from '../../services/api';
 import {
   FiDownload, FiFileText, FiDatabase, FiCalendar,
   FiCheckCircle, FiLoader, FiAlertCircle, FiGrid
@@ -48,7 +49,7 @@ const REPORT_TEMPLATES = [
   {
     id: 'forecast_report',
     name: 'Spending Forecast Report',
-    description: 'Month-end, quarterly, and annual spend projections with confidence intervals.',
+    description: 'Spending horizions monthly, quarterly, and annual spend projections with confidence intervals.',
     format: ['PDF'],
     icon: FiCalendar,
     color: 'amber',
@@ -64,46 +65,6 @@ const COLOR_MAP = {
   amber:  { bg: 'bg-amber-50',  text: 'text-amber-600',  btn: 'bg-amber-600 hover:bg-amber-700', badge: 'bg-amber-100 text-amber-700' },
 };
 
-const generateCSVReport = (type, dateRange) => {
-  const now = new Date().toISOString().split('T')[0];
-  let csvContent = '';
-
-  if (type === 'detailed_billing') {
-    csvContent = [
-      'Date,Service,Resource ID,Resource Name,Cost (USD),Region,Project Tag,Environment Tag,Team Tag',
-      `${now},Amazon EC2,i-0abc123def456,prod-web-01,124.50,us-east-1,Frontend,Production,Platform`,
-      `${now},Amazon RDS,db-inst-prod-01,prod-database,287.30,us-east-1,Backend,Production,Database`,
-      `${now},Amazon S3,s3-data-lake-01,finops-data-lake,12.40,us-east-1,FinOps,Production,Platform`,
-      `${now},AWS Lambda,lambda-cost-processor,cost-processor,3.20,us-east-1,FinOps,Production,Platform`,
-    ].join('\n');
-  } else if (type === 'tag_compliance') {
-    csvContent = [
-      'Resource ID,Resource Type,Region,Compliance Score,Missing Tags,Cost (USD)',
-      `i-0abc123def456,EC2 Instance,us-east-1,100%,None,124.50`,
-      `vol-0abc123def456,EBS Volume,us-east-1,40%,"Project,Environment,Team",18.20`,
-      `rds-prod-01,RDS Instance,us-east-1,80%,Team,287.30`,
-    ].join('\n');
-  } else if (type === 'optimization_report') {
-    csvContent = [
-      'Resource ID,Resource Name,Type,Recommendation,Current Cost/mo,Projected Cost/mo,Monthly Savings,Risk Level',
-      `i-0stale123,stale-dev-box,EC2 Rightsizing,t3.large → t3.small,54.00,27.00,27.00,Low`,
-      `i-0idle456,idle-batch-01,Idle Resource,Terminate instance,108.00,0.00,108.00,Low`,
-      `vol-unattached789,orphan-vol-01,EBS Cleanup,Delete unattached volume,22.40,0.00,22.40,Low`,
-    ].join('\n');
-  } else {
-    csvContent = ['Report Type,Generated At,Status', `${type},${now},Sample data`].join('\n');
-  }
-
-  // Trigger browser download
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `ciphergate_${type}_${now}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-};
-
 const Reports = () => {
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [generatingId, setGeneratingId] = useState('');
@@ -112,17 +73,33 @@ const Reports = () => {
   const handleGenerate = async (template, format) => {
     const key = `${template.id}_${format}`;
     setGeneratingId(key);
-    await new Promise(r => setTimeout(r, 1400)); // Simulate generation
 
-    if (format === 'CSV') {
-      generateCSVReport(template.id, dateRange);
-    } else {
-      // For PDF, notify user it requires backend PDF service
-      alert(`PDF export for "${template.name}" requires the backend PDF generator to be configured. Your CSV export is available immediately.`);
+    try {
+      const response = await api.get('/server/reports/export', {
+        params: {
+          type: template.id,
+          format,
+          start: dateRange.start,
+          end: dateRange.end
+        },
+        responseType: 'blob'
+      });
+
+      const blob = new Blob([response.data], { type: format === 'CSV' ? 'text/csv' : 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ciphergate_${template.id}_${new Date().toISOString().split('T')[0]}.${format.toLowerCase()}`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      setCompletedReports(prev => [...prev, key]);
+    } catch (error) {
+      console.error('Failed to generate report:', error);
+      alert('Failed to generate report from the server. Check your Cost Lake connection.');
+    } finally {
+      setGeneratingId('');
     }
-
-    setCompletedReports(prev => [...prev, key]);
-    setGeneratingId('');
   };
 
   return (

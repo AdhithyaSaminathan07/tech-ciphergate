@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getRecommendations } from '../../services/serverService';
+import { getRecommendations, getCommitmentCoverage } from '../../services/serverService';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { FiPercent, FiTrendingUp, FiActivity, FiDollarSign, FiInfo } from 'react-icons/fi';
 
@@ -8,19 +8,13 @@ const SavingsOpportunities = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [coverageScore, setCoverageScore] = useState(0);
   const [hourlyCommitment, setHourlyCommitment] = useState(0);
+  const [coverageData, setCoverageData] = useState([]);
 
   const fetchCommitments = async () => {
     setIsLoading(true);
     try {
       const data = await getRecommendations({ type: 'savings_plan' });
       setSavingsPlans(data);
-      if (data.length > 0) {
-        setCoverageScore(85);
-        setHourlyCommitment(data[0]?.recommendedDetails?.hourlyCommitment || 0);
-      } else {
-        setCoverageScore(0);
-        setHourlyCommitment(0);
-      }
     } catch (error) {
       console.error('Error fetching savings plans recommendations:', error);
     } finally {
@@ -28,11 +22,21 @@ const SavingsOpportunities = () => {
     }
   };
 
+  const fetchCoverage = async () => {
+    try {
+      const res = await getCommitmentCoverage();
+      setCoverageScore(res.coverageScore || 0);
+      setHourlyCommitment(res.hourlyCommitment || 0);
+      setCoverageData(res.coverageData || []);
+    } catch (error) {
+      console.error('Error fetching coverage telemetry:', error);
+    }
+  };
+
   useEffect(() => {
     fetchCommitments();
+    fetchCoverage();
   }, []);
-
-  const coverageData = [];
 
   return (
     <div className="space-y-6">

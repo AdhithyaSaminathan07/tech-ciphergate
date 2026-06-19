@@ -33,6 +33,32 @@ const connectDB = async () => {
     });
     
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
+    
+    // Audit index cache_key_1 to check for uniqueness mismatch
+    try {
+      const db = conn.connection.db;
+      const collections = await db.listCollections({ name: 'githubcaches' }).toArray();
+      if (collections.length > 0) {
+        const githubCachesColl = db.collection('githubcaches');
+        const indexes = await githubCachesColl.indexes();
+        const hasCacheKeyIndex = indexes.find(idx => idx.name === 'cache_key_1');
+        
+        if (hasCacheKeyIndex && hasCacheKeyIndex.unique) {
+          console.warn('========================================================================');
+          console.warn('⚠️  CRITICAL DATABASE INDEX MISMATCH WARNING  ⚠️');
+          console.warn('------------------------------------------------------------------------');
+          console.warn('The legacy unique index "cache_key_1" was detected on "githubcaches".');
+          console.warn('This index restricts cache keys globally and will cause duplicate key');
+          console.warn('errors (E11000) when multiple subdomains attempt synchronization.');
+          console.warn('RECOMMENDED ACTION: Run the index remediation script to drop it:');
+          console.warn('  node scripts/remediate_github_cache_indexes.js');
+          console.warn('========================================================================');
+        }
+      }
+    } catch (idxErr) {
+      console.error('❌ Failed to run startup index audit:', idxErr.message);
+    }
+
     return conn;
   } catch (error) {
     console.error(`❌ MongoDB connection error: ${error.message}`);

@@ -74,7 +74,7 @@ const PerformanceCard = ({ onLeaderboardClick }) => {
 
     return (
         <div
-            className="relative bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden flex flex-col transition-all hover:shadow-lg cursor-pointer group"
+            className="relative bg-white rounded-3xl border border-slate-100/80 shadow-sm overflow-hidden flex flex-col transition-all duration-300 hover:shadow-md hover:border-slate-200/80 cursor-pointer group"
             onClick={onLeaderboardClick}
             title="Click to view full leaderboard"
         >

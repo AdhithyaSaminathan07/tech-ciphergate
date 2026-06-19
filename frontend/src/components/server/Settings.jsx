@@ -1,19 +1,51 @@
-import React, { useState } from 'react';
-import { triggerSync } from '../../services/serverService';
-import { FiSliders, FiClock, FiCloud, FiAlertCircle, FiCheck } from 'react-icons/fi';
+import React, { useState, useEffect } from 'react';
+import { triggerSync, getSettings, updateSettings } from '../../services/serverService';
+import { FiSliders, FiClock, FiCloud, FiAlertCircle, FiCheck, FiBell } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const Settings = () => {
   const [anomalyThreshold, setAnomalyThreshold] = useState(30);
   const [syncSchedule, setSyncSchedule] = useState('daily');
-  const [bucketName, setBucketName] = useState('ciphergate-cost-lake-prod');
+  const [bucketName, setBucketName] = useState('');
+  const [glueDatabase, setGlueDatabase] = useState('');
+  const [athenaWorkgroup, setAthenaWorkgroup] = useState('');
+  const [slackWebhookUrl, setSlackWebhookUrl] = useState('');
+  const [alertEmails, setAlertEmails] = useState('');
+  const [alertsEnabled, setAlertsEnabled] = useState(true);
+
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState({ text: '', type: '' });
 
   const showMsg = (text, type = 'success') => {
     setMessage({ text, type });
     setTimeout(() => setMessage({ text: '', type: '' }), 5000);
   };
+
+  const loadSettingsData = async () => {
+    setIsLoading(true);
+    try {
+      const res = await getSettings();
+      if (res.success && res.settings) {
+        setAnomalyThreshold(res.settings.anomalyThreshold || 30);
+        setSyncSchedule(res.settings.syncSchedule || 'daily');
+        setBucketName(res.settings.billingBucket || '');
+        setGlueDatabase(res.settings.glueDatabase || '');
+        setAthenaWorkgroup(res.settings.athenaWorkgroup || '');
+        setSlackWebhookUrl(res.settings.slackWebhookUrl || '');
+        setAlertEmails(res.settings.alertEmails || '');
+        setAlertsEnabled(res.settings.alertsEnabled !== false);
+      }
+    } catch (err) {
+      showMsg('Failed to load configuration settings from server.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSettingsData();
+  }, []);
 
   const handleSyncNow = async () => {
     setIsSyncing(true);
@@ -29,10 +61,34 @@ const Settings = () => {
     }
   };
 
-  const handleSaveSettings = (e) => {
+  const handleSaveSettings = async (e) => {
     e.preventDefault();
-    showMsg('Configuration settings saved successfully!');
+    try {
+      const res = await updateSettings({
+        anomalyThreshold,
+        syncSchedule,
+        alertsEnabled,
+        slackWebhookUrl,
+        alertEmails,
+        billingBucket: bucketName,
+        glueDatabase,
+        athenaWorkgroup
+      });
+      if (res.success) {
+        showMsg('Configuration settings saved successfully!');
+      }
+    } catch (err) {
+      showMsg(err.message || 'Failed to save configuration settings.', 'error');
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-[50vh]">
+        <div className="w-8 h-8 border-2 border-teal-500/20 border-t-teal-500 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -78,7 +134,7 @@ const Settings = () => {
                     max={200}
                     step={10}
                     value={anomalyThreshold}
-                    onChange={(e) => setAnomalyThreshold(e.target.value)}
+                    onChange={(e) => setAnomalyThreshold(Number(e.target.value))}
                     className="flex-1 accent-teal-600 cursor-pointer"
                   />
                   <span className="text-sm font-bold text-teal-600 font-mono w-12 text-right">{anomalyThreshold}%</span>
@@ -86,21 +142,89 @@ const Settings = () => {
                 <span className="block text-[10px] text-slate-400 mt-1">Alert is triggered when daily cost increases beyond this percentage compared to baseline metrics.</span>
               </div>
 
-              {/* Bucket configuration input */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 tracking-wider mb-2">S3 Cost Lake Bucket Path</label>
-                <input
-                  type="text"
-                  value={bucketName}
-                  onChange={(e) => setBucketName(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-slate-50/50 text-sm transition-all font-mono"
-                  required
-                />
-                <span className="block text-[10px] text-slate-400 mt-1">Athena Glue schema will scan files contained in this folder path.</span>
+              {/* Bucket configuration inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 tracking-wider mb-2">S3 Cost Lake Bucket</label>
+                  <input
+                    type="text"
+                    value={bucketName}
+                    onChange={(e) => setBucketName(e.target.value)}
+                    placeholder="e.g. ciphergate-cost-lake"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-slate-50/50 text-xs transition-all font-mono"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 tracking-wider mb-2">Glue Catalog Database</label>
+                  <input
+                    type="text"
+                    value={glueDatabase}
+                    onChange={(e) => setGlueDatabase(e.target.value)}
+                    placeholder="e.g. cur_billing_catalog"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-slate-50/50 text-xs transition-all font-mono"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 tracking-wider mb-2">Athena Workgroup</label>
+                  <input
+                    type="text"
+                    value={athenaWorkgroup}
+                    onChange={(e) => setAthenaWorkgroup(e.target.value)}
+                    placeholder="e.g. primary"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-slate-50/50 text-xs transition-all font-mono"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Notification & Alerts configuration */}
+              <div className="pt-4 border-t border-slate-100 space-y-4">
+                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                  <FiBell className="text-teal-600" />
+                  <span>Slack & Email Notifications</span>
+                </h3>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="alertsEnabled"
+                    checked={alertsEnabled}
+                    onChange={(e) => setAlertsEnabled(e.target.checked)}
+                    className="accent-teal-600 rounded w-4 h-4 cursor-pointer"
+                  />
+                  <label htmlFor="alertsEnabled" className="text-xs font-bold text-slate-700 cursor-pointer">
+                    Enable Anomaly & Budget Alerting
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 tracking-wider mb-2">Slack Webhook URL</label>
+                    <input
+                      type="url"
+                      value={slackWebhookUrl}
+                      onChange={(e) => setSlackWebhookUrl(e.target.value)}
+                      placeholder="https://hooks.slack.com/services/..."
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-slate-50/50 text-xs transition-all font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 tracking-wider mb-2">Alert Email Recipients</label>
+                    <input
+                      type="text"
+                      value={alertEmails}
+                      onChange={(e) => setAlertEmails(e.target.value)}
+                      placeholder="e.g. devops@company.com, admin@company.com"
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-slate-50/50 text-xs transition-all font-mono"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Sync scheduler choice */}
-              <div>
+              <div className="pt-4 border-t border-slate-100">
                 <label className="block text-xs font-bold text-slate-500 tracking-wider mb-3">Billing Schedulers Interval</label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {['6h', '12h', 'daily'].map((option) => (
@@ -157,7 +281,7 @@ const Settings = () => {
             <div className="p-3.5 bg-sky-50 border border-sky-100 text-sky-800 rounded-xl flex gap-2.5 items-start">
               <FiAlertCircle className="text-sky-600 flex-shrink-0 mt-0.5" />
               <span className="text-[10px] leading-relaxed font-semibold">
-                Running sync in mock mode will immediately generate 90 days of historical unblended RDS/EC2 resources logs inside your database.
+                Manual synchronization runs the full CUR lake query processing, discovers multi-region inventory, detects rightsizing parameters, and compiles anomalies/forecasts.
               </span>
             </div>
 
