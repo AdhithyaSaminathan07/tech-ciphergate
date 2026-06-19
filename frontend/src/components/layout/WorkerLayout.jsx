@@ -26,7 +26,7 @@ import appContext from '../../context/AppContext';
 import Header from './Header';
 import BottomNavigation from './BottomNavigation';
 
-const WorkerLayout = ({ children }) => {
+const WorkerLayout = ({ children, isTestInProgress }) => {
   const { user, logout } = useAuth();
   const [newComments, setNewComments] = useState(0);
   const [leaveUpdates, setLeaveUpdates] = useState(0);
@@ -146,31 +146,37 @@ const WorkerLayout = ({ children }) => {
 
   return (
     <div className="flex h-screen bg-[#f8fafc] w-full overflow-hidden">
-      <div className="hidden md:block">
-        <Sidebar
-          links={sidebarLinks}
-          logoText="Employee Dashboard"
-          user={{
-            ...user,
-            displayName: `${user.name} (${user.department})`
-          }}
-          onLogout={handleLogout}
-          isAdmin={false}
-        />
-      </div>
+      {!isTestInProgress && (
+        <div className="hidden md:block">
+          <Sidebar
+            links={sidebarLinks}
+            logoText="Employee Dashboard"
+            user={{
+              ...user,
+              displayName: `${user.name} (${user.department})`
+            }}
+            onLogout={handleLogout}
+            isAdmin={false}
+          />
+        </div>
+      )}
 
       <div className="flex-1 w-full flex flex-col h-screen overflow-hidden relative">
-        <Header 
-          user={{ ...user, displayName: `${user.name} (${user.department})` }} 
-          menuLinks={menuLinks} 
-          onLogout={handleLogout}
-          isAdmin={false}
-          onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        />
-        <main className="flex-1 p-1 sm:p-4 md:p-6 pb-24 md:pb-6 overflow-x-hidden overflow-y-auto custom-main-scroll">
+        {!isTestInProgress && (
+          <Header 
+            user={{ ...user, displayName: `${user.name} (${user.department})` }} 
+            menuLinks={menuLinks} 
+            onLogout={handleLogout}
+            isAdmin={false}
+            onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          />
+        )}
+        <main className={isTestInProgress ? "flex-1 w-full h-full overflow-x-hidden overflow-y-auto" : "flex-1 p-1 sm:p-4 md:p-6 pb-24 md:pb-6 overflow-x-hidden overflow-y-auto custom-main-scroll"}>
           {children}
         </main>
-        <BottomNavigation navItems={bottomNavItems} badges={{ comments: newComments, leaves: leaveUpdates }} />
+        {!isTestInProgress && (
+          <BottomNavigation navItems={bottomNavItems} badges={{ comments: newComments, leaves: leaveUpdates }} />
+        )}
       </div>
     </div>
   );

@@ -1502,6 +1502,22 @@ const calculateWorkerProductivity = (productivityParameters) => {
             }
           }
 
+          // Attendance Rule
+          if (!isPenaltyTriggered && advancedLeaveDeduction.attendanceRuleEnabled) {
+            if (isEmployeeAttendancePenaltyActive) {
+              isPenaltyTriggered = true;
+              penaltyReasons.push(`Personal Attendance Low (${Math.round(monthlyAttendanceRate)}%)`);
+            }
+            const dateKey = typeof date === 'string' ? date : date.toISOString().split('T')[0];
+            const isCompanyPenaltyForDay = options.companyPenaltyMap ? options.companyPenaltyMap[dateKey] : options.isCompanyPenalty;
+            const isDeptPenaltyForDay = options.deptPenaltyMap ? options.deptPenaltyMap[dateKey] : options.isDeptPenalty;
+
+            if (!isPenaltyTriggered && (isCompanyPenaltyForDay || isDeptPenaltyForDay)) {
+              isPenaltyTriggered = true;
+              penaltyReasons.push(isCompanyPenaltyForDay ? 'Company Attendance Low' : 'Dept Attendance Low');
+            }
+          }
+
           if (isPenaltyTriggered) {
             dynamicFactor = advancedLeaveDeduction.deductionMultiplier || 2;
           }
@@ -1745,7 +1761,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
     } else {
       // Future working day or future holiday
       const holidayInfo = isHolidayForWorker(date, worker._id);
-      
+
       if (holidayInfo) {
         totalHolidayCount++;
         const dayData = {
@@ -1769,7 +1785,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
           workType: futureWorkType,
           projectId: futureProjectId
         };
-        
+
         if (futureActiveProject) {
           grossProjectSalary += futureEffectivePerDaySalary;
           const pid = futureActiveProject._id.toString();
@@ -1782,7 +1798,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
         } else {
           grossSaaSSalary += perDaySalary;
         }
-        
+
         report.push(reportEntry);
         dailyBreakdown.push(dayData);
       } else {

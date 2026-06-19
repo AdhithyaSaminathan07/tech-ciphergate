@@ -223,6 +223,7 @@ const GenerateQuestions = () => {
   const [jobId, setJobId] = useState(null);
   const [isPolling, setIsPolling] = useState(false);
   const [questionFormat, setQuestionFormat] = useState('mcq'); // Add question format state here
+  const [answerFeedback, setAnswerFeedback] = useState(true); // Add answer feedback state here
   const cancelRef = useRef(false);
 
   const dropdownRef = useRef(null);
@@ -499,6 +500,7 @@ const GenerateQuestions = () => {
         totalTestDuration: parseInt(totalTestDuration),
         topicMode,
         questionFormat, // Add question format to payload
+        answerFeedback, // Add answer feedback to payload
         totalWorkers: selectedWorkers.length,
         totalQuestions: selectedWorkers.length * parseInt(numQuestions)
       };
@@ -1107,6 +1109,39 @@ const GenerateQuestions = () => {
                             {questionFormat === 'mcq' 
                                 ? 'Standard multiple-choice questions' 
                                 : 'Structured statements with reasoning'}
+                        </p>
+                    </div>
+                    {/* New Answer Feedback Toggle */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center"><Settings className="mr-2 text-gray-500" size={16} />Answer Feedback</label>
+                        <div className="flex space-x-2">
+                            <button
+                                type="button"
+                                onClick={() => setAnswerFeedback(true)}
+                                className={`flex-1 py-2 px-3 rounded-full text-sm font-medium transition-all ${
+                                    answerFeedback === true 
+                                        ? 'bg-[#0d9488] text-white shadow-md' 
+                                        : 'bg-gray-200 text-gray-600 hover:bg-[#0d9488] hover:text-white'
+                                }`}
+                            >
+                                On
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setAnswerFeedback(false)}
+                                className={`flex-1 py-2 px-3 rounded-full text-sm font-medium transition-all ${
+                                    answerFeedback === false 
+                                        ? 'bg-[#0d9488] text-white shadow-md' 
+                                        : 'bg-gray-200 text-gray-600 hover:bg-[#0d9488] hover:text-white'
+                                }`}
+                            >
+                                Off
+                            </button>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                            {answerFeedback 
+                                ? 'Show green/orange colors on option selection' 
+                                : 'Do not show correct/wrong colors immediately'}
                         </p>
                     </div>
                 </div>

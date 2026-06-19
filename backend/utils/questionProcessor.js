@@ -52,7 +52,8 @@ const processQuestionGeneration = async (jobData, jobId) => {
         topic: commonTopic,
         commonTopics,
         individualTopics,
-        questionFormat = 'mcq' // Add question format with default value
+        questionFormat = 'mcq', // Add question format with default value
+        answerFeedback
     } = jobData;
 
     log.info('Starting robust, concurrent question generation job:', { numWorkers: workerIds.length, jobId, questionFormat });
@@ -199,21 +200,29 @@ const processQuestionGeneration = async (jobData, jobId) => {
                     // Also clean the correctAnswer
                     const cleanedCorrectAnswer = q.correctAnswer.replace(/^\([a-d]\)\s*/i, '').trim();
                     
-                    const correctOptionIndex = cleanedOptions.findIndex(
+                    // Programmatically shuffle options to guarantee randomness
+                    const shuffledOptions = [...cleanedOptions];
+                    for (let i = shuffledOptions.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [shuffledOptions[i], shuffledOptions[j]] = [shuffledOptions[j], shuffledOptions[i]];
+                    }
+                    
+                    const correctOptionIndex = shuffledOptions.findIndex(
                         (opt) => String(opt).trim().toLowerCase() === String(cleanedCorrectAnswer).trim().toLowerCase()
                     );
                     
                     return {
                         worker: worker._id,
                         topic: combinedTopicString,
-                        questionText: q.question,
-                        options: cleanedOptions,
-                        correctAnswer: correctOptionIndex !== -1 ? correctOptionIndex : Math.floor(Math.random() * cleanedOptions.length),
+                        questionText: q.questionText || q.question,
+                        options: shuffledOptions,
+                        correctAnswer: correctOptionIndex !== -1 ? correctOptionIndex : Math.floor(Math.random() * shuffledOptions.length),
                         difficulty: q.difficulty || difficulty,
                         timeDuration: parseInt(timeDuration),
                         totalTestDuration: parseInt(totalTestDuration),
                         questionFormat: questionFormat, // Store the question format
-                        upscFormat: q.format || 'E' // Store the specific UPSC format (A, B, C, D, or E)
+                        upscFormat: q.format || 'E', // Store the specific UPSC format (A, B, C, D, or E)
+                        showFeedback: answerFeedback !== false
                     };
                 }).filter(Boolean);
 
@@ -291,7 +300,8 @@ const processThreeSetQuestionGeneration = async (jobData, jobId) => {
         topic: commonTopic,
         commonTopics,
         individualTopics,
-        questionFormat = 'upsc' // Default to UPSC format for three sets
+        questionFormat = 'upsc', // Default to UPSC format for three sets
+        answerFeedback
     } = jobData;
 
     log.info('Starting three-set question generation job:', { numWorkers: workerIds.length, jobId, questionFormat });
@@ -387,22 +397,30 @@ const processThreeSetQuestionGeneration = async (jobData, jobId) => {
                     // Also clean the correctAnswer
                     const cleanedCorrectAnswer = q.correctAnswer.replace(/^\([a-d]\)\s*/i, '').trim();
                     
-                    const correctOptionIndex = cleanedOptions.findIndex(
+                    // Programmatically shuffle options to guarantee randomness
+                    const shuffledOptions = [...cleanedOptions];
+                    for (let i = shuffledOptions.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [shuffledOptions[i], shuffledOptions[j]] = [shuffledOptions[j], shuffledOptions[i]];
+                    }
+                    
+                    const correctOptionIndex = shuffledOptions.findIndex(
                         (opt) => String(opt).trim().toLowerCase() === String(cleanedCorrectAnswer).trim().toLowerCase()
                     );
                     
                     return {
                         worker: worker._id,
                         topic: combinedTopicString,
-                        questionText: q.question,
-                        options: cleanedOptions,
-                        correctAnswer: correctOptionIndex !== -1 ? correctOptionIndex : Math.floor(Math.random() * cleanedOptions.length),
+                        questionText: q.questionText || q.question,
+                        options: shuffledOptions,
+                        correctAnswer: correctOptionIndex !== -1 ? correctOptionIndex : Math.floor(Math.random() * shuffledOptions.length),
                         difficulty: q.difficulty || difficulty,
                         timeDuration: parseInt(timeDuration),
                         totalTestDuration: parseInt(totalTestDuration),
                         questionFormat: questionFormat, // Store the question format
                         upscFormat: q.format || 'E', // Store the specific UPSC format (A, B, C, D, or E)
-                        questionSet: setForWorker // Store which set this question belongs to
+                        questionSet: setForWorker, // Store which set this question belongs to
+                        showFeedback: answerFeedback !== false
                     };
                 }).filter(Boolean);
 

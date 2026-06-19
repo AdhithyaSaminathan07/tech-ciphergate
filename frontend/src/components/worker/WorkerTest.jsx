@@ -353,30 +353,47 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
         newAnswers[currentQuestionIndex] = optionIndex;
         setAnswers(newAnswers);
         
-        // Show feedback for the selected answer (correct/incorrect)
-        setShowFeedback(true);
+        // Check if answerFeedback is enabled (defaults to true)
+        const isFeedbackEnabled = currentTest.showFeedback !== false;
         
-        // Wait 2-3 seconds before moving to the next question or submitting
-        setTimeout(() => {
-            setShowFeedback(false);
-            setSelectedAnswerIndex(null);
+        if (isFeedbackEnabled) {
+            // Show feedback for the selected answer (correct/incorrect)
+            setShowFeedback(true);
             
-            if (currentQuestionIndex < currentTest.questions.length - 1) {
-                // Move to next question
-                setCurrentQuestionIndex(prev => prev + 1);
-                setTimeLeft(currentTest.durationPerQuestion);
-            } else {
-                // Last question - auto submit
-                console.log('Last question answered, auto-submitting test');
+            // Wait 2-3 seconds before moving to the next question or submitting
+            setTimeout(() => {
+                setShowFeedback(false);
+                setSelectedAnswerIndex(null);
                 
-                // Use setTimeout with higher priority to ensure it runs before other timers
-                setTimeout(() => {
-                    console.log('Auto-submitting test after last question');
-                    // Use the updated answers array directly instead of relying on state
+                if (currentQuestionIndex < currentTest.questions.length - 1) {
+                    // Move to next question
+                    setCurrentQuestionIndex(prev => prev + 1);
+                    setTimeLeft(currentTest.durationPerQuestion);
+                } else {
+                    // Last question - auto submit
+                    console.log('Last question answered, auto-submitting test');
+                    
+                    // Use setTimeout with higher priority to ensure it runs before other timers
+                    setTimeout(() => {
+                        console.log('Auto-submitting test after last question');
+                        // Use the updated answers array directly instead of relying on state
+                        handleSubmitTest(newAnswers);
+                    }, 300); // Shorter delay to ensure it runs before other potential submit calls
+                }
+            }, 2500); // 2.5 seconds delay for visual feedback
+        } else {
+            // No feedback: advance immediately after a short 300ms delay for click registration
+            setTimeout(() => {
+                setSelectedAnswerIndex(null);
+                if (currentQuestionIndex < currentTest.questions.length - 1) {
+                    setCurrentQuestionIndex(prev => prev + 1);
+                    setTimeLeft(currentTest.durationPerQuestion);
+                } else {
+                    console.log('Last question answered (no feedback), auto-submitting test');
                     handleSubmitTest(newAnswers);
-                }, 300); // Shorter delay to ensure it runs before other potential submit calls
-            }
-        }, 2500); // 2.5 seconds delay for visual feedback
+                }
+            }, 300);
+        }
     };
 
     const handleNextQuestion = () => {
@@ -1424,134 +1441,157 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
         );
     }
 
-    // Test interface (same as QuickTest but adapted for workers)
+   
     if (step === 'test' && currentTest) {
         const currentQuestion = currentTest.questions[currentQuestionIndex];
         const progress = ((currentQuestionIndex + 1) / currentTest.questions.length) * 100;
 
         return (
-            <div className="min-h-screen bg-gray-900 text-white p-8">
-                <div className="max-w-4xl mx-auto">
+            <div className="min-h-screen bg-[#0b0f19] text-white flex flex-col justify-center items-center p-4 sm:p-6 md:p-12 selection:bg-blue-500/30">
+                <div className="w-full max-w-4xl flex flex-col justify-center my-auto py-8">
                     {/* Header */}
-                    <div className="flex justify-between items-center mb-8">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
                         <div>
-                            <h1 className="text-2xl font-bold">{currentTest.latestTopic}</h1>
-                            <p className="text-gray-300">Question {currentQuestionIndex + 1} of {currentTest.questions.length}</p>
+                            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">{currentTest.latestTopic}</h1>
+                            <p className="text-slate-400 mt-1">Question {currentQuestionIndex + 1} of {currentTest.questions.length}</p>
                         </div>
-                        <div className="text-right">
-                            <div className="text-sm text-gray-300">Question Time</div>
-                            <div className="text-2xl font-bold text-yellow-400">
-                                <FaClock className="inline mr-2" />
-                                {formatTime(timeLeft)}
+                        <div className="flex items-center gap-4 text-right">
+                            <div className="bg-slate-800/60 border border-slate-700/40 backdrop-blur px-4 py-2.5 rounded-xl shadow-lg">
+                                <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Question Time</div>
+                                <div className="text-xl font-bold text-yellow-400 flex items-center justify-end gap-2 mt-0.5">
+                                    <FaClock size={16} />
+                                    {formatTime(timeLeft)}
+                                </div>
                             </div>
-                            <div className="text-sm text-gray-300 mt-2">Total Time: {formatTime(totalTimeLeft)}</div>
+                            <div className="bg-slate-800/60 border border-slate-700/40 backdrop-blur px-4 py-2.5 rounded-xl shadow-lg">
+                                <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Total Time</div>
+                                <div className="text-xl font-bold text-slate-200 mt-0.5">{formatTime(totalTimeLeft)}</div>
+                            </div>
                         </div>
                     </div>
 
                     {/* Progress Bar */}
-                    <div className="w-full bg-gray-700 rounded-full h-2 mb-8">
+                    <div className="w-full bg-slate-800/80 rounded-full h-2.5 mb-10 overflow-hidden border border-slate-700/20">
                         <div 
-                            className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                            className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-300 shadow-[0_0_8px_rgba(59,130,246,0.5)]"
                             style={{ width: `${progress}%` }}
                         ></div>
                     </div>
 
                     {/* Question */}
-                    <div className="bg-gray-800 p-8 rounded-lg mb-8">
+                    <div className="bg-[#111827] border border-slate-800/80 p-8 md:p-10 rounded-2xl shadow-2xl shadow-black/40 mb-8 backdrop-blur-md">
                         {currentQuestion.questionFormat === 'upsc' ? (
                             // UPSC/GK Style Question Format
                             <div className="mb-6">
-                                <h2 className="text-xl font-semibold mb-4 whitespace-pre-line">
+                                <h2 className="text-xl md:text-2xl font-bold leading-relaxed mb-8 text-slate-100 whitespace-pre-line">
                                     {currentQuestion.questionText}
                                 </h2>
-                                <div className="space-y-2 mt-4">
-                                    {currentQuestion.options.map((option, index) => {
-                                        // Determine styling based on the selected answer and correctness
-                                        let divStyle = 'p-3 bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-600';
-                                        
-                                        // When an answer is selected
-                                        if (answers[currentQuestionIndex] === index) {
-                                            // If the selected answer is correct
-                                            if (index === currentQuestion.correctOption || index === currentQuestion.correctAnswer) {
-                                                divStyle = 'p-3 bg-green-700 rounded-lg border-2 border-green-500';
-                                            } else {
-                                                // If the selected answer is wrong
-                                                divStyle = 'p-3 bg-red-700 rounded-lg border-2 border-red-500';
+                                <div className="space-y-4 mt-4">
+                                    {(() => {
+                                        const isFeedbackEnabled = currentTest.showFeedback !== false;
+                                        return currentQuestion.options.map((option, index) => {
+                                            // Determine styling based on the selected answer and correctness
+                                            let divStyle = 'w-full p-4 md:p-5 text-left rounded-xl border-2 transition-all duration-200 cursor-pointer flex justify-between items-center bg-[#1e293b]/40 border-slate-800 hover:border-slate-600 hover:bg-[#1e293b]/60 hover:translate-y-[-1px]';
+                                            
+                                            // When an answer is selected
+                                            if (answers[currentQuestionIndex] === index) {
+                                                if (isFeedbackEnabled) {
+                                                    // If the selected answer is correct
+                                                    if (index === currentQuestion.correctOption || index === currentQuestion.correctAnswer) {
+                                                        divStyle = 'w-full p-4 md:p-5 text-left rounded-xl border-2 transition-all duration-200 cursor-pointer flex justify-between items-center bg-emerald-950/60 border-emerald-500 text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.15)]';
+                                                    } else {
+                                                        // If the selected answer is wrong
+                                                        divStyle = 'w-full p-4 md:p-5 text-left rounded-xl border-2 transition-all duration-200 cursor-pointer flex justify-between items-center bg-orange-950/60 border-orange-500 text-orange-200 shadow-[0_0_15px_rgba(249,115,22,0.15)]';
+                                                    }
+                                                } else {
+                                                    // Neutral selected state
+                                                    divStyle = 'w-full p-4 md:p-5 text-left rounded-xl border-2 transition-all duration-200 cursor-pointer flex justify-between items-center bg-blue-950/60 border-blue-500 text-blue-200 shadow-[0_0_15px_rgba(59,130,246,0.15)]';
+                                                }
+                                            } else if (isFeedbackEnabled && showFeedback && (index === currentQuestion.correctOption || index === currentQuestion.correctAnswer)) {
+                                                // Show correct answer in green when feedback is shown
+                                                divStyle = 'w-full p-4 md:p-5 text-left rounded-xl border-2 transition-all duration-200 cursor-pointer flex justify-between items-center bg-emerald-950/60 border-emerald-500 text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.15)]';
                                             }
-                                        } else if (showFeedback && (index === currentQuestion.correctOption || index === currentQuestion.correctAnswer)) {
-                                            // Show correct answer in green when feedback is shown
-                                            divStyle = 'p-3 bg-green-700 rounded-lg border-2 border-green-500';
-                                        }
-                                        
-                                        return (
-                                            <div 
-                                                key={index} 
-                                                className={divStyle}
-                                                onClick={() => handleAnswerSelect(index)}
-                                            >
-                                                <span className="font-medium mr-3">{String.fromCharCode(65 + index)}.</span>
-                                                {option}
-                                                {/* Show indicators for selected answers */}
-                                                {answers[currentQuestionIndex] === index && (
-                                                    index === currentQuestion.correctOption || index === currentQuestion.correctAnswer ? 
-                                                    <span className="float-right font-bold text-green-300">✓ CORRECT</span> : 
-                                                    <span className="float-right font-bold text-red-300">✗ WRONG</span>
-                                                )}
-                                                {/* Show correct answer indicator when feedback is shown */}
-                                                {showFeedback && (index === currentQuestion.correctOption || index === currentQuestion.correctAnswer) && answers[currentQuestionIndex] !== index && (
-                                                    <span className="float-right font-bold text-green-300">✓ CORRECT ANSWER</span>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
+                                            
+                                            return (
+                                                <div 
+                                                    key={index} 
+                                                    className={divStyle}
+                                                    onClick={() => handleAnswerSelect(index)}
+                                                >
+                                                    <div className="flex items-center">
+                                                        <span className="font-semibold text-slate-400 mr-3">{String.fromCharCode(65 + index)}.</span>
+                                                        <span className="text-slate-200">{option}</span>
+                                                    </div>
+                                                    <div>
+                                                        {/* Show indicators for selected answers */}
+                                                        {isFeedbackEnabled && answers[currentQuestionIndex] === index && (
+                                                            index === currentQuestion.correctOption || index === currentQuestion.correctAnswer ? 
+                                                            <span className="font-bold text-emerald-400 text-sm tracking-wider">✓ CORRECT</span> : 
+                                                            <span className="font-bold text-orange-400 text-sm tracking-wider">✗ WRONG</span>
+                                                        )}
+                                                        {/* Show correct answer indicator when feedback is shown */}
+                                                        {isFeedbackEnabled && showFeedback && (index === currentQuestion.correctOption || index === currentQuestion.correctAnswer) && answers[currentQuestionIndex] !== index && (
+                                                            <span className="font-bold text-emerald-400 text-sm tracking-wider">✓ CORRECT ANSWER</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        });
+                                    })()}
                                 </div>
                             </div>
                         ) : (
                             // Standard MCQ Format
                             <>
-                                <h2 className="text-xl font-semibold mb-6">{currentQuestion.questionText}</h2>
+                                <h2 className="text-xl md:text-2xl font-bold leading-relaxed mb-8 text-slate-100">{currentQuestion.questionText}</h2>
                                 {/* Define correctAnswerIndex in a higher scope */}
                                 {(() => {
                                     const correctAnswerIndex = typeof currentQuestion.correctOption === 'number' 
                                         ? currentQuestion.correctOption 
                                         : (typeof currentQuestion.correctAnswer === 'number' ? currentQuestion.correctAnswer : 0);
                                     
+                                    const isFeedbackEnabled = currentTest.showFeedback !== false;
+                                    
                                     return (
                                         <div className="space-y-4">
                                             {currentQuestion.options.map((option, index) => {
                                                 // Determine styling based on the selected answer and feedback state
-                                                let buttonStyle = 'border-gray-600 bg-gray-700 hover:border-blue-500 hover:bg-gray-600';
+                                                let buttonStyle = 'border-slate-800 bg-[#1e293b]/40 hover:border-slate-600 hover:bg-[#1e293b]/60 hover:translate-y-[-1px] text-slate-300';
                                                 let iconMarkup = null;
                                                 
                                                 // When showing feedback after answer selection
-                                                if (showFeedback) {
+                                                if (isFeedbackEnabled && showFeedback) {
                                                     // Highlight the correct answer in green regardless of what was selected
                                                     if (index === correctAnswerIndex) {
-                                                        buttonStyle = 'border-green-500 bg-green-700 text-green-100';
-                                                        iconMarkup = <span className="float-right text-green-400 font-bold">✓ CORRECT</span>;
+                                                        buttonStyle = 'border-emerald-500 bg-emerald-950/60 text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.15)]';
+                                                        iconMarkup = <span className="font-bold text-emerald-400 text-sm tracking-wider">✓ CORRECT</span>;
                                                     }
                                                     
                                                     // If this is the selected answer and it's wrong
                                                     if (selectedAnswerIndex === index && index !== correctAnswerIndex) {
-                                                        buttonStyle = 'border-orange-500 bg-orange-900 text-orange-100';
-                                                        iconMarkup = <span className="float-right text-orange-400 font-bold">✗ WRONG</span>;
+                                                        buttonStyle = 'border-orange-500 bg-orange-950/60 text-orange-200 shadow-[0_0_15px_rgba(249,115,22,0.15)]';
+                                                        iconMarkup = <span className="font-bold text-orange-400 text-sm tracking-wider">✗ WRONG</span>;
                                                     }
                                                 } 
                                                 // When not showing feedback but an answer is selected
                                                 else if (answers[currentQuestionIndex] === index) {
-                                                    buttonStyle = 'border-blue-500 bg-blue-900 text-blue-100 transform scale-105';
+                                                    buttonStyle = 'border-blue-500 bg-blue-950/60 text-blue-200 shadow-[0_0_15px_rgba(59,130,246,0.15)] scale-[1.01]';
                                                 }
                                                 
                                                 return (
                                                     <button
                                                         key={index}
-                                                        className={`w-full p-4 text-left rounded-lg border-2 transition-all duration-300 hover:scale-105 ${buttonStyle}`}
+                                                        className={`w-full p-4 md:p-5 text-left rounded-xl border-2 transition-all duration-200 shadow-md ${buttonStyle} flex justify-between items-center`}
                                                         onClick={() => handleAnswerSelect(index)}
                                                         disabled={selectedAnswerIndex !== null || answers[currentQuestionIndex] !== null}
                                                     >
-                                                        <span className="font-medium mr-3">{String.fromCharCode(65 + index)}.</span>
-                                                        {option}
-                                                        {iconMarkup}
+                                                        <div className="flex items-center">
+                                                            <span className="font-semibold text-slate-400 mr-3">{String.fromCharCode(65 + index)}.</span>
+                                                            <span className="text-slate-200">{option}</span>
+                                                        </div>
+                                                        <div>
+                                                            {iconMarkup}
+                                                        </div>
                                                     </button>
                                                 );
                                             })}
@@ -1561,7 +1601,6 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                             </>
                         )}
                     </div>
-
                 </div>
 
                 {/* Warning Modal */}

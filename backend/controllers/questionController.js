@@ -199,7 +199,7 @@ const getQuestionsForTest = async (req, res) => {
 
         const latestQuestionEntry = await Question.findOne({ worker: workerId })
             .sort({ createdAt: -1 })
-            .select('topic timeDuration totalTestDuration createdAt isMixed allTopics questionSet')
+            .select('topic timeDuration totalTestDuration createdAt isMixed allTopics questionSet showFeedback')
             .lean();
 
         if (!latestQuestionEntry) {
@@ -317,7 +317,8 @@ const getQuestionsForTest = async (req, res) => {
             latestTopic: isMixed ? allTopics.join(', ') : latestQuestionEntry.topic,
             isMixed: isMixed,
             allTopics: allTopics,
-            questionSet: questionSet
+            questionSet: questionSet,
+            showFeedback: latestQuestionEntry ? (latestQuestionEntry.showFeedback !== false) : true
         });
 
     } catch (error) {
@@ -426,15 +427,22 @@ const createQuickTest = async (req, res) => {
             // Also clean the correctAnswer
             const cleanedCorrectAnswer = q.correctAnswer.replace(/^\([a-d]\)\s*/i, '').trim();
             
-            const correctOptionIndex = cleanedOptions.findIndex(
+            // Programmatically shuffle options to guarantee randomness
+            const shuffledOptions = [...cleanedOptions];
+            for (let i = shuffledOptions.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffledOptions[i], shuffledOptions[j]] = [shuffledOptions[j], shuffledOptions[i]];
+            }
+            
+            const correctOptionIndex = shuffledOptions.findIndex(
                 opt => String(opt).trim().toLowerCase() === String(cleanedCorrectAnswer).trim().toLowerCase()
             );
             
             return {
                 topic: topic,
-                questionText: q.question,
-                options: cleanedOptions,
-                correctAnswer: correctOptionIndex !== -1 ? correctOptionIndex : Math.floor(Math.random() * cleanedOptions.length),
+                questionText: q.questionText || q.question,
+                options: shuffledOptions,
+                correctAnswer: correctOptionIndex !== -1 ? correctOptionIndex : Math.floor(Math.random() * shuffledOptions.length),
                 difficulty: q.difficulty || difficulty,
                 timeDuration: parseInt(timeDuration),
                 totalTestDuration: parseInt(totalTestDuration),
