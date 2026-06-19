@@ -151,7 +151,7 @@ const RenewalModal = ({
                   <h2 className="text-lg font-semibold text-slate-900 tracking-tight">
                     {initialRenewalData ? 'Edit Renewal' : 'Record Renewal'}
                   </h2>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tight border ${initialRenewalData ? 'bg-slate-50 text-slate-600 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold tracking-tight border ${initialRenewalData ? 'bg-slate-50 text-slate-600 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
                     {initialRenewalData ? 'Update' : 'New Entry'}
                   </span>
                 </div>
@@ -178,7 +178,7 @@ const RenewalModal = ({
               <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm">
                 <div className="flex items-center gap-2 mb-2 text-slate-400">
                   <History size={14} />
-                  <span className="text-[10px] font-bold uppercase tracking-widest">Date Created</span>
+                  <span className="text-[10px] font-bold tracking-widest">Date Created</span>
                 </div>
                 <div className="text-sm font-semibold text-slate-700">
                   {initialRenewalData ? dayjs(initialRenewalData.createdAt).format('DD MMM YYYY') : dayjs().format('DD MMM YYYY')}
@@ -190,19 +190,19 @@ const RenewalModal = ({
               <div className="bg-emerald-50/30 border border-emerald-100/50 p-5 rounded-2xl relative overflow-hidden">
                 <div className="flex items-center gap-2 mb-2 text-emerald-600">
                   <Activity size={14} />
-                  <span className="text-[10px] font-bold uppercase tracking-widest">Current Status</span>
+                  <span className="text-[10px] font-bold tracking-widest">Current Status</span>
                 </div>
                 <div className="text-sm font-semibold text-emerald-700">
                   {dayjs().format('DD MMM YYYY')}
                 </div>
-                <div className="text-[11px] text-emerald-600/60 font-medium mt-1 uppercase tracking-tighter">
+                <div className="text-[11px] text-emerald-600/60 font-medium mt-1 tracking-tighter">
                   System Context Active
                 </div>
               </div>
               <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm">
                 <div className="flex items-center gap-2 mb-2 text-slate-400">
                   <Calendar size={14} />
-                  <span className="text-[10px] font-bold uppercase tracking-widest">Projected Expiry</span>
+                  <span className="text-[10px] font-bold tracking-widest">Projected Expiry</span>
                 </div>
                 <div className="text-sm font-semibold text-slate-700">
                   {formData.domain_expiry_date ? dayjs(formData.domain_expiry_date).format('DD MMM YYYY') : '—'}
@@ -217,7 +217,7 @@ const RenewalModal = ({
             <div className={sectionClasses}>
               <div className="flex items-center gap-2 mb-6 text-slate-400">
                 <User size={16} />
-                <h3 className="text-xs font-bold text-slate-600 uppercase tracking-widest">Customer Identity</h3>
+                <h3 className="text-xs font-bold text-slate-600 tracking-widest">Customer Identity</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-2">
@@ -261,7 +261,7 @@ const RenewalModal = ({
             <div className={sectionClasses}>
               <div className="flex items-center gap-2 mb-6 text-slate-400">
                 <Globe size={16} />
-                <h3 className="text-xs font-bold text-slate-600 uppercase tracking-widest">Primary Domain Asset</h3>
+                <h3 className="text-xs font-bold text-slate-600 tracking-widest">Primary Domain Asset</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                 <div className="space-y-1.5">
@@ -326,7 +326,7 @@ const RenewalModal = ({
             <div className={sectionClasses}>
               <div className="flex items-center gap-2 mb-6 text-slate-400">
                 <Server size={16} />
-                <h3 className="text-xs font-bold text-slate-600 uppercase tracking-widest">Infrastructure Hub</h3>
+                <h3 className="text-xs font-bold text-slate-600 tracking-widest">Infrastructure Hub</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                 <div className="space-y-1.5">
@@ -391,7 +391,7 @@ const RenewalModal = ({
             <div className={sectionClasses}>
               <div className="flex items-center gap-2 mb-4 text-slate-400">
                 <FileText size={16} />
-                <h3 className="text-xs font-bold text-slate-600 uppercase tracking-widest">Executive Summary / Notes</h3>
+                <h3 className="text-xs font-bold text-slate-600 tracking-widest">Executive Summary / Notes</h3>
               </div>
               <textarea
                 name="notes"
@@ -429,12 +429,7 @@ const RenewalModal = ({
                 form="renewal-form"
                 type="submit"
                 disabled={loading || !isFormValid}
-                className={`
-                  flex items-center gap-2 px-8 py-3 rounded-xl font-semibold text-sm transition-all duration-300
-                  ${isFormValid 
-                    ? 'bg-slate-900 text-white hover:bg-slate-800 shadow-lg shadow-slate-200 hover:-translate-y-0.5 active:translate-y-0' 
-                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'}
-                `}
+                className={`flex items-center gap-2 px-8 py-3 rounded-xl font-semibold text-sm transition-all duration-300 ${isFormValid ? 'bg-slate-900 text-white hover:bg-slate-800 shadow-lg shadow-slate-200 hover:-translate-y-0.5 active:translate-y-0' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
               >
                 {loading ? (
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />

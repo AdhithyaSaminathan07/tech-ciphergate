@@ -101,7 +101,7 @@ const CostAttribution = () => {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 tracking-wider">
                       <th className="pb-3 capitalize">{groupBy}</th>
                       <th className="pb-3 text-right">Cost ($)</th>
                       <th className="pb-3 text-right">Share (%)</th>

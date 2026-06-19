@@ -209,25 +209,25 @@ const CommunityFund = () => {
 
     return (
         <div className="container mx-auto px-4 py-6">
-            <div className="flex justify-between items-center mb-8">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-800">Community Fund</h1>
-                    <p className="text-gray-600 mt-1">Centralized wallet for collecting employee fines</p>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+                <div className="min-w-0 pr-4">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 tracking-tight">Community Fund</h1>
+                    <p className="text-sm text-gray-600 mt-1">Centralized wallet for collecting employee fines</p>
                 </div>
-                <div className="flex space-x-2">
+                <div className="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
                     <Button
                         variant="primary"
-                        className="flex items-center"
+                        className="flex items-center justify-center flex-1 sm:flex-none whitespace-nowrap"
                         onClick={() => setIsFineModalOpen(true)}
                     >
-                        <FaPlus className="mr-2" /> Fine
+                        <FaPlus className="mr-1.5" /> Fine
                     </Button>
                     <Button
                         variant="secondary"
-                        className="flex items-center"
+                        className="flex items-center justify-center flex-1 sm:flex-none whitespace-nowrap"
                         onClick={() => setIsDebitModalOpen(true)}
                     >
-                        <FaArrowDown className="mr-2" /> Debit
+                        <FaArrowDown className="mr-1.5" /> Debit
                     </Button>
                 </div>
             </div>
@@ -238,7 +238,7 @@ const CommunityFund = () => {
                 <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-teal-500">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">Total Balance</p>
+                            <p className="text-sm font-medium text-gray-500 tracking-wider">Total Balance</p>
                             <h3 className="text-3xl font-bold text-gray-800 mt-1">
                                 ₹{wallet?.totalBalance?.toLocaleString() || 0}
                             </h3>
@@ -253,7 +253,7 @@ const CommunityFund = () => {
                 <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">Total Credits</p>
+                            <p className="text-sm font-medium text-gray-500 tracking-wider">Total Credits</p>
                             <h3 className="text-3xl font-bold text-green-600 mt-1">
                                 +₹{wallet?.totalCredits?.toLocaleString() || 0}
                             </h3>
@@ -268,7 +268,7 @@ const CommunityFund = () => {
                 <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-red-500">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">Total Debits</p>
+                            <p className="text-sm font-medium text-gray-500 tracking-wider">Total Debits</p>
                             <h3 className="text-3xl font-bold text-red-600 mt-1">
                                 -₹{wallet?.totalDebits?.toLocaleString() || 0}
                             </h3>
@@ -283,7 +283,7 @@ const CommunityFund = () => {
                 <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">This Month</p>
+                            <p className="text-sm font-medium text-gray-500 tracking-wider">This Month</p>
                             <h3 className="text-3xl font-bold text-gray-800 mt-1">
                                 ₹{wallet?.currentMonthTotal?.toLocaleString() || 0}
                             </h3>
@@ -305,7 +305,7 @@ const CommunityFund = () => {
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
-                            <tr className="bg-gray-50 text-gray-600 text-sm uppercase">
+                            <tr className="bg-gray-50 text-gray-600 text-sm">
                                 <th className="px-6 py-3 font-medium">Date</th>
                                 <th className="px-6 py-3 font-medium">Type</th>
                                 <th className="px-6 py-3 font-medium">Employee</th>
@@ -330,10 +330,7 @@ const CommunityFund = () => {
                                             })}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${transaction.type === 'credit'
-                                                    ? 'bg-green-100 text-green-600'
-                                                    : 'bg-red-100 text-red-600'
-                                                }`}>
+                                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${transaction.type === 'credit' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600' }`}>
                                                 {transaction.type.toUpperCase()}
                                             </span>
                                         </td>
@@ -352,15 +349,11 @@ const CommunityFund = () => {
                                                 <span className="text-gray-400">—</span>
                                             )}
                                         </td>
-                                        <td className={`px-6 py-4 text-sm font-bold ${transaction.type === 'credit' ? 'text-green-600' : 'text-red-600'
-                                            }`}>
+                                        <td className={`px-6 py-4 text-sm font-bold ${transaction.type === 'credit' ? 'text-green-600' : 'text-red-600' }`}>
                                             {transaction.type === 'credit' ? '+' : '-'}₹{transaction.amount.toLocaleString()}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${transaction.source === 'fine'
-                                                    ? 'bg-orange-100 text-orange-600'
-                                                    : 'bg-purple-100 text-purple-600'
-                                                }`}>
+                                            <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${transaction.source === 'fine' ? 'bg-orange-100 text-orange-600' : 'bg-purple-100 text-purple-600' }`}>
                                                 {transaction.source}
                                             </span>
                                         </td>

@@ -112,7 +112,7 @@ const EmployeeRulesView = () => {
                 {/* Bottom row: version + print — stacks on mobile */}
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     <div className="flex items-center gap-2 flex-1 min-w-[140px]">
-                        <label className="text-[10px] sm:text-xs font-semibold text-slate-500 whitespace-nowrap uppercase tracking-wider flex-shrink-0">
+                        <label className="text-[10px] sm:text-xs font-semibold text-slate-500 whitespace-nowrap tracking-wider flex-shrink-0">
                             Version:
                         </label>
                         <select
@@ -179,7 +179,7 @@ const EmployeeRulesView = () => {
                                     >
                                         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                                             <span className="w-1 sm:w-1.5 h-5 sm:h-6 bg-blue-500 rounded-full print:hidden flex-shrink-0" />
-                                            <h3 className="text-sm sm:text-md font-bold text-slate-800 uppercase tracking-wide truncate print:text-lg print:text-black">
+                                            <h3 className="text-sm sm:text-md font-bold text-slate-800 tracking-wide truncate print:text-lg print:text-black">
                                                 {category}
                                             </h3>
                                         </div>
@@ -207,13 +207,7 @@ const EmployeeRulesView = () => {
                                                             {rule.title}
                                                         </h4>
                                                         {rule.severity && (
-                                                            <span className={`text-[9px] sm:text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded border print:hidden flex-shrink-0 ${
-                                                                rule.severity === 'critical'
-                                                                    ? 'bg-rose-50 border-rose-200 text-rose-600'
-                                                                    : rule.severity === 'high'
-                                                                    ? 'bg-amber-50 border-amber-200 text-amber-600'
-                                                                    : 'bg-emerald-50 border-emerald-200 text-emerald-600'
-                                                            }`}>
+                                                            <span className={`text-[9px] sm:text-[10px] font-bold tracking-wider px-2 py-0.5 rounded border print:hidden flex-shrink-0 ${ rule.severity === 'critical' ? 'bg-rose-50 border-rose-200 text-rose-600' : rule.severity === 'high' ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-emerald-50 border-emerald-200 text-emerald-600' }`}>
                                                                 {rule.severity}
                                                             </span>
                                                         )}
@@ -270,7 +264,7 @@ const EmployeeRulesView = () => {
                         <div className="bg-amber-50/50 border border-amber-200 p-4 sm:p-6 rounded-2xl space-y-2 sm:space-y-3">
                             <div className="flex items-center gap-2 text-amber-800">
                                 <FiInfo size={18} className="fill-amber-100 stroke-[2.5] flex-shrink-0" />
-                                <h3 className="font-bold text-xs sm:text-sm uppercase tracking-wider">
+                                <h3 className="font-bold text-xs sm:text-sm tracking-wider">
                                     Amendments in v{selectedVersion}
                                 </h3>
                             </div>

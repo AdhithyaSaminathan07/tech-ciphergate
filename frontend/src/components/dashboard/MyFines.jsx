@@ -56,14 +56,14 @@ const MyFines = ({ noCard = false }) => {
             {!noCard && (
                 <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-100">
                     <FaExclamationCircle className="text-rose-500" size={16} />
-                    <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">My Fines / Penalties</h2>
+                    <h2 className="text-sm font-bold text-slate-800 tracking-wider">My Fines / Penalties</h2>
                 </div>
             )}
 
             {/* Filter Section - Highly clean and aligned */}
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end bg-slate-50/60 p-3 rounded-xl border border-slate-100">
                 <div className="sm:col-span-5">
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider ml-0.5 flex items-center gap-1">
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1 tracking-wider ml-0.5 flex items-center gap-1">
                         <FaCalendarAlt size={10} className="text-slate-400" /> From Date
                     </label>
                     <input
@@ -74,7 +74,7 @@ const MyFines = ({ noCard = false }) => {
                     />
                 </div>
                 <div className="sm:col-span-5">
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider ml-0.5 flex items-center gap-1">
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1 tracking-wider ml-0.5 flex items-center gap-1">
                         <FaCalendarAlt size={10} className="text-slate-400" /> To Date
                     </label>
                     <input
@@ -87,7 +87,7 @@ const MyFines = ({ noCard = false }) => {
                 <div className="sm:col-span-2">
                     <Button 
                         onClick={handleFilter} 
-                        className="w-full h-10 px-4 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95"
+                        className="w-full h-10 px-4 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs tracking-wider flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95"
                     >
                         <FaFilter size={10} />
                         Filter
@@ -112,9 +112,9 @@ const MyFines = ({ noCard = false }) => {
                                 <table className="min-w-full divide-y divide-slate-100">
                                     <thead className="bg-slate-50/55">
                                         <tr>
-                                            <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Date</th>
-                                            <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Reason</th>
-                                            <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider">Amount</th>
+                                            <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-500 tracking-wider">Date</th>
+                                            <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-500 tracking-wider">Reason</th>
+                                            <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 tracking-wider">Amount</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 bg-white">
@@ -140,7 +140,7 @@ const MyFines = ({ noCard = false }) => {
                                 {fines.map((fine, index) => (
                                     <div key={index} className="bg-white rounded-lg p-3 border border-slate-150 shadow-sm flex flex-col gap-1.5">
                                         <div className="flex justify-between items-center">
-                                            <span className="text-[10px] font-bold text-slate-400 uppercase">{formatDate(fine.date)}</span>
+                                            <span className="text-[10px] font-bold text-slate-400">{formatDate(fine.date)}</span>
                                             <span className="text-xs font-bold text-rose-600">
                                                 ₹{fine.amount?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                             </span>
@@ -154,7 +154,7 @@ const MyFines = ({ noCard = false }) => {
 
                             {/* Summary / Total Section */}
                             <div className="flex justify-between items-center bg-rose-50/35 border border-rose-100/50 rounded-xl px-4 py-3">
-                                <span className="text-[10px] md:text-xs font-bold text-rose-800 uppercase tracking-wider">Total Penalties</span>
+                                <span className="text-[10px] md:text-xs font-bold text-rose-800 tracking-wider">Total Penalties</span>
                                 <span className="text-sm font-extrabold text-rose-700">
                                     ₹{totalFines.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                 </span>

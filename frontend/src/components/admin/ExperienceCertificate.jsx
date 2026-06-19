@@ -325,19 +325,13 @@ const ExperienceCertificate = () => {
               setActiveTab('generate');
               setIsViewMode(false);
             }}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'generate'
-              ? 'border-[#4a9d2d] text-[#4a9d2d]'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'generate' ? 'border-[#4a9d2d] text-[#4a9d2d]' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
           >
             Generate
           </button>
           <button
             onClick={() => setActiveTab('history')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'history'
-              ? 'border-[#4a9d2d] text-[#4a9d2d]'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'history' ? 'border-[#4a9d2d] text-[#4a9d2d]' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
           >
             History
           </button>
@@ -391,7 +385,7 @@ const ExperienceCertificate = () => {
                   {logoSelection === 'tech' ? (
                     <div className="flex items-center gap-2">
                       <img src="/Invoicelogo.png" alt="Logo" className="h-12 object-contain" />
-                      <div className="text-[#4a9d2d] font-bold text-xl uppercase tracking-wide">
+                      <div className="text-[#4a9d2d] font-bold text-xl tracking-wide">
                         {/* Removed Heading Text as per previous request */}
                       </div>
                     </div>
@@ -408,7 +402,7 @@ const ExperienceCertificate = () => {
               <div className="text-right mb-12">
                 <div
                   contentEditable={!isViewMode}
-                  className="text-[#4a9d2d] font-bold text-sm uppercase tracking-wide editable-area outline-none inline-block"
+                  className="text-[#4a9d2d] font-bold text-sm tracking-wide editable-area outline-none inline-block"
                   onBlur={(e) => handleEdit('date', e.target.innerText)}
                   suppressContentEditableWarning={true}
                 >
@@ -420,7 +414,7 @@ const ExperienceCertificate = () => {
               <div className="text-center mb-12">
                 <h1
                   contentEditable={!isViewMode}
-                  className="text-[#4a9d2d] font-bold text-lg uppercase tracking-wide editable-area outline-none inline-block"
+                  className="text-[#4a9d2d] font-bold text-lg tracking-wide editable-area outline-none inline-block"
                   onBlur={(e) => handleEdit('title', e.target.innerText)}
                   suppressContentEditableWarning={true}
                 >
@@ -534,7 +528,7 @@ const ExperienceCertificate = () => {
 
         {/* Header Options */}
         <div className={`flex flex-col gap-2 w-full md:w-auto ${isViewMode ? 'opacity-50 pointer-events-none' : ''}`}>
-          <span className="text-gray-500 font-bold text-[10px] tracking-widest uppercase">SELECT HEADER:</span>
+          <span className="text-gray-500 font-bold text-[10px] tracking-widest">SELECT HEADER:</span>
           <div className="flex gap-4">
             {/* Option 1 */}
             <label className={`cursor-pointer flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${logoSelection === 'tech' ? 'border-[#4a9d2d] bg-green-50' : 'border-gray-200 hover:bg-gray-50'}`}>

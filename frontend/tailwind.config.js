@@ -3,6 +3,10 @@ export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        display: ['Geist', 'Space Grotesk', 'sans-serif'],
+      },
       colors: {
         primary: '#0d9488', // Changed to teal as requested
         'primary-hover': '#0f766e', // Darker teal for hover

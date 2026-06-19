@@ -53,19 +53,19 @@ const CostLake = () => {
 
     if (successStates.includes(statusName)) {
       return (
-        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase bg-teal-50 text-teal-700 border border-teal-100">
+        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-100">
           <FiCheckCircle size={10} /> {statusName}
         </span>
       );
     } else if (pendingStates.includes(statusName)) {
       return (
-        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase bg-amber-50 text-amber-700 border border-amber-100">
+        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100">
           <FiActivity size={10} /> {statusName}
         </span>
       );
     } else {
       return (
-        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase bg-rose-50 text-rose-700 border border-rose-100">
+        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-100">
           <FiAlertCircle size={10} /> {statusName || 'Unconfigured'}
         </span>
       );
@@ -107,13 +107,7 @@ const CostLake = () => {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className={`p-4 rounded-xl text-sm font-medium border flex items-start gap-3 ${
-              message.type === 'error'
-                ? 'bg-rose-50 border-rose-100 text-rose-800'
-                : message.type === 'info'
-                ? 'bg-blue-50 border-blue-100 text-blue-800'
-                : 'bg-teal-50 border-teal-100 text-teal-800'
-            }`}
+            className={`p-4 rounded-xl text-sm font-medium border flex items-start gap-3 ${ message.type === 'error' ? 'bg-rose-50 border-rose-100 text-rose-800' : message.type === 'info' ? 'bg-blue-50 border-blue-100 text-blue-800' : 'bg-teal-50 border-teal-100 text-teal-800' }`}
           >
             {message.type === 'error' ? (
               <FiAlertCircle className="mt-0.5 shrink-0 text-rose-600" size={18} />
@@ -139,7 +133,7 @@ const CostLake = () => {
           </div>
 
           <div className="border-t border-slate-100 pt-6 space-y-4">
-            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Setup Instructions</h3>
+            <h3 className="text-xs font-bold text-slate-700 tracking-wider">Setup Instructions</h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/50 space-y-1">
@@ -212,7 +206,7 @@ const CostLake = () => {
                 {getStatusBadge(status?.cur?.status)}
               </div>
               <div className="mt-4">
-                <h3 className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">AWS CUR Configuration</h3>
+                <h3 className="text-slate-400 text-[10px] font-bold tracking-wider">AWS CUR Configuration</h3>
                 <p className="text-xs text-slate-600 mt-1 font-medium line-clamp-2">{status?.cur?.description}</p>
                 <span className="text-[10px] text-slate-400 font-semibold block mt-1.5 font-mono">Resource IDs: Enabled</span>
               </div>
@@ -227,7 +221,7 @@ const CostLake = () => {
                 {getStatusBadge(status?.s3?.status)}
               </div>
               <div className="mt-4">
-                <h3 className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">S3 Lake Storage</h3>
+                <h3 className="text-slate-400 text-[10px] font-bold tracking-wider">S3 Lake Storage</h3>
                 <p className="text-xs text-slate-600 mt-1 font-medium truncate">{status?.s3?.bucket}</p>
                 <span className="text-[10px] text-teal-600 font-bold block mt-1.5">
                   {(status?.s3?.totalRecords || 0).toLocaleString()} records stored
@@ -244,7 +238,7 @@ const CostLake = () => {
                 {getStatusBadge(status?.glue?.status)}
               </div>
               <div className="mt-4">
-                <h3 className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Glue Catalog Database</h3>
+                <h3 className="text-slate-400 text-[10px] font-bold tracking-wider">Glue Catalog Database</h3>
                 <p className="text-xs text-slate-600 mt-1 font-medium truncate">{status?.glue?.database || 'Not Cataloged'}</p>
                 <span className="text-[10px] text-slate-400 font-semibold block mt-1.5 line-clamp-1">{status?.glue?.description}</span>
               </div>
@@ -259,7 +253,7 @@ const CostLake = () => {
                 {getStatusBadge(status?.athena?.status)}
               </div>
               <div className="mt-4">
-                <h3 className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Athena Query Engine</h3>
+                <h3 className="text-slate-400 text-[10px] font-bold tracking-wider">Athena Query Engine</h3>
                 <p className="text-xs text-slate-600 mt-1 font-medium truncate">WG: {status?.athena?.workgroup || 'Unconfigured'}</p>
                 <span className="text-[10px] text-slate-400 font-semibold block mt-1.5 line-clamp-1">{status?.athena?.description}</span>
               </div>

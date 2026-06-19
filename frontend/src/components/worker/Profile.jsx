@@ -124,7 +124,7 @@ const Profile = () => {
             </div>
             
             <h2 className="text-lg font-bold text-slate-800 text-center">{user?.name}</h2>
-            <p className="text-xs font-black text-teal-600 uppercase tracking-widest mt-1">{user?.designation || 'Employee'}</p>
+            <p className="text-xs font-black text-teal-600 tracking-widest mt-1">{user?.designation || 'Employee'}</p>
             <p className="text-xs text-slate-400 mt-1">{user?.department}</p>
           </Card>
         </div>
@@ -136,7 +136,7 @@ const Profile = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Email */}
                 <div>
-                  <label className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Email Address</label>
+                  <label className="text-xs font-black text-slate-500 tracking-widest mb-1.5 block">Email Address</label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                       <Mail size={16} />
@@ -154,7 +154,7 @@ const Profile = () => {
 
                 {/* Phone Number */}
                 <div>
-                  <label className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Phone Number</label>
+                  <label className="text-xs font-black text-slate-500 tracking-widest mb-1.5 block">Phone Number</label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                       <Phone size={16} />
@@ -178,7 +178,7 @@ const Profile = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Password */}
                   <div>
-                    <label className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 block">New Password</label>
+                    <label className="text-xs font-black text-slate-500 tracking-widest mb-1.5 block">New Password</label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                         <Lock size={16} />
@@ -196,7 +196,7 @@ const Profile = () => {
 
                   {/* Confirm Password */}
                   <div>
-                    <label className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Confirm Password</label>
+                    <label className="text-xs font-black text-slate-500 tracking-widest mb-1.5 block">Confirm Password</label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                         <Lock size={16} />

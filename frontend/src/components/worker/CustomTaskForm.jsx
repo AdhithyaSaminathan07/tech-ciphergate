@@ -96,7 +96,7 @@ const CustomTaskForm = () => {
 
       <form onSubmit={handleSubmit}>
         <div className="mb-3">
-          <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">
+          <label className="block text-xs font-bold text-gray-500 mb-1">
             Task Description
           </label>
           <textarea
@@ -110,8 +110,7 @@ const CustomTaskForm = () => {
 
         <button
           type="submit"
-          className={`px-4 py-1.5 rounded-lg text-white text-sm font-semibold ${submitting ? 'bg-[#0d9488]' : 'bg-[#0d9488] hover:bg-[#0f766e] transition-colors'
-            }`}
+          className={`px-4 py-1.5 rounded-lg text-white text-sm font-semibold ${submitting ? 'bg-[#0d9488]' : 'bg-[#0d9488] hover:bg-[#0f766e] transition-colors' }`}
           disabled={submitting}
         >
           {submitting ? 'Submitting...' : 'Submit Task'}

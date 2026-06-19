@@ -1148,11 +1148,7 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                                             <button
                                                 key={pageNumber}
                                                 onClick={() => paginate(pageNumber)}
-                                                className={`px-3 py-1 rounded-md ${
-                                                    testReviewPage === pageNumber 
-                                                        ? 'bg-blue-500 text-white' 
-                                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                                }`}
+                                                className={`px-3 py-1 rounded-md ${ testReviewPage === pageNumber ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300' }`}
                                             >
                                                 {pageNumber}
                                             </button>
@@ -1190,22 +1186,14 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                     {/* Tab Navigation */}
                     <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg mb-6">
                         <button
-                            className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center ${
-                                activeTab === 'available' 
-                                    ? 'bg-primary text-white' 
-                                    : 'text-gray-600 hover:text-gray-900'
-                            }`}
+                            className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center ${ activeTab === 'available' ? 'bg-primary text-white' : 'text-gray-600 hover:text-gray-900' }`}
                             onClick={() => setActiveTab('available')}
                         >
                             <FaBook className="mr-2" />
                             Available Tests
                         </button>
                         <button
-                            className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center ${
-                                activeTab === 'history' 
-                                    ? 'bg-primary text-white' 
-                                    : 'text-gray-600 hover:text-gray-900'
-                            }`}
+                            className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center ${ activeTab === 'history' ? 'bg-primary text-white' : 'text-gray-600 hover:text-gray-900' }`}
                             onClick={() => setActiveTab('history')}
                         >
                             <FaHistory className="mr-2" />
@@ -1335,19 +1323,19 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                                     <table className="min-w-full divide-y divide-gray-200">
                                         <thead className="bg-gray-50">
                                             <tr>
-                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
                                                     Test Name
                                                 </th>
-                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
                                                     Date
                                                 </th>
-                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
                                                     Score
                                                 </th>
-                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
                                                     Status
                                                 </th>
-                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
                                                     Actions
                                                 </th>
                                             </tr>
@@ -1739,19 +1727,19 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                                 <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-gray-50">
                                         <tr>
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
                                                 Rank
                                             </th>
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
                                                 Employee
                                             </th>
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
                                                 Score
                                             </th>
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
                                                 Total Tests
                                             </th>
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
                                                 Percentage
                                             </th>
                                         </tr>
@@ -1803,11 +1791,7 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                                                             </div>
                                                             <div className="ml-2 w-16 bg-gray-200 rounded-full h-2">
                                                                 <div 
-                                                                    className={`h-2 rounded-full ${
-                                                                        worker.percentage >= 80 ? 'bg-green-600' : 
-                                                                        worker.percentage >= 60 ? 'bg-blue-600' : 
-                                                                        worker.percentage >= 40 ? 'bg-yellow-500' : 'bg-red-600'
-                                                                    }`} 
+                                                                    className={`h-2 rounded-full ${ worker.percentage >= 80 ? 'bg-green-600' : worker.percentage >= 60 ? 'bg-blue-600' : worker.percentage >= 40 ? 'bg-yellow-500' : 'bg-red-600' }`} 
                                                                     style={{ width: `${worker.percentage}%` }}
                                                                 ></div>
                                                             </div>

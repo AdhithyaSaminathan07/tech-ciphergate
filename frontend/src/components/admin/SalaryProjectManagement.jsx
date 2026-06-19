@@ -187,7 +187,7 @@ const SalaryProjectManagement = () => {
       <Card className="mb-5">
         <div className="flex flex-wrap items-center gap-4">
           <div>
-            <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Month</label>
+            <label className="block text-xs font-semibold text-gray-500 mb-1 tracking-wider">Month</label>
             <select
               className="form-input"
               value={filterMonth}
@@ -199,7 +199,7 @@ const SalaryProjectManagement = () => {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Year</label>
+            <label className="block text-xs font-semibold text-gray-500 mb-1 tracking-wider">Year</label>
             <select
               className="form-input"
               value={filterYear}

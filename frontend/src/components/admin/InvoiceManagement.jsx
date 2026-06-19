@@ -306,7 +306,7 @@ const InvoiceManagement = () => {
         <div className="flex flex-wrap items-center justify-end gap-4 animate-in fade-in slide-in-from-top-4">
           {/* GST Filter Dropdown */}
           <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-gray-200 shadow-sm">
-            <span className="text-xs font-bold text-gray-400 ml-2 uppercase">Filter:</span>
+            <span className="text-xs font-bold text-gray-400 ml-2">Filter:</span>
             <select
               value={gstFilter}
               onChange={(e) => handleGstFilterChange(e.target.value)}
@@ -331,10 +331,7 @@ const InvoiceManagement = () => {
               <button
                 key={option.id}
                 onClick={() => handleFilterChange(option.id)}
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${filterType === option.id
-                  ? 'bg-blue-50 text-blue-600 shadow-inner'
-                  : 'text-gray-500 hover:text-gray-700'
-                  }`}
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${filterType === option.id ? 'bg-blue-50 text-blue-600 shadow-inner' : 'text-gray-500 hover:text-gray-700' }`}
               >
                 {option.label}
               </button>
@@ -396,37 +393,25 @@ const InvoiceManagement = () => {
         <nav className="-mb-px flex space-x-8">
           <button
             onClick={() => setActiveTab('advanced-invoice')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'advanced-invoice'
-              ? 'border-blue-500 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'advanced-invoice' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
           >
             Advanced Invoice
           </button>
           <button
             onClick={() => setActiveTab('invoice-history')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'invoice-history'
-              ? 'border-blue-500 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'invoice-history' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
           >
             Invoice History
           </button>
           <button
             onClick={() => setActiveTab('unified-history')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'unified-history'
-              ? 'border-blue-500 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'unified-history' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
           >
             All Invoices
           </button>
           <button
             onClick={() => setActiveTab('delete-history')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'delete-history'
-              ? 'border-blue-500 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'delete-history' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
           >
             Delete History
           </button>

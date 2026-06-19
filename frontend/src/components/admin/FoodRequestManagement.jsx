@@ -254,11 +254,7 @@ const FoodRequestManagement = () => {
       header: 'Meal Type',
       accessor: 'mealType',
       render: (record) => (
-        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-          record.mealType === 'breakfast' ? 'bg-yellow-100 text-yellow-800' :
-          record.mealType === 'lunch' ? 'bg-blue-100 text-blue-800' :
-          'bg-purple-100 text-purple-800'
-        }`}>
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${ record.mealType === 'breakfast' ? 'bg-yellow-100 text-yellow-800' : record.mealType === 'lunch' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800' }`}>
           {record.mealType.charAt(0).toUpperCase() + record.mealType.slice(1)}
         </span>
       )
@@ -296,11 +292,7 @@ const FoodRequestManagement = () => {
           </Button>
         </div>
         <div className="mt-2">
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-            emailReportsEnabled 
-              ? 'bg-green-100 text-green-800' 
-              : 'bg-red-100 text-red-800'
-          }`}>
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${ emailReportsEnabled ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }`}>
             {emailReportsEnabled ? 'Enabled' : 'Disabled'}
           </span>
         </div>
@@ -382,11 +374,7 @@ const FoodRequestManagement = () => {
               <button
                 key={meal}
                 onClick={() => setActiveMealFilter(meal)}
-                className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  activeMealFilter === meal
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
+                className={`px-3 py-1 rounded-full text-sm font-medium ${ activeMealFilter === meal ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300' }`}
               >
                 {meal === 'all' ? 'All' : meal.charAt(0).toUpperCase() + meal.slice(1)}
                 {meal !== 'all' && (

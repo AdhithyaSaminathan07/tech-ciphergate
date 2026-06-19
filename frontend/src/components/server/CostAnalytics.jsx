@@ -55,12 +55,10 @@ const CostAnalytics = () => {
             <FiDollarSign size={20} />
           </div>
           <div>
-            <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wide">Month-to-Date Spend</h3>
+            <h3 className="text-slate-500 text-xs font-bold tracking-wide">Month-to-Date Spend</h3>
             <div className="flex items-baseline gap-2 mt-1">
               <p className="text-xl font-bold text-slate-900">${(summary.mtdSpend || 0).toLocaleString()}</p>
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                summary.momPercentage > 0 ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800'
-              }`}>
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${ summary.momPercentage > 0 ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800' }`}>
                 {summary.momPercentage > 0 ? '+' : ''}{summary.momPercentage}% MoM
               </span>
             </div>
@@ -74,7 +72,7 @@ const CostAnalytics = () => {
             <FiTrendingUp size={20} />
           </div>
           <div>
-            <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wide">Projected Run Rate</h3>
+            <h3 className="text-slate-500 text-xs font-bold tracking-wide">Projected Run Rate</h3>
             <p className="text-xl font-bold text-slate-900 mt-1">${(summary.runRate || 0).toLocaleString()}</p>
             <span className="text-[10px] text-slate-400 font-semibold">30-day forecast billing projection</span>
           </div>
@@ -86,7 +84,7 @@ const CostAnalytics = () => {
             <FiActivity size={20} />
           </div>
           <div>
-            <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wide">Identified Savings Target</h3>
+            <h3 className="text-slate-500 text-xs font-bold tracking-wide">Identified Savings Target</h3>
             <p className="text-xl font-bold text-slate-900 mt-1">${(summary.savingsOpportunities || 0).toLocaleString()}</p>
             <span className="text-[10px] text-slate-400 font-semibold">Potential monthly savings available</span>
           </div>

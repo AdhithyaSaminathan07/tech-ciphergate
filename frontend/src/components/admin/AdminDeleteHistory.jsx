@@ -157,7 +157,7 @@ const AdminDeleteHistory = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                <tr className="bg-gray-50 border-b border-gray-200 text-xs font-bold text-gray-500 tracking-wider">
                   <th className="px-6 py-4">Invoice No</th>
                   <th className="px-6 py-4">Status & Date</th>
                   <th className="px-6 py-4">Customer</th>

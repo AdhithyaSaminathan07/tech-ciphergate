@@ -204,8 +204,7 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage }) => {
 
                 {/* Right: Paste Clipboard */}
                 <div 
-                  className={`relative border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center gap-2 text-center transition-all select-none group
-                    ${isPasteFocused ? 'border-blue-500 bg-blue-50/40 shadow-inner' : 'border-gray-300 hover:border-blue-500 hover:bg-blue-50/10'}`}
+                  className={`relative border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center gap-2 text-center transition-all select-none group ${isPasteFocused ? 'border-blue-500 bg-blue-50/40 shadow-inner' : 'border-gray-300 hover:border-blue-500 hover:bg-blue-50/10'}`}
                 >
                   <textarea
                     ref={hiddenInputRef}

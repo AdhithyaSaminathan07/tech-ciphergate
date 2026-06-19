@@ -77,7 +77,7 @@ const StatCard = ({ icon, label, value, sub, color = 'teal' }) => {
                 {icon}
             </div>
             <div className="space-y-1">
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</p>
+                <p className="text-[10px] font-bold text-slate-500 tracking-widest">{label}</p>
                 <p className={`text-2xl font-extrabold ${c.value} leading-none tracking-tight`}>{value}</p>
                 {sub && <p className="text-[11px] text-slate-400 font-medium">{sub}</p>}
             </div>
@@ -189,17 +189,14 @@ const PerformanceRewards = () => {
             {/* Page Header */}
             {/* Tabs & Actions Row */}
             <div className="flex items-center justify-between flex-wrap gap-4 pb-2">
-                <div className="flex gap-1.5 p-1 bg-slate-100/70 backdrop-blur-sm border border-slate-200/50 rounded-2xl w-fit overflow-x-auto shadow-sm">
+                <div className="flex gap-1.5 p-1 bg-slate-100/70 backdrop-blur-sm border border-slate-200/50 rounded-2xl w-full max-w-full md:w-fit overflow-x-auto no-scrollbar shadow-sm">
                     {TABS.map(tab => {
                         const isActive = activeTab === tab.key;
                         return (
                             <button
                                 key={tab.key}
                                 onClick={() => setActiveTab(tab.key)}
-                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 whitespace-nowrap ${isActive
-                                        ? 'bg-white text-slate-900 shadow-md shadow-slate-200/60 border border-slate-100/80 scale-[1.02]'
-                                        : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
-                                    }`}
+                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 whitespace-nowrap ${isActive ? 'bg-white text-slate-900 shadow-md shadow-slate-200/60 border border-slate-100/80 scale-[1.02]' : 'text-slate-500 hover:text-slate-800 hover:bg-white/40' }`}
                             >
                                 <span className={`transition-colors duration-300 ${isActive ? 'text-teal-600' : 'text-slate-400'}`}>
                                     {tab.icon}
@@ -230,7 +227,7 @@ const PerformanceRewards = () => {
                     {activeTab === 'overview' && overview && (
                         <div className="space-y-6">
                             {/* Stats Grid */}
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                                 <StatCard icon={<Trophy className="w-5 h-5" />} label="Total Points Distributed" value={overview.totalPointsDistributed?.toLocaleString() || '0'} color="amber" />
                                 <StatCard icon={<AlertTriangle className="w-5 h-5" />} label="Total Penalties" value={overview.totalPenalties?.toLocaleString() || '0'} sub="Points deducted" color="rose" />
                                 <StatCard icon={<TrendingUp className="w-5 h-5" />} label="Avg Efficiency" value={`${overview.avgEfficiency}x`} sub="Estimated / Actual" color="teal" />
@@ -266,7 +263,7 @@ const PerformanceRewards = () => {
                                                     </div>
                                                     <div className="text-right">
                                                         <span className="text-xs font-extrabold text-emerald-600">{(w.performancePoints || 0).toLocaleString()}</span>
-                                                        <p className="text-[8px] text-slate-400 font-semibold uppercase tracking-wider">pts</p>
+                                                        <p className="text-[8px] text-slate-400 font-semibold tracking-wider">pts</p>
                                                     </div>
                                                 </div>
                                             );
@@ -303,7 +300,7 @@ const PerformanceRewards = () => {
                                                         <Flame className="w-3.5 h-3.5 text-orange-500 fill-orange-500" />
                                                         {w.currentStreak}
                                                     </span>
-                                                    <p className="text-[8px] text-slate-400 font-semibold uppercase tracking-wider">streak</p>
+                                                    <p className="text-[8px] text-slate-400 font-semibold tracking-wider">streak</p>
                                                 </div>
                                             </div>
                                         ))}
@@ -336,7 +333,7 @@ const PerformanceRewards = () => {
                                                 </div>
                                                 <div className="text-right">
                                                     <span className="text-xs font-extrabold text-rose-600">{w.performancePoints || 0}</span>
-                                                    <p className="text-[8px] text-slate-400 font-semibold uppercase tracking-wider">pts</p>
+                                                    <p className="text-[8px] text-slate-400 font-semibold tracking-wider">pts</p>
                                                 </div>
                                             </div>
                                         ))}
@@ -372,7 +369,7 @@ const PerformanceRewards = () => {
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-xs">
                                         <thead>
-                                            <tr className="bg-slate-50/70 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                            <tr className="bg-slate-50/70 border-b border-slate-100 text-[10px] font-bold text-slate-400 tracking-wider">
                                                 <th className="text-center px-4 py-3.5 w-12">Rank</th>
                                                 <th className="text-left px-4 py-3.5">Employee</th>
                                                 <th className="text-right px-4 py-3.5 cursor-pointer hover:text-teal-600 transition-colors" onClick={() => handleSort('totalPoints')}>
@@ -486,7 +483,7 @@ const PerformanceRewards = () => {
                                 </h3>
                                 <form onSubmit={handleBonusSubmit} className="space-y-4">
                                     <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1.5">Employee</label>
+                                        <label className="text-[10px] font-bold text-slate-400 tracking-widest block mb-1.5">Employee</label>
                                         <select
                                             value={bonusForm.workerId}
                                             onChange={e => setBonusForm(p => ({ ...p, workerId: e.target.value }))}
@@ -501,7 +498,7 @@ const PerformanceRewards = () => {
                                     </div>
 
                                     <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1.5">
+                                        <label className="text-[10px] font-bold text-slate-400 tracking-widest block mb-1.5">
                                             Points <span className="text-slate-400 font-normal lowercase">(use negative value to deduct points)</span>
                                         </label>
                                         <input
@@ -516,7 +513,7 @@ const PerformanceRewards = () => {
                                     </div>
 
                                     <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1.5">Note / Reason</label>
+                                        <label className="text-[10px] font-bold text-slate-400 tracking-widest block mb-1.5">Note / Reason</label>
                                         <textarea
                                             value={bonusForm.note}
                                             onChange={e => setBonusForm(p => ({ ...p, note: e.target.value }))}
@@ -541,13 +538,13 @@ const PerformanceRewards = () => {
                                 <h3 className="text-sm font-bold text-slate-800 pb-3 border-b border-slate-50">Point Formula Reference</h3>
                                 <div className="space-y-4">
                                     <div className="p-4 bg-gradient-to-br from-slate-50 to-slate-100/50 border border-slate-100 rounded-xl">
-                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Basic Formula</p>
+                                        <p className="text-[10px] font-bold text-slate-500 tracking-wider mb-1">Basic Formula</p>
                                         <code className="text-xs text-teal-700 font-extrabold">
                                             Points = (Est.Days / Act.Days) × Base
                                         </code>
                                     </div>
                                     <div className="p-4 bg-gradient-to-br from-slate-50 to-slate-100/50 border border-slate-100 rounded-xl">
-                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Example scenario</p>
+                                        <p className="text-[10px] font-bold text-slate-500 tracking-wider mb-1">Example scenario</p>
                                         <p className="text-xs text-slate-600 font-medium">Estimated: 6 days, Actual: 2 days</p>
                                         <p className="text-xs text-slate-700 font-semibold mt-1">Calculation: (6 / 2) × 1 = <span className="text-emerald-600 font-bold">3.0 Points</span></p>
                                     </div>
@@ -607,7 +604,7 @@ const PerformanceRewards = () => {
 
                                 <div className="pt-2 space-y-4">
                                     <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1.5">Base Points (per task)</label>
+                                        <label className="text-[10px] font-bold text-slate-400 tracking-widest block mb-1.5">Base Points (per task)</label>
                                         <input
                                             type="number"
                                             min="0.1"
@@ -619,7 +616,7 @@ const PerformanceRewards = () => {
                                     </div>
 
                                     <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1.5">Penalty Percentage (%)</label>
+                                        <label className="text-[10px] font-bold text-slate-400 tracking-widest block mb-1.5">Penalty Percentage (%)</label>
                                         <input
                                             type="number"
                                             min="0"
@@ -645,7 +642,7 @@ const PerformanceRewards = () => {
 
                                 <div className={localSettings.advancedMode ? 'space-y-5' : 'space-y-5 opacity-40 pointer-events-none'}>
                                     <div>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Priority Multipliers</p>
+                                        <p className="text-[10px] font-bold text-slate-400 tracking-widest mb-3">Priority Multipliers</p>
                                         <div className="grid grid-cols-2 gap-3">
                                             {['Low', 'Medium', 'High', 'Critical'].map(p => (
                                                 <div key={p}>
@@ -667,7 +664,7 @@ const PerformanceRewards = () => {
                                     </div>
 
                                     <div>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Type Multipliers</p>
+                                        <p className="text-[10px] font-bold text-slate-400 tracking-widest mb-3">Type Multipliers</p>
                                         <div className="grid grid-cols-2 gap-3">
                                             {['Task', 'Bug', 'Story', 'Epic'].map(t => (
                                                 <div key={t}>

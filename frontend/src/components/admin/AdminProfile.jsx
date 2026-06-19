@@ -139,7 +139,7 @@ const AdminProfile = () => {
             </div>
             
             <h2 className="text-lg font-bold text-slate-800 text-center">{user?.username || user?.name}</h2>
-            <p className="text-xs font-black text-teal-600 uppercase tracking-widest mt-1">Administrator</p>
+            <p className="text-xs font-black text-teal-600 tracking-widest mt-1">Administrator</p>
           </Card>
         </div>
 
@@ -149,7 +149,7 @@ const AdminProfile = () => {
             <form onSubmit={handleSubmit} className="space-y-5">
               {/* Email */}
               <div>
-                <label className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Email Address</label>
+                <label className="text-xs font-black text-slate-500 tracking-widest mb-1.5 block">Email Address</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                     <Mail size={16} />
@@ -172,7 +172,7 @@ const AdminProfile = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Password */}
                   <div>
-                    <label className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 block">New Password</label>
+                    <label className="text-xs font-black text-slate-500 tracking-widest mb-1.5 block">New Password</label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                         <Lock size={16} />
@@ -190,7 +190,7 @@ const AdminProfile = () => {
 
                   {/* Confirm Password */}
                   <div>
-                    <label className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Confirm Password</label>
+                    <label className="text-xs font-black text-slate-500 tracking-widest mb-1.5 block">Confirm Password</label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                         <Lock size={16} />

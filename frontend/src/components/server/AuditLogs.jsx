@@ -82,7 +82,7 @@ const AuditLogs = () => {
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-white/80 backdrop-blur-md p-4 rounded-2xl border border-slate-100 shadow-sm text-center">
             <p className={`text-2xl font-black font-mono ${color}`}>{value}</p>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide mt-1">{label}</p>
+            <p className="text-[10px] text-slate-400 font-bold tracking-wide mt-1">{label}</p>
           </div>
         ))}
       </div>
@@ -127,7 +127,7 @@ const AuditLogs = () => {
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
                   <thead>
-                    <tr className="bg-slate-50/80 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    <tr className="bg-slate-50/80 text-[10px] font-bold text-slate-400 tracking-wider">
                       <th className="px-5 py-3">Action</th>
                       <th className="px-5 py-3">User</th>
                       <th className="px-5 py-3">Resource</th>
@@ -225,7 +225,7 @@ const AuditLogs = () => {
                 ))}
                 {(selectedLog.newState || selectedLog.previousState) && (
                   <div className="mt-3">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">State Changes</p>
+                    <p className="text-[10px] font-bold text-slate-400 tracking-wider mb-1.5">State Changes</p>
                     <pre className="bg-slate-50 p-3 rounded-lg text-[9px] font-mono text-slate-700 max-h-40 overflow-auto whitespace-pre-wrap border border-slate-100">
                       {JSON.stringify({ previous: selectedLog.previousState, next: selectedLog.newState }, null, 2)}
                     </pre>

@@ -170,7 +170,7 @@ return (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2"> {/* Adjusted grid for better responsiveness */}
           {displayedColumns.map((column) => (
             <div key={column._id} className="form-group">
-              <label htmlFor={`column-${column._id}`} className="text-[10px] font-bold text-gray-500 uppercase block mb-1">
+              <label htmlFor={`column-${column._id}`} className="text-[10px] font-bold text-gray-500 block mb-1">
                 {column.name}
               </label>
               <input
@@ -209,14 +209,7 @@ return (
             {displayedTopics.map((topic) => (
               <div 
                 key={topic._id} 
-                className={`
-                  p-3 rounded-xl border
-                  ${selectedTopics.includes(topic._id) || (selectedSubtopics[topic._id] && selectedSubtopics[topic._id].length > 0)
-                      ? 'bg-blue-50 border-blue-200 shadow-sm' // Highlight selected topic
-                      : 'bg-gray-50 border-gray-100'
-                  }
-                  flex flex-col transition-all
-                `}
+                className={`p-3 rounded-xl border ${selectedTopics.includes(topic._id) || (selectedSubtopics[topic._id] && selectedSubtopics[topic._id].length > 0) ? 'bg-blue-50 border-blue-200 shadow-sm' // Highlight selected topic : 'bg-gray-50 border-gray-100' } flex flex-col transition-all`}
               >
                 <label className="inline-flex items-center gap-2 mb-1 cursor-pointer flex-shrink-0">
                   <input
@@ -252,12 +245,7 @@ return (
                         {topic.subtopics.map(subtopic => (
                           <label
                             key={subtopic._id}
-                            className={`inline-flex items-center gap-2 text-xs px-2 py-1 rounded-md cursor-pointer w-full
-                              ${selectedSubtopics[topic._id] && selectedSubtopics[topic._id].includes(subtopic._id)
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-                              }
-                            `}
+                            className={`inline-flex items-center gap-2 text-xs px-2 py-1 rounded-md cursor-pointer w-full ${selectedSubtopics[topic._id] && selectedSubtopics[topic._id].includes(subtopic._id) ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300' }`}
                           >
                             <input
                               type="checkbox"

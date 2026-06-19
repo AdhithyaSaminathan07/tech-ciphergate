@@ -91,23 +91,23 @@ const calculateKpiStats = (tickets) => {
 ───────────────────────────────────────── */
 const StatCard = ({ title, value, icon: Icon, link }) => {
   const inner = (
-    <div className="dash-card px-2 py-2 md:px-5 md:py-4 flex items-center justify-between gap-1.5 min-h-[60px] md:min-h-[90px] h-auto group cursor-pointer">
+    <div className="dash-card p-3 md:px-5 md:py-4 flex items-center justify-between gap-2 min-h-[72px] md:min-h-[90px] h-full w-full group cursor-pointer">
       <div className="min-w-0 flex-1">
-        <p className="dash-label mb-0 text-[9px] md:text-[11px] leading-tight">
+        <p className="dash-label mb-0.5 text-[9px] md:text-[11px] leading-tight">
           {title}
         </p>
-        <p className="dash-value text-[13px] md:text-[21px] font-black leading-tight truncate">
+        <p className="dash-value text-[14px] md:text-[21px] font-black leading-tight truncate">
           {value}
         </p>
       </div>
       {Icon && (
-        <div className="w-9 h-9 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-dash-soft-green text-dash-green flex items-center justify-center flex-shrink-0 group-hover:bg-dash-green group-hover:text-white transition-all duration-300">
+        <div className="w-8 h-8 md:w-12 md:h-12 rounded-[10px] md:rounded-2xl bg-dash-soft-green text-dash-green flex items-center justify-center flex-shrink-0 group-hover:bg-dash-green group-hover:text-white transition-all duration-300">
           <Icon className="w-4 h-4 md:w-5 md:h-5" />
         </div>
       )}
     </div>
   );
-  return link ? <Link to={link}>{inner}</Link> : inner;
+  return link ? <Link to={link} className="block w-full h-full">{inner}</Link> : inner;
 };
 
 /* ─────────────────────────────────────────
@@ -381,8 +381,8 @@ const Dashboard = () => {
           </div>
           <StatCard title="Active Tasks" value={stats.tasks} icon={FaTasks} link="/admin/tasks" />
           <StatCard title="Topics" value={stats.topics} icon={FaTasks} link="/admin/topics" />
-          <StatCard title="Monthly Base Salary" value={`₹${stats.salary.base.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} icon={FaMoneyBillWave} />
-          <StatCard title="Total Net Payout" value={`₹${stats.salary.payout.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} icon={FaWallet} />
+          <StatCard title="Monthly Base Salary" value={`₹${stats.salary.base.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`} icon={FaMoneyBillWave} />
+          <StatCard title="Total Net Payout" value={`₹${stats.salary.payout.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`} icon={FaWallet} />
         </div>
 
         {/* ══════════════════════════════════════════
@@ -421,14 +421,11 @@ const Dashboard = () => {
                       <p className="text-[13px] font-bold text-dash-text truncate group-hover:text-dash-green transition-colors">
                         {ticket.title}
                       </p>
-                      <p className="text-[10px] font-medium text-dash-muted uppercase tracking-wider mt-0.5">
+                      <p className="text-[10px] font-medium text-dash-muted tracking-wider mt-0.5">
                         #{ticket._id.substring(ticket._id.length - 4).toUpperCase()}
                       </p>
                     </div>
-                    <span className={`ml-3 text-[10px] font-bold uppercase px-3 py-1 rounded-full flex-shrink-0 ${ticket.status === 'Review'
-                        ? 'bg-dash-soft-orange text-dash-orange'
-                        : 'bg-blue-50 text-blue-600'
-                      }`}>
+                    <span className={`ml-3 text-[10px] font-bold px-3 py-1 rounded-full flex-shrink-0 ${ticket.status === 'Review' ? 'bg-dash-soft-orange text-dash-orange' : 'bg-blue-50 text-blue-600' }`}>
                       {ticket.status}
                     </span>
                   </div>
@@ -447,19 +444,19 @@ const Dashboard = () => {
             {/* Small Task status summary at the bottom */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-4 border-t border-dash-border/50">
               <div className="flex flex-col items-center py-2 bg-dash-bg/40 rounded-xl border border-dash-border">
-                <span className="text-[9px] font-bold text-dash-muted uppercase">To Do</span>
+                <span className="text-[9px] font-bold text-dash-muted">To Do</span>
                 <span className="text-[14px] font-bold text-dash-text">{stats.tickets.todo}</span>
               </div>
               <div className="flex flex-col items-center py-2 bg-dash-bg/40 rounded-xl border border-dash-border">
-                <span className="text-[9px] font-bold text-dash-muted uppercase text-blue-600">Active</span>
+                <span className="text-[9px] font-bold text-dash-muted text-blue-600">Active</span>
                 <span className="text-[14px] font-bold text-blue-600">{stats.tickets.inProgress}</span>
               </div>
               <div className="flex flex-col items-center py-2 bg-dash-bg/40 rounded-xl border border-dash-border">
-                <span className="text-[9px] font-bold text-dash-muted uppercase text-dash-orange">Review</span>
+                <span className="text-[9px] font-bold text-dash-muted text-dash-orange">Review</span>
                 <span className="text-[14px] font-bold text-dash-orange">{stats.tickets.review}</span>
               </div>
               <div className="flex flex-col items-center py-2 bg-dash-bg/40 rounded-xl border border-dash-border">
-                <span className="text-[9px] font-bold text-dash-muted uppercase text-dash-green">Done</span>
+                <span className="text-[9px] font-bold text-dash-muted text-dash-green">Done</span>
                 <span className="text-[14px] font-bold text-dash-green">{stats.tickets.done}</span>
               </div>
             </div>
@@ -498,8 +495,7 @@ const Dashboard = () => {
                 {/* SLA Index */}
                 <div className="text-center px-2 flex flex-col items-center pt-3 sm:pt-0">
                   <p className="dash-label mb-2">SLA Index</p>
-                  <span className={`dash-value ${stats.kpi.slaBreachRate > 20 ? 'text-rose-500' : 'text-dash-green'
-                    }`}>
+                  <span className={`dash-value ${stats.kpi.slaBreachRate > 20 ? 'text-rose-500' : 'text-dash-green' }`}>
                     {100 - stats.kpi.slaBreachRate}%
                   </span>
                 </div>
@@ -513,9 +509,7 @@ const Dashboard = () => {
                 <div className="flex gap-6 mt-2">
                   <div>
                     <p className="dash-label mb-1">Status</p>
-                    <p className={`text-[14px] font-bold uppercase ${attendancePercentage >= 80 ? 'text-dash-green' :
-                        attendancePercentage >= 50 ? 'text-blue-500' : 'text-rose-500'
-                      }`}>
+                    <p className={`text-[14px] font-bold ${attendancePercentage >= 80 ? 'text-dash-green' : attendancePercentage >= 50 ? 'text-blue-500' : 'text-rose-500' }`}>
                       {attendancePercentage >= 80 ? 'Healthy' :
                         attendancePercentage >= 50 ? 'Moderate' : 'Low'}
                     </p>
@@ -578,7 +572,7 @@ const Dashboard = () => {
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-16 rounded-[24px] border-2 border-dashed border-dash-border bg-dash-bg/30">
-                <p className="text-[14px] text-dash-muted font-bold uppercase tracking-widest">
+                <p className="text-[14px] text-dash-muted font-bold tracking-widest">
                   No departments found
                 </p>
               </div>
@@ -609,21 +603,16 @@ const Dashboard = () => {
             </div>
 
             {/* Status banner */}
-            <div className={`rounded-2xl px-5 py-4 flex items-center justify-between ${stats.renewals.expired > 0
-                ? 'bg-rose-50 border border-rose-100'
-                : 'bg-dash-soft-green border border-dash-green/20'
-              }`}>
+            <div className={`rounded-2xl px-5 py-4 flex items-center justify-between ${stats.renewals.expired > 0 ? 'bg-rose-50 border border-rose-100' : 'bg-dash-soft-green border border-dash-green/20' }`}>
               <div>
                 <p className="dash-label mb-1 opacity-80">
                   System Status
                 </p>
-                <p className={`text-[15px] font-bold ${stats.renewals.expired > 0 ? 'text-rose-500' : 'text-dash-green'
-                  }`}>
+                <p className={`text-[15px] font-bold ${stats.renewals.expired > 0 ? 'text-rose-500' : 'text-dash-green' }`}>
                   {stats.renewals.expired > 0 ? 'Action Required' : 'All Systems Good'}
                 </p>
               </div>
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-[20px] ${stats.renewals.expired > 0 ? 'bg-rose-100' : 'bg-green-100'
-                }`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-[20px] ${stats.renewals.expired > 0 ? 'bg-rose-100' : 'bg-green-100' }`}>
                 {stats.renewals.expired > 0 ? '⚠' : '✓'}
               </div>
             </div>
@@ -702,7 +691,7 @@ const Dashboard = () => {
                         <h3 className="text-base font-extrabold text-slate-900 leading-tight">
                           Bug Bounty Program
                         </h3>
-                        <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">
+                        <p className="text-[10px] text-slate-400 font-semibold tracking-wider mt-0.5">
                           Responsible Disclosure
                         </p>
                       </div>

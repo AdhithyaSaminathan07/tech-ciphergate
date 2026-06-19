@@ -200,10 +200,7 @@ const CustomTasks = () => {
 
         {task.status !== 'pending' && (
           <div className="mt-2">
-            <span className={`px-2 py-1 rounded-full text-xs ${task.status === 'approved'
-              ? 'bg-green-100 text-green-800'
-              : 'bg-red-100 text-red-800'
-              }`}>
+            <span className={`px-2 py-1 rounded-full text-xs ${task.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }`}>
               {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
             </span>
 

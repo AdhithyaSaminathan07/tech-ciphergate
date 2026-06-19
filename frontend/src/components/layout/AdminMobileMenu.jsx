@@ -65,7 +65,7 @@ const AdminMobileMenu = ({ isOpen, onClose, links, user, onLogout }) => {
                 </div>
                 <div>
                   <h2 className="text-lg font-black text-slate-900 leading-none">CipherGate</h2>
-                  <p className="text-[10px] font-bold text-teal-600 uppercase tracking-widest mt-1">Admin Panel</p>
+                  <p className="text-[10px] font-bold text-teal-600 tracking-widest mt-1">Admin Panel</p>
                 </div>
               </div>
               <button
@@ -115,7 +115,7 @@ const AdminMobileMenu = ({ isOpen, onClose, links, user, onLogout }) => {
                 if (link.isHeader) {
                   return (
                     <div key={idx} className="px-8 py-3 mt-2">
-                      <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400/80">
+                      <span className="text-[10px] font-black tracking-[0.15em] text-slate-400/80">
                         {link.label}
                       </span>
                     </div>
@@ -128,8 +128,7 @@ const AdminMobileMenu = ({ isOpen, onClose, links, user, onLogout }) => {
                     <Link
                       key={link.to || idx}
                       to={link.to}
-                      className={`flex items-center gap-3 px-8 py-3.5 transition-all relative group ${isActive ? 'text-[#0d9488]' : 'text-slate-600 active:bg-slate-50'
-                        }`}
+                      className={`flex items-center gap-3 px-8 py-3.5 transition-all relative group ${isActive ? 'text-[#0d9488]' : 'text-slate-600 active:bg-slate-50' }`}
                     >
                       {isActive && (
                         <motion.div
@@ -155,8 +154,7 @@ const AdminMobileMenu = ({ isOpen, onClose, links, user, onLogout }) => {
                   <div key={link.label || idx} className="mb-1">
                     <button
                       onClick={() => toggleSection(link.label)}
-                      className={`w-full flex items-center justify-between px-8 py-3.5 transition-all group ${hasActiveChild || isExpanded ? 'text-slate-900' : 'text-slate-600 hover:bg-slate-50/50'
-                        }`}
+                      className={`w-full flex items-center justify-between px-8 py-3.5 transition-all group ${hasActiveChild || isExpanded ? 'text-slate-900' : 'text-slate-600 hover:bg-slate-50/50' }`}
                     >
                       <div className="flex items-center gap-3">
                         <span className={`text-xl transition-colors ${hasActiveChild || isExpanded ? 'text-[#0d9488]' : 'text-slate-400'}`}>
@@ -187,7 +185,7 @@ const AdminMobileMenu = ({ isOpen, onClose, links, user, onLogout }) => {
                               if (child.isSubHeader) {
                                 return (
                                   <div key={cIdx} className="px-16 py-2 mt-2 opacity-40">
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">
+                                    <span className="text-[9px] font-black tracking-widest text-slate-500">
                                       {child.label}
                                     </span>
                                   </div>
@@ -199,8 +197,7 @@ const AdminMobileMenu = ({ isOpen, onClose, links, user, onLogout }) => {
                                 <Link
                                   key={child.to || cIdx}
                                   to={child.to}
-                                  className={`flex items-center gap-3 pl-16 pr-8 py-3 transition-all relative ${isChildActive ? 'text-[#0d9488]' : 'text-slate-500 hover:text-slate-800 active:text-[#0d9488]'
-                                    }`}
+                                  className={`flex items-center gap-3 pl-16 pr-8 py-3 transition-all relative ${isChildActive ? 'text-[#0d9488]' : 'text-slate-500 hover:text-slate-800 active:text-[#0d9488]' }`}
                                 >
                                   {isChildActive && (
                                     <div className="absolute left-[34px] top-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-[#0d9488]" />

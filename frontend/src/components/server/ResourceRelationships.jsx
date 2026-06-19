@@ -80,9 +80,7 @@ const ResourceRelationships = () => {
       <div key={nodeId} className="space-y-1.5">
         <div 
           onClick={() => toggleNode(nodeId)}
-          className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition bg-white border-slate-100 hover:bg-slate-50/50 hover:border-slate-200/50 ${
-            depth > 0 ? 'ml-6 border-l-2 border-l-teal-500/20' : ''
-          }`}
+          className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition bg-white border-slate-100 hover:bg-slate-50/50 hover:border-slate-200/50 ${ depth > 0 ? 'ml-6 border-l-2 border-l-teal-500/20' : '' }`}
         >
           <div className="flex items-center gap-3">
             <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100">
@@ -90,7 +88,7 @@ const ResourceRelationships = () => {
             </div>
             <div>
               <span className="text-xs font-bold text-slate-900 font-mono break-all">{node.id}</span>
-              <span className="block text-[9px] text-slate-400 font-extrabold uppercase tracking-wide mt-0.5">{node.type} node</span>
+              <span className="block text-[9px] text-slate-400 font-extrabold tracking-wide mt-0.5">{node.type} node</span>
             </div>
           </div>
 
@@ -128,7 +126,7 @@ const ResourceRelationships = () => {
                       </div>
                       <div>
                         <span className="font-semibold text-slate-800 font-mono break-all">{child.id}</span>
-                        <span className="block text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{child.type} leaf</span>
+                        <span className="block text-[9px] text-slate-400 font-bold tracking-wider mt-0.5">{child.type} leaf</span>
                       </div>
                     </div>
 

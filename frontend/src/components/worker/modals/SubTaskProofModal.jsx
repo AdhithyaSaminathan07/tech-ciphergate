@@ -236,8 +236,7 @@ const SubTaskProofModal = ({ isOpen, onClose, ticketId, subTaskId, subTaskText, 
                                     onDragOver={handleDragOver}
                                     onDrop={handleDrop}
                                     onClick={() => !uploading && fileInputRef.current.click()}
-                                    className={`border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center gap-2 text-center transition-all cursor-pointer group 
-                                        ${uploading ? 'bg-gray-50 border-gray-100 cursor-not-allowed' : 'border-gray-200 hover:border-teal-400 hover:bg-teal-50/30'}`}
+                                    className={`border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center gap-2 text-center transition-all cursor-pointer group ${uploading ? 'bg-gray-50 border-gray-100 cursor-not-allowed' : 'border-gray-200 hover:border-teal-400 hover:bg-teal-50/30'}`}
                                 >
                                     <div className="w-10 h-10 bg-teal-50 rounded-full flex items-center justify-center text-teal-600 group-hover:scale-115 transition-transform shrink-0">
                                         <Upload className="w-5 h-5" />
@@ -258,9 +257,7 @@ const SubTaskProofModal = ({ isOpen, onClose, ticketId, subTaskId, subTaskText, 
 
                                 {/* Right: Paste Screenshot */}
                                 <div
-                                    className={`relative border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center gap-2 text-center transition-all select-none group
-                                        ${uploading ? 'bg-gray-50 border-gray-100 cursor-not-allowed' :
-                                            isPasteFocused ? 'border-teal-500 bg-teal-50/40 shadow-inner' : 'border-gray-200 hover:border-teal-400 hover:bg-teal-50/30'}`}
+                                    className={`relative border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center gap-2 text-center transition-all select-none group ${uploading ? 'bg-gray-50 border-gray-100 cursor-not-allowed' : isPasteFocused ? 'border-teal-500 bg-teal-50/40 shadow-inner' : 'border-gray-200 hover:border-teal-400 hover:bg-teal-50/30'}`}
                                 >
                                     <textarea
                                         ref={hiddenInputRef}
@@ -270,8 +267,7 @@ const SubTaskProofModal = ({ isOpen, onClose, ticketId, subTaskId, subTaskText, 
                                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer resize-none z-10"
                                         disabled={uploading}
                                     />
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-transform shrink-0 z-0
-                                        ${isPasteFocused ? 'bg-teal-100 text-teal-700 animate-bounce' : 'bg-teal-50 text-teal-600 group-hover:scale-115'}`}>
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-transform shrink-0 z-0 ${isPasteFocused ? 'bg-teal-100 text-teal-700 animate-bounce' : 'bg-teal-50 text-teal-600 group-hover:scale-115'}`}>
                                         <Image className="w-5 h-5" />
                                     </div>
                                     <div className="z-0">
@@ -289,7 +285,7 @@ const SubTaskProofModal = ({ isOpen, onClose, ticketId, subTaskId, subTaskText, 
                                     {/* Existing Files */}
                                     {existingFiles.length > 0 && (
                                         <>
-                                            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Uploaded Files ({existingFiles.length})</h4>
+                                            <h4 className="text-xs font-bold text-gray-400 tracking-wider mb-2">Uploaded Files ({existingFiles.length})</h4>
                                             {existingFiles.map((file, index) => {
                                                 const isImage = file.url?.match(/\.(jpeg|jpg|gif|png|webp)$/i) || file.url?.includes('blob:');
                                                 const fileUrl = file.url.startsWith('http') ? file.url : `/${file.url}`;
@@ -310,7 +306,7 @@ const SubTaskProofModal = ({ isOpen, onClose, ticketId, subTaskId, subTaskText, 
                                                             </div>
                                                             <div className="min-w-0">
                                                                 <p className="text-sm font-semibold text-gray-700 truncate">{file.name}</p>
-                                                                <p className="text-[10px] text-teal-600 font-bold uppercase">Uploaded</p>
+                                                                <p className="text-[10px] text-teal-600 font-bold">Uploaded</p>
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-1">
@@ -341,7 +337,7 @@ const SubTaskProofModal = ({ isOpen, onClose, ticketId, subTaskId, subTaskText, 
                                     {/* New Files */}
                                     {files.length > 0 && (
                                         <>
-                                            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-4 mb-2">New Files ({files.length})</h4>
+                                            <h4 className="text-xs font-bold text-gray-400 tracking-wider mt-4 mb-2">New Files ({files.length})</h4>
                                             {files.map((file, index) => {
                                                 const isImage = file.type?.startsWith('image/');
                                                 let objectUrl = "";
@@ -407,15 +403,14 @@ const SubTaskProofModal = ({ isOpen, onClose, ticketId, subTaskId, subTaskText, 
                     <button
                         onClick={onClose}
                         disabled={uploading}
-                        className="flex-1 px-4 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors uppercase tracking-wider shadow-sm disabled:opacity-50"
+                        className="flex-1 px-4 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors tracking-wider shadow-sm disabled:opacity-50"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleSubmit}
                         disabled={uploading || files.length === 0}
-                        className={`flex-1 px-4 py-2.5 text-sm font-bold text-white rounded-xl transition-all uppercase tracking-wider shadow-md flex items-center justify-center gap-2
-                            ${uploading || files.length === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700 hover:shadow-lg active:scale-95'}`}
+                        className={`flex-1 px-4 py-2.5 text-sm font-bold text-white rounded-xl transition-all tracking-wider shadow-md flex items-center justify-center gap-2 ${uploading || files.length === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700 hover:shadow-lg active:scale-95'}`}
                     >
                         {uploading ? (
                             <>

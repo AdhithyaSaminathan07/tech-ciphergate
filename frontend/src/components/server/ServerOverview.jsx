@@ -64,22 +64,22 @@ const chatWithAgent = async (message, history) => {
 const COLORS = ['#0d9488', '#3b82f6', '#6366f1', '#a855f7', '#ec4899', '#f59e0b', '#64748b'];
 
 const KPICard = ({ icon: Icon, label, value, sub, color, trend: trendDir }) => (
-  <div className="bg-white/95 backdrop-blur-md p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-all duration-300 hover:-translate-y-0.5">
-    <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-inner ${color}`}>
-      <Icon size={20} />
+  <div className="bg-white/95 backdrop-blur-md p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 hover:shadow-md transition-all duration-300 hover:-translate-y-0.5">
+    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shadow-inner shrink-0 ${color}`}>
+      <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
     </div>
-    <div className="flex-1 min-w-0">
-      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{label}</p>
-      <div className="flex items-baseline gap-2 mt-0.5">
-        <p className="text-xl font-black text-slate-800 font-mono truncate">{value}</p>
+    <div className="flex-1 min-w-0 flex flex-col w-full gap-1">
+      <p className="text-xs text-slate-500 font-medium truncate">{label}</p>
+      <div className="flex flex-wrap items-baseline gap-2">
+        <p className="text-base sm:text-lg font-bold text-slate-800 font-mono truncate">{value}</p>
         {trendDir !== undefined && (
-          <span className={`text-[10px] font-extrabold flex items-center gap-0.5 ${trendDir > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
-            {trendDir > 0 ? <FiArrowUp size={10} /> : <FiArrowDown size={10} />}
+          <span className={`text-xs font-medium flex items-center gap-1 ${trendDir > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
+            {trendDir > 0 ? <FiArrowUp size={12} /> : <FiArrowDown size={12} />}
             {Math.abs(trendDir)}%
           </span>
         )}
       </div>
-      {sub && <p className="text-[10px] text-slate-400 font-semibold mt-0.5 truncate">{sub}</p>}
+      {sub && <p className="text-xs text-slate-400 font-medium truncate">{sub}</p>}
     </div>
   </div>
 );
@@ -91,9 +91,9 @@ const renderMarkdown = (text) => {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/^### (.+)$/gm, '<h3 class="font-bold text-slate-800 mt-2 mb-1 text-xs">$1</h3>')
     .replace(/^## (.+)$/gm, '<h2 class="font-bold text-slate-900 mt-3 mb-1 text-sm">$1</h2>')
-    .replace(/^- (.+)$/gm, '<li class="ml-3 list-disc text-slate-600 text-[11px]">$1</li>')
+    .replace(/^- (.+)$/gm, '<li class="ml-3 list-disc text-slate-600 text-xs">$1</li>')
     .replace(/\n\n/g, '<br/>')
-    .replace(/`([^`]+)`/g, '<code class="bg-slate-100 px-1 py-0.5 rounded text-[10px] font-mono">$1</code>');
+    .replace(/`([^`]+)`/g, '<code class="bg-slate-100 px-1 py-0.5 rounded text-xs font-mono">$1</code>');
 };
 
 const ServerOverview = () => {
@@ -245,14 +245,14 @@ const ServerOverview = () => {
       {/* Top Cockpit Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/40 p-4 rounded-3xl border border-slate-100 backdrop-blur-sm">
         <div>
-          <h1 className="text-2xl font-black text-slate-800 tracking-tight">FinOps Executive Control Cockpit</h1>
+          <h1 className="text-2xl font-bold text-slate-800 tracking-tight truncate leading-[1.2]">FinOps Cockpit</h1>
           <p className="text-slate-500 text-xs mt-0.5">
             Continuous cost allocation analytics, baseline variance anomaly checks, and active optimization recommendation boards.
           </p>
         </div>
         <div className="flex items-center gap-3">
           {syncMessage && (
-            <span className="text-[10px] bg-indigo-50 border border-indigo-100 font-bold px-3 py-1.5 rounded-xl text-indigo-700 animate-pulse">
+            <span className="text-xs bg-indigo-50 border border-indigo-100 font-bold px-3 py-1.5 rounded-xl text-indigo-700 animate-pulse">
               {syncMessage}
             </span>
           )}
@@ -274,7 +274,7 @@ const ServerOverview = () => {
             <FiAlertTriangle className="text-rose-600 shrink-0" size={20} />
             <div>
               <p className="font-bold text-sm">{criticalAnomaliesCount} Critical/High Severity Cost Spikes Active</p>
-              <p className="text-[11px] text-rose-600/90 font-medium">Unusual cloud spend patterns detected matching RDS/EC2 anomalies. Resolving actions required.</p>
+              <p className="text-xs text-rose-600/90 font-medium">Unusual cloud spend patterns detected matching RDS/EC2 anomalies. Resolving actions required.</p>
             </div>
           </div>
         </div>
@@ -297,21 +297,10 @@ const ServerOverview = () => {
         </div>
       ) : (
         <>
-          {/* Critical Anomaly Flash Banner */}
-          {criticalAnomaliesCount > 0 && (
-            <div className="flex items-center justify-between gap-3 bg-rose-50 border border-rose-100 rounded-2xl px-5 py-4 text-rose-800 shadow-sm animate-pulse">
-              <div className="flex items-center gap-3">
-                <FiAlertTriangle className="text-rose-600 shrink-0" size={20} />
-                <div>
-                  <p className="font-bold text-sm">{criticalAnomaliesCount} Critical/High Severity Cost Spikes Active</p>
-                  <p className="text-[11px] text-rose-600/90 font-medium">Unusual cloud spend patterns detected matching RDS/EC2 anomalies. Resolving actions required.</p>
-                </div>
-              </div>
-            </div>
-          )}
+          
 
           {/* KPI Cards Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <KPICard
               icon={FiDollarSign}
               label="Month-to-Date Spend"
@@ -350,7 +339,7 @@ const ServerOverview = () => {
               <div className="flex justify-between items-center">
                 <div>
                   <h3 className="text-sm font-bold text-slate-800">30-Day Cost Baseline Trend</h3>
-                  <p className="text-[11px] text-slate-400 font-medium">Aggregated daily spend vs standard daily variance</p>
+                  <p className="text-xs text-slate-400 font-medium">Aggregated daily spend vs standard daily variance</p>
                 </div>
               </div>
               {trend?.length > 0 ? (
@@ -382,7 +371,7 @@ const ServerOverview = () => {
             <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4 flex flex-col justify-between">
               <div>
                 <h3 className="text-sm font-bold text-slate-800">Cost by AWS Service</h3>
-                <p className="text-[11px] text-slate-400 font-medium">Month-to-date cost share distribution</p>
+                <p className="text-xs text-slate-400 font-medium">Month-to-date cost share distribution</p>
               </div>
               {pieData.length > 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center">
@@ -408,7 +397,7 @@ const ServerOverview = () => {
                   </div>
                   <div className="w-full grid grid-cols-2 gap-2 mt-2">
                     {pieData.map((d, index) => (
-                      <div key={d.name} className="flex items-center gap-1.5 text-[10px] text-slate-600">
+                      <div key={d.name} className="flex items-center gap-1.5 text-xs text-slate-600">
                         <span className="w-2 h-2 rounded-full shrink-0" style={{ background: COLORS[index % COLORS.length] }} />
                         <span className="font-semibold truncate">{d.name}:</span>
                         <span className="font-bold font-mono text-slate-800 ml-auto">${d.value.toLocaleString()}</span>
@@ -432,9 +421,9 @@ const ServerOverview = () => {
                 <div className="flex justify-between items-center">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800">Top Cost Driving Resources</h3>
-                    <p className="text-[11px] text-slate-400 font-medium">Most expensive active cloud assets over last 30 days</p>
+                    <p className="text-xs text-slate-400 font-medium">Most expensive active cloud assets over last 30 days</p>
                   </div>
-                  <span className="text-[9px] bg-teal-50 text-teal-700 border border-teal-100/50 font-extrabold px-2 py-0.5 rounded uppercase">
+                  <span className="text-xs bg-teal-50 text-teal-700 border border-teal-100/50 font-extrabold px-2 py-0.5 rounded">
                     Last 30 Days
                   </span>
                 </div>
@@ -449,7 +438,7 @@ const ServerOverview = () => {
                 ) : (
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider sticky top-0 bg-white z-10">
+                      <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 tracking-wider sticky top-0 bg-white z-10">
                         <th className="pb-2">Resource</th>
                         <th className="pb-2">Service</th>
                         <th className="pb-2">Region</th>
@@ -462,16 +451,16 @@ const ServerOverview = () => {
                           <td className="py-2.5 max-w-[240px] truncate">
                             <div className="flex flex-col truncate">
                               <span className="font-semibold text-slate-800 truncate">{res.name}</span>
-                              <span className="text-[9px] text-slate-400 font-mono truncate">{res.resourceId}</span>
+                              <span className="text-xs text-slate-400 font-mono truncate">{res.resourceId}</span>
                             </div>
                           </td>
                           <td className="py-2.5">
-                            <div className="flex items-center gap-1 text-[10px] font-bold uppercase text-slate-500">
+                            <div className="flex items-center gap-1 text-xs font-bold text-slate-500">
                               {getServiceIcon(res.service)}
                               <span>{res.service.replace('Amazon', '')}</span>
                             </div>
                           </td>
-                          <td className="py-2.5 font-mono text-[10px] text-slate-500">{res.region}</td>
+                          <td className="py-2.5 font-mono text-xs text-slate-500">{res.region}</td>
                           <td className="py-2.5 text-right font-mono font-bold text-slate-900">${res.totalCost?.toLocaleString()}</td>
                         </tr>
                       ))}
@@ -485,7 +474,7 @@ const ServerOverview = () => {
             <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between min-h-[480px]">
               <div>
                 <h3 className="text-sm font-bold text-slate-800">AI FinOps Assistant</h3>
-                <p className="text-[11px] text-slate-400 font-medium">Natural language cloud cost query engine</p>
+                <p className="text-xs text-slate-400 font-medium">Natural language cloud cost query engine</p>
               </div>
 
               {/* Message Area */}
@@ -499,7 +488,7 @@ const ServerOverview = () => {
                       {msg.role === 'user' ? (
                         <p>{msg.content}</p>
                       ) : (
-                        <div className="prose prose-sm max-w-none text-[11px]" dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
+                        <div className="prose prose-sm max-w-none text-xs" dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
                       )}
                     </div>
                   </div>
@@ -509,7 +498,7 @@ const ServerOverview = () => {
                     <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 bg-gradient-to-br from-teal-500 to-indigo-600 text-white">
                       <FiCpu className="animate-pulse" size={12} />
                     </div>
-                    <div className="bg-slate-50 border border-slate-100 rounded-xl rounded-tl-none px-3 py-2 text-[10px] text-slate-400 font-semibold animate-pulse">
+                    <div className="bg-slate-50 border border-slate-100 rounded-xl rounded-tl-none px-3 py-2 text-xs text-slate-400 font-semibold animate-pulse">
                       Querying database via MCP dispatcher...
                     </div>
                   </div>
@@ -526,7 +515,7 @@ const ServerOverview = () => {
                       onClick={() => {
                         setChatInput(p);
                       }}
-                      className="text-[9px] bg-slate-50 border border-slate-200 text-slate-500 px-2 py-1 rounded-lg hover:bg-indigo-50 hover:text-indigo-600 transition"
+                      className="text-xs bg-slate-50 border border-slate-200 text-slate-500 px-2 py-1 rounded-lg hover:bg-indigo-50 hover:text-indigo-600 transition"
                     >
                       {p}
                     </button>
@@ -560,7 +549,7 @@ const ServerOverview = () => {
             <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4 flex flex-col justify-between min-h-[380px]">
               <div>
                 <h3 className="text-sm font-bold text-slate-800">Anomaly Alert Board</h3>
-                <p className="text-[11px] text-slate-400 font-medium">Verify detected cost spikes against historical 30d baselines</p>
+                <p className="text-xs text-slate-400 font-medium">Verify detected cost spikes against historical 30d baselines</p>
               </div>
 
               <div className="flex-1 overflow-y-auto max-h-[280px] pr-1 mt-2 custom-main-scroll">
@@ -575,18 +564,15 @@ const ServerOverview = () => {
                       <div key={anom._id} className="p-3 bg-slate-50/80 rounded-2xl border border-slate-100 flex flex-col gap-2.5">
                         <div className="flex justify-between items-start">
                           <div>
-                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
-                              anom.severity === 'Critical' ? 'bg-rose-100 text-rose-700' :
-                              anom.severity === 'High' ? 'bg-orange-100 text-orange-700' : 'bg-amber-100 text-amber-700'
-                            }`}>
+                            <span className={`px-2 py-0.5 rounded text-xs font-black ${ anom.severity === 'Critical' ? 'bg-rose-100 text-rose-700' : anom.severity === 'High' ? 'bg-orange-100 text-orange-700' : 'bg-amber-100 text-amber-700' }`}>
                               {anom.severity}
                             </span>
                             <h4 className="text-xs font-bold text-slate-800 mt-1">{anom.service}</h4>
-                            <p className="text-[9px] text-slate-400 font-medium">Detected: {new Date(anom.date).toLocaleDateString()}</p>
+                            <p className="text-xs text-slate-400 font-medium">Detected: {new Date(anom.date).toLocaleDateString()}</p>
                           </div>
                           <div className="text-right">
                             <p className="text-xs font-mono font-black text-rose-600">+${(anom.detectedCost - anom.baselineCost).toFixed(2)}/day</p>
-                            <p className="text-[9px] text-slate-400 font-medium">Spike: +{anom.increasePercentage}%</p>
+                            <p className="text-xs text-slate-400 font-medium">Spike: +{anom.increasePercentage}%</p>
                           </div>
                         </div>
 
@@ -603,14 +589,14 @@ const ServerOverview = () => {
                                 <div className="flex gap-2 justify-end">
                                   <button
                                     onClick={() => setResolvingAnomalyId(null)}
-                                    className="px-2.5 py-1 text-[10px] font-bold text-slate-500 rounded-lg hover:bg-slate-100"
+                                    className="px-2.5 py-1 text-xs font-bold text-slate-500 rounded-lg hover:bg-slate-100"
                                   >
                                     Cancel
                                   </button>
                                   <button
                                     onClick={() => handleResolveAnomaly(anom._id)}
                                     disabled={!anomalyReason.trim()}
-                                    className="px-3 py-1 text-[10px] font-bold bg-teal-600 hover:bg-teal-700 text-white rounded-lg disabled:opacity-50"
+                                    className="px-3 py-1 text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white rounded-lg disabled:opacity-50"
                                   >
                                     Save Resolution
                                   </button>
@@ -619,14 +605,14 @@ const ServerOverview = () => {
                             ) : (
                               <button
                                 onClick={() => setResolvingAnomalyId(anom._id)}
-                                className="w-full py-1.5 bg-slate-200/50 hover:bg-slate-200/80 text-slate-800 text-[10px] font-bold rounded-xl transition"
+                                className="w-full py-1.5 bg-slate-200/50 hover:bg-slate-200/80 text-slate-800 text-xs font-bold rounded-xl transition"
                               >
                                 Explain & Resolve Cost Spike
                               </button>
                             )}
                           </div>
                         ) : (
-                          <div className="p-2 bg-emerald-50 border border-emerald-100 rounded-xl text-[10px] text-emerald-800 font-medium">
+                          <div className="p-2 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-800 font-medium">
                             <strong>✓ Resolved:</strong> {anom.reason || 'Variance reviewed and accepted.'}
                           </div>
                         )}
@@ -641,7 +627,7 @@ const ServerOverview = () => {
             <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4 flex flex-col justify-between min-h-[380px]">
               <div>
                 <h3 className="text-sm font-bold text-slate-800">Metadata Tag Compliance</h3>
-                <p className="text-[11px] text-slate-400 font-medium">Required billing allocation keys metadata coverage score</p>
+                <p className="text-xs text-slate-400 font-medium">Required billing allocation keys metadata coverage score</p>
               </div>
 
               <div className="flex-1 flex flex-col justify-center space-y-4">
@@ -655,13 +641,11 @@ const ServerOverview = () => {
                     <p className="text-xs font-bold text-slate-700">Billing Coverage Rating</p>
                     <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-1.5">
                       <div
-                        className={`h-full rounded-full transition-all duration-700 ${
-                          (tagCompliance?.overallScore || 0) >= 80 ? 'bg-emerald-500' : 'bg-amber-500'
-                        }`}
+                        className={`h-full rounded-full transition-all duration-700 ${ (tagCompliance?.overallScore || 0) >= 80 ? 'bg-emerald-500' : 'bg-amber-500' }`}
                         style={{ width: `${tagCompliance?.overallScore || 0}%` }}
                       />
                     </div>
-                    <p className="text-[10px] text-slate-400 mt-1">{tagCompliance?.nonCompliantCount || 0} resources missing essential billing tags</p>
+                    <p className="text-xs text-slate-400 mt-1">{tagCompliance?.nonCompliantCount || 0} resources missing essential billing tags</p>
                   </div>
                 </div>
 
@@ -669,7 +653,7 @@ const ServerOverview = () => {
                 <div className="grid grid-cols-3 gap-2 text-center pt-2">
                   {tagCompliance?.tags && Object.entries(tagCompliance.tags).map(([tag, score]) => (
                     <div key={tag} className="p-2 rounded-xl bg-slate-50 border border-slate-100/50">
-                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">{tag}</p>
+                      <p className="text-xs font-bold text-slate-400 tracking-wide">{tag}</p>
                       <p className="text-xs font-mono font-black text-slate-800 mt-0.5">{score}%</p>
                     </div>
                   ))}

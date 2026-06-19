@@ -370,7 +370,7 @@ const AdminRulesDashboard = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white border border-slate-200 p-5 rounded-2xl flex items-center justify-between shadow-sm">
                     <div className="space-y-1">
-                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Active Rules Book</span>
+                        <span className="text-xs font-semibold text-slate-500 tracking-wider">Active Rules Book</span>
                         <div className="text-2xl font-bold text-slate-800">{stats.activeRulesCount} <span className="text-xs text-slate-400 font-normal">/ {stats.totalRules} total</span></div>
                         <p className="text-[10px] text-slate-450">Active on version v{stats.currentVersion}</p>
                     </div>
@@ -381,7 +381,7 @@ const AdminRulesDashboard = () => {
 
                 <div className="bg-white border border-slate-200 p-5 rounded-2xl flex items-center justify-between shadow-sm">
                     <div className="space-y-1">
-                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Enforcement Version</span>
+                        <span className="text-xs font-semibold text-slate-500 tracking-wider">Enforcement Version</span>
                         <div className="text-2xl font-bold text-slate-800">v{stats.currentVersion}</div>
                         <p className="text-[10px] text-slate-450">Last updated: {new Date(stats.lastUpdated).toLocaleDateString()}</p>
                     </div>
@@ -392,7 +392,7 @@ const AdminRulesDashboard = () => {
 
                 <div className="bg-white border border-slate-200 p-5 rounded-2xl flex items-center justify-between shadow-sm">
                     <div className="space-y-1">
-                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Acceptance Rate</span>
+                        <span className="text-xs font-semibold text-slate-500 tracking-wider">Acceptance Rate</span>
                         <div className="text-2xl font-bold text-slate-800">{stats.acceptanceRate}%</div>
                         <p className="text-[10px] text-emerald-600 font-semibold">{stats.acceptedWorkersCount} of {stats.totalWorkers} employees</p>
                     </div>
@@ -403,7 +403,7 @@ const AdminRulesDashboard = () => {
 
                 <div className="bg-white border border-slate-200 p-5 rounded-2xl flex items-center justify-between shadow-sm">
                     <div className="space-y-1">
-                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Pending Reminders</span>
+                        <span className="text-xs font-semibold text-slate-500 tracking-wider">Pending Reminders</span>
                         <div className="text-2xl font-bold text-slate-800">{stats.pendingWorkersCount}</div>
                         <p className="text-[10px] text-rose-500 font-semibold">Action required</p>
                     </div>
@@ -419,11 +419,7 @@ const AdminRulesDashboard = () => {
                     <div className="flex items-center gap-1.5">
                         <button
                             onClick={() => setActiveTab('rules')}
-                            className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all duration-200 ${
-                                activeTab === 'rules'
-                                    ? 'border-[#0d9488] text-[#0d9488]'
-                                    : 'border-transparent text-slate-505 hover:text-slate-800'
-                            }`}
+                            className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all duration-200 ${ activeTab === 'rules' ? 'border-[#0d9488] text-[#0d9488]' : 'border-transparent text-slate-505 hover:text-slate-800' }`}
                         >
                             <FiBookOpen size={16} />
                             <span>Rules Manager</span>
@@ -431,11 +427,7 @@ const AdminRulesDashboard = () => {
                         
                         <button
                             onClick={() => setActiveTab('monitoring')}
-                            className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all duration-200 ${
-                                activeTab === 'monitoring'
-                                    ? 'border-[#0d9488] text-[#0d9488]'
-                                    : 'border-transparent text-slate-505 hover:text-slate-800'
-                            }`}
+                            className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all duration-200 ${ activeTab === 'monitoring' ? 'border-[#0d9488] text-[#0d9488]' : 'border-transparent text-slate-505 hover:text-slate-800' }`}
                         >
                             <FiUsers size={16} />
                             <span>Acceptance Monitoring</span>
@@ -443,11 +435,7 @@ const AdminRulesDashboard = () => {
 
                         <button
                             onClick={() => setActiveTab('config')}
-                            className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all duration-200 ${
-                                activeTab === 'config'
-                                    ? 'border-[#0d9488] text-[#0d9488]'
-                                    : 'border-transparent text-slate-505 hover:text-slate-800'
-                            }`}
+                            className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-all duration-200 ${ activeTab === 'config' ? 'border-[#0d9488] text-[#0d9488]' : 'border-transparent text-slate-505 hover:text-slate-800' }`}
                         >
                             <FiSettings size={16} />
                             <span>Config Settings</span>
@@ -495,7 +483,7 @@ const AdminRulesDashboard = () => {
                             <div className="border border-slate-150 rounded-xl overflow-hidden shadow-inner">
                                 <table className="w-full text-left border-collapse">
                                     <thead>
-                                        <tr className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider border-b border-slate-150">
+                                        <tr className="bg-slate-50 text-slate-500 text-xs font-bold tracking-wider border-b border-slate-150">
                                             <th className="px-6 py-4">Title & Details</th>
                                             <th className="px-6 py-4">Category</th>
                                             <th className="px-6 py-4">Version</th>
@@ -522,22 +510,12 @@ const AdminRulesDashboard = () => {
                                                     <td className="px-6 py-4 text-slate-505 font-medium">{rule.category}</td>
                                                     <td className="px-6 py-4"><span className="bg-slate-100 border border-slate-200 text-slate-600 px-2 py-0.5 rounded text-xs font-bold">v{rule.version}</span></td>
                                                     <td className="px-6 py-4">
-                                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                                                            rule.status === 'active'
-                                                                ? 'bg-emerald-50 border-emerald-100 text-emerald-700'
-                                                                : 'bg-slate-100 border-slate-200 text-slate-450'
-                                                        }`}>
+                                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${ rule.status === 'active' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-slate-100 border-slate-200 text-slate-450' }`}>
                                                             {rule.status}
                                                         </span>
                                                     </td>
                                                     <td className="px-6 py-4">
-                                                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
-                                                            rule.severity === 'critical'
-                                                                ? 'bg-rose-50 border-rose-150 text-rose-600'
-                                                                : rule.severity === 'high'
-                                                                ? 'bg-amber-50 border-amber-150 text-amber-600'
-                                                                : 'bg-emerald-50 border-emerald-150 text-emerald-600'
-                                                        }`}>
+                                                        <span className={`text-[10px] font-bold tracking-wider px-2 py-0.5 rounded border ${ rule.severity === 'critical' ? 'bg-rose-50 border-rose-150 text-rose-600' : rule.severity === 'high' ? 'bg-amber-50 border-amber-150 text-amber-600' : 'bg-emerald-50 border-emerald-150 text-emerald-600' }`}>
                                                             {rule.severity || 'medium'}
                                                         </span>
                                                     </td>
@@ -636,7 +614,7 @@ const AdminRulesDashboard = () => {
                             <div className="border border-slate-150 rounded-xl overflow-hidden shadow-inner">
                                 <table className="w-full text-left border-collapse">
                                     <thead>
-                                        <tr className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider border-b border-slate-150">
+                                        <tr className="bg-slate-50 text-slate-500 text-xs font-bold tracking-wider border-b border-slate-150">
                                             <th className="px-6 py-4">Employee</th>
                                             <th className="px-6 py-4">Department</th>
                                             <th className="px-6 py-4">Status</th>
@@ -658,11 +636,7 @@ const AdminRulesDashboard = () => {
                                                     </td>
                                                     <td className="px-6 py-4 text-slate-505 font-medium">{row.department}</td>
                                                     <td className="px-6 py-4">
-                                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                                                            row.acceptedStatus === 'Accepted'
-                                                                ? 'bg-emerald-50 border-emerald-100 text-emerald-700'
-                                                                : 'bg-rose-50 border-rose-100 text-rose-700'
-                                                        }`}>
+                                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${ row.acceptedStatus === 'Accepted' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700' }`}>
                                                             {row.acceptedStatus}
                                                         </span>
                                                     </td>
@@ -888,7 +862,7 @@ const AdminRulesDashboard = () => {
                             
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-slate-650 uppercase tracking-wider">Rule Title</label>
+                                    <label className="text-xs font-bold text-slate-650 tracking-wider">Rule Title</label>
                                     <input
                                         type="text"
                                         value={ruleForm.title}
@@ -899,7 +873,7 @@ const AdminRulesDashboard = () => {
                                     />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-slate-650 uppercase tracking-wider">Category</label>
+                                    <label className="text-xs font-bold text-slate-650 tracking-wider">Category</label>
                                     <select
                                         value={ruleForm.category}
                                         onChange={(e) => setRuleForm({ ...ruleForm, category: e.target.value })}
@@ -914,7 +888,7 @@ const AdminRulesDashboard = () => {
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-slate-650 uppercase tracking-wider">Rule Severity</label>
+                                    <label className="text-xs font-bold text-slate-650 tracking-wider">Rule Severity</label>
                                     <select
                                         value={ruleForm.severity}
                                         onChange={(e) => setRuleForm({ ...ruleForm, severity: e.target.value })}
@@ -927,7 +901,7 @@ const AdminRulesDashboard = () => {
                                     </select>
                                 </div>
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-slate-650 uppercase tracking-wider">Attachments (PDF, Doc)</label>
+                                    <label className="text-xs font-bold text-slate-650 tracking-wider">Attachments (PDF, Doc)</label>
                                     <input
                                         type="file"
                                         multiple
@@ -945,7 +919,7 @@ const AdminRulesDashboard = () => {
                             {/* Content Editor area */}
                             <div className="space-y-2">
                                 <div className="flex justify-between items-center">
-                                    <label className="text-xs font-bold text-slate-650 uppercase tracking-wider">Policy Content (HTML Format)</label>
+                                    <label className="text-xs font-bold text-slate-650 tracking-wider">Policy Content (HTML Format)</label>
                                     <div className="flex items-center gap-1.5 print:hidden">
                                         <button
                                             type="button"
@@ -1014,7 +988,7 @@ const AdminRulesDashboard = () => {
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-slate-650 uppercase tracking-wider">Update Changelog (Optional)</label>
+                                    <label className="text-xs font-bold text-slate-650 tracking-wider">Update Changelog (Optional)</label>
                                     <input
                                         type="text"
                                         value={ruleForm.changeLog}

@@ -72,6 +72,7 @@ import Sidebar from './Sidebar';
 import Header from './Header';
 import BottomNavigation from './BottomNavigation';
 import QuestionGenerationTracker from '../admin/QuestionGenerationTracker';
+import FloatingChatButton from '../common/FloatingChatButton';
 import appContext from '../../context/AppContext';
 
 // Lazy load management components
@@ -404,7 +405,7 @@ const AdminLayout = () => {
       />
 
       {/* Main Content Surface */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden transition-all duration-300">
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden transition-all duration-300">
         <Header 
           user={user} 
           menuLinks={menuLinks} 
@@ -415,7 +416,7 @@ const AdminLayout = () => {
           title={pageTitle}
         />
 
-        <main className="flex-1 overflow-x-hidden overflow-y-auto pb-6 md:pb-10 custom-main-scroll">
+        <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto pb-6 md:pb-10 custom-main-scroll">
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
@@ -508,6 +509,8 @@ const AdminLayout = () => {
         generationData={null}
         isGenerating={false}
       />
+
+      <FloatingChatButton isAdmin={true} />
 
       {/* BottomNavigation removed for Admin as per strict separation rules */}
 

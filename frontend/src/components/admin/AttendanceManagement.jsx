@@ -642,11 +642,7 @@ const AttendanceManagement = () => {
                     </div>
                     <button
                         onClick={() => setIsFilterSheetOpen(true)}
-                        className={`px-4 h-12 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition-all ${
-                            filterRfid || filterDepartment || filterDate 
-                            ? 'bg-teal-50 text-teal-600 border border-teal-100' 
-                            : 'bg-slate-50 text-slate-600 border border-slate-100'
-                        }`}
+                        className={`px-4 h-12 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition-all ${ filterRfid || filterDepartment || filterDate ? 'bg-teal-50 text-teal-600 border border-teal-100' : 'bg-slate-50 text-slate-600 border border-slate-100' }`}
                     >
                         <Filter size={18} />
                         <span>Filter</span>

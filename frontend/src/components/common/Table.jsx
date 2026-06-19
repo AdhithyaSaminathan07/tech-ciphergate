@@ -34,7 +34,7 @@ const Table = ({
                 <th
                   key={index}
                   scope="col"
-                  className={`${compact ? 'px-3 py-2' : 'px-6 py-3'} text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200 ${column.headerAlign || 'text-center'} ${stickyClass}`}
+                  className={`${compact ? 'px-3 py-2' : 'px-6 py-3'} text-xs font-medium text-gray-500 tracking-wider border-b border-gray-200 ${column.headerAlign || 'text-center'} ${stickyClass}`}
                   style={column.width ? { width: column.width, minWidth: column.width } : {}}
                   title={column.description || column.header}
                 >
@@ -62,11 +62,7 @@ const Table = ({
             data.map((row, rowIndex) => (
               <tr
                 key={rowIndex}
-                className={`
-                  group
-                  ${striped && rowIndex % 2 === 1 ? 'bg-gray-50' : ''}
-                  ${hover ? 'hover:bg-gray-100' : ''}
-                `}
+                className={`group ${striped && rowIndex % 2 === 1 ? 'bg-gray-50' : ''} ${hover ? 'hover:bg-gray-100' : ''}`}
               >
                 {columnKeys.map((key, colIndex) => {
                   const column = columns[colIndex];

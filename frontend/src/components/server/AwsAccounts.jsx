@@ -144,11 +144,7 @@ const AwsAccounts = () => {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className={`p-4 rounded-xl border text-sm flex items-center justify-between shadow-sm ${
-              message.type === 'error' 
-                ? 'bg-rose-50 border-rose-200 text-rose-800' 
-                : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-            }`}
+            className={`p-4 rounded-xl border text-sm flex items-center justify-between shadow-sm ${ message.type === 'error' ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800' }`}
           >
             <span>{message.text}</span>
             <button onClick={() => setMessage({ text: '', type: '' })} className="font-bold ml-4 hover:opacity-75">×</button>
@@ -168,7 +164,7 @@ const AwsAccounts = () => {
             
             <form onSubmit={handleCreateAccount} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Display Name</label>
+                <label className="block text-xs font-bold text-slate-500 tracking-wider mb-2">Display Name</label>
                 <input
                   id="display-name-input"
                   type="text"
@@ -181,7 +177,7 @@ const AwsAccounts = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">12-Digit Account ID</label>
+                <label className="block text-xs font-bold text-slate-500 tracking-wider mb-2">12-Digit Account ID</label>
                 <input
                   type="text"
                   placeholder="e.g. 123456789012"
@@ -249,7 +245,7 @@ const AwsAccounts = () => {
               </div>
 
               <div>
-                <span className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Trust Relationship Document</span>
+                <span className="block text-xs font-bold text-slate-400 mb-2 tracking-wide">Trust Relationship Document</span>
                 <pre className="text-[10px] bg-slate-950 p-3 rounded-lg overflow-x-auto text-slate-300 border border-slate-900 font-mono leading-normal max-h-36">
                   {activeAccountForSetup.policyDocument || 'Loading trust policy...'}
                 </pre>
@@ -331,11 +327,7 @@ const AwsAccounts = () => {
                   return (
                     <div 
                       key={acc._id}
-                      className={`p-5 rounded-2xl border transition-all ${
-                        isSetupActive 
-                          ? 'bg-teal-50/20 border-teal-500/40 ring-1 ring-teal-500/10' 
-                          : 'bg-white hover:bg-slate-50/50 border-slate-100 shadow-sm'
-                      }`}
+                      className={`p-5 rounded-2xl border transition-all ${ isSetupActive ? 'bg-teal-50/20 border-teal-500/40 ring-1 ring-teal-500/10' : 'bg-white hover:bg-slate-50/50 border-slate-100 shadow-sm' }`}
                     >
                       <div className="flex justify-between items-start">
                         <div>

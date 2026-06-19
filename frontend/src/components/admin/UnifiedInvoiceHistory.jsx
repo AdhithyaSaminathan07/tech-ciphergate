@@ -221,13 +221,13 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, 
               </colgroup>
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="py-3.5 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Invoice No</th>
-                  <th className="py-3.5 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="py-3.5 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Customer</th>
-                  <th className="py-3.5 px-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="py-3.5 px-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Amount</th>
-                  <th className="py-3.5 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Stage Progress</th>
-                  <th className="py-3.5 px-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
+                  <th className="py-3.5 px-4 text-left text-xs font-bold text-gray-500 tracking-wider">Invoice No</th>
+                  <th className="py-3.5 px-4 text-left text-xs font-bold text-gray-500 tracking-wider">Date</th>
+                  <th className="py-3.5 px-4 text-left text-xs font-bold text-gray-500 tracking-wider">Customer</th>
+                  <th className="py-3.5 px-4 text-center text-xs font-bold text-gray-500 tracking-wider">Type</th>
+                  <th className="py-3.5 px-4 text-right text-xs font-bold text-gray-500 tracking-wider">Amount</th>
+                  <th className="py-3.5 px-4 text-left text-xs font-bold text-gray-500 tracking-wider">Stage Progress</th>
+                  <th className="py-3.5 px-4 text-center text-xs font-bold text-gray-500 tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -240,11 +240,7 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, 
                       {invoice.customerContact && <div className="text-xs text-gray-400 truncate">{invoice.customerContact}</div>}
                     </td>
                     <td className="py-3.5 px-4 text-center">
-                      <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-bold ${
-                        invoice.invoiceType === 'TAX INVOICE' 
-                          ? 'bg-amber-100 text-amber-700' 
-                          : 'bg-blue-100 text-blue-700'
-                      }`}>
+                      <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-bold ${ invoice.invoiceType === 'TAX INVOICE' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700' }`}>
                         {invoice.invoiceType}
                       </span>
                     </td>
@@ -265,18 +261,10 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, 
                                 <button
                                   onClick={() => handleStatusUpdate(invoice._id, stage)}
                                   title={stage}
-                                  className={`rounded-full transition-all duration-200 flex-shrink-0 ${
-                                    isCurrent
-                                      ? 'w-4 h-4 bg-blue-600 ring-[3px] ring-blue-200 shadow-sm' 
-                                      : isCompleted
-                                        ? 'w-3 h-3 bg-blue-500' 
-                                        : 'w-3 h-3 bg-gray-200 hover:bg-gray-300'
-                                  }`}
+                                  className={`rounded-full transition-all duration-200 flex-shrink-0 ${ isCurrent ? 'w-4 h-4 bg-blue-600 ring-[3px] ring-blue-200 shadow-sm' : isCompleted ? 'w-3 h-3 bg-blue-500' : 'w-3 h-3 bg-gray-200 hover:bg-gray-300' }`}
                                 />
                                 {index < STAGES.length - 1 && (
-                                  <div className={`w-5 h-[2px] flex-shrink-0 ${
-                                    index < currentIdx ? 'bg-blue-500' : 'bg-gray-200'
-                                  }`} />
+                                  <div className={`w-5 h-[2px] flex-shrink-0 ${ index < currentIdx ? 'bg-blue-500' : 'bg-gray-200' }`} />
                                 )}
                               </div>
                             );
@@ -284,7 +272,7 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, 
                         </div>
                         {/* Stage label + proof icons row */}
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider leading-none">
+                          <span className="text-[10px] font-bold text-blue-700 tracking-wider leading-none">
                             {invoice.status || 'Invoice'}
                           </span>
                           <div className="flex items-center gap-1">

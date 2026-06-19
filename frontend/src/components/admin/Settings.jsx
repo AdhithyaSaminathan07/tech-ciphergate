@@ -528,12 +528,10 @@ const Settings = () => {
             type="button"
             onClick={onChange}
             disabled={disabled}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${checked ? 'bg-blue-600' : 'bg-gray-200'
-                } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${checked ? 'bg-blue-600' : 'bg-gray-200' } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         >
             <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-lg transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'
-                    }`}
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-lg transition-transform ${checked ? 'translate-x-6' : 'translate-x-1' }`}
             />
         </button>
     );
@@ -728,28 +726,16 @@ const Settings = () => {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {mealConfigs.map(({ key, title, icon: Icon, color, enabledKey, openTimeKey, closeTimeKey, autoSwitchKey }) => (
                             <Card key={key} className="overflow-hidden hover:shadow-lg transition-shadow duration-200">
-                                <div className={`h-2 bg-gradient-to-r ${color === 'yellow' ? 'from-yellow-400 to-orange-400' :
-                                    color === 'blue' ? 'from-blue-400 to-cyan-400' :
-                                        'from-purple-400 to-pink-400'
-                                    }`} />
+                                <div className={`h-2 bg-gradient-to-r ${color === 'yellow' ? 'from-yellow-400 to-orange-400' : color === 'blue' ? 'from-blue-400 to-cyan-400' : 'from-purple-400 to-pink-400' }`} />
                                 <div className="p-6">
                                     <div className="flex items-center justify-between mb-6">
                                         <div className="flex items-center">
-                                            <div className={`p-3 rounded-lg ${color === 'yellow' ? 'bg-yellow-100' :
-                                                color === 'blue' ? 'bg-blue-100' :
-                                                    'bg-purple-100'
-                                                }`}>
-                                                <Icon className={`h-6 w-6 ${color === 'yellow' ? 'text-yellow-600' :
-                                                    color === 'blue' ? 'text-blue-600' :
-                                                        'text-purple-600'
-                                                    }`} />
+                                            <div className={`p-3 rounded-lg ${color === 'yellow' ? 'bg-yellow-100' : color === 'blue' ? 'bg-blue-100' : 'bg-purple-100' }`}>
+                                                <Icon className={`h-6 w-6 ${color === 'yellow' ? 'text-yellow-600' : color === 'blue' ? 'text-blue-600' : 'text-purple-600' }`} />
                                             </div>
                                             <h3 className="ml-3 text-lg font-semibold text-gray-900">{title}</h3>
                                         </div>
-                                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${settings[enabledKey]
-                                            ? 'bg-green-100 text-green-800'
-                                            : 'bg-red-100 text-red-800'
-                                            }`}>
+                                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${settings[enabledKey] ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }`}>
                                             {settings[enabledKey] ? 'Active' : 'Inactive'}
                                         </div>
                                     </div>
@@ -1214,7 +1200,7 @@ const Settings = () => {
                                     </p>
                                 </div>
                                 <div className="flex items-center bg-white p-2 rounded-xl border border-red-200 shadow-sm self-start md:self-center">
-                                    <span className="px-3 text-sm font-bold text-gray-500 uppercase tracking-wider">Factor</span>
+                                    <span className="px-3 text-sm font-bold text-gray-500 tracking-wider">Factor</span>
                                     <div className="relative">
                                         <input
                                             type="text"
@@ -1277,8 +1263,7 @@ const Settings = () => {
                                                             disabled={!settings.advancedLeaveDeduction.thresholds[item.key].enabled}
                                                             value={settings.advancedLeaveDeduction.thresholds[item.key].value}
                                                             onChange={(e) => handleAdvancedSettingsChange(null, parseInt(e.target.value) || 0, item.key, 'value')}
-                                                            className={`w-full px-3 py-1.5 border rounded-lg focus:ring-red-500 focus:border-red-500 transition-all font-medium text-gray-700 text-center ${!settings.advancedLeaveDeduction.thresholds[item.key].enabled ? 'bg-gray-100 text-gray-400' : 'bg-white'
-                                                                }`}
+                                                            className={`w-full px-3 py-1.5 border rounded-lg focus:ring-red-500 focus:border-red-500 transition-all font-medium text-gray-700 text-center ${!settings.advancedLeaveDeduction.thresholds[item.key].enabled ? 'bg-gray-100 text-gray-400' : 'bg-white' }`}
                                                         />
                                                     </div>
                                                 </div>
@@ -1305,7 +1290,7 @@ const Settings = () => {
                                         <div className="pt-4 border-t border-gray-200 space-y-6">
                                             <div className="flex items-center">
                                                 <div className="flex-grow">
-                                                    <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Monthly Limit (Days)</label>
+                                                    <label className="block text-xs font-bold text-gray-600 mb-2">Monthly Limit (Days)</label>
                                                     <div className="flex items-center">
                                                         <input
                                                             type="number"
@@ -1361,14 +1346,10 @@ const Settings = () => {
                                         </p>
                                     </div>
                                     <div className="pt-4 border-t border-gray-200 mt-auto flex items-center gap-2">
-                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black uppercase tracking-wider transition-colors duration-300 ${
-                                            settings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty
-                                                ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                                                : 'bg-gray-100 text-gray-500 border border-gray-200'
-                                        }`}>
+                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black tracking-wider transition-colors duration-300 ${ settings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-gray-100 text-gray-500 border border-gray-200' }`}>
                                             {settings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty ? 'Enabled (5X)' : 'Disabled'}
                                         </span>
-                                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                                        <span className="text-[10px] text-gray-400 font-bold tracking-wider">
                                             Pending leaves are safe
                                         </span>
                                     </div>
@@ -1420,7 +1401,7 @@ const Settings = () => {
                             {settings.paidLeaveConfig?.enabled && (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm transition-all hover:border-emerald-200">
-                                        <label className="block text-xs font-black text-gray-500 mb-2 uppercase tracking-widest">
+                                        <label className="block text-xs font-black text-gray-500 mb-2 tracking-widest">
                                             Monthly Limit
                                         </label>
                                         <div className="flex items-center">
@@ -1432,9 +1413,9 @@ const Settings = () => {
                                                 onChange={(e) => handlePaidLeaveConfigChange('leavesPerMonth', parseInt(e.target.value) || 0)}
                                                 className="block w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm font-bold text-gray-900"
                                             />
-                                            <span className="ml-3 text-sm text-gray-500 font-black uppercase tracking-wider">Days</span>
+                                            <span className="ml-3 text-sm text-gray-500 font-black tracking-wider">Days</span>
                                         </div>
-                                        <p className="mt-3 text-[10px] text-gray-400 font-medium uppercase leading-tight">
+                                        <p className="mt-3 text-[10px] text-gray-400 font-medium leading-tight">
                                             Max paid leaves per employee / month
                                         </p>
                                     </div>
@@ -1948,13 +1929,13 @@ const Settings = () => {
                                             <div className="text-xl font-bold text-indigo-700">
                                                 {settings.aiConfig?.aiDailyRequestCount || 0} / {settings.aiConfig?.aiMaxDailyRequests ?? 100}
                                             </div>
-                                            <div className="text-xs text-indigo-500 font-semibold uppercase">Daily Usage</div>
+                                            <div className="text-xs text-indigo-500 font-semibold">Daily Usage</div>
                                         </div>
                                         <div>
                                             <div className="text-xl font-bold text-indigo-700">
                                                 {settings.aiConfig?.aiMonthlyRequestCount || 0} / {settings.aiConfig?.aiMaxMonthlyRequests ?? 1000}
                                             </div>
-                                            <div className="text-xs text-indigo-500 font-semibold uppercase">Monthly Usage</div>
+                                            <div className="text-xs text-indigo-500 font-semibold">Monthly Usage</div>
                                         </div>
                                     </div>
                                 </div>
@@ -1978,11 +1959,7 @@ const Settings = () => {
                                         <h3 className="text-lg font-bold text-gray-900 leading-tight">
                                             Bug Bounty Program
                                         </h3>
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                            (settings.bugBountyConfig?.enabled && settings.bugBountyConfig?.popupFrequency !== 'disabled' && settings.bugBountyConfig?.bugReportUrl)
-                                                ? 'bg-green-50 text-green-700 border border-green-200'
-                                                : 'bg-gray-100 text-gray-600 border border-gray-200'
-                                        }`}>
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${ (settings.bugBountyConfig?.enabled && settings.bugBountyConfig?.popupFrequency !== 'disabled' && settings.bugBountyConfig?.bugReportUrl) ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-600 border border-gray-200' }`}>
                                             {(settings.bugBountyConfig?.enabled && settings.bugBountyConfig?.popupFrequency !== 'disabled' && settings.bugBountyConfig?.bugReportUrl) ? 'Configured' : 'Not Configured'}
                                         </span>
                                     </div>

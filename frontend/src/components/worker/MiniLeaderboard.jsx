@@ -52,10 +52,7 @@ const MiniLeaderboard = ({ onViewFull }) => {
                 return (
                     <div
                         key={entry._id}
-                        className={`flex items-center gap-3 px-3 py-2 rounded-xl border transition-all duration-200 ${isMe
-                            ? 'bg-teal-50/50 border-teal-200 shadow-sm shadow-teal-500/5'
-                            : 'bg-slate-50/40 hover:bg-slate-50 border-slate-100/70 hover:border-slate-200'
-                            }`}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-xl border transition-all duration-200 ${isMe ? 'bg-teal-50/50 border-teal-200 shadow-sm shadow-teal-500/5' : 'bg-slate-50/40 hover:bg-slate-50 border-slate-100/70 hover:border-slate-200' }`}
                     >
                         <span className="text-xs w-4 text-center flex-shrink-0 font-bold text-slate-400">
                             {medals[entry.rank] || entry.rank}
@@ -71,7 +68,7 @@ const MiniLeaderboard = ({ onViewFull }) => {
                                     {isMe ? 'You' : entry.name}
                                 </p>
                                 {isMe && (
-                                    <span className="text-[8px] bg-teal-600 text-white font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider scale-90">
+                                    <span className="text-[8px] bg-teal-600 text-white font-extrabold px-1.5 py-0.5 rounded tracking-wider scale-90">
                                         Me
                                     </span>
                                 )}
@@ -95,7 +92,7 @@ const MiniLeaderboard = ({ onViewFull }) => {
                 <>
                     <div className="flex items-center gap-2 py-0.5 px-3">
                         <div className="h-px flex-1 bg-slate-100 border-t" />
-                        <span className="text-[9px] text-slate-350 font-bold uppercase tracking-widest">Your Position</span>
+                        <span className="text-[9px] text-slate-350 font-bold tracking-widest">Your Position</span>
                         <div className="h-px flex-1 bg-slate-100 border-t" />
                     </div>
 
@@ -122,7 +119,7 @@ const MiniLeaderboard = ({ onViewFull }) => {
             {/* View Full Button */}
             <button
                 onClick={onViewFull}
-                className="w-full flex items-center justify-center gap-1.5 mt-3 py-2 text-[10px] font-bold uppercase tracking-wider text-teal-650 bg-teal-50/40 hover:bg-teal-50 border border-teal-200/50 rounded-xl transition-all duration-200 hover:shadow-sm"
+                className="w-full flex items-center justify-center gap-1.5 mt-3 py-2 text-[10px] font-bold tracking-wider text-teal-650 bg-teal-50/40 hover:bg-teal-50 border border-teal-200/50 rounded-xl transition-all duration-200 hover:shadow-sm"
             >
                 <Trophy className="w-3 h-3 text-teal-600" />
                 View Full Leaderboard

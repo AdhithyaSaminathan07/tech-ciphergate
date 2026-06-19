@@ -139,7 +139,7 @@ const Reports = () => {
       <div className="bg-white/80 backdrop-blur-md p-5 rounded-2xl border border-slate-100 shadow-sm">
         <div className="flex flex-col md:flex-row gap-4 items-end">
           <div className="space-y-1.5 flex-1">
-            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Report Start Date</label>
+            <label className="text-[10px] text-slate-400 font-bold tracking-wider">Report Start Date</label>
             <input
               type="date"
               value={dateRange.start}
@@ -148,7 +148,7 @@ const Reports = () => {
             />
           </div>
           <div className="space-y-1.5 flex-1">
-            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Report End Date</label>
+            <label className="text-[10px] text-slate-400 font-bold tracking-wider">Report End Date</label>
             <input
               type="date"
               value={dateRange.end}
@@ -209,9 +209,7 @@ const Reports = () => {
                       key={fmt}
                       onClick={() => handleGenerate(template, fmt)}
                       disabled={!!generatingId}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg text-white transition disabled:opacity-50 ${
-                        isDone ? 'bg-emerald-600' : colors.btn
-                      }`}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg text-white transition disabled:opacity-50 ${ isDone ? 'bg-emerald-600' : colors.btn }`}
                     >
                       {isGenerating ? (
                         <FiLoader size={10} className="animate-spin" />

@@ -319,10 +319,7 @@ export default function LiveRepositories() {
                         <Button
                             onClick={toggleAutoRefresh}
                             variant={autoRefreshEnabled ? "default" : "outline"}
-                            className={`px-6 py-2 rounded-lg flex items-center gap-2 ${autoRefreshEnabled
-                                ? "bg-green-600 hover:bg-green-700 text-white"
-                                : "border-slate-600 text-slate-300 hover:bg-slate-700"
-                                }`}
+                            className={`px-6 py-2 rounded-lg flex items-center gap-2 ${autoRefreshEnabled ? "bg-green-600 hover:bg-green-700 text-white" : "border-slate-600 text-slate-300 hover:bg-slate-700" }`}
                         >
                             <Timer className="w-4 h-4" />
                             Auto Refresh {autoRefreshEnabled ? 'ON' : 'OFF'}

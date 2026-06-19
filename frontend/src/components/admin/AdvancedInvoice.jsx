@@ -1355,11 +1355,11 @@ temporarily interrupt app availability. We will provide advance notice when poss
 
   return (
     <div className="max-w-6xl mx-auto p-4 bg-white font-sans">
-      <div className="mb-6 flex justify-between items-center">
+      <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <h1 className="text-xl font-bold text-gray-800">
           {initialData ? 'Edit Invoice' : 'Advanced Invoice Creator'}
         </h1>
-        <div className="space-x-2 invoice-action-buttons">
+        <div className="flex flex-wrap gap-2 invoice-action-buttons">
           {!isPreviewMode && (
             <button
               onClick={() => {
@@ -1375,32 +1375,32 @@ temporarily interrupt app availability. We will provide advance notice when poss
                   onInvoiceSave({ ...invoiceData, _id: initialData?._id });
                 }
               }}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition duration-300 text-sm"
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition duration-300 text-sm whitespace-nowrap"
             >
               Save Invoice
             </button>
           )}
           <button
             onClick={printInvoice}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition duration-300 text-sm"
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition duration-300 text-sm whitespace-nowrap"
           >
             Print
           </button>
           <button
             onClick={exportToPDF}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition duration-300 text-sm"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition duration-300 text-sm whitespace-nowrap"
           >
             Download PDF
           </button>
         </div>
       </div>
 
-      {/* Invoice Preview - Added mobile-responsive container with scaling */}
+      {/* Invoice Preview - Fixed layout container to preserve desktop alignment */}
       <fieldset disabled={isPreviewMode} className="contents">
-        <div className="bg-white p-6 border border-gray-300 rounded-lg mb-6">
+        <div className="bg-white p-2 sm:p-6 border border-gray-300 rounded-lg mb-6 overflow-x-auto custom-scrollbar">
           <div
             ref={invoiceRef}
-            className="max-w-4xl mx-auto bg-white mobile-invoice-container"
+            className="bg-white min-w-[800px] mx-auto mobile-invoice-container"
             style={{
               fontFamily: 'Poppins, sans-serif',
               color: '#333',
@@ -1416,7 +1416,7 @@ temporarily interrupt app availability. We will provide advance notice when poss
                   name="invoiceType"
                   value={invoiceData.invoiceType}
                   onChange={handleInvoiceTypeChange}
-                  className="text-3xl font-bold uppercase"
+                  className="text-3xl font-bold"
                   style={{ color: '#00843d', background: 'white', border: 'none', outline: 'none' }}
                 >
                   <option value="INVOICE">INVOICE</option>
@@ -1623,17 +1623,17 @@ temporarily interrupt app availability. We will provide advance notice when poss
               <table className="w-full border-collapse border border-gray-300">
                 <thead>
                   <tr style={{ backgroundColor: '#00843d' }}>
-                    <th className="py-2 px-3 border-r border-gray-300 text-center text-white text-xs font-bold uppercase">NO</th>
-                    <th className="py-2 px-3 border-r border-gray-300 text-left text-white text-xs font-bold uppercase">DESCRIPTION</th>
+                    <th className="py-2 px-3 border-r border-gray-300 text-center text-white text-xs font-bold">NO</th>
+                    <th className="py-2 px-3 border-r border-gray-300 text-left text-white text-xs font-bold">DESCRIPTION</th>
                     {invoiceData.gstEnabled && (
                       <>
-                        <th className="py-2 px-3 border-r border-gray-300 text-left text-white text-xs font-bold uppercase">HSN/SAC</th>
-                        <th className="py-2 px-3 border-r border-gray-300 text-right text-white text-xs font-bold uppercase">GST (%)</th>
+                        <th className="py-2 px-3 border-r border-gray-300 text-left text-white text-xs font-bold">HSN/SAC</th>
+                        <th className="py-2 px-3 border-r border-gray-300 text-right text-white text-xs font-bold">GST (%)</th>
                       </>
                     )}
-                    <th className="py-2 px-3 border-r border-gray-300 text-right text-white text-xs font-bold uppercase">QTY</th>
-                    <th className="py-2 px-3 border-r border-gray-300 text-right text-white text-xs font-bold uppercase">PRICE</th>
-                    <th className="py-2 px-3 text-right text-white text-xs font-bold uppercase">TOTAL</th>
+                    <th className="py-2 px-3 border-r border-gray-300 text-right text-white text-xs font-bold">QTY</th>
+                    <th className="py-2 px-3 border-r border-gray-300 text-right text-white text-xs font-bold">PRICE</th>
+                    <th className="py-2 px-3 text-right text-white text-xs font-bold">TOTAL</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1776,7 +1776,7 @@ temporarily interrupt app availability. We will provide advance notice when poss
                     )}
 
                     <tr style={{ backgroundColor: '#00843d' }}>
-                      <td className="py-2 px-3 font-bold text-sm text-right text-white uppercase">Grand Total :</td>
+                      <td className="py-2 px-3 font-bold text-sm text-right text-white">Grand Total :</td>
                       <td className="py-2 px-3 font-bold text-sm text-right text-white">₹{totals.grandTotal.toFixed(2)}</td>
                     </tr>
                   </tbody>
@@ -1793,7 +1793,7 @@ temporarily interrupt app availability. We will provide advance notice when poss
                     onChange={() => handleCheckboxChange('bankDetails')}
                     className="mr-2 h-4 w-4 text-green-600 rounded"
                   />
-                  <h3 className="font-bold text-sm text-gray-700 uppercase">Payment Method:</h3>
+                  <h3 className="font-bold text-sm text-gray-700">Payment Method:</h3>
                 </div>
                 <div className="grid grid-cols-1 gap-1 ml-6 text-sm">
                   <div>

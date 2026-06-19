@@ -127,11 +127,7 @@ const RFIDAttendance = () => {
       
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         {/* Location Status */}
-        <div className={`mb-6 p-4 rounded-lg text-center ${
-          locationAllowed 
-            ? 'bg-green-50 text-green-700 border border-green-200' 
-            : 'bg-red-50 text-red-700 border border-red-200'
-        }`}>
+        <div className={`mb-6 p-4 rounded-lg text-center ${ locationAllowed ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200' }`}>
           <p className="font-medium">
             {locationAllowed 
               ? '✓ You are within the allowed attendance area' 

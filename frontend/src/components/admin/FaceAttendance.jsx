@@ -577,11 +577,7 @@ const FaceAttendance = ({ subdomain, isOpen, onClose, workerMode = false, curren
             <div className="face-attendance-container">
               {/* Location Information */}
               {locationChecked && (
-                <div className={`mb-4 p-3 rounded-md text-center ${
-                  locationAllowed 
-                    ? 'bg-green-50 text-green-700 border border-green-200' 
-                    : 'bg-red-50 text-red-700 border border-red-200'
-                }`}>
+                <div className={`mb-4 p-3 rounded-md text-center ${ locationAllowed ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200' }`}>
                   <p className="font-medium">
                     {locationAllowed 
                       ? '✓ You are within the allowed attendance area' 

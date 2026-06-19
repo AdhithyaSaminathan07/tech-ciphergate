@@ -144,12 +144,12 @@ const Card = ({ title, children, icon: Icon, className = "", headerActions }) =>
     transition={{ delay: 0.1 }}
     className={`bg-white rounded-xl shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300 ${className}`}>
    <div className="p-4 md:p-6 border-b border-gray-100">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-0">
         <div className="flex items-center">
-         {Icon && <Icon className="text-gray-600 mr-3" size={24} />}
-          <h3 className="text-xl font-bold text-gray-800">{title}</h3>
+         {Icon && <Icon className="text-gray-600 mr-2 md:mr-3 w-5 h-5 md:w-6 md:h-6 shrink-0" />}
+          <h3 className="text-lg md:text-xl font-bold text-gray-800">{title}</h3>
         </div>
-        {headerActions && <div className="flex items-center space-x-2">{headerActions}</div>}
+        {headerActions && <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">{headerActions}</div>}
       </div>
     </div>
     <div className="p-4 md:p-6">{children}</div>
@@ -773,11 +773,7 @@ const GenerateQuestions = () => {
                                                     <button
                                                         type="button"
                                                         onClick={() => handleDepartmentFilter('')}
-                                                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors flex items-center ${
-                                                            departmentFilter === '' 
-                                                            ? 'bg-green-500 text-white' 
-                                                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                                        }`}
+                                                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors flex items-center ${ departmentFilter === '' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300' }`}
                                                     >
                                                         All Departments
                                                         <span className="ml-1.5 bg-white bg-opacity-20 px-1.5 py-0.5 rounded-full text-xs">
@@ -796,15 +792,7 @@ const GenerateQuestions = () => {
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => handleDepartmentFilter(dept)}
-                                                                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors flex items-center group-hover:pr-8 ${
-                                                                        departmentFilter === dept 
-                                                                        ? 'bg-green-500 text-white' 
-                                                                        : partiallySelected
-                                                                          ? 'bg-green-100 text-green-800 border border-green-300'
-                                                                          : allSelected
-                                                                            ? 'bg-green-200 text-green-800 border border-green-300'
-                                                                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                                                    }`}
+                                                                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors flex items-center group-hover:pr-8 ${ departmentFilter === dept ? 'bg-green-500 text-white' : partiallySelected ? 'bg-green-100 text-green-800 border border-green-300' : allSelected ? 'bg-green-200 text-green-800 border border-green-300' : 'bg-gray-200 text-gray-700 hover:bg-gray-300' }`}
                                                                 >
                                                                     {dept}
                                                                     <span className="ml-1.5 bg-white bg-opacity-20 px-1.5 py-0.5 rounded-full text-xs flex items-center">
@@ -900,13 +888,7 @@ const GenerateQuestions = () => {
                                                                     <button 
                                                                         type="button"
                                                                         onClick={() => selectAllFromDepartment(dept)}
-                                                                        className={`mr-2 h-5 w-5 rounded border flex items-center justify-center transition-colors ${
-                                                                            allSelected 
-                                                                                ? 'bg-green-500 border-green-500 text-white'
-                                                                                : someSelected
-                                                                                    ? 'bg-green-100 border-green-500 text-green-500'
-                                                                                    : 'border-gray-300 text-gray-400 hover:border-green-500'
-                                                                        }`}
+                                                                        className={`mr-2 h-5 w-5 rounded border flex items-center justify-center transition-colors ${ allSelected ? 'bg-green-500 border-green-500 text-white' : someSelected ? 'bg-green-100 border-green-500 text-green-500' : 'border-gray-300 text-gray-400 hover:border-green-500' }`}
                                                                     >
                                                                         {allSelected ? '✓' : someSelected ? '-' : '+'}
                                                                     </button>
@@ -962,9 +944,9 @@ const GenerateQuestions = () => {
                 title="Step 2: Configure Topics" 
                 icon={BookOpen} 
                 headerActions={
-                    <div className="flex items-center space-x-2">
-                        <button type="button" onClick={() => setTopicMode('common')} className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${topicMode === 'common' ? 'bg-[#0d9488] text-white shadow-md' : 'bg-gray-200 text-gray-600 hover:bg-[#0d9488] hover:text-white'}`}>Common Topic</button>
-                        <button type="button" onClick={() => setTopicMode('individual')} className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${topicMode === 'individual' ? 'bg-[#0d9488] text-white shadow-md' : 'bg-gray-200 text-gray-600 hover:bg-[#0d9488] hover:text-white'}`}>Individual Topics</button>
+                    <div className="flex flex-wrap gap-2 w-full">
+                        <button type="button" onClick={() => setTopicMode('common')} className={`flex-1 sm:flex-none px-4 py-2 rounded-full text-sm font-medium transition-all ${topicMode === 'common' ? 'bg-[#0d9488] text-white shadow-md' : 'bg-gray-200 text-gray-600 hover:bg-[#0d9488] hover:text-white'}`}>Common Topic</button>
+                        <button type="button" onClick={() => setTopicMode('individual')} className={`flex-1 sm:flex-none px-4 py-2 rounded-full text-sm font-medium transition-all ${topicMode === 'individual' ? 'bg-[#0d9488] text-white shadow-md' : 'bg-gray-200 text-gray-600 hover:bg-[#0d9488] hover:text-white'}`}>Individual Topics</button>
                     </div>
                 }
             >
@@ -1085,22 +1067,14 @@ const GenerateQuestions = () => {
                             <button
                                 type="button"
                                 onClick={() => setQuestionFormat('mcq')}
-                                className={`flex-1 py-2 px-3 rounded-full text-sm font-medium transition-all ${
-                                    questionFormat === 'mcq' 
-                                        ? 'bg-[#0d9488] text-white shadow-md' 
-                                        : 'bg-gray-200 text-gray-600 hover:bg-[#0d9488] hover:text-white'
-                                }`}
+                                className={`flex-1 py-2 px-3 rounded-full text-sm font-medium transition-all ${ questionFormat === 'mcq' ? 'bg-[#0d9488] text-white shadow-md' : 'bg-gray-200 text-gray-600 hover:bg-[#0d9488] hover:text-white' }`}
                             >
                                 MCQ Type
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setQuestionFormat('upsc')}
-                                className={`flex-1 py-2 px-3 rounded-full text-sm font-medium transition-all ${
-                                    questionFormat === 'upsc' 
-                                        ? 'bg-[#0d9488] text-white shadow-md' 
-                                        : 'bg-gray-200 text-gray-600 hover:bg-[#0d9488] hover:text-white'
-                                }`}
+                                className={`flex-1 py-2 px-3 rounded-full text-sm font-medium transition-all ${ questionFormat === 'upsc' ? 'bg-[#0d9488] text-white shadow-md' : 'bg-gray-200 text-gray-600 hover:bg-[#0d9488] hover:text-white' }`}
                             >
                                 UPSC/GK Style
                             </button>

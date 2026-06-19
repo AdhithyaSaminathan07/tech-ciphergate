@@ -299,19 +299,13 @@ const OfferLetter = () => {
               setActiveTab('generate');
               setIsViewMode(false);
             }}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'generate'
-              ? 'border-[#4a9d2d] text-[#4a9d2d]'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'generate' ? 'border-[#4a9d2d] text-[#4a9d2d]' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
           >
             Generate
           </button>
           <button
             onClick={() => setActiveTab('history')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'history'
-              ? 'border-[#4a9d2d] text-[#4a9d2d]'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'history' ? 'border-[#4a9d2d] text-[#4a9d2d]' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
           >
             History
           </button>
@@ -356,7 +350,7 @@ const OfferLetter = () => {
                       <img src="/Invoicelogo.png" alt="Logo" className="h-12 object-contain" />
                       <div
                         contentEditable={!isViewMode}
-                        className="text-[#4a9d2d] font-bold text-xl uppercase tracking-wide editable-area outline-none"
+                        className="text-[#4a9d2d] font-bold text-xl tracking-wide editable-area outline-none"
                         onBlur={(e) => handleEdit('companyName', e.target.innerText)}
                         suppressContentEditableWarning={true}
                       >
@@ -367,7 +361,7 @@ const OfferLetter = () => {
                     <img src="/vaseveda.png" alt="Veda Logo" className="h-14 object-contain" />
                   )}
                 </div>
-                <h1 className="text-[#4a9d2d] font-bold text-lg tracking-widest uppercase">
+                <h1 className="text-[#4a9d2d] font-bold text-lg tracking-widest">
                   OFFER LETTER
                 </h1>
               </div>
@@ -394,7 +388,7 @@ const OfferLetter = () => {
                   <div className="text-gray-500 font-bold text-sm mb-1 tracking-wide">TO :</div>
                   <div
                     contentEditable={!isViewMode}
-                    className="font-bold text-gray-900 text-sm uppercase mb-1 editable-area outline-none"
+                    className="font-bold text-gray-900 text-sm mb-1 editable-area outline-none"
                     onBlur={(e) => handleEdit('recipientName', e.target.innerText)}
                     suppressContentEditableWarning={true}
                   >
@@ -483,7 +477,7 @@ const OfferLetter = () => {
                   <p className="text-sm text-gray-800 mb-6 font-semibold">Accepted and Signed by:</p>
                   <div className="mb-4">
                     <span className="text-sm">Name: </span>
-                    <span className="font-bold text-sm uppercase">{formData.recipientName}</span>
+                    <span className="font-bold text-sm">{formData.recipientName}</span>
                   </div>
                   <div className="mb-4">
                     <span className="text-sm">Signature: </span>
@@ -522,7 +516,7 @@ const OfferLetter = () => {
 
         {/* Header Options */}
         <div className={`flex flex-col gap-2 w-full md:w-auto ${isViewMode ? 'opacity-50 pointer-events-none' : ''}`}>
-          <span className="text-gray-500 font-bold text-[10px] tracking-widest uppercase">SELECT HEADER:</span>
+          <span className="text-gray-500 font-bold text-[10px] tracking-widest">SELECT HEADER:</span>
           <div className="flex gap-4">
             {/* Option 1 */}
             <label className={`cursor-pointer flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${logoSelection === 'tech' ? 'border-[#4a9d2d] bg-green-50' : 'border-gray-200 hover:bg-gray-50'}`}>

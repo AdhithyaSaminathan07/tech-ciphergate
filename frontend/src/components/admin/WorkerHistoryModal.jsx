@@ -125,11 +125,7 @@ const WorkerHistoryModal = ({ isOpen, onClose, onRestore }) => {
                 <button
                   key={tab.id}
                   onClick={() => setFilterAction(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
-                    filterAction === tab.id 
-                      ? 'bg-teal-600 text-white border-teal-600 shadow-md shadow-teal-600/20' 
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-teal-200 hover:text-teal-600'
-                  }`}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${ filterAction === tab.id ? 'bg-teal-600 text-white border-teal-600 shadow-md shadow-teal-600/20' : 'bg-white text-slate-600 border-slate-200 hover:border-teal-200 hover:text-teal-600' }`}
                 >
                   {tab.icon}
                   {tab.label}
@@ -144,7 +140,7 @@ const WorkerHistoryModal = ({ isOpen, onClose, onRestore }) => {
           {isLoading ? (
             <div className="flex flex-col items-center justify-center h-64 gap-4">
               <Spinner size="lg" />
-              <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Sequencing history data...</p>
+              <p className="text-sm font-bold text-slate-400 tracking-widest">Sequencing history data...</p>
             </div>
           ) : filteredHistory.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
@@ -169,11 +165,7 @@ const WorkerHistoryModal = ({ isOpen, onClose, onRestore }) => {
                     className="group bg-white p-4 rounded-2xl border border-slate-100 hover:border-teal-100 hover:shadow-xl hover:shadow-teal-900/[0.02] transition-all relative overflow-hidden"
                   >
                     {/* Background accent */}
-                    <div className={`absolute top-0 left-0 w-1 h-full ${
-                      item.actionType === 'Deleted' ? 'bg-rose-500' : 
-                      item.actionType === 'Created' ? 'bg-emerald-500' : 
-                      item.actionType === 'Relieved' ? 'bg-orange-500' : 'bg-blue-500'
-                    } opacity-0 group-hover:opacity-100 transition-opacity`} />
+                    <div className={`absolute top-0 left-0 w-1 h-full ${ item.actionType === 'Deleted' ? 'bg-rose-500' : item.actionType === 'Created' ? 'bg-emerald-500' : item.actionType === 'Relieved' ? 'bg-orange-500' : 'bg-blue-500' } opacity-0 group-hover:opacity-100 transition-opacity`} />
 
                     <div className="flex items-start gap-4">
                       {/* Left: Action Icon */}
@@ -183,29 +175,29 @@ const WorkerHistoryModal = ({ isOpen, onClose, onRestore }) => {
 
                       {/* Middle: Details */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-4 mb-1">
-                          <div className="flex items-center gap-2 overflow-hidden">
-                            <span className="font-black text-slate-900 truncate">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 mb-2">
+                          <div className="flex items-center gap-2 overflow-hidden w-full sm:w-auto">
+                            <span className="font-bold text-sm text-slate-900 truncate">
                               {item.employee ? item.employee.name : 'Unknown Employee'}
                             </span>
                             {item.employee?.status === 'Deleted' && (
-                              <span className="px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-600 text-[9px] font-black uppercase tracking-wider border border-rose-100">Deleted</span>
+                              <span className="px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-600 text-[9px] font-black tracking-wider border border-rose-100 shrink-0">Deleted</span>
                             )}
                           </div>
-                          <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-lg">
+                          <span className="text-[10px] font-bold text-slate-500 whitespace-nowrap flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-lg w-fit shrink-0">
                             <Clock size={10} />
                             {new Date(item.createdAt).toLocaleDateString()} • {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
-                          <span className={`px-2 py-0.5 rounded-md border text-[10px] font-black uppercase tracking-widest ${getActionColor(item.actionType)}`}>
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 font-medium">
+                          <span className={`px-2 py-0.5 rounded-md border text-[10px] font-black tracking-widest shrink-0 ${getActionColor(item.actionType)}`}>
                             {item.actionType}
                           </span>
-                          <span className="text-slate-300">•</span>
-                          <div className="flex items-center gap-1.5 truncate">
-                            <User size={12} className="text-slate-400" />
-                            <span>Action by: <span className="text-slate-700 font-bold">{item.performedBy ? item.performedBy.name || item.performedBy.email : 'System'}</span></span>
+                          <span className="text-slate-300 hidden sm:inline">•</span>
+                          <div className="flex items-center gap-1.5 truncate w-full sm:w-auto mt-1 sm:mt-0 bg-slate-50 sm:bg-transparent px-2 py-1 sm:p-0 rounded-md">
+                            <User size={12} className="text-slate-400 shrink-0" />
+                            <span className="truncate text-[11px]">Action by: <span className="text-slate-700 font-bold">{item.performedBy ? item.performedBy.name || item.performedBy.email : 'System'}</span></span>
                           </div>
                         </div>
                       </div>
@@ -232,10 +224,10 @@ const WorkerHistoryModal = ({ isOpen, onClose, onRestore }) => {
 
         {/* Footer info */}
         <div className="p-4 bg-white border-t border-slate-100 flex justify-between items-center px-8">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Secure Audit Trail v2.0</p>
+          <p className="text-[10px] font-black text-slate-400 tracking-[0.2em]">Secure Audit Trail v2.0</p>
           <div className="flex gap-2">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Real-time Activity Sync</p>
+            <p className="text-[10px] font-black text-emerald-600 tracking-widest">Real-time Activity Sync</p>
           </div>
         </div>
       </div>

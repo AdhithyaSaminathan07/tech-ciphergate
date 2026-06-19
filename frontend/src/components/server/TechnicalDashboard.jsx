@@ -45,19 +45,19 @@ const TechnicalDashboard = () => {
 
     if (activeStates.includes(statusVal)) {
       return (
-        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase bg-teal-50 text-teal-700 border border-teal-100">
+        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-100">
           <FiCheckCircle size={10} /> {statusVal}
         </span>
       );
     } else if (pendingStates.includes(statusVal)) {
       return (
-        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase bg-amber-50 text-amber-700 border border-amber-100">
+        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100">
           <FiClock size={10} /> {statusVal}
         </span>
       );
     } else {
       return (
-        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase bg-rose-50 text-rose-700 border border-rose-100">
+        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-100">
           <FiAlertCircle size={10} /> {statusVal || 'Failed'}
         </span>
       );
@@ -129,7 +129,7 @@ const TechnicalDashboard = () => {
                 <FiCloud size={20} />
               </div>
               <div>
-                <h3 className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">AWS Org Accounts</h3>
+                <h3 className="text-slate-400 text-[10px] font-bold tracking-wider">AWS Org Accounts</h3>
                 <p className="text-xl font-bold text-slate-900 mt-0.5">{accounts.length}</p>
                 <span className="text-[10px] text-slate-400 font-semibold">
                   {connectedCount} Connected · {pendingCount + failedCount} Inactive
@@ -143,7 +143,7 @@ const TechnicalDashboard = () => {
                 <FiLayers size={20} />
               </div>
               <div>
-                <h3 className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Total Ingested Rows</h3>
+                <h3 className="text-slate-400 text-[10px] font-bold tracking-wider">Total Ingested Rows</h3>
                 <p className="text-xl font-bold text-slate-900 mt-0.5">
                   {(lakeStatus?.sync?.totalRecords || 0).toLocaleString()}
                 </p>
@@ -159,7 +159,7 @@ const TechnicalDashboard = () => {
                 <FiDatabase size={20} />
               </div>
               <div>
-                <h3 className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Glue Schema State</h3>
+                <h3 className="text-slate-400 text-[10px] font-bold tracking-wider">Glue Schema State</h3>
                 <p className="text-xl font-bold text-slate-900 mt-0.5">
                   {lakeStatus?.glue?.status === 'Cataloged' ? 'Cataloged' : 'Unconfigured'}
                 </p>
@@ -175,7 +175,7 @@ const TechnicalDashboard = () => {
                 <FiServer size={20} />
               </div>
               <div>
-                <h3 className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Sync Connection</h3>
+                <h3 className="text-slate-400 text-[10px] font-bold tracking-wider">Sync Connection</h3>
                 <p className="text-xs font-bold text-slate-900 mt-1 truncate">
                   {lakeStatus?.sync?.lastSyncFormatted || 'Never'}
                 </p>
@@ -207,7 +207,7 @@ const TechnicalDashboard = () => {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 tracking-wider">
                         <th className="pb-3">Account Name</th>
                         <th className="pb-3">AWS Account ID</th>
                         <th className="pb-3">Connection</th>

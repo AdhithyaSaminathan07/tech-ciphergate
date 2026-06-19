@@ -152,11 +152,7 @@ const LeaveManagement = () => {
 
   const LeaveItem = ({ leave }) => (
     <Card
-      className={`mb-4 border-t-4 ${leave.status === 'Approved' ? 'border-green-500' :
-        leave.status === 'Rejected' ? 'border-red-500' :
-          'border-yellow-500'
-        } ${leave.leaveType === 'Permission' ? 'bg-blue-50' : ''
-        }`}
+      className={`mb-4 border-t-4 ${leave.status === 'Approved' ? 'border-green-500' : leave.status === 'Rejected' ? 'border-red-500' : 'border-yellow-500' } ${leave.leaveType === 'Permission' ? 'bg-blue-50' : '' }`}
     >
       <div className="flex justify-between">
         <div>
@@ -194,14 +190,14 @@ const LeaveManagement = () => {
           </p>
           {leave.leaveType === 'Paid Leave' && (
             <div className="mt-2 flex flex-wrap gap-1">
-              {/* <span className="bg-teal-50 text-teal-700 px-2.5 py-1 rounded-full text-[10px] font-black border border-teal-100 uppercase tracking-tighter shadow-sm flex items-center">
+              {/* <span className="bg-teal-50 text-teal-700 px-2.5 py-1 rounded-full text-[10px] font-black border border-teal-100 tracking-tighter shadow-sm flex items-center">
                 <FiDollarSign className="mr-0.5" /> SALARY: PAID (INDEPENDENT OF APPROVAL)
               </span> */}
             </div>
           )}
           {leave.leaveType !== 'Permission' && leave.leaveType !== 'Paid Leave' && leave.deductionFactor > 1 && (
             <div className="mt-2 flex flex-wrap gap-1">
-              <span className="bg-red-100 text-red-700 px-2.5 py-1 rounded text-[10px] font-bold border border-red-200 uppercase tracking-tighter shadow-sm flex items-center">
+              <span className="bg-red-100 text-red-700 px-2.5 py-1 rounded text-[10px] font-bold border border-red-200 tracking-tighter shadow-sm flex items-center">
                 <FiDollarSign className="mr-0.5" /> {leave.deductionFactor}X Deduction
               </span>
               {leave.penaltyReasons?.attendanceRule && (
@@ -218,12 +214,7 @@ const LeaveManagement = () => {
           )}
         </div>
         <span
-          className={`px-2 h-8 flex justify-center items-center rounded-full text-xs ${leave.status === 'Approved'
-            ? 'bg-green-100 text-green-800'
-            : leave.status === 'Rejected'
-              ? 'bg-red-100 text-red-800'
-              : 'bg-yellow-100 text-yellow-800'
-            }`}
+          className={`px-2 h-8 flex justify-center items-center rounded-full text-xs ${leave.status === 'Approved' ? 'bg-green-100 text-green-800' : leave.status === 'Rejected' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800' }`}
         >
           {leave.status}
         </span>
@@ -255,67 +246,70 @@ const LeaveManagement = () => {
   const displayLeaves = showAllLeaves ? filteredLeaves : filteredLeaves.slice(0, 5);
 
   const getTabClassName = (tabName) => {
-    return `px-3 py-1 rounded-md cursor-pointer ${activeView === tabName
-      ? 'bg-[#0d9488] text-white'
-      : 'bg-gray-200 text-gray-700 hover:bg-[#0d9488] hover:text-white'
+    return `px-4 py-1.5 rounded-[10px] text-sm font-semibold cursor-pointer whitespace-nowrap transition-all shadow-sm border border-transparent ${activeView === tabName
+      ? 'bg-teal-600 text-white border-teal-600'
+      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
       }`;
   };
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6 md:hidden">Leave Management</h1>
+    <div className="max-w-[1600px] mx-auto pb-8">
+      <h1 className="text-2xl font-display font-bold text-slate-900 tracking-tight mb-6 md:hidden px-2">Leave Management</h1>
 
       {loading ? (
         <Spinner size="md" variant="default" />
       ) : leaves.length === 0 ? (
-        <p>No leave requests submitted yet.</p>
+        <p className="px-2 text-slate-500">No leave requests submitted yet.</p>
       ) : (
         <div>
-          <div className="bg-white p-4 rounded-lg shadow mb-6">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <FaSearch className="text-gray-400" />
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Search by employee name or leave type"
-                    className="pl-10 pr-4 py-2 w-full border rounded-md"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
+          {/* Advanced Control Bar */}
+          <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200/80 mb-6">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1 relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <FaSearch className="text-slate-400 w-4 h-4" />
                 </div>
+                <input
+                  type="text"
+                  placeholder="Search by employee name or leave type..."
+                  className="pl-9 pr-4 py-2 w-full bg-slate-50/50 border border-slate-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#0d9488]/20 focus:border-[#0d9488] transition-all shadow-sm"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
               </div>
-              <button
-                onClick={clearFilters}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-full hover:bg-[#0d9488] hover:text-white"
-              >
-                Clear Filters
-              </button>
+              {searchTerm && (
+                <button
+                  onClick={clearFilters}
+                  className="px-4 py-2 bg-slate-100 text-slate-600 text-sm font-bold rounded-[10px] hover:bg-slate-200 transition-all whitespace-nowrap"
+                >
+                  Clear Filters
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold">Leave List</h2>
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-500">
-                Showing {displayLeaves.length} of {filteredLeaves.length} leaves
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3 px-1">
+            <h2 className="text-lg font-display font-bold text-slate-900">Leave List</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-slate-500 font-bold bg-slate-100 px-2.5 py-1 rounded-md">
+                Showing {displayLeaves.length} of {filteredLeaves.length}
               </span>
-              <button
-                onClick={() => setShowAllLeaves(!showAllLeaves)}
-                className="text-[#0d9488] hover:text-[#0d9488] text-sm flex items-center"
-              >
-                {showAllLeaves ? (
-                  <>Show Less {<FaChevronUp className="ml-1" />}</>
-                ) : (
-                  <>Show All {<FaChevronDown className="ml-1" />}</>
-                )}
-              </button>
+              {filteredLeaves.length > 5 && (
+                <button
+                  onClick={() => setShowAllLeaves(!showAllLeaves)}
+                  className="text-teal-600 hover:text-teal-700 text-xs font-bold flex items-center bg-teal-50 px-2.5 py-1 rounded-md border border-teal-100"
+                >
+                  {showAllLeaves ? (
+                    <>Show Less <FaChevronUp className="ml-1" /></>
+                  ) : (
+                    <>Show All <FaChevronDown className="ml-1" /></>
+                  )}
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="flex space-x-2 mb-4 overflow-x-auto">
+          <div className="flex gap-2 mb-5 overflow-x-auto no-scrollbar pb-1 px-1">
             <div
               className={getTabClassName('all')}
               onClick={() => setActiveView('all')}

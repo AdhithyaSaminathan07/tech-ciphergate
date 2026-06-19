@@ -84,7 +84,7 @@ const Forecasting = () => {
           <div key={label} className="bg-white/80 backdrop-blur-md p-5 rounded-2xl border border-slate-100 shadow-sm space-y-3">
             <div className="flex items-center gap-2">
               <FiCalendar className={`text-${color}-500`} size={16} />
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide">{label}</h3>
+              <h3 className="text-xs font-bold text-slate-500 tracking-wide">{label}</h3>
             </div>
             {isLoading ? (
               <div className="h-16 flex items-center justify-center">
@@ -164,7 +164,7 @@ const Forecasting = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                <tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400 tracking-wider">
                   <th className="pb-3">Type</th>
                   <th className="pb-3 text-right">Predicted Spend</th>
                   <th className="pb-3 text-right">Baseline</th>

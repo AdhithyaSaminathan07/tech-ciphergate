@@ -328,11 +328,7 @@ const validateTopic = (topic, date) => {
             
             <button
               onClick={() => setCurrentWeekOffset(currentWeekOffset + 1)}
-              className={`flex items-center px-4 py-2 rounded-lg transition-colors ${
-                currentWeekOffset >= 0 
-                  ? 'text-gray-400 cursor-not-allowed' 
-                  : 'text-gray-700 hover:text-blue-600 hover:bg-blue-50'
-              }`}
+              className={`flex items-center px-4 py-2 rounded-lg transition-colors ${ currentWeekOffset >= 0 ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700 hover:text-blue-600 hover:bg-blue-50' }`}
               disabled={currentWeekOffset >= 0}
             >
               Next Week
@@ -352,13 +348,7 @@ const validateTopic = (topic, date) => {
               return (
                 <div
                   key={date}
-                  className={`relative p-4 rounded-xl transition-all hover:shadow-lg ${
-                    isToday ? 'bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-400 shadow-md' : 
-                    isFuture ? 'bg-gray-50 border border-gray-200' :
-                    topic ? 'bg-green-50 border border-green-300' :
-                    isWeekend ? 'bg-orange-50 border border-orange-200' :
-                    'bg-white border border-gray-300 hover:border-blue-300'
-                  }`}
+                  className={`relative p-4 rounded-xl transition-all hover:shadow-lg ${ isToday ? 'bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-400 shadow-md' : isFuture ? 'bg-gray-50 border border-gray-200' : topic ? 'bg-green-50 border border-green-300' : isWeekend ? 'bg-orange-50 border border-orange-200' : 'bg-white border border-gray-300 hover:border-blue-300' }`}
                 >
                   {isToday && (
                     <div className="absolute -top-2 -right-2">
@@ -369,9 +359,7 @@ const validateTopic = (topic, date) => {
                     </div>
                   )}
                   
-                  <div className={`text-sm font-bold mb-1 ${
-                    isToday ? 'text-blue-700' : 'text-gray-700'
-                  }`}>
+                  <div className={`text-sm font-bold mb-1 ${ isToday ? 'text-blue-700' : 'text-gray-700' }`}>
                     {dayName}
                   </div>
                   <div className="text-xs text-gray-500 mb-3">
