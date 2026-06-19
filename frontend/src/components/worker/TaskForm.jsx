@@ -209,7 +209,7 @@ return (
             {displayedTopics.map((topic) => (
               <div 
                 key={topic._id} 
-                className={`p-3 rounded-xl border ${selectedTopics.includes(topic._id) || (selectedSubtopics[topic._id] && selectedSubtopics[topic._id].length > 0) ? 'bg-blue-50 border-blue-200 shadow-sm' // Highlight selected topic : 'bg-gray-50 border-gray-100' } flex flex-col transition-all`}
+                className={`p-3 rounded-xl border ${selectedTopics.includes(topic._id) || (selectedSubtopics[topic._id] && selectedSubtopics[topic._id].length > 0) ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-gray-50 border-gray-100'} flex flex-col transition-all`}
               >
                 <label className="inline-flex items-center gap-2 mb-1 cursor-pointer flex-shrink-0">
                   <input

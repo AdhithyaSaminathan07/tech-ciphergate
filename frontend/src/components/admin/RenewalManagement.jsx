@@ -413,6 +413,7 @@ const RenewalManagement = () => {
     );
   };
 
+  return (
     <div className="max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 pb-8">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4 mt-2 md:mt-0">
