@@ -45,7 +45,7 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
   attendanceData.forEach(att => {
     if (att.presence === true) {
       // Attendance date is stored as a string in the DB
-      const dStr = typeof att.date === 'string' ? att.date : new Date(att.date).toISOString().split('T')[0];
+      const dStr = typeof att.date === 'string' ? att.date : indiaDateFormatter.format(new Date(att.date));
       punchInDates.add(dStr);
     }
   });
@@ -53,7 +53,7 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
   // Build holiday date set for quick lookup
   const holidayDates = new Set();
   holidays.forEach(h => {
-    const hDate = new Date(h.date).toISOString().split('T')[0];
+    const hDate = indiaDateFormatter.format(new Date(h.date));
     holidayDates.add(hDate);
   });
 
@@ -63,10 +63,10 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
   // Iterate every day in the report range
   const d = new Date(fromDateObj);
   while (d <= toDateObj) {
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = indiaDateFormatter.format(d);
 
-    // ── Safety Rule: Only evaluate PAST days (end-of-day validation) ──
-    if (dateStr >= todayStr) {
+    // ── Safety Rule: Only evaluate PAST and PRESENT days ──
+    if (dateStr > todayStr) {
       d.setDate(d.getDate() + 1);
       continue;
     }
@@ -91,8 +91,8 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
 
     // ── Find any leaves covering this date (full-day types only) ──
     const leavesForDay = fullDayLeaves.filter(l => {
-      const start = new Date(l.startDate).toISOString().split('T')[0];
-      const end = new Date(l.endDate).toISOString().split('T')[0];
+      const start = indiaDateFormatter.format(new Date(l.startDate));
+      const end = indiaDateFormatter.format(new Date(l.endDate));
       return dateStr >= start && dateStr <= end;
     });
 

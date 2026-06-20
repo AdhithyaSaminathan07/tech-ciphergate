@@ -165,6 +165,7 @@ const getScoreboard = async (req, res) => {
             { $match: matchQuery },
             { $lookup: { from: 'workers', localField: 'worker', foreignField: '_id', as: 'workerInfo' } },
             { $unwind: '$workerInfo' },
+            { $match: { 'workerInfo.status': 'Active' } },
             {
                 $lookup: {
                     from: 'departments',
@@ -250,6 +251,7 @@ const getGlobalScoreboard = async (req, res) => {
             },
             { $lookup: { from: 'workers', localField: '_id', foreignField: '_id', as: 'workerInfo' } },
             { $unwind: '$workerInfo' },
+            { $match: { 'workerInfo.status': 'Active' } },
             {
                 $lookup: {
                     from: 'departments',

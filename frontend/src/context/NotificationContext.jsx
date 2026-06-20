@@ -74,7 +74,7 @@ export const NotificationProvider = ({ children }) => {
             // Show Toast if tab is focused
             if (document.hasFocus()) {
                 toast.info(`🔔 ${notification.title}: ${notification.message}`, {
-                    autoClose: 5000,
+                    autoClose: 3500,
                     position: 'top-right',
                     theme: 'dark',
                     onClick: () => {

@@ -74,13 +74,13 @@ export default defineConfig({
             injectManifest: {
                 maximumFileSizeToCacheInBytes: 5000000, // 5MB limit
                 globIgnores: [
-                  '**/models/**/*',          // Exclude ML models from precaching (load on-demand)
-                  '**/Invoicelogo.pngg',      // Exclude unused duplicate image
-                  '**/*.mp4',                // Exclude video files
-                  '**/*.bak',                // Exclude backup files
-                  '**/*.backup.jsx',         // Exclude backup files
-                  '**/*.fixed.jsx',          // Exclude backup files
-                  '**/node_modules/**/*'
+                    '**/models/**/*',          // Exclude ML models from precaching (load on-demand)
+                    '**/Invoicelogo.pngg',      // Exclude unused duplicate image
+                    '**/*.mp4',                // Exclude video files
+                    '**/*.bak',                // Exclude backup files
+                    '**/*.backup.jsx',         // Exclude backup files
+                    '**/*.fixed.jsx',          // Exclude backup files
+                    '**/node_modules/**/*'
                 ]
             },
             devOptions: {
@@ -99,7 +99,7 @@ export default defineConfig({
                 manualChunks(id) {
                     if (id.includes('node_modules')) {
                         // Split heavy libraries into their own chunks
-                        if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) return 'react-vendor';
+                        if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/') || id.includes('node_modules/scheduler/')) return 'react-vendor';
                         if (id.includes('face-api.js')) return 'face-api';
                         if (id.includes('jspdf')) return 'pdf-lib';
                         if (id.includes('exceljs')) return 'exceljs-lib';
@@ -119,7 +119,7 @@ export default defineConfig({
                         if (id.includes('html2canvas')) return 'html2canvas-lib';
                         if (id.includes('jsqr')) return 'jsqr-lib';
                         if (id.includes('qrcode')) return 'qrcode-lib';
-                        
+
                         // Default vendor chunk for smaller libraries
                         return 'vendor';
                     }

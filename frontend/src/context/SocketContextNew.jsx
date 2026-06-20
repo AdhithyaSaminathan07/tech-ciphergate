@@ -40,8 +40,8 @@ export const SocketProvider = ({ children }) => {
         }
 
         const newSocket = io(socketUrl, {
-            // Allow fallback to polling if websocket fails initially
-            transports: ['websocket', 'polling'],
+            // Start with polling, then upgrade to websocket (default behavior)
+            transports: ['polling', 'websocket'],
 
             // Pass JWT in handshake auth - checked by backend middleware
             auth: { token },
