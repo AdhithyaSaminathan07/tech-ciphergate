@@ -867,15 +867,15 @@ const WorkerManagement = () => {
           <p className="text-sm text-slate-500 mt-1 leading-snug">Manage, filter and track your workforce efficiently.</p>
         </div>
         <div className="flex items-center gap-2 w-full md:w-auto mt-2 md:mt-0">
-          <Button 
-            variant="outline" 
+          <button 
+            type="button"
             onClick={() => setIsHistoryModalOpen(true)} 
-            className="flex shrink-0 items-center justify-center bg-white border-slate-200 hover:bg-slate-50 text-slate-700 shadow-sm w-[38px] h-[38px] md:w-auto md:px-3 rounded-[10px] transition-all !p-0 md:!py-2"
+            className="flex shrink-0 items-center justify-center bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 shadow-sm w-[38px] h-[38px] md:w-auto md:px-3 rounded-[10px] transition-all focus:outline-none focus:ring-2 focus:ring-[#0d9488]/20 focus:border-[#0d9488] !p-0 md:!py-2 text-sm font-semibold"
             title="History"
           >
             <FaHistory className="text-slate-500" size={15} />
-            <span className="hidden md:inline ml-1.5 text-sm font-semibold">History</span>
-          </Button>
+            <span className="hidden md:inline ml-1.5">History</span>
+          </button>
           <Button 
             variant="primary" 
             onClick={openAddModal} 

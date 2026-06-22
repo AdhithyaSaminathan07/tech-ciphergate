@@ -16,7 +16,7 @@ const patchToastMethod = (methodName) => {
     }
 
     return originalMethod(
-      ({ closeToast }) => <CustomToast type={type} content={content} closeToast={closeToast} />,
+      <CustomToast type={type} content={content} />,
       {
         icon: false,
         closeButton: false,

@@ -290,13 +290,13 @@ const AcceptanceLetter = () => {
               setActiveTab('generate');
               setIsViewMode(false);
             }}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'generate' ? 'border-[#4a9d2d] text-[#4a9d2d]' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'generate' ? 'border-[#4a9d2d] text-[#4a9d2d]' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
           >
             Generate
           </button>
           <button
             onClick={() => setActiveTab('history')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'history' ? 'border-[#4a9d2d] text-[#4a9d2d]' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }`}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'history' ? 'border-[#4a9d2d] text-[#4a9d2d]' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
           >
             History
           </button>
@@ -321,228 +321,228 @@ const AcceptanceLetter = () => {
             </div>
           )}
 
-      {/* Helper Text */}
-      <div className="flex items-center gap-2 mb-4 text-gray-500 bg-white px-4 py-2 rounded-full shadow-sm text-sm">
-        <FaPen className="text-[#4a9d2d] w-3 h-3" />
-        <span>Tip: Click directly on any text inside the letter to edit it.</span>
-      </div>
+          {/* Helper Text */}
+          <div className="flex items-center gap-2 mb-4 text-gray-500 bg-white px-4 py-2 rounded-full shadow-sm text-sm">
+            <FaPen className="text-[#4a9d2d] w-3 h-3" />
+            <span>Tip: Click directly on any text inside the letter to edit it.</span>
+          </div>
 
-      {/* --- A4 DOCUMENT --- */}
-      <div className="w-full overflow-hidden flex justify-center md:block md:w-auto md:overflow-visible my-4 md:my-0">
-        <div className="transform origin-top scale-[0.45] sm:scale-[0.6] md:scale-100">
-          <div ref={letterRef} className={`acceptance-container a4-size ${isViewMode ? 'pointer-events-none' : ''}`}>
-            <div className="page-content flex flex-col h-full relative">
+          {/* --- A4 DOCUMENT --- */}
+          <div className="w-full overflow-hidden flex justify-center md:block md:w-auto md:overflow-visible my-4 md:my-0">
+            <div className="transform origin-top scale-[0.45] sm:scale-[0.6] md:scale-100">
+              <div ref={letterRef} className={`acceptance-container a4-size ${isViewMode ? 'pointer-events-none' : ''}`}>
+                <div className="page-content flex flex-col h-full relative">
 
-              {/* 1. Header (Logo Only) */}
-              <div className="flex items-center gap-3 mb-2">
-                {logoSelection === 'tech' ? (
-                  <div className="flex items-center gap-2">
-                    <img src="/Invoicelogo.png" alt="Logo" className="h-12 object-contain" />
-                    <div
-                      contentEditable={!isViewMode}
-                      className="text-[#4a9d2d] font-bold text-xl tracking-wide editable-area outline-none"
-                      onBlur={(e) => handleEdit('companyName', e.target.innerText)}
-                      suppressContentEditableWarning={true}
-                    >
-                      {formData.companyName}
-                    </div>
-                  </div>
-                ) : (
-                  <img src="/vaseveda.png" alt="Veda Logo" className="h-14 object-contain" />
-                )}
-              </div>
-
-              {/* 2. Header Separator (Exact Style) */}
-              <div className="header-separator-container">
-                <div className="header-thin-line"></div>
-                <div className="header-thick-line"></div>
-              </div>
-
-              {/* 3. Date (Right Aligned, Green) */}
-              <div className="text-right mb-8">
-                <div
-                  contentEditable={!isViewMode}
-                  className="text-[#4a9d2d] font-bold text-sm tracking-wide editable-area outline-none inline-block"
-                  onBlur={(e) => handleEdit('date', e.target.innerText)}
-                  suppressContentEditableWarning={true}
-                >
-                  {formData.date}
-                </div>
-              </div>
-
-              {/* 4. Title (Centered, Green) */}
-              <div className="text-center mb-10">
-                <h1 className="text-[#4a9d2d] font-bold text-lg tracking-wide">
-                  ACCEPTANCE LETTER
-                </h1>
-              </div>
-
-              {/* 5. Content Block */}
-              <div className="flex flex-col gap-6 text-sm text-gray-800">
-
-                {/* Recipient Address */}
-                <div
-                  contentEditable={!isViewMode}
-                  className="whitespace-pre-line leading-relaxed font-medium text-gray-900 editable-area outline-none"
-                  onBlur={(e) => handleEdit('recipientLines', e.target.innerText)}
-                  suppressContentEditableWarning={true}
-                >
-                  {formData.recipientLines}
-                </div>
-
-                {/* Subject */}
-                <div
-                  contentEditable={!isViewMode}
-                  className="font-bold text-gray-900 editable-area outline-none mt-2"
-                  onBlur={(e) => handleEdit('subject', e.target.innerText)}
-                  suppressContentEditableWarning={true}
-                >
-                  {formData.subject}
-                </div>
-
-                {/* Paragraphs */}
-                <div className="space-y-6 text-justify leading-7">
-                  <div
-                    contentEditable={!isViewMode}
-                    className="editable-area outline-none"
-                    onBlur={(e) => handleEdit('para1', e.target.innerText)}
-                    suppressContentEditableWarning={true}
-                  >
-                    {formData.para1}
-                  </div>
-
-                  <div
-                    contentEditable={!isViewMode}
-                    className="editable-area outline-none"
-                    onBlur={(e) => handleEdit('para2', e.target.innerText)}
-                    suppressContentEditableWarning={true}
-                  >
-                    {formData.para2}
-                  </div>
-                </div>
-
-                {/* Signatory Section (Left Aligned) */}
-                <div className="mt-8">
-                  <div
-                    contentEditable={!isViewMode}
-                    className="text-[#4a9d2d] font-medium editable-area outline-none"
-                    onBlur={(e) => handleEdit('closing', e.target.innerText)}
-                    suppressContentEditableWarning={true}
-                  >
-                    {formData.closing}
-                  </div>
-
-                  <div
-                    contentEditable={!isViewMode}
-                    className="text-[#4a9d2d] font-bold mb-2 editable-area outline-none"
-                    onBlur={(e) => handleEdit('forCompany', e.target.innerText)}
-                    suppressContentEditableWarning={true}
-                  >
-                    {formData.forCompany}
-                  </div>
-
-                  {/* Signature Image - Increased size for upload */}
-                  <div className="h-32 mb-2 flex items-center">
-                    {signatures.signature ? (
-                      <img src={signatures.signature} alt="Sign" className="max-h-full max-w-[350px] object-contain" />
+                  {/* 1. Header (Logo Only) */}
+                  <div className="flex items-center gap-3 mb-2">
+                    {logoSelection === 'tech' ? (
+                      <div className="flex items-center gap-2">
+                        <img src="/Invoicelogo.png" alt="Logo" className="h-12 object-contain" />
+                        <div
+                          contentEditable={!isViewMode}
+                          className="text-[#4a9d2d] font-bold text-xl tracking-wide editable-area outline-none"
+                          onBlur={(e) => handleEdit('companyName', e.target.innerText)}
+                          suppressContentEditableWarning={true}
+                        >
+                          {formData.companyName}
+                        </div>
+                      </div>
                     ) : (
-                      <span className="text-gray-300 italic text-xs border border-dashed p-2">Signature Area</span>
+                      <img src="/vaseveda.png" alt="Veda Logo" className="h-14 object-contain" />
                     )}
                   </div>
 
-                  <div
-                    contentEditable={!isViewMode}
-                    className="text-[#4a9d2d] font-bold text-sm editable-area outline-none"
-                    onBlur={(e) => handleEdit('signatoryName', e.target.innerText)}
-                    suppressContentEditableWarning={true}
-                  >
-                    {formData.signatoryName}
+                  {/* 2. Header Separator (Exact Style) */}
+                  <div className="header-separator-container">
+                    <div className="header-thin-line"></div>
+                    <div className="header-thick-line"></div>
                   </div>
-                  <div
-                    contentEditable={!isViewMode}
-                    className="text-[#4a9d2d] font-bold text-sm editable-area outline-none"
-                    onBlur={(e) => handleEdit('signatoryTitle', e.target.innerText)}
-                    suppressContentEditableWarning={true}
-                  >
-                    {formData.signatoryTitle}
+
+                  {/* 3. Date (Right Aligned, Green) */}
+                  <div className="text-right mb-8">
+                    <div
+                      contentEditable={!isViewMode}
+                      className="text-[#4a9d2d] font-bold text-sm tracking-wide editable-area outline-none inline-block"
+                      onBlur={(e) => handleEdit('date', e.target.innerText)}
+                      suppressContentEditableWarning={true}
+                    >
+                      {formData.date}
+                    </div>
                   </div>
+
+                  {/* 4. Title (Centered, Green) */}
+                  <div className="text-center mb-10">
+                    <h1 className="text-[#4a9d2d] font-bold text-lg tracking-wide">
+                      ACCEPTANCE LETTER
+                    </h1>
+                  </div>
+
+                  {/* 5. Content Block */}
+                  <div className="flex flex-col gap-6 text-sm text-gray-800">
+
+                    {/* Recipient Address */}
+                    <div
+                      contentEditable={!isViewMode}
+                      className="whitespace-pre-line leading-relaxed font-medium text-gray-900 editable-area outline-none"
+                      onBlur={(e) => handleEdit('recipientLines', e.target.innerText)}
+                      suppressContentEditableWarning={true}
+                    >
+                      {formData.recipientLines}
+                    </div>
+
+                    {/* Subject */}
+                    <div
+                      contentEditable={!isViewMode}
+                      className="font-bold text-gray-900 editable-area outline-none mt-2"
+                      onBlur={(e) => handleEdit('subject', e.target.innerText)}
+                      suppressContentEditableWarning={true}
+                    >
+                      {formData.subject}
+                    </div>
+
+                    {/* Paragraphs */}
+                    <div className="space-y-6 text-justify leading-7">
+                      <div
+                        contentEditable={!isViewMode}
+                        className="editable-area outline-none"
+                        onBlur={(e) => handleEdit('para1', e.target.innerText)}
+                        suppressContentEditableWarning={true}
+                      >
+                        {formData.para1}
+                      </div>
+
+                      <div
+                        contentEditable={!isViewMode}
+                        className="editable-area outline-none"
+                        onBlur={(e) => handleEdit('para2', e.target.innerText)}
+                        suppressContentEditableWarning={true}
+                      >
+                        {formData.para2}
+                      </div>
+                    </div>
+
+                    {/* Signatory Section (Left Aligned) */}
+                    <div className="mt-8">
+                      <div
+                        contentEditable={!isViewMode}
+                        className="text-[#4a9d2d] font-medium editable-area outline-none"
+                        onBlur={(e) => handleEdit('closing', e.target.innerText)}
+                        suppressContentEditableWarning={true}
+                      >
+                        {formData.closing}
+                      </div>
+
+                      <div
+                        contentEditable={!isViewMode}
+                        className="text-[#4a9d2d] font-bold mb-2 editable-area outline-none"
+                        onBlur={(e) => handleEdit('forCompany', e.target.innerText)}
+                        suppressContentEditableWarning={true}
+                      >
+                        {formData.forCompany}
+                      </div>
+
+                      {/* Signature Image - Increased size for upload */}
+                      <div className="h-32 mb-2 flex items-center">
+                        {signatures.signature ? (
+                          <img src={signatures.signature} alt="Sign" className="max-h-full max-w-[350px] object-contain" />
+                        ) : (
+                          <span className="text-gray-300 italic text-xs border border-dashed p-2">Signature Area</span>
+                        )}
+                      </div>
+
+                      <div
+                        contentEditable={!isViewMode}
+                        className="text-[#4a9d2d] font-bold text-sm editable-area outline-none"
+                        onBlur={(e) => handleEdit('signatoryName', e.target.innerText)}
+                        suppressContentEditableWarning={true}
+                      >
+                        {formData.signatoryName}
+                      </div>
+                      <div
+                        contentEditable={!isViewMode}
+                        className="text-[#4a9d2d] font-bold text-sm editable-area outline-none"
+                        onBlur={(e) => handleEdit('signatoryTitle', e.target.innerText)}
+                        suppressContentEditableWarning={true}
+                      >
+                        {formData.signatoryTitle}
+                      </div>
+                    </div>
+
+                  </div>
+
                 </div>
 
+                {/* 6. Footer (Specific to Acceptance Letter Image) */}
+                <div className="relative pb-5 pt-2">
+                  <div className="border-t border-[#4a9d2d] mx-12 mb-2"></div>
+                  <div className="flex flex-col items-center justify-center px-12 footer-text font-bold">
+                    <div className="flex gap-2">
+                      <span contentEditable={!isViewMode} onBlur={(e) => handleEdit('footerLine1', e.target.innerText)} className="editable-area outline-none" suppressContentEditableWarning={true}>
+                        {formData.footerLine1}
+                      </span>
+                      <span contentEditable={!isViewMode} onBlur={(e) => handleEdit('footerLine2', e.target.innerText)} className="editable-area outline-none" suppressContentEditableWarning={true}>
+                        {formData.footerLine2}
+                      </span>
+                    </div>
+                    <div contentEditable={!isViewMode} onBlur={(e) => handleEdit('footerLine3', e.target.innerText)} className="editable-area outline-none mt-1" suppressContentEditableWarning={true}>
+                      {formData.footerLine3}
+                    </div>
+                  </div>
+                  <div className="green-footer-stripe"></div>
+                </div>
               </div>
-
-            </div>
-
-            {/* 6. Footer (Specific to Acceptance Letter Image) */}
-            <div className="relative pb-5 pt-2">
-              <div className="border-t border-[#4a9d2d] mx-12 mb-2"></div>
-              <div className="flex flex-col items-center justify-center px-12 footer-text font-bold">
-                <div className="flex gap-2">
-                  <span contentEditable={!isViewMode} onBlur={(e) => handleEdit('footerLine1', e.target.innerText)} className="editable-area outline-none" suppressContentEditableWarning={true}>
-                    {formData.footerLine1}
-                  </span>
-                  <span contentEditable={!isViewMode} onBlur={(e) => handleEdit('footerLine2', e.target.innerText)} className="editable-area outline-none" suppressContentEditableWarning={true}>
-                    {formData.footerLine2}
-                  </span>
-                </div>
-                <div contentEditable={!isViewMode} onBlur={(e) => handleEdit('footerLine3', e.target.innerText)} className="editable-area outline-none mt-1" suppressContentEditableWarning={true}>
-                  {formData.footerLine3}
-                </div>
-              </div>
-              <div className="green-footer-stripe"></div>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* --- BOTTOM ACTION BAR (UNCHANGED) --- */}
-      <div className="w-full max-w-[90%] md:max-w-[210mm] mt-8 mb-12 action-bar-container bg-white border border-gray-200 rounded-xl shadow-lg p-5 flex flex-col md:flex-row items-center justify-between gap-6 transition-all">
+          {/* --- BOTTOM ACTION BAR (UNCHANGED) --- */}
+          <div className="w-full max-w-[90%] md:max-w-[210mm] mt-8 mb-12 action-bar-container bg-white border border-gray-200 rounded-xl shadow-lg p-5 flex flex-col md:flex-row items-center justify-between gap-6 transition-all">
 
-        {/* Header Options */}
-        <div className={`flex flex-col gap-2 w-full md:w-auto ${isViewMode ? 'opacity-50 pointer-events-none' : ''}`}>
-          <span className="text-gray-500 font-bold text-[10px] tracking-widest">SELECT HEADER:</span>
-          <div className="flex gap-4">
-            <label className={`cursor-pointer flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${logoSelection === 'tech' ? 'border-[#4a9d2d] bg-green-50' : 'border-gray-200 hover:bg-gray-50'}`}>
-              <input type="radio" name="logo" checked={logoSelection === 'tech'} onChange={() => setLogoSelection('tech')} className="hidden" />
-              <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${logoSelection === 'tech' ? 'border-[#4a9d2d]' : 'border-gray-400'}`}>
-                {logoSelection === 'tech' && <div className="w-1.5 h-1.5 rounded-full bg-[#4a9d2d]"></div>}
+            {/* Header Options */}
+            <div className={`flex flex-col gap-2 w-full md:w-auto ${isViewMode ? 'opacity-50 pointer-events-none' : ''}`}>
+              <span className="text-gray-500 font-bold text-[10px] tracking-widest">SELECT HEADER:</span>
+              <div className="flex gap-4">
+                <label className={`cursor-pointer flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${logoSelection === 'tech' ? 'border-[#4a9d2d] bg-green-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                  <input type="radio" name="logo" checked={logoSelection === 'tech'} onChange={() => setLogoSelection('tech')} className="hidden" />
+                  <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${logoSelection === 'tech' ? 'border-[#4a9d2d]' : 'border-gray-400'}`}>
+                    {logoSelection === 'tech' && <div className="w-1.5 h-1.5 rounded-full bg-[#4a9d2d]"></div>}
+                  </div>
+                  <span className={`text-sm font-semibold ${logoSelection === 'tech' ? 'text-[#4a9d2d]' : 'text-gray-600'}`}>Tech Vaseegrah</span>
+                </label>
+
+                <label className={`cursor-pointer flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${logoSelection === 'veda' ? 'border-[#4a9d2d] bg-green-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                  <input type="radio" name="logo" checked={logoSelection === 'veda'} onChange={() => setLogoSelection('veda')} className="hidden" />
+                  <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${logoSelection === 'veda' ? 'border-[#4a9d2d]' : 'border-gray-400'}`}>
+                    {logoSelection === 'veda' && <div className="w-1.5 h-1.5 rounded-full bg-[#4a9d2d]"></div>}
+                  </div>
+                  <span className={`text-sm font-semibold ${logoSelection === 'veda' ? 'text-[#4a9d2d]' : 'text-gray-600'}`}>Vaseegrah Veda</span>
+                </label>
               </div>
-              <span className={`text-sm font-semibold ${logoSelection === 'tech' ? 'text-[#4a9d2d]' : 'text-gray-600'}`}>Tech Vaseegrah</span>
-            </label>
+            </div>
 
-            <label className={`cursor-pointer flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${logoSelection === 'veda' ? 'border-[#4a9d2d] bg-green-50' : 'border-gray-200 hover:bg-gray-50'}`}>
-              <input type="radio" name="logo" checked={logoSelection === 'veda'} onChange={() => setLogoSelection('veda')} className="hidden" />
-              <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${logoSelection === 'veda' ? 'border-[#4a9d2d]' : 'border-gray-400'}`}>
-                {logoSelection === 'veda' && <div className="w-1.5 h-1.5 rounded-full bg-[#4a9d2d]"></div>}
-              </div>
-              <span className={`text-sm font-semibold ${logoSelection === 'veda' ? 'text-[#4a9d2d]' : 'text-gray-600'}`}>Vaseegrah Veda</span>
-            </label>
+            {/* Action Buttons */}
+            <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+              <label className={`cursor-pointer group flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 rounded-lg hover:border-[#4a9d2d] hover:shadow-md transition-all ${isViewMode ? 'opacity-50 pointer-events-none' : ''}`}>
+                <FaUpload className="text-gray-500 group-hover:text-[#4a9d2d] transition-colors" />
+                <span className="text-sm font-bold text-gray-700 group-hover:text-[#4a9d2d]">SIGNATURE</span>
+                <input type="file" className="hidden" onChange={handleSignatureUpload} accept="image/*" />
+              </label>
+
+              <button
+                onClick={downloadPDF}
+                disabled={isGenerating}
+                className="flex items-center gap-2 px-6 py-2.5 bg-[#4a9d2d] text-white rounded-lg shadow-md hover:bg-[#3d8524] hover:shadow-lg active:scale-95 transition-all disabled:opacity-70 disabled:active:scale-100"
+              >
+                {isGenerating ? (
+                  <span className="text-sm font-bold animate-pulse">GENERATING...</span>
+                ) : (
+                  <>
+                    <FaDownload />
+                    <span className="text-sm font-bold">{isViewMode ? 'DOWNLOAD' : 'SAVE & DOWNLOAD'}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-          <label className={`cursor-pointer group flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 rounded-lg hover:border-[#4a9d2d] hover:shadow-md transition-all ${isViewMode ? 'opacity-50 pointer-events-none' : ''}`}>
-            <FaUpload className="text-gray-500 group-hover:text-[#4a9d2d] transition-colors" />
-            <span className="text-sm font-bold text-gray-700 group-hover:text-[#4a9d2d]">SIGNATURE</span>
-            <input type="file" className="hidden" onChange={handleSignatureUpload} accept="image/*" />
-          </label>
-
-          <button
-            onClick={downloadPDF}
-            disabled={isGenerating}
-            className="flex items-center gap-2 px-6 py-2.5 bg-[#4a9d2d] text-white rounded-lg shadow-md hover:bg-[#3d8524] hover:shadow-lg active:scale-95 transition-all disabled:opacity-70 disabled:active:scale-100"
-          >
-            {isGenerating ? (
-              <span className="text-sm font-bold animate-pulse">GENERATING...</span>
-            ) : (
-              <>
-                <FaDownload />
-                <span className="text-sm font-bold">{isViewMode ? 'DOWNLOAD' : 'SAVE & DOWNLOAD'}</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
 
         </>
       )}
