@@ -3,6 +3,24 @@ import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import { VitePWA } from "vite-plugin-pwa"
 
+const handleProxyError = (proxy) => {
+    proxy.on('error', (err, req, res) => {
+        // Suppress ECONNREFUSED logs on startup/reconnect to prevent console spam
+        if (err.code === 'ECONNREFUSED') {
+            if (res && typeof res.writeHead === 'function') {
+                if (!res.headersSent) {
+                    res.writeHead(502, { 'Content-Type': 'text/plain' });
+                    res.end('Bad Gateway: Backend server is starting up or unreachable.');
+                }
+            } else if (res && typeof res.destroy === 'function') {
+                res.destroy();
+            }
+            return;
+        }
+        console.error('[Vite Proxy Error]:', err.message);
+    });
+};
+
 export default defineConfig({
     plugins: [
         react(),
@@ -136,16 +154,19 @@ export default defineConfig({
                 target: 'http://127.0.0.1:5002',
                 changeOrigin: true,
                 ws: true,
+                configure: handleProxyError,
             },
             // Proxy Socket.IO in dev so the same domain-only URL works locally
             '/socket.io': {
                 target: 'http://127.0.0.1:5002',
                 changeOrigin: true,
                 ws: true,   // <-- enables WebSocket proxying in Vite
+                configure: handleProxyError,
             },
             '/uploads': {
                 target: 'http://127.0.0.1:5002',
                 changeOrigin: true,
+                configure: handleProxyError,
             },
         },
     },

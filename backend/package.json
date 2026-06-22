@@ -5,8 +5,8 @@
     "description": "Task Tracker API",
     "main": "server.js",
     "scripts": {
-        "start": "nodemon server.js",
-        "dev": "nodemon server.js",
+        "start": "nodemon --no-deprecation server.js",
+        "dev": "nodemon --no-deprecation server.js",
         "migrate:holidays": "node migrations/updateHolidaysForEmployeeSpecific.js",
         "test:aws": "node tests/awsConnection.test.js",
         "test:sync": "node tests/syncAws.test.js",
