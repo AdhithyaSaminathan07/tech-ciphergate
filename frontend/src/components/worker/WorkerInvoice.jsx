@@ -4,6 +4,39 @@ import html2canvas from 'html2canvas';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
 
+// Helper to normalize any date string to DD/MM/YYYY
+const normalizeInvoiceDate = (dateStr) => {
+  if (!dateStr) return '';
+  dateStr = dateStr.trim();
+
+  // Case 1: YYYY-MM-DD
+  const ymdRegex = /^(\d{4})[-/](\d{2})[-/](\d{2})$/;
+  let match = dateStr.match(ymdRegex);
+  if (match) {
+    const [_, yyyy, mm, dd] = match;
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  // Case 2: DD-MM-YYYY or DD/MM/YYYY
+  const dmyRegex = /^(\d{2})[-/](\d{2})[-/](\d{4})$/;
+  match = dateStr.match(dmyRegex);
+  if (match) {
+    const [_, dd, mm, yyyy] = match;
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  // Fallback: parse as standard date
+  const parsedDate = new Date(dateStr);
+  if (!isNaN(parsedDate.getTime())) {
+    const dd = String(parsedDate.getDate()).padStart(2, '0');
+    const mm = String(parsedDate.getMonth() + 1).padStart(2, '0');
+    const yyyy = parsedDate.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  return dateStr;
+};
+
 const WorkerInvoice = ({ onInvoiceSave, initialData }) => {
   // Auto-generate invoice number and date
   const today = new Date();
@@ -11,11 +44,11 @@ const WorkerInvoice = ({ onInvoiceSave, initialData }) => {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric'
-  }).split('/').join('-');
+  });
 
   const [invoiceData, setInvoiceData] = useState({
     invoiceNo: initialData?.invoiceNo || 'TV0000000',
-    invoiceDate: initialData?.invoiceDate || formattedDate,
+    invoiceDate: initialData?.invoiceDate ? normalizeInvoiceDate(initialData.invoiceDate) : formattedDate,
     customerName: initialData?.customerName || '',
     customerContact: initialData?.customerContact || '',
     salesPerson: initialData?.salesPerson || '',
@@ -82,7 +115,7 @@ const WorkerInvoice = ({ onInvoiceSave, initialData }) => {
     if (initialData) {
       setInvoiceData({
         invoiceNo: initialData.invoiceNo || 'TV0000000',
-        invoiceDate: initialData.invoiceDate || formattedDate,
+        invoiceDate: initialData.invoiceDate ? normalizeInvoiceDate(initialData.invoiceDate) : formattedDate,
         customerName: initialData.customerName || '',
         customerContact: initialData.customerContact || '',
         salesPerson: initialData.salesPerson || '',

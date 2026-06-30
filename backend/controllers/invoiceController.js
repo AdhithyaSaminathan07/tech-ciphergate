@@ -5,13 +5,18 @@ const DeleteHistory = require('../models/DeleteHistory'); // Add this line
 const mongoose = require('mongoose');
 const { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parse, format } = require('date-fns');
 
-// Helper to parse DD-MM-YYYY to Date object
+// Helper to parse DD-MM-YYYY or DD/MM/YYYY to Date object
 const parseInvoiceDate = (dateStr) => {
   if (!dateStr) return new Date();
-  const parts = dateStr.split('-');
+  const parts = dateStr.includes('-') ? dateStr.split('-') : dateStr.split('/');
   if (parts.length === 3) {
-    // Expects DD-MM-YYYY
-    return new Date(parts[2], parts[1] - 1, parts[0]);
+    // Expects DD-MM-YYYY or DD/MM/YYYY
+    const day = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const year = parseInt(parts[2], 10);
+    if (year > 1000) {
+      return new Date(year, month, day);
+    }
   }
   return new Date(dateStr);
 };

@@ -10,6 +10,39 @@ import RenewalModal from './RenewalModal';
 import { getInvoices, getAllInvoices, createInvoice, updateInvoice, deleteInvoice, updateAdminLastViewed } from '../../services/invoiceService';
 import { useAuth } from '../../hooks/useAuth';
 
+// Helper to normalize any date string to DD/MM/YYYY
+const normalizeInvoiceDate = (dateStr) => {
+  if (!dateStr) return '';
+  dateStr = dateStr.trim();
+
+  // Case 1: YYYY-MM-DD
+  const ymdRegex = /^(\d{4})[-/](\d{2})[-/](\d{2})$/;
+  let match = dateStr.match(ymdRegex);
+  if (match) {
+    const [_, yyyy, mm, dd] = match;
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  // Case 2: DD-MM-YYYY or DD/MM/YYYY
+  const dmyRegex = /^(\d{2})[-/](\d{2})[-/](\d{4})$/;
+  match = dateStr.match(dmyRegex);
+  if (match) {
+    const [_, dd, mm, yyyy] = match;
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  // Fallback: parse as standard date
+  const parsedDate = new Date(dateStr);
+  if (!isNaN(parsedDate.getTime())) {
+    const dd = String(parsedDate.getDate()).padStart(2, '0');
+    const mm = String(parsedDate.getMonth() + 1).padStart(2, '0');
+    const yyyy = parsedDate.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  return dateStr;
+};
+
 const InvoiceManagement = () => {
   const [activeTab, setActiveTab] = useState('advanced-invoice');
   const [invoices, setInvoices] = useState([]);
@@ -207,7 +240,7 @@ const InvoiceManagement = () => {
         invoice.customerName || 'N/A',
         invoice.customerGst || 'N/A',
         invoice.invoiceNo,
-        invoice.invoiceDate,
+        normalizeInvoiceDate(invoice.invoiceDate),
         taxableValue.toFixed(2),
         rate,
         totalTax.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
@@ -218,6 +251,9 @@ const InvoiceManagement = () => {
         const td = document.createElement('td');
         td.style.border = '1px solid black';
         td.style.textAlign = 'center'; // Center everything as per user request
+        if (i === 3 || i === 4) {
+          td.setAttribute('data-t', 's'); // Force string type for Invoice No and Date columns
+        }
         td.innerText = val;
         tr.appendChild(td);
       });

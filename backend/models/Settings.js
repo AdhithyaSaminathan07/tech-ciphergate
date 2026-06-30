@@ -435,6 +435,24 @@ const settingsSchema = mongoose.Schema({
       type: Date,
       default: Date.now
     }
+  },
+
+  // Unread WhatsApp Message Fine (SLA penalty for staff)
+  unreadMessageFineConfig: {
+    enabled: {
+      type: Boolean,
+      default: false
+    },
+    amountPerMessage: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    thresholdHours: {
+      type: Number,
+      default: 24,
+      min: 1
+    }
   }
 
 }, {

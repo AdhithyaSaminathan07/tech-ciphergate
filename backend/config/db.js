@@ -1,4 +1,13 @@
 const mongoose = require('mongoose');
+const dns = require('dns');
+
+// Configure DNS fallback to public resolvers to resolve Node.js/c-ares DNS issues on Windows
+try {
+  dns.setServers(['1.1.1.1', '8.8.8.8', '9.9.9.9']);
+  console.log('📡 DNS servers configured for reliable resolution (1.1.1.1, 8.8.8.8, 9.9.9.9)');
+} catch (dnsErr) {
+  console.warn('⚠️ Failed to set DNS servers, using system default:', dnsErr.message);
+}
 
 const connectDB = async () => {
   try {

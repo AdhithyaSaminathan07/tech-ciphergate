@@ -1,8 +1,9 @@
-// backend/controllers/fineController.js
 const asyncHandler = require('express-async-handler');
 const Worker = require('../models/Worker');
 const CommunityFundWallet = require('../models/CommunityFundWallet');
 const CommunityFundTransaction = require('../models/CommunityFundTransaction');
+const crypto = require('crypto');
+const Settings = require('../models/Settings');
 
 // Add a fine to a worker
 const addFine = asyncHandler(async (req, res) => {
@@ -26,7 +27,6 @@ const addFine = asyncHandler(async (req, res) => {
         return res.status(404).json({ message: 'Worker not found' });
     }
 
-    // Add the fine to the worker's fines array
     const newFine = {
         amount: Number(amount),
         date: new Date(date),
@@ -34,18 +34,12 @@ const addFine = asyncHandler(async (req, res) => {
     };
     worker.fines.push(newFine);
 
-    // Update the worker's final salary by deducting the fine amount
-    // If finalSalary is not set, use the base salary
     const currentSalary = worker.finalSalary !== undefined ? worker.finalSalary : worker.salary || 0;
     worker.finalSalary = Math.max(0, currentSalary - Number(amount));
 
     await worker.save();
 
-    // ---------------------------------------------------------
-    // COMMUNITY FUND INTEGRATION
-    // ---------------------------------------------------------
     try {
-        // 1. Get or Create Wallet
         let wallet = await CommunityFundWallet.findOne({ subdomain: worker.subdomain });
         if (!wallet) {
             wallet = await CommunityFundWallet.create({
@@ -55,29 +49,23 @@ const addFine = asyncHandler(async (req, res) => {
             });
         }
 
-        // 2. Update Wallet
         wallet.totalBalance += Number(amount);
         wallet.totalFinesCollected += Number(amount);
         await wallet.save();
 
-        // 3. Create Transaction Record
         await CommunityFundTransaction.create({
             employeeId: id,
             amount: Number(amount),
-            type: 'credit', // Money coming INTO the fund
+            type: 'credit',
             source: 'fine',
             reason: reason.trim(),
-            referenceId: worker.fines[worker.fines.length - 1]._id, // ID of the fine just added
-            createdBy: req.user ? req.user._id : null, // Assuming req.user is set by auth middleware
+            referenceId: worker.fines[worker.fines.length - 1]._id,
+            createdBy: req.user ? req.user._id : null,
             subdomain: worker.subdomain
         });
     } catch (error) {
         console.error("Error updating Community Fund:", error);
-        // Note: We don't fail the request if community fund update fails, 
-        // ensuring the fine is still applied to the employee.
-        // You might want to implement a rollback or retry mechanism here in production.
     }
-    // ---------------------------------------------------------
 
     res.status(200).json({
         message: 'Fine added successfully',
@@ -94,20 +82,14 @@ const removeFine = asyncHandler(async (req, res) => {
         return res.status(404).json({ message: 'Worker not found' });
     }
 
-    // Find the fine to remove
     const fineIndex = worker.fines.findIndex(fine => fine._id.toString() === fineId);
     if (fineIndex === -1) {
         return res.status(404).json({ message: 'Fine not found' });
     }
 
-    // Get the fine amount to add back to the salary
     const fineAmount = worker.fines[fineIndex].amount;
-
-    // Remove the fine from the array
     worker.fines.splice(fineIndex, 1);
 
-    // Update the worker's final salary by adding back the fine amount
-    // If finalSalary is not set, use the base salary
     const currentSalary = worker.finalSalary !== undefined ? worker.finalSalary : worker.salary || 0;
     worker.finalSalary = currentSalary + fineAmount;
 
@@ -128,28 +110,19 @@ const deleteFine = asyncHandler(async (req, res) => {
         return res.status(404).json({ message: 'Worker not found' });
     }
 
-    // Find the fine to delete
     const fineIndex = worker.fines.findIndex(fine => fine._id.toString() === fineId);
     if (fineIndex === -1) {
         return res.status(404).json({ message: 'Fine not found' });
     }
 
-    // Get the fine amount to add back to the salary
     const fineAmount = worker.fines[fineIndex].amount;
-
-    // Remove the fine from the array
     worker.fines.splice(fineIndex, 1);
 
-    // Update the worker's final salary by adding back the fine amount
-    // If finalSalary is not set, use the base salary
     const currentSalary = worker.finalSalary !== undefined ? worker.finalSalary : worker.salary || 0;
     worker.finalSalary = currentSalary + fineAmount;
 
     await worker.save();
 
-    // ---------------------------------------------------------
-    // COMMUNITY FUND REVERSAL
-    // ---------------------------------------------------------
     try {
         const wallet = await CommunityFundWallet.findOne({ subdomain: worker.subdomain });
         if (wallet) {
@@ -158,21 +131,19 @@ const deleteFine = asyncHandler(async (req, res) => {
             await wallet.save();
         }
 
-        // Add a reversal transaction
         await CommunityFundTransaction.create({
             employeeId: id,
             amount: fineAmount,
-            type: 'debit', // Money leaving the fund (reversal)
+            type: 'debit',
             source: 'fine',
-            reason: `Reversal of fine: ${worker.name}`, // Or fetch the original reason if needed
-            referenceId: fineId, // Reference the deleted fine ID
+            reason: `Reversal of fine: ${worker.name}`,
+            referenceId: fineId,
             createdBy: req.user ? req.user._id : null,
             subdomain: worker.subdomain
         });
     } catch (error) {
         console.error("Error reversing Community Fund:", error);
     }
-    // ---------------------------------------------------------
 
     res.status(200).json({
         message: 'Fine deleted successfully',
@@ -196,7 +167,6 @@ const getWorkerFines = asyncHandler(async (req, res) => {
 
 // Get logged-in worker's fines
 const getMyFines = asyncHandler(async (req, res) => {
-    // req.user is set by the protect middleware
     const id = req.user._id;
     const { fromDate, toDate } = req.query;
 
@@ -207,12 +177,9 @@ const getMyFines = asyncHandler(async (req, res) => {
 
     let fines = worker.fines || [];
 
-    // Apply filters if provided
     if (fromDate || toDate) {
         const start = fromDate ? new Date(fromDate) : new Date(0);
         const end = toDate ? new Date(toDate) : new Date();
-
-        // Set end date to end of day if it's the same as provided (to include all fines on that day)
         end.setHours(23, 59, 59, 999);
 
         fines = fines.filter(fine => {
@@ -221,7 +188,6 @@ const getMyFines = asyncHandler(async (req, res) => {
         });
     }
 
-    // Sort by date descending (latest first)
     fines.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     res.status(200).json({
@@ -235,7 +201,6 @@ const updateFine = asyncHandler(async (req, res) => {
     const { id, fineId } = req.params;
     const { amount, date, reason } = req.body;
 
-    // Validate inputs
     if (amount !== undefined && (isNaN(amount) || amount <= 0)) {
         return res.status(400).json({ message: 'Fine amount must be a valid positive number' });
     }
@@ -245,7 +210,6 @@ const updateFine = asyncHandler(async (req, res) => {
         return res.status(404).json({ message: 'Worker not found' });
     }
 
-    // Find the fine to update
     const fineIndex = worker.fines.findIndex(fine => fine._id.toString() === fineId);
     if (fineIndex === -1) {
         return res.status(404).json({ message: 'Fine not found' });
@@ -256,7 +220,6 @@ const updateFine = asyncHandler(async (req, res) => {
     const newAmount = amount !== undefined ? Number(amount) : oldAmount;
     const amountDifference = newAmount - oldAmount;
 
-    // Update the fine fields
     if (amount !== undefined) {
         worker.fines[fineIndex].amount = newAmount;
     }
@@ -267,8 +230,6 @@ const updateFine = asyncHandler(async (req, res) => {
         worker.fines[fineIndex].reason = reason.trim();
     }
 
-    // Update worker's finalSalary based on amount difference
-    // If amount increased, deduct more; if decreased, add back
     if (amountDifference !== 0) {
         const currentSalary = worker.finalSalary !== undefined ? worker.finalSalary : worker.salary || 0;
         worker.finalSalary = Math.max(0, currentSalary - amountDifference);
@@ -276,9 +237,6 @@ const updateFine = asyncHandler(async (req, res) => {
 
     await worker.save();
 
-    // ---------------------------------------------------------
-    // COMMUNITY FUND ADJUSTMENT
-    // ---------------------------------------------------------
     if (amountDifference !== 0) {
         try {
             const wallet = await CommunityFundWallet.findOne({ subdomain: worker.subdomain });
@@ -288,7 +246,6 @@ const updateFine = asyncHandler(async (req, res) => {
                 await wallet.save();
             }
 
-            // Create a correction transaction to track the change
             await CommunityFundTransaction.create({
                 employeeId: id,
                 amount: Math.abs(amountDifference),
@@ -303,7 +260,6 @@ const updateFine = asyncHandler(async (req, res) => {
             console.error("Error updating Community Fund:", error);
         }
     }
-    // ---------------------------------------------------------
 
     res.status(200).json({
         message: 'Fine updated successfully',
@@ -314,10 +270,8 @@ const updateFine = asyncHandler(async (req, res) => {
 const getAllFines = asyncHandler(async (req, res) => {
     const { month, year, department } = req.query;
 
-    // Build query to find all workers with fines
     let query = { fines: { $exists: true, $ne: [] } };
 
-    // If department is specified, filter by department
     if (department) {
         query.department = department;
     }
@@ -328,7 +282,6 @@ const getAllFines = asyncHandler(async (req, res) => {
 
     workers.forEach(worker => {
         worker.fines.forEach(fine => {
-            // If month and year are provided, filter by that specific month/year
             if (month && year) {
                 const fineDate = new Date(fine.date);
                 if (fineDate.getMonth() + 1 === parseInt(month) && fineDate.getFullYear() === parseInt(year)) {
@@ -346,7 +299,6 @@ const getAllFines = asyncHandler(async (req, res) => {
                     });
                 }
             } else {
-                // If no specific month/year, include all fines
                 allFines.push({
                     _id: fine._id,
                     amount: fine.amount,
@@ -363,7 +315,6 @@ const getAllFines = asyncHandler(async (req, res) => {
         });
     });
 
-    // Sort fines by date (newest first)
     allFines.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     res.status(200).json({
@@ -374,6 +325,145 @@ const getAllFines = asyncHandler(async (req, res) => {
     });
 });
 
+// Env-secret webhook variant (kept for manual/direct testing — reads amount from env)
+const addFineFromWebhook = asyncHandler(async (req, res) => {
+    const { secret, username, subdomain, reason } = req.body;
+
+    const expectedSecret = process.env.GOWHATS_FINE_SECRET || '';
+    const providedSecret = secret || '';
+    const isValidSecret = expectedSecret.length > 0 &&
+        providedSecret.length === expectedSecret.length &&
+        crypto.timingSafeEqual(Buffer.from(providedSecret), Buffer.from(expectedSecret));
+
+    if (!isValidSecret) {
+        return res.status(401).json({ message: 'Invalid secret' });
+    }
+
+    if (!username || !subdomain) {
+        return res.status(400).json({ message: 'username and subdomain are required' });
+    }
+
+    const worker = await Worker.findOne({ username, subdomain, status: 'Active' });
+    if (!worker) {
+        return res.status(404).json({ message: `No active worker found for username="${username}" subdomain="${subdomain}"` });
+    }
+
+    const amount = Number(process.env.UNREAD_FINE_AMOUNT || 50);
+
+    const newFine = {
+        amount,
+        date: new Date(),
+        reason: reason ? reason.trim() : 'Unread message SLA violation'
+    };
+    worker.fines.push(newFine);
+
+    const currentSalary = worker.finalSalary !== undefined ? worker.finalSalary : worker.salary || 0;
+    worker.finalSalary = Math.max(0, currentSalary - amount);
+
+    await worker.save();
+
+    try {
+        let wallet = await CommunityFundWallet.findOne({ subdomain: worker.subdomain });
+        if (!wallet) {
+            wallet = await CommunityFundWallet.create({
+                totalBalance: 0,
+                totalFinesCollected: 0,
+                subdomain: worker.subdomain
+            });
+        }
+        wallet.totalBalance += amount;
+        wallet.totalFinesCollected += amount;
+        await wallet.save();
+
+        await CommunityFundTransaction.create({
+            employeeId: worker._id,
+            amount,
+            type: 'credit',
+            source: 'fine',
+            reason: newFine.reason,
+            referenceId: worker.fines[worker.fines.length - 1]._id,
+            createdBy: null,
+            subdomain: worker.subdomain
+        });
+    } catch (error) {
+        console.error("Error updating Community Fund (webhook fine):", error);
+    }
+
+    res.status(200).json({
+        message: 'Fine applied successfully',
+        fineAmount: amount,
+        worker: { _id: worker._id, username: worker.username, finalSalary: worker.finalSalary }
+    });
+});
+
+// Called by GoWhats cron job — fines a worker for an unread WhatsApp message past SLA.
+// Reads enabled/amount/threshold from Settings (Settings-page configurable), not env.
+const addFineFromGowhats = asyncHandler(async (req, res) => {
+    const { secret, username, subdomain, reason } = req.body;
+
+    if (!secret || secret !== process.env.GOWHATS_FINE_SECRET) {
+        return res.status(401).json({ message: 'Unauthorized' });
+    }
+    if (!username || !subdomain) {
+        return res.status(400).json({ message: 'username and subdomain are required' });
+    }
+
+    const settings = await Settings.findOne({ subdomain });
+    if (!settings?.unreadMessageFineConfig?.enabled) {
+        return res.status(403).json({ message: 'Unread message fines are disabled for this company' });
+    }
+
+    const fineAmount = Number(settings.unreadMessageFineConfig.amountPerMessage);
+    if (!fineAmount || fineAmount <= 0) {
+        return res.status(400).json({ message: 'No valid fine amount configured' });
+    }
+
+    const worker = await Worker.findOne({ username, subdomain });
+    if (!worker) {
+        return res.status(404).json({ message: 'Worker not found for this username/subdomain' });
+    }
+
+    const newFine = {
+        amount: fineAmount,
+        date: new Date(),
+        reason: reason || `Unread WhatsApp message past ${settings.unreadMessageFineConfig.thresholdHours}h SLA`
+    };
+    worker.fines.push(newFine);
+
+    const currentSalary = worker.finalSalary !== undefined ? worker.finalSalary : worker.salary || 0;
+    worker.finalSalary = Math.max(0, currentSalary - fineAmount);
+    await worker.save();
+
+    try {
+        let wallet = await CommunityFundWallet.findOne({ subdomain: worker.subdomain });
+        if (!wallet) {
+            wallet = await CommunityFundWallet.create({
+                totalBalance: 0,
+                totalFinesCollected: 0,
+                subdomain: worker.subdomain
+            });
+        }
+        wallet.totalBalance += fineAmount;
+        wallet.totalFinesCollected += fineAmount;
+        await wallet.save();
+
+        await CommunityFundTransaction.create({
+            employeeId: worker._id,
+            amount: fineAmount,
+            type: 'credit',
+            source: 'fine',
+            reason: newFine.reason,
+            referenceId: worker.fines[worker.fines.length - 1]._id,
+            createdBy: null,
+            subdomain: worker.subdomain
+        });
+    } catch (error) {
+        console.error('Error updating Community Fund (gowhats fine):', error);
+    }
+
+    res.status(200).json({ message: 'Fine applied', workerId: worker._id, fineAmount });
+});
+
 module.exports = {
     addFine,
     removeFine,
@@ -381,5 +471,7 @@ module.exports = {
     updateFine,
     getWorkerFines,
     getMyFines,
-    getAllFines
+    getAllFines,
+    addFineFromWebhook,
+    addFineFromGowhats
 };

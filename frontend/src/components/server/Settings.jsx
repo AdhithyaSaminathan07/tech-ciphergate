@@ -112,7 +112,7 @@ const Settings = () => {
       </AnimatePresence>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        
+
         {/* Left Side: Parameters forms */}
         <div className="xl:col-span-2">
           <div className="bg-white/80 backdrop-blur-md p-6 rounded-2xl border border-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.01)]">
@@ -228,7 +228,7 @@ const Settings = () => {
                 <label className="block text-xs font-bold text-slate-500 tracking-wider mb-3">Billing Schedulers Interval</label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {['6h', '12h', 'daily'].map((option) => (
-                    <label 
+                    <label
                       key={option}
                       className={`p-3.5 rounded-xl border flex flex-col justify-between cursor-pointer transition ${ syncSchedule === option ? 'border-teal-500/40 bg-teal-50/20 ring-1 ring-teal-500/10' : 'border-slate-200 bg-slate-50/25 hover:bg-slate-50' }`}
                     >

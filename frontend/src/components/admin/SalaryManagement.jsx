@@ -593,18 +593,37 @@ const SalaryManagement = () => {
     };
 
     const fetchReport = async () => {
-        // If using month selection, set the date range first
+        let fromDate, toDate;
+
         if (useMonthSelection) {
-            setMonthDateRange();
+            // Compute dates directly from selectedMonth/selectedYear (avoid stale state)
+            const formatDateLocal = (date) => {
+                const d = new Date(date);
+                let m = '' + (d.getMonth() + 1);
+                let day = '' + d.getDate();
+                const y = d.getFullYear();
+                if (m.length < 2) m = '0' + m;
+                if (day.length < 2) day = '0' + day;
+                return [y, m, day].join('-');
+            };
+            const firstDay = new Date(selectedYear, selectedMonth - 1, 1);
+            const lastDay = new Date(selectedYear, selectedMonth, 0);
+            fromDate = formatDateLocal(firstDay);
+            toDate = formatDateLocal(lastDay);
+            // Also update state so PDF/other consumers stay in sync
+            setReportDateRange({ fromDate, toDate });
+        } else {
+            fromDate = reportDateRange.fromDate;
+            toDate = reportDateRange.toDate;
         }
 
-        if (!reportDateRange.fromDate || !reportDateRange.toDate) {
+        if (!fromDate || !toDate) {
             toast.error('Please select a date range.');
             return;
         }
         setIsReportLoading(true);
         try {
-            const data = await getSalaryReport(selectedWorker._id, reportDateRange.fromDate, reportDateRange.toDate);
+            const data = await getSalaryReport(selectedWorker._id, fromDate, toDate);
             setReportData(data);
         } catch (error) {
             toast.error(error.message || 'Failed to fetch report');
@@ -3220,12 +3239,10 @@ const SalaryManagement = () => {
                                 </select>
                             </div>
                             <Button
-                                onClick={() => {
-                                    setMonthDateRange();
-                                    fetchReport();
-                                }}
+                                onClick={fetchReport}
+                                disabled={isReportLoading}
                                 variant="primary"
-                                className="h-11 px-8 rounded-xl shadow-lg shadow-blue-100"
+                                className="h-11 px-8 rounded-xl shadow-lg shadow-blue-100 disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                                 {isReportLoading ? <Spinner /> : 'Generate Report'}
                             </Button>
@@ -3254,8 +3271,9 @@ const SalaryManagement = () => {
                             </div>
                             <Button
                                 onClick={fetchReport}
+                                disabled={isReportLoading}
                                 variant="primary"
-                                className="h-11 px-8 rounded-xl shadow-lg shadow-blue-100"
+                                className="h-11 px-8 rounded-xl shadow-lg shadow-blue-100 disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                                 {isReportLoading ? <Spinner /> : 'Generate Report'}
                             </Button>

@@ -4,6 +4,39 @@ import { deleteInvoice, updateInvoice } from '../../services/invoiceService';
 import { toast } from 'react-toastify';
 import StageProofModal from './StageProofModal';
 
+// Helper to normalize any date string to DD/MM/YYYY
+const normalizeInvoiceDate = (dateStr) => {
+  if (!dateStr) return '';
+  dateStr = dateStr.trim();
+
+  // Case 1: YYYY-MM-DD
+  const ymdRegex = /^(\d{4})[-/](\d{2})[-/](\d{2})$/;
+  let match = dateStr.match(ymdRegex);
+  if (match) {
+    const [_, yyyy, mm, dd] = match;
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  // Case 2: DD-MM-YYYY or DD/MM/YYYY
+  const dmyRegex = /^(\d{2})[-/](\d{2})[-/](\d{4})$/;
+  match = dateStr.match(dmyRegex);
+  if (match) {
+    const [_, dd, mm, yyyy] = match;
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  // Fallback: parse as standard date
+  const parsedDate = new Date(dateStr);
+  if (!isNaN(parsedDate.getTime())) {
+    const dd = String(parsedDate.getDate()).padStart(2, '0');
+    const mm = String(parsedDate.getMonth() + 1).padStart(2, '0');
+    const yyyy = parsedDate.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  return dateStr;
+};
+
 const STAGES = ['Invoice', 'Payment Received', 'Work completion', 'Closure agreement'];
 
 const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, onStatusUpdate, loading, error }) => {
@@ -249,7 +282,7 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, 
                 {localInvoices.map((invoice) => (
                   <tr key={invoice._id} className="hover:bg-teal-50/20 transition-colors">
                     <td className="py-3.5 px-4 text-sm font-semibold text-gray-900 truncate">{invoice.invoiceNo}</td>
-                    <td className="py-3.5 px-4 text-sm text-gray-500">{invoice.invoiceDate || formatDate(invoice.createdAt)}</td>
+                    <td className="py-3.5 px-4 text-sm text-gray-500">{normalizeInvoiceDate(invoice.invoiceDate) || formatDate(invoice.createdAt)}</td>
                     <td className="py-3.5 px-4 text-sm">
                       <div className="font-medium text-gray-800 truncate">{invoice.customerName || 'N/A'}</div>
                       {invoice.customerContact && <div className="text-xs text-gray-400 truncate">{invoice.customerContact}</div>}

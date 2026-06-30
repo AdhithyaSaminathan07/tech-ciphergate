@@ -1,4 +1,3 @@
-// Settings.jsx
 import { useState, useEffect, useContext } from 'react';
 import { toast } from 'react-toastify';
 import {
@@ -24,7 +23,8 @@ import {
     FiCalendar,
     FiShield,
     FiCopy,
-    FiSliders
+    FiSliders,
+    FiMessageCircle
 } from 'react-icons/fi';
 import Modal from '../common/Modal';
 import HolidayManagement from './HolidayManagement';
@@ -39,43 +39,31 @@ const Settings = () => {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [hasChanges, setHasChanges] = useState(false);
-    const [currentLocation, setCurrentLocation] = useState(null); // Add this state to track current location
+    const [currentLocation, setCurrentLocation] = useState(null);
 
     const { subdomain } = useContext(appContext);
     const [isHolidayModalOpen, setIsHolidayModalOpen] = useState(false);
 
-    // Original settings (for comparison)
     const [originalSettings, setOriginalSettings] = useState({});
 
-    // Current form data
     const [settings, setSettings] = useState({
-        // Breakfast settings
         breakfastEnabled: false,
         breakfastOpenTime: '07:00',
         breakfastCloseTime: '09:00',
         breakfastAutoSwitch: false,
-        // Lunch (food request) settings
         foodRequestEnabled: false,
         foodRequestOpenTime: '12:00',
         foodRequestCloseTime: '14:00',
         foodRequestAutoSwitch: false,
-
-        // Dinner settings
         dinnerEnabled: false,
         dinnerOpenTime: '18:00',
         dinnerCloseTime: '20:00',
         dinnerAutoSwitch: false,
-
-        // Email settings
         emailReportsEnabled: false,
-
-        // Attendance and productivity settings
         considerOvertime: false,
         deductSalary: true,
         permissionTimeMinutes: 15,
         salaryDeductionPerBreak: 10,
-
-        // Batches and intervals
         batches: [
             {
                 batchName: 'Full Time',
@@ -103,16 +91,12 @@ const Settings = () => {
                 isBreakConsider: false
             }
         ],
-
-        // Location settings
         attendanceLocation: {
             enabled: false,
             latitude: 0,
             longitude: 0,
             radius: 100
         },
-
-        // Attendance Access Control
         attendanceAccessControl: {
             admin: {
                 addAttendance: true,
@@ -123,8 +107,6 @@ const Settings = () => {
                 faceAttendance: true
             }
         },
-
-        // Advanced Leave Deduction Settings
         advancedLeaveDeduction: {
             attendanceRuleEnabled: false,
             monthlyLimitRuleEnabled: false,
@@ -156,6 +138,11 @@ const Settings = () => {
             bugReportUrl: 'https://techvaseegrah.com/bug-bounty',
             disclosureMessage: 'Visit to check the bug bounty to earn for each bug 1000',
             popupFrequency: 'every_day'
+        },
+        unreadMessageFineConfig: {
+            enabled: false,
+            amountPerMessage: 0,
+            thresholdHours: 24
         }
     });
 
@@ -168,7 +155,6 @@ const Settings = () => {
         return `${hour12}:${minutes.padStart(2, '0')} ${period}`;
     };
 
-    // Validation functions
     const validateBatchNames = (batches) => {
         const names = batches.map(batch => batch.batchName.trim().toLowerCase());
         const uniqueNames = new Set(names);
@@ -181,13 +167,11 @@ const Settings = () => {
         return names.length === uniqueNames.size;
     };
 
-    // Check if settings have changed
     const checkForChanges = (currentSettings) => {
         const changed = JSON.stringify(currentSettings) !== JSON.stringify(originalSettings);
         setHasChanges(changed);
     };
 
-    // Fetch settings from API
     const fetchSettings = async () => {
         if (!subdomain || subdomain === 'main') {
             toast.error('Invalid subdomain. Please check the URL.');
@@ -229,9 +213,9 @@ const Settings = () => {
             };
 
             const finalSettings = {
-                ...settings, // Start with defaults
-                ...fetchedSettings, // Overwrite with DB data
-                advancedLeaveDeduction: mappedAdvanced, // Overwrite with mapped data
+                ...settings,
+                ...fetchedSettings,
+                advancedLeaveDeduction: mappedAdvanced,
                 attendanceAccessControl: {
                     admin: { ...settings.attendanceAccessControl.admin, ...(fetchedSettings.attendanceAccessControl?.admin || {}) },
                     employee: { ...settings.attendanceAccessControl.employee, ...(fetchedSettings.attendanceAccessControl?.employee || {}) }
@@ -261,6 +245,11 @@ const Settings = () => {
                     bugReportUrl: fetchedSettings.bugBountyConfig?.bugReportUrl || 'https://techvaseegrah.com/bug-bounty',
                     disclosureMessage: fetchedSettings.bugBountyConfig?.disclosureMessage || 'Visit to check the bug bounty to earn for each bug 1000',
                     popupFrequency: fetchedSettings.bugBountyConfig?.popupFrequency || 'every_day'
+                },
+                unreadMessageFineConfig: {
+                    enabled: fetchedSettings.unreadMessageFineConfig?.enabled ?? false,
+                    amountPerMessage: fetchedSettings.unreadMessageFineConfig?.amountPerMessage ?? 0,
+                    thresholdHours: fetchedSettings.unreadMessageFineConfig?.thresholdHours ?? 24
                 }
             };
 
@@ -269,7 +258,7 @@ const Settings = () => {
             setHasChanges(false);
         } catch (error) {
             if (error.response?.status === 404) {
-                setOriginalSettings(settings); // Baseline is current defaults
+                setOriginalSettings(settings);
             } else {
                 toast.error('Failed to fetch settings');
             }
@@ -278,7 +267,6 @@ const Settings = () => {
         }
     };
 
-    // Handle input changes (for non-batch/interval fields)
     const handleInputChange = (e) => {
         const { name, value, type, checked } = e.target;
         const newValue = type === 'checkbox' ? checked : (type === 'number' ? Number(value) : value);
@@ -292,7 +280,6 @@ const Settings = () => {
         checkForChanges(updatedSettings);
     };
 
-    // Handle batch changes
     const handleBatchChange = (index, field, value) => {
         const updatedBatches = [...settings.batches];
         updatedBatches[index] = {
@@ -307,7 +294,6 @@ const Settings = () => {
         checkForChanges(updatedSettings);
     };
 
-    // Handle interval changes
     const handleIntervalChange = (index, field, value) => {
         const updatedIntervals = [...settings.intervals];
         updatedIntervals[index] = {
@@ -322,7 +308,6 @@ const Settings = () => {
         checkForChanges(updatedSettings);
     };
 
-    // Handle adding new batch
     const handleAddBatch = () => {
         const newBatch = {
             batchName: '',
@@ -343,7 +328,6 @@ const Settings = () => {
         checkForChanges(updatedSettings);
     };
 
-    // Handle removing batch
     const handleRemoveBatch = (index) => {
         const updatedBatches = settings.batches.filter((_, i) => i !== index);
         const updatedSettings = {
@@ -354,7 +338,6 @@ const Settings = () => {
         checkForChanges(updatedSettings);
     };
 
-    // Handle adding new interval
     const handleAddInterval = () => {
         const newInterval = {
             intervalName: `interval${settings.intervals.length + 1}`,
@@ -370,7 +353,6 @@ const Settings = () => {
         checkForChanges(updatedSettings);
     };
 
-    // Handle removing interval
     const handleRemoveInterval = (index) => {
         const updatedIntervals = settings.intervals.filter((_, i) => i !== index);
         const updatedSettings = {
@@ -381,7 +363,6 @@ const Settings = () => {
         checkForChanges(updatedSettings);
     };
 
-    // Handle location input changes
     const handleLocationChange = (field, value) => {
         const updatedSettings = {
             ...settings,
@@ -391,10 +372,9 @@ const Settings = () => {
             }
         };
         setSettings(updatedSettings);
-        checkLocationChanges(updatedSettings);
+        checkForChanges(updatedSettings);
     };
 
-    // Handle Attendance Access Control changes
     const handleAccessControlChange = (role, field, value) => {
         const updatedSettings = {
             ...settings,
@@ -410,7 +390,6 @@ const Settings = () => {
         checkForChanges(updatedSettings);
     };
 
-    // Handle Advanced Leave Deduction Settings changes
     const handleAdvancedSettingsChange = (field, value, subField = null, property = null) => {
         let updatedAdvanced;
         if (subField) {
@@ -452,11 +431,22 @@ const Settings = () => {
         checkForChanges(updatedSettings);
     };
 
-    // Handle location capture
+    const handleUnreadFineChange = (field, value) => {
+        const updatedFineConfig = {
+            ...settings.unreadMessageFineConfig,
+            [field]: value
+        };
+        const updatedSettings = {
+            ...settings,
+            unreadMessageFineConfig: updatedFineConfig
+        };
+        setSettings(updatedSettings);
+        checkForChanges(updatedSettings);
+    };
+
     const handleCaptureLocation = async () => {
         try {
             const position = await getCurrentPosition();
-            // Update both latitude and longitude in a single state update
             const updatedSettings = {
                 ...settings,
                 attendanceLocation: {
@@ -467,7 +457,7 @@ const Settings = () => {
             };
             setSettings(updatedSettings);
             checkForChanges(updatedSettings);
-            setCurrentLocation(position); // Set the current location state
+            setCurrentLocation(position);
             toast.success('Location captured successfully');
         } catch (error) {
             console.error('Error capturing location:', error);
@@ -475,7 +465,6 @@ const Settings = () => {
         }
     };
 
-    // Handle settings save
     const handleSaveSettings = async () => {
         if (!validateBatchNames(settings.batches)) {
             toast.error('Batch names must be unique. Please check for duplicate batch names.');
@@ -516,22 +505,20 @@ const Settings = () => {
         }
     };
 
-    // Reset to original settings
     const handleReset = () => {
         setSettings({ ...originalSettings });
         setHasChanges(false);
     };
 
-    // Custom toggle component
     const CustomToggle = ({ checked, onChange, disabled = false }) => (
         <button
             type="button"
             onClick={onChange}
             disabled={disabled}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${checked ? 'bg-blue-600' : 'bg-gray-200' } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${checked ? 'bg-blue-600' : 'bg-gray-200'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         >
             <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-lg transition-transform ${checked ? 'translate-x-6' : 'translate-x-1' }`}
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-lg transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`}
             />
         </button>
     );
@@ -639,7 +626,7 @@ const Settings = () => {
             title: 'Lunch',
             icon: FiSun,
             color: 'blue',
-            enabledKey: 'foodRequestEnabled', // keep for meal service config only
+            enabledKey: 'foodRequestEnabled',
             openTimeKey: 'foodRequestOpenTime',
             closeTimeKey: 'foodRequestCloseTime',
             autoSwitchKey: 'foodRequestAutoSwitch'
@@ -697,7 +684,6 @@ const Settings = () => {
                         </div>
                     </div>
 
-                    {/* Unsaved changes alert */}
                     {hasChanges && (
                         <div className="mt-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
                             <div className="flex">
@@ -726,22 +712,21 @@ const Settings = () => {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {mealConfigs.map(({ key, title, icon: Icon, color, enabledKey, openTimeKey, closeTimeKey, autoSwitchKey }) => (
                             <Card key={key} className="overflow-hidden hover:shadow-lg transition-shadow duration-200">
-                                <div className={`h-2 bg-gradient-to-r ${color === 'yellow' ? 'from-yellow-400 to-orange-400' : color === 'blue' ? 'from-blue-400 to-cyan-400' : 'from-purple-400 to-pink-400' }`} />
+                                <div className={`h-2 bg-gradient-to-r ${color === 'yellow' ? 'from-yellow-400 to-orange-400' : color === 'blue' ? 'from-blue-400 to-cyan-400' : 'from-purple-400 to-pink-400'}`} />
                                 <div className="p-6">
                                     <div className="flex items-center justify-between mb-6">
                                         <div className="flex items-center">
-                                            <div className={`p-3 rounded-lg ${color === 'yellow' ? 'bg-yellow-100' : color === 'blue' ? 'bg-blue-100' : 'bg-purple-100' }`}>
-                                                <Icon className={`h-6 w-6 ${color === 'yellow' ? 'text-yellow-600' : color === 'blue' ? 'text-blue-600' : 'text-purple-600' }`} />
+                                            <div className={`p-3 rounded-lg ${color === 'yellow' ? 'bg-yellow-100' : color === 'blue' ? 'bg-blue-100' : 'bg-purple-100'}`}>
+                                                <Icon className={`h-6 w-6 ${color === 'yellow' ? 'text-yellow-600' : color === 'blue' ? 'text-blue-600' : 'text-purple-600'}`} />
                                             </div>
                                             <h3 className="ml-3 text-lg font-semibold text-gray-900">{title}</h3>
                                         </div>
-                                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${settings[enabledKey] ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }`}>
+                                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${settings[enabledKey] ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                                             {settings[enabledKey] ? 'Active' : 'Inactive'}
                                         </div>
                                     </div>
 
                                     <div className="space-y-5">
-                                        {/* Enable/Disable Toggle */}
                                         <div className="flex items-center justify-between">
                                             <div>
                                                 <label className="text-sm font-medium text-gray-700">Enable {title}</label>
@@ -759,7 +744,6 @@ const Settings = () => {
                                             />
                                         </div>
 
-                                        {/* Time Settings */}
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -794,7 +778,6 @@ const Settings = () => {
                                             </div>
                                         </div>
 
-                                        {/* Auto Switch */}
                                         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                                             <div>
                                                 <label className="text-sm font-medium text-gray-700 flex items-center">
@@ -1058,7 +1041,6 @@ const Settings = () => {
                         </p>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            {/* Admin Controls */}
                             <div className="space-y-4">
                                 <h4 className="text-md font-medium text-gray-800 border-b pb-2">Admin Attendance Page</h4>
 
@@ -1089,7 +1071,6 @@ const Settings = () => {
                                 </div>
                             </div>
 
-                            {/* Employee Controls */}
                             <div className="space-y-4">
                                 <h4 className="text-md font-medium text-gray-800 border-b pb-2">Employee Dashboard</h4>
 
@@ -1174,6 +1155,84 @@ const Settings = () => {
                     </div>
                 </Card>
 
+                {/* Unread WhatsApp Message Fine Configuration */}
+                <Card className="mb-8 hover:shadow-lg transition-shadow duration-200">
+                    <div className="h-2 bg-gradient-to-r from-rose-400 to-orange-400" />
+                    <div className="p-6">
+                        <h3 className="text-lg font-semibold mb-2 flex items-center text-gray-900">
+                            <div className="p-2 bg-rose-100 rounded-lg mr-3">
+                                <FiMessageCircle className="h-5 w-5 text-rose-600" />
+                            </div>
+                            Unread WhatsApp Message Fine
+                        </h3>
+                        <p className="text-sm text-gray-600 mb-6">
+                            Automatically fine a staff member's salary when a customer's WhatsApp message stays unread past the SLA window. Synced hourly from GoWhats.
+                        </p>
+
+                        <div className="space-y-6">
+                            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                                <div>
+                                    <label className="text-sm font-medium text-gray-700">Enable Unread Message Fine</label>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Turn this SLA penalty on or off for your company
+                                    </p>
+                                </div>
+                                <CustomToggle
+                                    checked={settings.unreadMessageFineConfig?.enabled ?? false}
+                                    onChange={() => handleUnreadFineChange('enabled', !(settings.unreadMessageFineConfig?.enabled ?? false))}
+                                />
+                            </div>
+
+                            {settings.unreadMessageFineConfig?.enabled && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Fine Amount per Message (₹)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            min="0"
+                                            step="1"
+                                            value={settings.unreadMessageFineConfig?.amountPerMessage ?? 0}
+                                            onChange={(e) => handleUnreadFineChange('amountPerMessage', parseFloat(e.target.value) || 0)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-rose-500 focus:border-rose-500"
+                                        />
+                                        <p className="text-xs text-gray-500">
+                                            Deducted from the assigned staff's salary for each overdue unread chat
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Unread Threshold (Hours)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            value={settings.unreadMessageFineConfig?.thresholdHours ?? 24}
+                                            onChange={(e) => handleUnreadFineChange('thresholdHours', parseInt(e.target.value) || 1)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-rose-500 focus:border-rose-500"
+                                        />
+                                        <p className="text-xs text-gray-500">
+                                            How long a chat can sit unread before the fine is applied
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {settings.unreadMessageFineConfig?.enabled && (
+                                <div className="bg-rose-50 border border-rose-100 rounded-lg p-3">
+                                    <p className="text-xs text-rose-700">
+                                        Each unread customer chat assigned to a staff member, left unread for more than{' '}
+                                        <strong>{settings.unreadMessageFineConfig?.thresholdHours ?? 24} hours</strong>, results in a{' '}
+                                        <strong>₹{settings.unreadMessageFineConfig?.amountPerMessage ?? 0}</strong> fine on that staff member's salary. A chat is only fined once per overdue message.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </Card>
+
                 {/* Advanced Leave Deduction Settings */}
                 <Card className="mb-8 hover:shadow-lg transition-shadow duration-200">
                     <div className="h-2 bg-gradient-to-r from-red-400 to-orange-400" />
@@ -1187,7 +1246,6 @@ const Settings = () => {
                             </h3>
                         </div>
 
-                        {/* Global Multiplier Setting */}
                         <div className="mb-8 p-6 bg-red-50/30 rounded-2xl border-2 border-dashed border-red-100">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div>
@@ -1224,7 +1282,6 @@ const Settings = () => {
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            {/* Rule Toggles */}
                             <div className="space-y-6">
                                 <div className="bg-gray-50 p-6 rounded-xl border border-gray-100 h-full">
                                     <div className="flex items-center justify-between mb-2">
@@ -1263,7 +1320,7 @@ const Settings = () => {
                                                             disabled={!settings.advancedLeaveDeduction.thresholds[item.key].enabled}
                                                             value={settings.advancedLeaveDeduction.thresholds[item.key].value}
                                                             onChange={(e) => handleAdvancedSettingsChange(null, parseInt(e.target.value) || 0, item.key, 'value')}
-                                                            className={`w-full px-3 py-1.5 border rounded-lg focus:ring-red-500 focus:border-red-500 transition-all font-medium text-gray-700 text-center ${!settings.advancedLeaveDeduction.thresholds[item.key].enabled ? 'bg-gray-100 text-gray-400' : 'bg-white' }`}
+                                                            className={`w-full px-3 py-1.5 border rounded-lg focus:ring-red-500 focus:border-red-500 transition-all font-medium text-gray-700 text-center ${!settings.advancedLeaveDeduction.thresholds[item.key].enabled ? 'bg-gray-100 text-gray-400' : 'bg-white'}`}
                                                         />
                                                     </div>
                                                 </div>
@@ -1286,7 +1343,7 @@ const Settings = () => {
                                         Penalty of {settings.advancedLeaveDeduction.deductionMultiplier}X deduction applies once an employee exceeds their monthly leave limit.
                                     </p>
 
-                                     {settings.advancedLeaveDeduction.monthlyLimitRuleEnabled && (
+                                    {settings.advancedLeaveDeduction.monthlyLimitRuleEnabled && (
                                         <div className="pt-4 border-t border-gray-200 space-y-6">
                                             <div className="flex items-center">
                                                 <div className="flex-grow">
@@ -1307,7 +1364,6 @@ const Settings = () => {
                                                 </div>
                                             </div>
 
-                                            {/* New Permission Toggle */}
                                             <div className="flex items-center justify-between p-3 bg-white border border-red-100 rounded-lg shadow-sm">
                                                 <div>
                                                     <label className="text-sm font-bold text-gray-700">Include Permission in Penalty</label>
@@ -1346,7 +1402,7 @@ const Settings = () => {
                                         </p>
                                     </div>
                                     <div className="pt-4 border-t border-gray-200 mt-auto flex items-center gap-2">
-                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black tracking-wider transition-colors duration-300 ${ settings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-gray-100 text-gray-500 border border-gray-200' }`}>
+                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black tracking-wider transition-colors duration-300 ${settings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
                                             {settings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty ? 'Enabled (5X)' : 'Disabled'}
                                         </span>
                                         <span className="text-[10px] text-gray-400 font-bold tracking-wider">
@@ -1357,7 +1413,6 @@ const Settings = () => {
                             </div>
                         </div>
 
-                        {/* Note */}
                         <div className="mt-8 p-4 bg-blue-50 border border-blue-100 rounded-lg flex items-start">
                             <FiAlertTriangle className="text-blue-500 h-5 w-5 mr-3 mt-0.5" />
                             <div className="text-xs text-blue-700 font-medium leading-relaxed">
@@ -1445,7 +1500,6 @@ const Settings = () => {
                                         Work Batches
                                     </h3>
                                 </div>
-                                {/* Batches List */}
                                 {settings.batches && settings.batches.map((batch, index) => (
                                     <div key={index} className="batch-item border p-4 mb-4 rounded">
                                         <div className="flex justify-between items-center mb-3">
@@ -1457,7 +1511,6 @@ const Settings = () => {
                                                 Remove
                                             </button>
                                         </div>
-                                        {/* Batch Name */}
                                         <div className="mb-3">
                                             <label className="block text-sm font-medium mb-1">Batch Name</label>
                                             <input
@@ -1468,7 +1521,6 @@ const Settings = () => {
                                                 placeholder="Enter batch name"
                                             />
                                         </div>
-                                        {/* Factory Worker Toggle */}
                                         <div className="flex items-center justify-between mb-4 border-b pb-4">
                                             <div>
                                                 <label className="block text-sm font-medium">Factory Worker</label>
@@ -1486,7 +1538,6 @@ const Settings = () => {
 
                                         {!batch.isFactoryWorkerToggle ? (
                                             <>
-                                                {/* Working Hours */}
                                                 <div className="grid grid-cols-2 gap-4 mb-3">
                                                     <div>
                                                         <label className="block text-sm font-medium mb-1">From</label>
@@ -1507,7 +1558,6 @@ const Settings = () => {
                                                         />
                                                     </div>
                                                 </div>
-                                                {/* Lunch Hours */}
                                                 <div className="grid grid-cols-2 gap-4 mb-3">
                                                     <div>
                                                         <label className="block text-sm font-medium mb-1">Lunch From</label>
@@ -1528,7 +1578,6 @@ const Settings = () => {
                                                         />
                                                     </div>
                                                 </div>
-                                                {/* Consider Work at Lunch Toggle */}
                                                 <div className="flex items-center justify-between">
                                                     <div>
                                                         <label className="block text-sm font-medium">Consider Work at Lunch</label>
@@ -1546,7 +1595,6 @@ const Settings = () => {
                                             </>
                                         ) : (
                                             <>
-                                                {/* Factory Worker specific settings */}
                                                 <div className="grid grid-cols-2 gap-4 mb-3">
                                                     <div>
                                                         <label className="block text-sm font-medium mb-1">Required Hrs Per Day</label>
@@ -1604,7 +1652,6 @@ const Settings = () => {
                                         Break Intervals
                                     </h3>
                                 </div>
-                                {/* Intervals List */}
                                 {settings.intervals && settings.intervals.map((interval, index) => (
                                     <div key={index} className="interval-item border p-4 mb-4 rounded">
                                         <div className="flex justify-between items-center mb-3">
@@ -1616,7 +1663,6 @@ const Settings = () => {
                                                 Remove
                                             </button>
                                         </div>
-                                        {/* Interval Name */}
                                         <div className="mb-3">
                                             <label className="block text-sm font-medium mb-1">Interval Name</label>
                                             <input
@@ -1627,7 +1673,6 @@ const Settings = () => {
                                                 placeholder="Enter interval name"
                                             />
                                         </div>
-                                        {/* Interval Times */}
                                         <div className="grid grid-cols-2 gap-4 mb-3">
                                             <div>
                                                 <label className="block text-sm font-medium mb-1">From</label>
@@ -1648,7 +1693,6 @@ const Settings = () => {
                                                 />
                                             </div>
                                         </div>
-                                        {/* Consider Work at Breaks Toggle */}
                                         <div className="flex items-center justify-between">
                                             <div>
                                                 <label className="block text-sm font-medium">Consider Work at Breaks</label>
@@ -1676,142 +1720,6 @@ const Settings = () => {
                     </div>
                 </div>
 
-                {/* Settings Summary */}
-                {/* <Card className="bg-gradient-to-br from-gray-50 to-gray-100">
-                    <div className="p-6">
-                        <h3 className="text-lg font-semibold mb-6 text-gray-900">Configuration Summary</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div className="bg-white p-4 rounded-lg shadow-sm">
-                                <h4 className="font-medium text-gray-700 mb-3 flex items-center">
-                                    <FiClock className="mr-2 h-4 w-4" />
-                                    Meal Services
-                                </h4>
-                                <div className="space-y-2 text-sm">
-                                    <div className="flex justify-between">
-                                        <span>Breakfast:</span>
-                                        <span className={settings.breakfastEnabled ? 'text-green-600 font-medium' : 'text-red-600'}>
-                                            {settings.breakfastEnabled ? '✓ Enabled' : '✗ Disabled'}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Lunch:</span>
-                                        <span className={settings.foodRequestEnabled ? 'text-green-600 font-medium' : 'text-red-600'}>
-                                            {settings.foodRequestEnabled ? '✓ Enabled' : '✗ Disabled'}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Dinner:</span>
-                                        <span className={settings.dinnerEnabled ? 'text-green-600 font-medium' : 'text-red-600'}>
-                                            {settings.dinnerEnabled ? '✓ Enabled' : '✗ Disabled'}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="bg-white p-4 rounded-lg shadow-sm">
-                                <h4 className="font-medium text-gray-700 mb-3 flex items-center">
-                                    <FiToggleRight className="mr-2 h-4 w-4" />
-                                    Automation
-                                </h4>
-                                <div className="space-y-2 text-sm">
-                                    <div className="flex justify-between">
-                                        <span>Email Reports:</span>
-                                        <span className={settings.emailReportsEnabled ? 'text-green-600 font-medium' : 'text-gray-600'}>
-                                            {settings.emailReportsEnabled ? '✓ Active' : '✗ Inactive'}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Breakfast Auto:</span>
-                                        <span className={settings.breakfastAutoSwitch ? 'text-green-600 font-medium' : 'text-gray-600'}>
-                                            {settings.breakfastAutoSwitch ? '✓ Active' : '✗ Inactive'}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Lunch Auto:</span>
-                                        <span className={settings.foodRequestAutoSwitch ? 'text-green-600 font-medium' : 'text-gray-600'}>
-                                            {settings.foodRequestAutoSwitch ? '✓ Active' : '✗ Inactive'}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Dinner Auto:</span>
-                                        <span className={settings.dinnerAutoSwitch ? 'text-green-600 font-medium' : 'text-gray-600'}>
-                                            {settings.dinnerAutoSwitch ? '✓ Active' : '✗ Inactive'}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="bg-white p-4 rounded-lg shadow-sm">
-                                <h4 className="font-medium text-gray-700 mb-3 flex items-center">
-                                    <FiDollarSign className="mr-2 h-4 w-4" />
-                                    Financial Settings
-                                </h4>
-                                <div className="space-y-2 text-sm">
-                                    <div className="flex justify-between">
-                                        <span>Permission Time:</span>
-                                        <span className="font-medium">{settings.permissionTimeMinutes} min</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Deduction Amount:</span>
-                                        <span className="font-medium">₹{settings.salaryDeductionPerBreak}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Consider Overtime:</span>
-                                        <span className={settings.considerOvertime ? 'text-green-600 font-medium' : 'text-gray-600'}>
-                                            {settings.considerOvertime ? '✓ Yes' : '✗ No'}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Salary Deduction:</span>
-                                        <span className={settings.deductSalary ? 'text-green-600 font-medium' : 'text-gray-600'}>
-                                            {settings.deductSalary ? '✓ Enabled' : '✗ Disabled'}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="bg-white p-4 rounded-lg shadow-sm">
-                                <h4 className="font-medium text-gray-700 mb-3 flex items-center">
-                                    <FiMapPin className="mr-2 h-4 w-4" />
-                                    Location Settings
-                                </h4>
-                                <div className="space-y-2 text-sm">
-                                    <div className="flex justify-between">
-                                        <span>Location Restriction:</span>
-                                        <span className={settings.attendanceLocation.enabled ? 'text-green-600 font-medium' : 'text-gray-600'}>
-                                            {settings.attendanceLocation.enabled ? '✓ Enabled' : '✗ Disabled'}
-                                        </span>
-                                    </div>
-                                    {settings.attendanceLocation.enabled && (
-                                        <>
-                                            <div className="flex justify-between">
-                                                <span>Latitude:</span>
-                                                <span className="font-medium">{settings.attendanceLocation.latitude.toFixed(6)}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span>Longitude:</span>
-                                                <span className="font-medium">{settings.attendanceLocation.longitude.toFixed(6)}</span>
-                                            </div>
-                                            {currentLocation && (
-                                                <div className="flex justify-between">
-                                                    <span>Current Location:</span>
-                                                    <span className="font-medium">
-                                                        {currentLocation.latitude.toFixed(6)}, {currentLocation.longitude.toFixed(6)}
-                                                        {currentLocation.accuracy && ` (±${Math.round(currentLocation.accuracy)}m)`}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            <div className="flex justify-between">
-                                                <span>Radius:</span>
-                                                <span className="font-medium">{settings.attendanceLocation.radius}m</span>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </Card> */}
                 {/* AI Second Brain Configuration */}
                 <Card className="mb-8 hover:shadow-lg transition-shadow duration-200">
                     <div className="h-2 bg-gradient-to-r from-blue-500 to-indigo-600" />
@@ -1923,7 +1831,6 @@ const Settings = () => {
                                         </div>
                                     </div>
 
-                                    {/* Usage Stats counters */}
                                     <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4 grid grid-cols-2 gap-4 text-center">
                                         <div>
                                             <div className="text-xl font-bold text-indigo-700">
@@ -1948,7 +1855,6 @@ const Settings = () => {
                 <Card className="mb-8 hover:shadow-lg transition-shadow duration-200 overflow-hidden">
                     <div className="h-2 bg-gradient-to-r from-violet-500 to-indigo-500" />
                     <div className="p-6">
-                        {/* Header Section */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-gray-100">
                             <div className="flex items-start gap-4">
                                 <div className="p-3 bg-indigo-50 rounded-2xl border border-indigo-100 text-indigo-600 flex-shrink-0">
@@ -1959,7 +1865,7 @@ const Settings = () => {
                                         <h3 className="text-lg font-bold text-gray-900 leading-tight">
                                             Bug Bounty Program
                                         </h3>
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${ (settings.bugBountyConfig?.enabled && settings.bugBountyConfig?.popupFrequency !== 'disabled' && settings.bugBountyConfig?.bugReportUrl) ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-600 border border-gray-200' }`}>
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${(settings.bugBountyConfig?.enabled && settings.bugBountyConfig?.popupFrequency !== 'disabled' && settings.bugBountyConfig?.bugReportUrl) ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
                                             {(settings.bugBountyConfig?.enabled && settings.bugBountyConfig?.popupFrequency !== 'disabled' && settings.bugBountyConfig?.bugReportUrl) ? 'Configured' : 'Not Configured'}
                                         </span>
                                     </div>
@@ -1978,10 +1884,8 @@ const Settings = () => {
                             </button>
                         </div>
 
-                        {/* Collapsible Content */}
                         {isBugBountyExpanded && (
                             <div className="space-y-6 pt-6">
-                                {/* Bug Report URL */}
                                 <div className="space-y-2">
                                     <label className="block text-sm font-bold text-gray-700">
                                         Bug Report URL
@@ -2005,7 +1909,6 @@ const Settings = () => {
                                     </div>
                                 </div>
 
-                                {/* Disclosure Message */}
                                 <div className="space-y-2">
                                     <label className="block text-sm font-bold text-gray-700">
                                         Disclosure Summary Message
@@ -2019,7 +1922,6 @@ const Settings = () => {
                                     />
                                 </div>
 
-                                {/* Dashboard Popup Frequency */}
                                 <div className="space-y-2">
                                     <label className="block text-sm font-bold text-gray-700">
                                         Dashboard Popup Frequency
@@ -2038,7 +1940,6 @@ const Settings = () => {
                                     </select>
                                 </div>
 
-                                {/* Action Buttons Row */}
                                 <div className="flex items-center justify-between pt-4 border-t border-gray-100">
                                     <button
                                         type="button"
