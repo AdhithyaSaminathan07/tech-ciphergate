@@ -267,20 +267,16 @@ const Dashboard = () => {
       setTopTeams(sortedTeams);
       // Fetch public settings for bug bounty popup
       try {
-        console.log('[DEBUG Admin Dashboard] subdomain:', subdomain);
         if (subdomain && subdomain !== 'main') {
           const response = await api.get(`/settings/public/${subdomain}`);
-          console.log('[DEBUG Admin Dashboard] response.data:', response.data);
           if (response.data?.bugBountyConfig) {
             const config = response.data.bugBountyConfig;
             setBugBountyData(config);
-            console.log('[DEBUG Admin Dashboard] config:', config);
 
             if (config.popupFrequency && config.popupFrequency !== 'disabled') {
               const username = user?.username || 'default';
               const lastShownKey = `bugBountyPopupLastShown_${username}`;
               const lastShown = localStorage.getItem(lastShownKey);
-              console.log('[DEBUG Admin Dashboard] username:', username, 'lastShownKey:', lastShownKey, 'lastShown:', lastShown);
 
               let shouldShow = false;
               if (config.popupFrequency === 'always') {
@@ -309,7 +305,6 @@ const Dashboard = () => {
                 }
               }
 
-              console.log('[DEBUG Admin Dashboard] shouldShow popup:', shouldShow);
               if (shouldShow) {
                 setShowBugBountyPopup(true);
               }

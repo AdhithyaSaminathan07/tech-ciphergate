@@ -2,7 +2,6 @@
 import api from './api';
 
 export const submitFoodRequest = async (foodRequestData) => {
-  console.log('🔍 DEBUG: submitFoodRequest called with:', foodRequestData);
   
   if (!foodRequestData.subdomain || foodRequestData.subdomain == 'main') {
     throw new Error('Subdomain was missing check the URL.');
@@ -21,7 +20,6 @@ export const submitFoodRequest = async (foodRequestData) => {
 };
 
 export const submitRequestForWorkerByAdmin = async (foodRequestData) => {
-  console.log('🔍 DEBUG: submitRequestForWorkerByAdmin called with:', foodRequestData);
 
   if (!foodRequestData.subdomain || foodRequestData.subdomain == 'main') {
     throw new Error('Subdomain was missing check the URL.');
@@ -44,7 +42,6 @@ export const submitRequestForWorkerByAdmin = async (foodRequestData) => {
 };
 
 export const getTodayRequests = async (foodRequestData) => {
-  console.log('🔍 DEBUG: getTodayRequests called with:', foodRequestData);
   
   if (!foodRequestData.subdomain || foodRequestData.subdomain == 'main') {
     throw new Error('Subdomain was missing check the URL.');
@@ -61,7 +58,6 @@ export const getTodayRequests = async (foodRequestData) => {
 };
 
 export const getMealsSummary = async (foodRequestData) => {
-  console.log('🔍 DEBUG: getMealsSummary called with:', foodRequestData);
   
   if (!foodRequestData.subdomain || foodRequestData.subdomain == 'main') {
     throw new Error('Subdomain was missing check the URL.');
@@ -77,7 +73,6 @@ export const getMealsSummary = async (foodRequestData) => {
 };
 
 export const toggleFoodRequests = async (foodRequestData) => {
-  console.log('🔍 DEBUG: toggleFoodRequests called with:', foodRequestData);
   
   if (!foodRequestData.subdomain || foodRequestData.subdomain == 'main') {
     throw new Error('Subdomain was missing check the URL.');
@@ -99,7 +94,6 @@ export const toggleFoodRequests = async (foodRequestData) => {
 };
 
 export const getFoodRequestSettings = async (foodRequestData) => {
-  console.log('🔍 DEBUG: getFoodRequestSettings called with:', foodRequestData);
   
   if (!foodRequestData.subdomain || foodRequestData.subdomain === 'main') {
     throw new Error('Subdomain was missing check the URL.');
@@ -115,7 +109,6 @@ export const getFoodRequestSettings = async (foodRequestData) => {
 };
 
 export const updateMealSettings = async (data) => {
-  console.log('🔍 DEBUG: updateMealSettings called with:', data);
   
   if (!data.subdomain || data.subdomain === 'main') {
     throw new Error('Subdomain was missing check the URL.');

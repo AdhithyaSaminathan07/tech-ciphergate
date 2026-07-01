@@ -36,8 +36,8 @@ const SalaryProjectManagement = () => {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
-  const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
-  const [filterYear, setFilterYear] = useState(new Date().getFullYear());
+  const [filterMonth, setFilterMonth] = useState('');
+  const [filterYear, setFilterYear] = useState('');
   const [searchDev, setSearchDev] = useState('');
 
   const loadData = async () => {
@@ -191,8 +191,9 @@ const SalaryProjectManagement = () => {
             <select
               className="form-input"
               value={filterMonth}
-              onChange={e => setFilterMonth(parseInt(e.target.value))}
+              onChange={e => setFilterMonth(e.target.value ? parseInt(e.target.value) : '')}
             >
+              <option value="">All</option>
               {MONTHS.slice(1).map((m, i) => (
                 <option key={i + 1} value={i + 1}>{m}</option>
               ))}
@@ -203,8 +204,9 @@ const SalaryProjectManagement = () => {
             <select
               className="form-input"
               value={filterYear}
-              onChange={e => setFilterYear(parseInt(e.target.value))}
+              onChange={e => setFilterYear(e.target.value ? parseInt(e.target.value) : '')}
             >
+              <option value="">All</option>
               {years.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>

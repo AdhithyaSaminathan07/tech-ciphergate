@@ -27,7 +27,6 @@ export const NotificationProvider = ({ children }) => {
 
         const fetchNotifications = async () => {
             try {
-                console.log('[Notification Debug] Fetching notifications from api base:', apiBase);
                 const res = await api.get(apiBase);
                 setNotifications(res.data.notifications);
                 setUnreadCount(res.data.unreadCount);
@@ -40,7 +39,6 @@ export const NotificationProvider = ({ children }) => {
                 });
 
                 if (pushEnabled) {
-                    console.log('[Notification Debug] Automatic push subscription triggered on login.');
                     subscribeToPush();
                 }
             } catch (err) {
@@ -114,13 +112,11 @@ export const NotificationProvider = ({ children }) => {
         }
 
         try {
-            console.log('[Notification Debug] Checking permissions...');
             // Request permission explicitly
             let permission = Notification.permission;
             if (permission === 'default') {
                 permission = await Notification.requestPermission();
             }
-            console.log('[Notification Debug] Permission status:', permission);
 
             if (permission !== 'granted') {
                 console.warn('[Notification Debug] Push notification permission not granted.');
@@ -128,10 +124,8 @@ export const NotificationProvider = ({ children }) => {
             }
 
             const registration = await navigator.serviceWorker.ready;
-            console.log('[Notification Debug] Service Worker active registration verified:', !!registration);
 
             const publicVapidKey = import.meta.env.VITE_PUBLIC_VAPID_KEY;
-            console.log('[Notification Debug] Public VAPID Key loaded:', publicVapidKey ? 'YES' : 'NO');
             
             if (!publicVapidKey) {
                 console.warn('[Notification Debug] VAPID key not configured in frontend environment.');
@@ -149,16 +143,12 @@ export const NotificationProvider = ({ children }) => {
                 outputArray[i] = rawData.charCodeAt(i);
             }
 
-            console.log('[Notification Debug] Subscribing to PushManager...');
             const subscription = await registration.pushManager.subscribe({
                 userVisibleOnly: true,
                 applicationServerKey: outputArray
             });
-            console.log('[Notification Debug] Generated subscription object successfully.');
 
-            console.log('[Notification Debug] Sending subscription payload to backend...');
             const res = await api.post(`${apiBase}/subscribe`, { subscription });
-            console.log('[Notification Debug] Push Subscription saved on server. Status:', res.status);
             
             toast.success('Push notifications enabled');
         } catch (error) {

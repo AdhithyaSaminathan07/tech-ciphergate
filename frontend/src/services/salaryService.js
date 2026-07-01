@@ -262,4 +262,35 @@ export const getProjectAdjustmentLedger = async (workerId, subdomain) => {
     throw error.response ? error.response.data : new Error('Failed to get project adjustment ledger');
   }
 };
-
+
+
+// ─── PAYROLL ADJUSTMENTS (ENTERPRISE MODULE) ───
+export const getPayrollRecord = async (workerId, month, year, subdomain) => {
+  const response = await api.get(`/salary/payroll-records/${workerId}?month=${month}&year=${year}&subdomain=${subdomain}`);
+  return response.data;
+};
+
+export const addPayrollAdjustment = async (workerId, data) => {
+  const response = await api.post(`/salary/payroll-records/${workerId}/adjustments`, data);
+  return response.data;
+};
+
+export const updatePayrollAdjustment = async (workerId, adjustmentId, data) => {
+  const response = await api.put(`/salary/payroll-records/${workerId}/adjustments/${adjustmentId}`, data);
+  return response.data;
+};
+
+export const deletePayrollAdjustment = async (workerId, adjustmentId, month, year, subdomain) => {
+  const response = await api.delete(`/salary/payroll-records/${workerId}/adjustments/${adjustmentId}?month=${month}&year=${year}&subdomain=${subdomain}`);
+  return response.data;
+};
+
+export const restorePayrollAdjustment = async (workerId, adjustmentId, month, year, subdomain) => {
+  const response = await api.post(`/salary/payroll-records/${workerId}/adjustments/${adjustmentId}/restore`, { month, year, subdomain });
+  return response.data;
+};
+
+export const updatePayrollStatus = async (workerId, data) => {
+  const response = await api.put(`/salary/payroll-records/${workerId}/status`, data);
+  return response.data;
+};

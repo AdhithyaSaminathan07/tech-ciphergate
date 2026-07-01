@@ -2,22 +2,22 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { 
-    Coins, 
-    Eye, 
-    FileDown, 
-    Trash2, 
-    Calendar, 
-    List, 
-    ChevronLeft, 
-    ChevronDown, 
-    ChevronUp, 
-    RefreshCw, 
-    X, 
-    Sliders, 
-    FileText, 
-    Receipt, 
-    Wallet, 
+import {
+    Coins,
+    Eye,
+    FileDown,
+    Trash2,
+    Calendar,
+    List,
+    ChevronLeft,
+    ChevronDown,
+    ChevronUp,
+    RefreshCw,
+    X,
+    Sliders,
+    FileText,
+    Receipt,
+    Wallet,
     Filter,
     AlertTriangle
 } from 'lucide-react';
@@ -35,6 +35,7 @@ import { getAllHolidays } from '../../services/holidayService';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import AddFineModal from './modals/AddFineModal';
+import PayrollAdjustmentModal from './modals/PayrollAdjustmentModal';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -79,7 +80,7 @@ const WorkerAvatar = ({ record }) => {
     const [imgFailed, setImgFailed] = React.useState(false);
     const photoUrl = record?.photo;
     const hasPhoto = photoUrl && photoUrl !== 'null' && photoUrl !== 'undefined' && photoUrl !== '';
-    
+
     if (hasPhoto && !imgFailed) {
         return (
             <img
@@ -90,11 +91,11 @@ const WorkerAvatar = ({ record }) => {
             />
         );
     }
-    
-    const initials = record?.name 
-        ? record.name.trim().split(/\s+/).map(n => n[0]).slice(0, 2).join('').toUpperCase() 
+
+    const initials = record?.name
+        ? record.name.trim().split(/\s+/).map(n => n[0]).slice(0, 2).join('').toUpperCase()
         : '??';
-        
+
     return (
         <div className="w-9 h-9 rounded-full bg-teal-50 border border-teal-100/80 flex items-center justify-center text-teal-700 font-extrabold text-xs mr-3 flex-none">
             {initials}
@@ -138,6 +139,10 @@ const SalaryManagement = () => {
 
     // ADD FINE STATE
     const [isFineModalOpen, setIsFineModalOpen] = useState(false);
+
+    // PAYROLL ADJUSTMENT STATE
+    const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
+    const [expandedAdjustments, setExpandedAdjustments] = useState({});
 
     // State for fine filter
     const [isFineFilterOpen, setIsFineFilterOpen] = useState(false);
@@ -622,6 +627,7 @@ const SalaryManagement = () => {
             return;
         }
         setIsReportLoading(true);
+        setReportData(null);
         try {
             const data = await getSalaryReport(selectedWorker._id, fromDate, toDate);
             setReportData(data);
@@ -998,6 +1004,7 @@ const SalaryManagement = () => {
         }
 
         setIsBulkReportLoading(true);
+        setBulkReportData([]);
         try {
             // Calculate the date range for the selected month
             const year = selectedYear;
@@ -1448,23 +1455,38 @@ const SalaryManagement = () => {
         doc.text(`Period: ${monthName} ${selectedYear}`, 14, 33);
 
         // Summary Stats
-        const totalPayout = bulkReportData.reduce((sum, r) => sum + Math.max(0, r.totalFinalSalary - (deductionView ? (r.taskPenalty || 0) : 0)), 0);
+        const totalPayout = bulkReportData.reduce((sum, r) => sum + Math.max(0, (r.payableSalary !== undefined ? r.payableSalary : r.totalFinalSalary) - (deductionView ? (r.taskPenalty || 0) : 0)), 0);
 
         doc.setTextColor(255, 255, 255);
         doc.text(`Total Employees: ${bulkReportData.length}`, pageWidth - 60, 25);
         doc.text(`Total Payout: Rs. ${totalPayout.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, pageWidth - 60, 33);
 
-        // Table
-        const tableColumn = ['Employee', 'Department', 'Working', 'Actual Worked', 'Absent', 'Project Adj', 'Net Salary'];
-        const tableRows = bulkReportData.map(r => [
-            r.name,
-            r.department,
-            `${r.totalWorkingDays} Days`,
-            `${r.actualWorkingDays} Days`,
-            `${r.totalAbsentDays} Days`,
-            r.projectAdjustment ? `${r.projectAdjustment > 0 ? '+' : ''}Rs. ${r.projectAdjustment.toFixed(2)}` : 'Rs. 0.00',
-            `Rs. ${Math.max(0, r.totalFinalSalary - (deductionView ? (r.taskPenalty || 0) : 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-        ]);
+        let tableColumn, tableRows;
+
+        if (showDetailedBreakdown) {
+            tableColumn = ['Employee', 'Attendance Salary', 'Payroll Adjustments', 'Payable Salary'];
+            tableRows = bulkReportData.map(r => {
+                const activeAdjs = r.payrollRecord?.adjustments?.filter(a => !a.isDeleted) || [];
+                const adjsText = activeAdjs.map(a => `${a.type === 'addition' ? '+' : '-'}Rs. ${a.amount} (${a.reason})`).join('\n');
+                return [
+                    r.name,
+                    `Rs. ${(r.attendanceSalary || r.totalFinalSalary).toFixed(2)}`,
+                    adjsText || 'None',
+                    `Rs. ${(r.payableSalary !== undefined ? r.payableSalary : r.totalFinalSalary).toFixed(2)}`
+                ];
+            });
+        } else {
+            tableColumn = ['Employee', 'Department', 'Working', 'Actual Worked', 'Absent', 'Project Adj', 'Net Salary'];
+            tableRows = bulkReportData.map(r => [
+                r.name,
+                r.department,
+                `${r.totalWorkingDays} Days`,
+                `${r.actualWorkingDays} Days`,
+                `${r.totalAbsentDays} Days`,
+                r.projectAdjustment ? `${r.projectAdjustment > 0 ? '+' : ''}Rs. ${r.projectAdjustment.toFixed(2)}` : 'Rs. 0.00',
+                `Rs. ${Math.max(0, (r.payableSalary !== undefined ? r.payableSalary : r.totalFinalSalary) - (deductionView ? (r.taskPenalty || 0) : 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+            ]);
+        }
 
         autoTable(doc, {
             startY: 50,
@@ -1473,10 +1495,14 @@ const SalaryManagement = () => {
             theme: 'striped',
             headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
             alternateRowStyles: { fillColor: [248, 250, 252] },
-            styles: { fontSize: 9, cellPadding: 4 },
-            columnStyles: {
-                4: { halign: 'right' },
-                5: { halign: 'right', fontStyle: 'bold' }
+            styles: { fontSize: 8, cellPadding: 3 },
+            columnStyles: showDetailedBreakdown ? {
+                1: { halign: 'right' },
+                2: { cellWidth: 70 },
+                3: { halign: 'right', fontStyle: 'bold' }
+            } : {
+                5: { halign: 'right' },
+                6: { halign: 'right', fontStyle: 'bold' }
             }
         });
 
@@ -1857,27 +1883,43 @@ const SalaryManagement = () => {
 
         const monthName = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][selectedMonth - 1];
 
-        const headers = [
-            'Employee', 'Department', 'Working Days', 'Actual Worked', 'Absent Days', 'Project Adj', 'Final Salary',
-            'Bank Status'
-        ];
+        let headers, rows;
 
-        const rows = bulkReportData.map(report => {
-            const worker = workers.find(w => w._id === report.workerId);
-            const hasBankDetails = worker?.bankDetails?.accountNumber && worker?.bankDetails?.ifscCode;
-            const finalSalary = Math.max(0, report.totalFinalSalary - (deductionView ? (report.taskPenalty || 0) : 0));
-
-            return [
-                report.name,
-                report.department,
-                report.totalWorkingDays,
-                report.actualWorkingDays,
-                report.totalAbsentDays,
-                (report.projectAdjustment || 0).toFixed(2),
-                finalSalary.toFixed(2),
-                hasBankDetails ? 'Added' : 'Pending'
+        if (showDetailedBreakdown) {
+            headers = ['Employee', 'Attendance Salary', 'Payroll Adjustments', 'Final Payable Salary'];
+            rows = bulkReportData.map(report => {
+                const activeAdjs = report.payrollRecord?.adjustments?.filter(a => !a.isDeleted) || [];
+                const adjsText = activeAdjs.map(a => `${a.type === 'addition' ? '+' : '-'}Rs. ${a.amount} (${a.category} - ${a.reason})`).join('; ');
+                return [
+                    report.name,
+                    (report.attendanceSalary || report.totalFinalSalary).toFixed(2),
+                    adjsText || 'None',
+                    (report.payableSalary !== undefined ? report.payableSalary : report.totalFinalSalary).toFixed(2)
+                ];
+            });
+        } else {
+            headers = [
+                'Employee', 'Department', 'Working Days', 'Actual Worked', 'Absent Days', 'Project Adj', 'Final Salary',
+                'Bank Status'
             ];
-        });
+
+            rows = bulkReportData.map(report => {
+                const worker = workers.find(w => w._id === report.workerId);
+                const hasBankDetails = worker?.bankDetails?.accountNumber && worker?.bankDetails?.ifscCode;
+                const finalSalary = Math.max(0, (report.payableSalary !== undefined ? report.payableSalary : report.totalFinalSalary) - (deductionView ? (report.taskPenalty || 0) : 0));
+
+                return [
+                    report.name,
+                    report.department,
+                    report.totalWorkingDays,
+                    report.actualWorkingDays,
+                    report.totalAbsentDays,
+                    (report.projectAdjustment || 0).toFixed(2),
+                    finalSalary.toFixed(2),
+                    hasBankDetails ? 'Added' : 'Pending'
+                ];
+            });
+        }
 
         const wsData = [headers, ...rows];
         const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -1895,7 +1937,7 @@ const SalaryManagement = () => {
                     <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Payroll Overview</h1>
                     <p className="text-sm text-slate-500 mt-1">Manage employee base pay, bonuses, and fines</p>
                 </div>
-                
+
                 {/* Header Actions */}
                 <div className="grid grid-cols-2 md:flex md:flex-wrap items-center gap-2.5 w-full md:w-auto">
                     <button
@@ -1911,7 +1953,7 @@ const SalaryManagement = () => {
                         <Coins size={14} className="text-slate-400" /> Fine
                     </button>
                     <button
-                        className={`px-3 py-2 border rounded-xl font-bold transition-all duration-150 active:scale-95 flex justify-center items-center gap-1.5 text-xs shadow-sm whitespace-nowrap ${ isFineFilterOpen ? 'border-teal-200 bg-teal-50 text-teal-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300' }`}
+                        className={`px-3 py-2 border rounded-xl font-bold transition-all duration-150 active:scale-95 flex justify-center items-center gap-1.5 text-xs shadow-sm whitespace-nowrap ${isFineFilterOpen ? 'border-teal-200 bg-teal-50 text-teal-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'}`}
                         onClick={() => {
                             const nextState = !isFineFilterOpen;
                             setIsFineFilterOpen(nextState);
@@ -2108,12 +2150,12 @@ const SalaryManagement = () => {
                                 </button>
                             )}
                         </div>
-                        
+
                         <div className="flex items-center gap-2 w-full md:w-auto flex-none justify-end">
                             <button
                                 type="button"
                                 onClick={() => setIsSalaryFilterOpen(!isSalaryFilterOpen)}
-                                className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border font-bold text-xs transition-all duration-200 active:scale-95 w-full md:w-auto shadow-sm ${ isSalaryFilterOpen ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300' }`}
+                                className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border font-bold text-xs transition-all duration-200 active:scale-95 w-full md:w-auto shadow-sm ${isSalaryFilterOpen ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'}`}
                             >
                                 <Sliders size={14} className="text-slate-500" />
                                 <span>Filters</span>
@@ -2321,6 +2363,32 @@ const SalaryManagement = () => {
                 onFineAdded={loadData}
             />
 
+            {/* PAYROLL ADJUSTMENT MODAL */}
+            <PayrollAdjustmentModal
+                isOpen={isAdjustmentModalOpen}
+                onClose={() => setIsAdjustmentModalOpen(false)}
+                bulkReportData={bulkReportData}
+                month={selectedMonth}
+                year={selectedYear}
+                subdomain={subdomain || ''}
+                deductionView={deductionView}
+                onAdjustmentSaved={() => {
+                    // Re-fetch bulk report to pick up latest adjustments
+                    if (bulkReportData && bulkReportData.length > 0) {
+                        const fromDate = new Date(selectedYear, selectedMonth - 1, 1).toISOString().slice(0, 10);
+                        const toDate = new Date(selectedYear, selectedMonth, 0).toISOString().slice(0, 10);
+                        setIsBulkReportLoading(true);
+                        getBulkSalaryReport(subdomain, fromDate, toDate)
+                            .then(data => {
+                                const filtered = (data.reports || []).filter(r => selectedWorkersForReport.map(w => w._id || w).includes(r.workerId));
+                                setBulkReportData(filtered);
+                                setIsBulkReportLoading(false);
+                            })
+                            .catch(() => setIsBulkReportLoading(false));
+                    }
+                }}
+            />
+
             {/* BULK REPORT — FULL PAGE OVERLAY */}
             <AnimatePresence>
                 {isBulkReportModalOpen && (
@@ -2386,7 +2454,7 @@ const SalaryManagement = () => {
                                     disabled={isBulkReportLoading || selectedWorkersForReport.length === 0}
                                     className="flex items-center gap-2 px-5 py-2.5 rounded-2xl shadow-lg shadow-teal-500/20 text-sm"
                                 >
-                                    {isBulkReportLoading ? <Spinner size="sm" /> : (
+                                    {isBulkReportLoading ? 'Generating...' : (
                                         <>
                                             <RefreshCw size={13} className={isBulkReportLoading ? 'animate-spin' : ''} />
                                             <span>Generate · {selectedWorkersForReport.length}</span>
@@ -2455,7 +2523,7 @@ const SalaryManagement = () => {
                                     {bulkFilteredWorkers.map(worker => (
                                         <label
                                             key={worker._id}
-                                            className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer group ${selectedWorkersForReport.includes(worker._id) ? 'bg-teal-50 border-teal-200 shadow-sm' : 'bg-transparent border-slate-100 hover:border-slate-200 hover:bg-slate-50/60' }`}
+                                            className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer group ${selectedWorkersForReport.includes(worker._id) ? 'bg-teal-50 border-teal-200 shadow-sm' : 'bg-transparent border-slate-100 hover:border-slate-200 hover:bg-slate-50/60'}`}
                                         >
                                             <div className="flex items-center gap-3 min-w-0">
                                                 <div className="relative flex-none">
@@ -2479,7 +2547,7 @@ const SalaryManagement = () => {
                                                 checked={selectedWorkersForReport.includes(worker._id)}
                                                 onChange={() => toggleWorkerSelection(worker._id)}
                                             />
-                                            <div className={`w-5 h-5 rounded-lg border-2 flex-none flex items-center justify-center transition-colors ${selectedWorkersForReport.includes(worker._id) ? 'bg-teal-500 border-teal-500' : 'border-slate-200 group-hover:border-teal-200' }`}>
+                                            <div className={`w-5 h-5 rounded-lg border-2 flex-none flex items-center justify-center transition-colors ${selectedWorkersForReport.includes(worker._id) ? 'bg-teal-500 border-teal-500' : 'border-slate-200 group-hover:border-teal-200'}`}>
                                                 {selectedWorkersForReport.includes(worker._id) && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
                                             </div>
                                         </label>
@@ -2501,12 +2569,11 @@ const SalaryManagement = () => {
                                     </div>
                                 )}
 
-                                {/* Loading */}
-                                {isBulkReportLoading && (
-                                    <div className="flex items-center justify-center h-full py-20">
-                                        <Spinner size="lg" />
+                                {isBulkReportLoading && bulkReportData.length === 0 ? (
+                                    <div className="flex-1 flex flex-col items-center justify-center min-h-0 bg-slate-50/50 m-4 rounded-3xl border border-slate-100">
+                                        <p className="mt-4 text-sm font-bold text-slate-500 tracking-wide">Loading bulk report...</p>
                                     </div>
-                                )}
+                                ) : null}
 
                                 {/* Report Data */}
                                 <AnimatePresence>
@@ -2547,64 +2614,89 @@ const SalaryManagement = () => {
                                             <div className="flex items-center justify-between flex-wrap gap-3">
                                                 <h4 className="text-sm font-black text-slate-900 tracking-widest">Report Summary</h4>
 
-                                                {/* Export Dropdown */}
-                                                <div className="relative">
-                                                    <button
-                                                        onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
-                                                        className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-teal-600 text-white hover:bg-teal-700 transition-all text-[10px] font-black tracking-widest shadow-lg shadow-teal-200"
-                                                    >
-                                                        <span>Export Reports</span>
-                                                        <svg className={`w-3 h-3 transition-transform ${isExportDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                                                    </button>
-
-                                                    {isExportDropdownOpen && (
-                                                        <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 z-[1000] overflow-hidden">
-                                                            <div className="py-2">
-                                                                <button
-                                                                    onClick={() => { setIsExportDropdownOpen(false); downloadGeneralXLSX(); }}
-                                                                    className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                                                                >
-                                                                    <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                                                                    Export XLSX
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => { setIsExportDropdownOpen(false); downloadBulkSummaryPDF(); }}
-                                                                    className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                                                                >
-                                                                    <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                                                                    Export Consolidated PDF
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => { setIsExportDropdownOpen(false); downloadAllDetailedReportsPDF(); }}
-                                                                    className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                                                                >
-                                                                    <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 012-2h10a2 2 0 012 2M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg>
-                                                                    Consolidated Detailed PDF
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => { setIsExportDropdownOpen(false); downloadAllIndividualPDFs(); }}
-                                                                    className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                                                                >
-                                                                    <svg className="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                                                                    Download Separate PDFs
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => { setIsExportDropdownOpen(false); downloadAllAsSinglePDF(); }}
-                                                                    className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                                                                >
-                                                                    <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                                                                    All Employees — Single PDF
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => { setIsExportDropdownOpen(false); downloadBankStatementXLSX(); }}
-                                                                    className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                                                                >
-                                                                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
-                                                                    Bank Statement XLSX
-                                                                </button>
-                                                            </div>
-                                                        </div>
+                                                <div className="flex items-center gap-2">
+                                                    {bulkReportData && bulkReportData.length > 0 && (
+                                                        <label className="flex items-center gap-2 cursor-pointer text-[10px] font-black tracking-widest text-slate-700 bg-white border border-slate-200 px-4 py-2 rounded-2xl shadow-sm hover:bg-slate-50 transition-all select-none">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={showDetailedBreakdown}
+                                                                onChange={(e) => setShowDetailedBreakdown(e.target.checked)}
+                                                                className="w-3.5 h-3.5 rounded text-teal-600 focus:ring-teal-500 border-gray-300"
+                                                            />
+                                                            <span>Salary Breakdown</span>
+                                                        </label>
                                                     )}
+
+                                                    {/* Payroll Adjustments Button */}
+                                                    {bulkReportData && bulkReportData.length > 0 && (
+                                                        <button
+                                                            onClick={() => setIsAdjustmentModalOpen(true)}
+                                                            className="flex items-center gap-2 px-5 py-2 rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all text-[10px] font-black tracking-widest shadow-lg shadow-indigo-200"
+                                                        >
+                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                                                            <span>Payroll Adjustments</span>
+                                                        </button>
+                                                    )}
+
+                                                    {/* Export Dropdown */}
+                                                    <div className="relative">
+                                                        <button
+                                                            onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
+                                                            className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-teal-600 text-white hover:bg-teal-700 transition-all text-[10px] font-black tracking-widest shadow-lg shadow-teal-200"
+                                                        >
+                                                            <span>Export Reports</span>
+                                                            <svg className={`w-3 h-3 transition-transform ${isExportDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                                        </button>
+
+                                                        {isExportDropdownOpen && (
+                                                            <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 z-[1000] overflow-hidden">
+                                                                <div className="py-2">
+                                                                    <button
+                                                                        onClick={() => { setIsExportDropdownOpen(false); downloadGeneralXLSX(); }}
+                                                                        className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                                                    >
+                                                                        <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                                                        Export XLSX
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => { setIsExportDropdownOpen(false); downloadBulkSummaryPDF(); }}
+                                                                        className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                                                    >
+                                                                        <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                                                        Export Consolidated PDF
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => { setIsExportDropdownOpen(false); downloadAllDetailedReportsPDF(); }}
+                                                                        className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                                                    >
+                                                                        <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 012-2h10a2 2 0 012 2M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg>
+                                                                        Consolidated Detailed PDF
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => { setIsExportDropdownOpen(false); downloadAllIndividualPDFs(); }}
+                                                                        className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                                                    >
+                                                                        <svg className="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                                                        Download Separate PDFs
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => { setIsExportDropdownOpen(false); downloadAllAsSinglePDF(); }}
+                                                                        className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                                                    >
+                                                                        <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                                                        All Employees — Single PDF
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => { setIsExportDropdownOpen(false); downloadBankStatementXLSX(); }}
+                                                                        className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                                                    >
+                                                                        <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+                                                                        Bank Statement XLSX
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
 
@@ -2614,9 +2706,15 @@ const SalaryManagement = () => {
                                                     <table className="min-w-full divide-y divide-slate-100 text-xs">
                                                         <thead className="bg-slate-50/80 sticky top-0 backdrop-blur-sm z-10">
                                                             <tr>
-                                                                {['Employee', 'Department', 'Working Days', 'Actual Worked', 'Absent Days', 'Final Salary', 'Bank Status', 'Actions'].map(h => (
-                                                                    <th key={h} className="px-4 py-4 text-left font-black text-slate-400 tracking-widest border-b border-slate-100 text-[10px]">{h}</th>
-                                                                ))}
+                                                                {showDetailedBreakdown ? (
+                                                                    ['Employee', 'Attendance Salary', 'Payroll Adjustments', 'Final Payable Salary', 'Actions'].map(h => (
+                                                                        <th key={h} className="px-4 py-4 text-left font-black text-slate-400 tracking-widest border-b border-slate-100 text-[10px]">{h}</th>
+                                                                    ))
+                                                                ) : (
+                                                                    ['Employee', 'Department', 'Working Days', 'Actual Worked', 'Absent Days', 'Final Salary', 'Bank Status', 'Actions'].map(h => (
+                                                                        <th key={h} className="px-4 py-4 text-left font-black text-slate-400 tracking-widest border-b border-slate-100 text-[10px]">{h}</th>
+                                                                    ))
+                                                                )}
                                                             </tr>
                                                         </thead>
                                                         <tbody className="divide-y divide-slate-50">
@@ -2626,36 +2724,93 @@ const SalaryManagement = () => {
 
                                                                 return (
                                                                     <tr key={index} className="hover:bg-slate-50/50 transition-colors">
-                                                                        <td className="px-4 py-4">
-                                                                            <p className="font-bold text-slate-700">{report.name}</p>
-                                                                        </td>
-                                                                        <td className="px-4 py-4">
-                                                                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 font-bold text-[9px] tracking-wider">
-                                                                                {report.department}
-                                                                            </span>
-                                                                        </td>
-                                                                        <td className="px-4 py-4 font-bold text-slate-600">
-                                                                            {report.totalWorkingDays} <span className="text-[9px] text-slate-400 font-medium">Days</span>
-                                                                        </td>
-                                                                        <td className="px-4 py-4 font-bold text-teal-600">
-                                                                            {report.actualWorkingDays} <span className="text-[9px] text-teal-500 font-medium">Days</span>
-                                                                        </td>
-                                                                        <td className="px-4 py-4 font-bold text-rose-500">
-                                                                            {report.totalAbsentDays} <span className="text-[9px] text-rose-400 font-medium">Days</span>
-                                                                        </td>
-                                                                        <td className="px-4 py-4">
-                                                                            <p className="font-black text-emerald-600 text-sm">₹{Math.max(0, report.totalFinalSalary - (deductionView ? (report.taskPenalty || 0) : 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                                                            {report.projectAdjustment !== undefined && report.projectAdjustment !== 0 && (
-                                                                                <span className={`inline-flex items-center px-1.5 py-0.5 mt-1 rounded text-[8px] font-black tracking-wider ${report.projectAdjustment < 0 ? 'bg-rose-50 text-rose-600 border border-rose-100/50' : 'bg-emerald-50 text-emerald-600 border border-emerald-100/50'}`}>
-                                                                                    {report.projectAdjustment > 0 ? '+' : ''}₹{report.projectAdjustment.toFixed(2)} Adj
-                                                                                </span>
-                                                                            )}
-                                                                        </td>
-                                                                        <td className="px-4 py-4">
-                                                                            <span className={`inline-flex items-center px-2 py-1 rounded-lg font-bold text-[9px] tracking-wider ${hasBankDetails ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
-                                                                                {hasBankDetails ? 'Added' : 'Pending'}
-                                                                            </span>
-                                                                        </td>
+                                                                        {showDetailedBreakdown ? (
+                                                                            <>
+                                                                                <td className="px-4 py-4">
+                                                                                    <p className="font-bold text-slate-700">{report.name}</p>
+                                                                                </td>
+                                                                                <td className="px-4 py-4 font-bold text-slate-600">
+                                                                                    ₹{((report.attendanceSalary || report.totalFinalSalary) - (deductionView ? (report.taskPenalty || 0) : 0)).toFixed(2)}
+                                                                                </td>
+                                                                                <td className="px-4 py-4">
+                                                                                    {(() => {
+                                                                                        const adjs = report.payrollRecord?.adjustments?.filter(a => !a.isDeleted) || [];
+                                                                                        const isExpanded = expandedAdjustments[report.workerId];
+                                                                                        if (adjs.length === 0) return <span className="text-slate-400">None</span>;
+
+                                                                                        const renderAdj = (a) => (
+                                                                                            <div key={a._id} className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-bold border mt-0.5 mr-1 ${a.type === 'addition' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'}`}>
+                                                                                                <span className={`w-1 h-1 rounded-full ${a.type === 'addition' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+                                                                                                <span>{a.type === 'addition' ? '+' : '-'}₹{a.amount} ({a.reason})</span>
+                                                                                            </div>
+                                                                                        );
+
+                                                                                        if (adjs.length > 3 && !isExpanded) {
+                                                                                            return (
+                                                                                                <div className="flex flex-wrap gap-1 items-center max-w-sm">
+                                                                                                    {adjs.slice(0, 2).map(renderAdj)}
+                                                                                                    <button
+                                                                                                        onClick={() => setExpandedAdjustments({ ...expandedAdjustments, [report.workerId]: true })}
+                                                                                                        className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold ml-1"
+                                                                                                    >
+                                                                                                        {adjs.length} Adjustments ▼
+                                                                                                    </button>
+                                                                                                </div>
+                                                                                            );
+                                                                                        }
+                                                                                        return (
+                                                                                            <div className="flex flex-wrap gap-1 items-center max-w-sm">
+                                                                                                {adjs.map(renderAdj)}
+                                                                                                {adjs.length > 3 && (
+                                                                                                    <button
+                                                                                                        onClick={() => setExpandedAdjustments({ ...expandedAdjustments, [report.workerId]: false })}
+                                                                                                        className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold ml-1"
+                                                                                                    >
+                                                                                                        Show Less ▲
+                                                                                                    </button>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        );
+                                                                                    })()}
+                                                                                </td>
+                                                                                <td className="px-4 py-4 font-black text-emerald-600 text-sm">
+                                                                                    ₹{((report.payableSalary !== undefined ? report.payableSalary : report.totalFinalSalary) - (deductionView ? (report.taskPenalty || 0) : 0)).toFixed(2)}
+                                                                                </td>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <td className="px-4 py-4">
+                                                                                    <p className="font-bold text-slate-700">{report.name}</p>
+                                                                                </td>
+                                                                                <td className="px-4 py-4">
+                                                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 font-bold text-[9px] tracking-wider">
+                                                                                        {report.department}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="px-4 py-4 font-bold text-slate-600">
+                                                                                    {report.totalWorkingDays} <span className="text-[9px] text-slate-400 font-medium">Days</span>
+                                                                                </td>
+                                                                                <td className="px-4 py-4 font-bold text-teal-600">
+                                                                                    {report.actualWorkingDays} <span className="text-[9px] text-teal-500 font-medium">Days</span>
+                                                                                </td>
+                                                                                <td className="px-4 py-4 font-bold text-rose-500">
+                                                                                    {report.totalAbsentDays} <span className="text-[9px] text-rose-400 font-medium">Days</span>
+                                                                                </td>
+                                                                                <td className="px-4 py-4">
+                                                                                    <p className="font-black text-emerald-600 text-sm">₹{Math.max(0, (report.payableSalary !== undefined ? report.payableSalary : report.totalFinalSalary) - (deductionView ? (report.taskPenalty || 0) : 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                                                                    {report.projectAdjustment !== undefined && report.projectAdjustment !== 0 && (
+                                                                                        <span className={`inline-flex items-center px-1.5 py-0.5 mt-1 rounded text-[8px] font-black tracking-wider ${report.projectAdjustment < 0 ? 'bg-rose-50 text-rose-600 border border-rose-100/50' : 'bg-emerald-50 text-emerald-600 border border-emerald-100/50'}`}>
+                                                                                            {report.projectAdjustment > 0 ? '+' : ''}₹{report.projectAdjustment.toFixed(2)} Adj
+                                                                                        </span>
+                                                                                    )}
+                                                                                </td>
+                                                                                <td className="px-4 py-4">
+                                                                                    <span className={`inline-flex items-center px-2 py-1 rounded-lg font-bold text-[9px] tracking-wider ${hasBankDetails ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                                                                                        {hasBankDetails ? 'Added' : 'Pending'}
+                                                                                    </span>
+                                                                                </td>
+                                                                            </>
+                                                                        )}
                                                                         <td className="px-4 py-4">
                                                                             <div className="flex items-center gap-2">
                                                                                 <button
@@ -3244,7 +3399,7 @@ const SalaryManagement = () => {
                                 variant="primary"
                                 className="h-11 px-8 rounded-xl shadow-lg shadow-blue-100 disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                                {isReportLoading ? <Spinner /> : 'Generate Report'}
+                                {isReportLoading ? 'Generating...' : 'Generate Report'}
                             </Button>
                         </div>
                     ) : (
@@ -3275,14 +3430,14 @@ const SalaryManagement = () => {
                                 variant="primary"
                                 className="h-11 px-8 rounded-xl shadow-lg shadow-blue-100 disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                                {isReportLoading ? <Spinner /> : 'Generate Report'}
+                                {isReportLoading ? 'Generating...' : 'Generate Report'}
                             </Button>
                         </div>
                     )}
 
                     {isReportLoading && !reportData && (
                         <div className="flex justify-center py-12">
-                            <Spinner size="lg" />
+                            <p className="text-slate-500 font-medium tracking-wide">Loading report data...</p>
                         </div>
                     )}
                     {reportData && (

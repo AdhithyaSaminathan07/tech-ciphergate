@@ -96,7 +96,6 @@ function App() {
   // Initialize subdomain with the actual value from localStorage immediately
   const [subdomain, setSubdomain] = useState(() => {
     const stored = localStorage.getItem('tasktracker-subdomain');
-    console.log('剥 DEBUG: Initial subdomain from localStorage:', stored);
     return stored || 'main'; // Default to 'main' instead of null
   });
 
@@ -106,7 +105,6 @@ function App() {
 
   // Custom function to update subdomain and localStorage
   const updateSubdomain = (newSubdomain) => {
-    console.log('剥 DEBUG: Updating subdomain to:', newSubdomain);
     if (newSubdomain && newSubdomain !== 'main') {
       localStorage.setItem('tasktracker-subdomain', newSubdomain);
     } else {
@@ -121,7 +119,6 @@ function App() {
     const handleStorageChange = (e) => {
       if (e.key === 'tasktracker-subdomain') {
         const newValue = e.newValue || 'main';
-        console.log('剥 DEBUG: Storage change detected:', newValue);
         setSubdomain(newValue);
       }
     };
@@ -133,7 +130,6 @@ function App() {
       const current = getSubdomain();
       setSubdomain(prev => {
         if (prev !== current) {
-          console.log('剥 DEBUG: Subdomain changed from', prev, 'to', current);
           return current;
         }
         return prev;
@@ -148,7 +144,6 @@ function App() {
 
   // Log subdomain changes for debugging
   useEffect(() => {
-    console.log('剥 DEBUG: App.jsx subdomain state changed to:', subdomain);
   }, [subdomain]);
 
   const contextValue = {

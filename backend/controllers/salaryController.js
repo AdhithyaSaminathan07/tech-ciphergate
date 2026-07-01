@@ -679,7 +679,8 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
         { assignee: id },
         { assignees: id }
       ],
-      subdomain: worker.subdomain
+      subdomain: worker.subdomain,
+      isDeleted: { $ne: true }
     });
 
     const { taskPenalties: delayedTasks, totalTaskPenalty: taskPenalty } = calculateTaskPenalties({
@@ -876,10 +877,21 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
       $or: [{ startDate: { $lte: new Date(end) }, endDate: { $gte: new Date(start) } }]
     }).populate('developers', 'name');
 
+    const rptStartDateObj = new Date(start);
+    const rptMonth = rptStartDateObj.getMonth() + 1;
+    const rptYear = rptStartDateObj.getFullYear();
+    const settledLedgers = await ProjectPaymentLedger.find({
+      employeeId: id,
+      month: rptMonth,
+      year: rptYear,
+      isSettled: true,
+      subdomain: worker.subdomain
+    });
+
     const enrichedProjects = salaryProjects.map(p => {
       const pObj = p.toObject();
       const devCount = pObj.developers.length || 1;
-      const share = pObj.projectProfit / devCount;
+      let share = pObj.projectProfit / devCount;
       const pStart = new Date(pObj.startDate);
       const pEnd = new Date(pObj.endDate);
       let workingDays = 0;
@@ -888,7 +900,18 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
         if (cur.getDay() !== 0) workingDays++;
         cur.setDate(cur.getDate() + 1);
       }
-      return { ...pObj, perDeveloperShare: share, totalWorkingDays: workingDays, perDayValue: workingDays > 0 ? share / workingDays : 0 };
+      
+      let perDayValue = workingDays > 0 ? share / workingDays : 0;
+      let totalWorkingDays = workingDays;
+
+      const ledger = settledLedgers.find(l => l.projectId.toString() === pObj._id.toString());
+      if (ledger) {
+        share = ledger.perDeveloperShareAtPayment;
+        perDayValue = ledger.paidPerDayValue;
+        totalWorkingDays = ledger.projectTotalWorkingDaysAtPayment || totalWorkingDays;
+      }
+
+      return { ...pObj, perDeveloperShare: share, totalWorkingDays: totalWorkingDays, perDayValue: perDayValue };
     });
 
     const report = calculateWorkerProductivity({
@@ -949,7 +972,8 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
         { assignee: id },
         { assignees: id }
       ],
-      subdomain: worker.subdomain
+      subdomain: worker.subdomain,
+      isDeleted: { $ne: true }
     });
 
     const { taskPenalties: delayedTasks, totalTaskPenalty: taskPenalty } = calculateTaskPenalties({
@@ -1443,6 +1467,35 @@ const updateSalaryProject = asyncHandler(async (req, res) => {
   }
 
   await project.save();
+
+  // FIX: Sync existing frozen project ledgers to match new project details to avoid unintended adjustments
+  const ledgers = await ProjectPaymentLedger.find({ projectId: project._id, isSettled: true });
+  if (ledgers.length > 0) {
+    const devCount = project.developers.length || 1;
+    const share = project.projectProfit / devCount;
+    const startD = new Date(project.startDate);
+    const endD = new Date(project.endDate);
+    let totalWorkingDays = 0;
+    const cur = new Date(startD);
+    while (cur <= endD) {
+      if (cur.getDay() !== 0) totalWorkingDays++;
+      cur.setDate(cur.getDate() + 1);
+    }
+    const perDayValue = totalWorkingDays > 0 ? share / totalWorkingDays : 0;
+
+    for (const ledger of ledgers) {
+      const currentEntitlement = ledger.paidWorkingDays * perDayValue;
+      ledger.paidAmount = currentEntitlement;
+      ledger.paidPerDayValue = perDayValue;
+      ledger.projectTotalWorkingDaysAtPayment = totalWorkingDays;
+      ledger.perDeveloperShareAtPayment = share;
+      ledger.currentPerDayValue = perDayValue;
+      ledger.currentEntitlement = currentEntitlement;
+      ledger.adjustmentAmount = 0;
+      await ledger.save();
+    }
+  }
+
   const populated = await SalaryProject.findById(project._id).populate('developers', 'name rfid department');
 
   res.status(200).json({ message: 'Salary project updated', project: populated });
@@ -1485,9 +1538,20 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
       subdomain,
       $or: [{ startDate: { $lte: toDateObj }, endDate: { $gte: fromDateObj } }]
     }).populate('developers', 'name');
-    const allTickets = await Ticket.find({ subdomain });
+    const allTickets = await Ticket.find({ subdomain, isDeleted: { $ne: true } });
 
-    const results = workers.map(worker => {
+    // Enterprise Payroll Module: Fetch payroll records for this month
+    const bulkFromDate = new Date(fromDate);
+    const bulkMonth = bulkFromDate.getMonth() + 1;
+    const bulkYear = bulkFromDate.getFullYear();
+    const PayrollRecord = require('../models/PayrollRecord');
+    const allPayrollRecords = await PayrollRecord.find({
+      subdomain,
+      month: bulkMonth,
+      year: bulkYear
+    }).populate('adjustments.addedBy', 'name');
+
+    const results = await Promise.all(workers.map(async worker => {
       const workerId = worker._id.toString();
 
       // Filter data for this worker
@@ -1517,6 +1581,20 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         return { ...pObj, perDeveloperShare: share, totalWorkingDays: workingDays, perDayValue: workingDays > 0 ? share / workingDays : 0 };
       });
 
+      // Calculate Company/Dept Attendance Penalties (Daily rates)
+      let companyPenaltyMap = {};
+      let deptPenaltyMap = {};
+
+      if (settings && settings.advancedLeaveDeduction && settings.advancedLeaveDeduction.attendanceRuleEnabled) {
+        const adv = settings.advancedLeaveDeduction;
+        const thresh = adv.thresholds || {};
+        const workerDeptId = worker.department?._id?.toString() || worker.department?.toString();
+
+        const penaltyMaps = await calculateDailyAttendancePenalties(subdomain, fromDate, toDate, workerId, workerDeptId, thresh);
+        companyPenaltyMap = penaltyMaps.companyPenaltyMap;
+        deptPenaltyMap = penaltyMaps.deptPenaltyMap;
+      }
+
       // Calculate productivity (filtering only approved/paid leaves for standard logic)
       const report = calculateWorkerProductivity({
         worker,
@@ -1532,6 +1610,8 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
           deductSalary: settings ? settings.deductSalary : true,
           intervals: settings ? settings.intervals : [],
           advancedLeaveDeduction: settings ? settings.advancedLeaveDeduction : null,
+          companyPenaltyMap,
+          deptPenaltyMap,
           includePermission: settings?.includePermission || false,
           paidLeaveConfig: settings ? settings.paidLeaveConfig : null
         }
@@ -1625,12 +1705,9 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
           }
         }
       };
-    });
+    }));
 
     // ─── Apply project adjustments to bulk results ──
-    const bulkFromDate = new Date(fromDate);
-    const bulkMonth = bulkFromDate.getMonth() + 1;
-    const bulkYear = bulkFromDate.getFullYear();
 
     // Auto-record if it is a completed past month
     const now = new Date();
@@ -1647,10 +1724,37 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
           result.workerId, result.subdomain || subdomain, bulkMonth, bulkYear
         );
         const finalSalaryWithAdjustment = Math.max(0, result.totalFinalSalary + totalAdjustment);
+
+        // Enterprise Payroll Module: Attach Payroll Record
+        const payrollRecord = allPayrollRecords.find(pr => pr.workerId.toString() === result.workerId);
+        
+        let totalAdditions = 0;
+        let totalDeductions = 0;
+        
+        if (payrollRecord && payrollRecord.adjustments) {
+          payrollRecord.adjustments.forEach(adj => {
+            if (!adj.isDeleted) {
+              if (adj.type === 'addition') totalAdditions += adj.amount;
+              if (adj.type === 'deduction') totalDeductions += adj.amount;
+            }
+          });
+        }
+        
+        const attendanceSalary = payrollRecord && ['Locked', 'Paid'].includes(payrollRecord.status) && payrollRecord.attendanceSalarySnapshot !== null 
+          ? payrollRecord.attendanceSalarySnapshot 
+          : finalSalaryWithAdjustment;
+          
+        const payableSalary = Math.max(0, attendanceSalary + totalAdditions - totalDeductions);
+
         return {
           ...result,
           projectAdjustment: totalAdjustment,
-          totalFinalSalary: finalSalaryWithAdjustment,
+          totalFinalSalary: finalSalaryWithAdjustment, // Treat as original base/Attendance Salary
+          payrollRecord: payrollRecord || null,
+          payableSalary: payableSalary,
+          attendanceSalary: attendanceSalary,
+          totalAdditions,
+          totalDeductions,
           fullReport: {
             ...result.fullReport,
             projectAdjustment: totalAdjustment,
@@ -1708,7 +1812,7 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
       subdomain,
       $or: [{ startDate: { $lte: toDateObj }, endDate: { $gte: fromDateObj } }]
     }).populate('developers', 'name');
-    const allTickets = await Ticket.find({ subdomain });
+    const allTickets = await Ticket.find({ subdomain, isDeleted: { $ne: true } });
 
     const teamEarnings = {};
 
@@ -2026,6 +2130,247 @@ const getProjectAdjustmentLedger = asyncHandler(async (req, res) => {
   });
 });
 
+// ─── PAYROLL ADJUSTMENTS (ENTERPRISE MODULE) ───
+const PayrollRecord = require('../models/PayrollRecord');
+
+const getPayrollRecord = async (req, res) => {
+  try {
+    const { workerId } = req.params;
+    const { month, year, subdomain } = req.query;
+
+    if (!workerId || !month || !year || !subdomain) {
+      return res.status(400).json({ success: false, message: 'Missing required parameters' });
+    }
+
+    let record = await PayrollRecord.findOne({
+      workerId,
+      month: parseInt(month),
+      year: parseInt(year),
+      subdomain
+    }).populate('adjustments.addedBy', 'name email').populate('adjustments.deletedBy', 'name email').populate('history.actionBy', 'name email');
+
+    if (!record) {
+      record = new PayrollRecord({
+        workerId,
+        subdomain,
+        month: parseInt(month),
+        year: parseInt(year),
+        status: 'Draft',
+        adjustments: [],
+        history: []
+      });
+      await record.save();
+    }
+
+    res.status(200).json({ success: true, record });
+  } catch (error) {
+    console.error('Error fetching payroll record:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+const addPayrollAdjustment = async (req, res) => {
+  try {
+    const { workerId } = req.params;
+    const { month, year, subdomain, type, category, amount, reason, remarks } = req.body;
+    
+    let record = await PayrollRecord.findOne({ workerId, month, year, subdomain });
+    
+    if (!record) {
+      record = new PayrollRecord({
+        workerId,
+        subdomain,
+        month,
+        year,
+        status: 'Draft',
+        adjustments: [],
+        history: []
+      });
+    }
+
+    if (['Locked', 'Paid'].includes(record.status)) {
+      return res.status(400).json({ success: false, message: 'Cannot modify adjustments for a Locked or Paid payroll.' });
+    }
+
+    const newAdjustment = {
+      type,
+      category,
+      amount,
+      reason,
+      remarks,
+      addedBy: req.user._id,
+      isDeleted: false
+    };
+
+    record.adjustments.push(newAdjustment);
+    const addedAdjustment = record.adjustments[record.adjustments.length - 1];
+
+    record.history.push({
+      action: 'CREATE',
+      adjustmentId: addedAdjustment._id,
+      newValue: { type, category, amount, reason, remarks },
+      actionBy: req.user._id
+    });
+
+    await record.save();
+    res.status(200).json({ success: true, record, message: 'Adjustment added successfully' });
+  } catch (error) {
+    console.error('Error adding adjustment:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+const updatePayrollAdjustment = async (req, res) => {
+  try {
+    const { workerId, adjustmentId } = req.params;
+    const { month, year, subdomain, type, category, amount, reason, remarks } = req.body;
+
+    const record = await PayrollRecord.findOne({ workerId, month, year, subdomain });
+    if (!record) return res.status(404).json({ success: false, message: 'Record not found' });
+
+    if (['Locked', 'Paid'].includes(record.status)) {
+      return res.status(400).json({ success: false, message: 'Cannot modify adjustments for a Locked or Paid payroll.' });
+    }
+
+    const adjustment = record.adjustments.id(adjustmentId);
+    if (!adjustment) return res.status(404).json({ success: false, message: 'Adjustment not found' });
+
+    const oldValue = {
+      type: adjustment.type,
+      category: adjustment.category,
+      amount: adjustment.amount,
+      reason: adjustment.reason,
+      remarks: adjustment.remarks
+    };
+
+    adjustment.type = type;
+    adjustment.category = category;
+    adjustment.amount = amount;
+    adjustment.reason = reason;
+    adjustment.remarks = remarks;
+
+    record.history.push({
+      action: 'UPDATE',
+      adjustmentId: adjustment._id,
+      oldValue,
+      newValue: { type, category, amount, reason, remarks },
+      actionBy: req.user._id
+    });
+
+    await record.save();
+    res.status(200).json({ success: true, record, message: 'Adjustment updated successfully' });
+  } catch (error) {
+    console.error('Error updating adjustment:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+const deletePayrollAdjustment = async (req, res) => {
+  try {
+    const { workerId, adjustmentId } = req.params;
+    const { month, year, subdomain } = req.query;
+
+    const record = await PayrollRecord.findOne({ workerId, month: parseInt(month), year: parseInt(year), subdomain });
+    if (!record) return res.status(404).json({ success: false, message: 'Record not found' });
+
+    if (['Locked', 'Paid'].includes(record.status)) {
+      return res.status(400).json({ success: false, message: 'Cannot modify adjustments for a Locked or Paid payroll.' });
+    }
+
+    const adjustment = record.adjustments.id(adjustmentId);
+    if (!adjustment) return res.status(404).json({ success: false, message: 'Adjustment not found' });
+
+    adjustment.isDeleted = true;
+    adjustment.deletedBy = req.user._id;
+    adjustment.deletedAt = new Date();
+
+    const oldValue = {
+      type: adjustment.type,
+      category: adjustment.category,
+      amount: adjustment.amount,
+      reason: adjustment.reason,
+      remarks: adjustment.remarks
+    };
+
+    record.history.push({
+      action: 'DELETE',
+      adjustmentId: adjustment._id,
+      oldValue,
+      actionBy: req.user._id
+    });
+
+    await record.save();
+    res.status(200).json({ success: true, record, message: 'Adjustment deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting adjustment:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+const restorePayrollAdjustment = async (req, res) => {
+  try {
+    const { workerId, adjustmentId } = req.params;
+    const { month, year, subdomain } = req.body;
+
+    const record = await PayrollRecord.findOne({ workerId, month, year, subdomain });
+    if (!record) return res.status(404).json({ success: false, message: 'Record not found' });
+
+    if (['Locked', 'Paid'].includes(record.status)) {
+      return res.status(400).json({ success: false, message: 'Cannot modify adjustments for a Locked or Paid payroll.' });
+    }
+
+    const adjustment = record.adjustments.id(adjustmentId);
+    if (!adjustment) return res.status(404).json({ success: false, message: 'Adjustment not found' });
+
+    adjustment.isDeleted = false;
+    adjustment.deletedBy = null;
+    adjustment.deletedAt = null;
+
+    record.history.push({
+      action: 'RESTORE',
+      adjustmentId: adjustment._id,
+      actionBy: req.user._id
+    });
+
+    await record.save();
+    res.status(200).json({ success: true, record, message: 'Adjustment restored successfully' });
+  } catch (error) {
+    console.error('Error restoring adjustment:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+const updatePayrollStatus = async (req, res) => {
+  try {
+    const { workerId } = req.params;
+    const { month, year, subdomain, status, attendanceSalarySnapshot } = req.body;
+
+    let record = await PayrollRecord.findOne({ workerId, month, year, subdomain });
+    if (!record) {
+      record = new PayrollRecord({
+        workerId,
+        subdomain,
+        month,
+        year,
+        status: 'Draft',
+        adjustments: [],
+        history: []
+      });
+    }
+
+    record.status = status;
+    if (['Locked', 'Paid'].includes(status) && attendanceSalarySnapshot !== undefined) {
+      record.attendanceSalarySnapshot = attendanceSalarySnapshot;
+    }
+
+    await record.save();
+    res.status(200).json({ success: true, record, message: `Status updated to ${status}` });
+  } catch (error) {
+    console.error('Error updating status:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
 module.exports = {
   giveBonus,
   removeBonus,
@@ -2039,14 +2384,18 @@ module.exports = {
   getDeveloperProjects,
   deleteDeveloperProject,
   getAllDeveloperProjectsSummary,
-  // Hybrid salary project
   createSalaryProject,
   getSalaryProjects,
   getSalaryProjectsForWorker,
   updateSalaryProject,
   deleteSalaryProject,
-  // Project adjustment ledger
   recordProjectPayment,
   recordAllProjectPayments,
-  getProjectAdjustmentLedger
+  getProjectAdjustmentLedger,
+  getPayrollRecord,
+  addPayrollAdjustment,
+  updatePayrollAdjustment,
+  deletePayrollAdjustment,
+  restorePayrollAdjustment,
+  updatePayrollStatus
 };

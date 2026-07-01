@@ -33,8 +33,28 @@ const startServer = async () => {
 
     const app = express();
 
+    // Security Headers with Helmet
+    const helmet = require('helmet');
+    app.use(helmet({
+      contentSecurityPolicy: false, // Disabling initially to prevent breaking React/Vite/Supabase. Roll out incrementally.
+      xssFilter: false // Obsolete header
+    }));
+    app.disable('x-powered-by');
+
+    // Dynamic CORS configuration
+    const allowedOrigins = process.env.ALLOWED_ORIGINS 
+      ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) 
+      : ['https://ciphergate.in', 'https://www.ciphergate.in', 'http://localhost:5173', 'http://localhost:3000'];
+
     const corsOptions = {
-      origin: true,
+      origin: function (origin, callback) {
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+          callback(null, true);
+        } else {
+          console.warn(`[CORS] Blocked cross-origin request from: ${origin}`);
+          callback(null, false);
+        }
+      },
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
       credentials: true
@@ -102,6 +122,30 @@ const startServer = async () => {
     // API Key routes
     const apiKeyRoutes = require('./routes/apiKeyRoutes');
     const apiRoutes = require('./routes/apiRoutes');
+
+    // Enterprise Rate Limiting
+    const rateLimit = require('express-rate-limit');
+
+    const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: { message: 'Too many auth requests, please try again later.' } });
+    const attendanceLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, message: { message: 'Too many attendance requests.' } });
+    const adminLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 150, message: { message: 'Too many admin requests.' } });
+    const publicLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, message: { message: 'Too many requests.' } });
+    const reportsLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200, message: { message: 'Too many report requests.' } });
+    const generalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 300, message: { message: 'Too many API requests, please try again later.' } });
+
+    // Mount limiters on specific route prefixes before mounting the routes
+    app.use('/api/auth/admin', authLimiter);
+    app.use('/api/auth/worker', authLimiter);
+    app.use('/api/auth/admin/register', rateLimit({ windowMs: 60 * 60 * 1000, max: 10, message: { message: 'Too many register requests.' } }));
+    app.use('/api/auth/request-reset-otp', rateLimit({ windowMs: 60 * 60 * 1000, max: 3, message: { message: 'Too many forgot password requests.' } }));
+    app.use('/api/auth/reset-password-with-otp', rateLimit({ windowMs: 15 * 60 * 1000, max: 5, message: { message: 'Too many OTP requests.' } }));
+    
+    app.use('/api/attendance', attendanceLimiter);
+    app.use('/api/admin', adminLimiter);
+    app.use('/api/salary', reportsLimiter);
+    app.use('/api/contact', publicLimiter); // in case it exists later
+    // The rest will use generalLimiter
+    app.use('/api', generalLimiter);
 
     // Mount routes
     app.use('/api/gowhats', gowhatsRoutes);
