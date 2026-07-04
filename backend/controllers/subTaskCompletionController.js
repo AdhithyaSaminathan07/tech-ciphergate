@@ -32,7 +32,7 @@ exports.upsertCompletion = async (req, res) => {
 
         const fullBaseUrl = `${req.protocol}://${req.get('host')}`;
         const proofFiles = req.files.map(file => ({
-            url: `${fullBaseUrl}/uploads/${file.filename}`,
+            url: `${fullBaseUrl}/uploads/tickets/${file.filename}`,
             name: file.originalname,
             type: file.mimetype,
             size: file.size,
@@ -172,7 +172,7 @@ exports.deleteProofFile = async (req, res) => {
 
         // Delete from filesystem
         const filename = file.url.split('/').pop();
-        const filePath = path.join(__dirname, '..', 'uploads', filename);
+        const filePath = path.join(__dirname, '..', 'uploads', 'tickets', filename);
         if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
         }
@@ -226,9 +226,9 @@ exports.deleteReferenceFile = async (req, res) => {
 
         // Delete from filesystem
         const filename = file.url.split('/').pop();
-        const filePath = path.join(__dirname, '..', 'uploads', filename);
         const fs = require('fs');
         const path = require('path');
+        const filePath = path.join(__dirname, '..', 'uploads', 'tickets', filename);
         if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
         }
@@ -337,7 +337,7 @@ exports.uploadReference = async (req, res) => {
 
         const fullBaseUrl = `${req.protocol}://${req.get('host')}`;
         const referenceFiles = req.files.map(file => ({
-            url: `${fullBaseUrl}/uploads/${file.filename}`,
+            url: `${fullBaseUrl}/uploads/tickets/${file.filename}`,
             name: file.originalname,
             type: file.mimetype,
             size: file.size,

@@ -171,9 +171,9 @@ I am your **Senior AWS FinOps Architect**. I analyze your live cloud billing dat
                 {msg.role === 'user' ? (
                   <p>{msg.content}</p>
                 ) : (
-                  <div
-                    className="prose-sm max-w-none"
-                    dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
+                  <SafeHTML 
+                    html={renderMarkdown(msg.content)} 
+                    className="text-[13px] font-medium whitespace-pre-wrap leading-relaxed opacity-90 break-words"
                   />
                 )}
               </div>

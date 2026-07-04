@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
+import { Switch } from '../ui/switch';
+import SafeHTML from '../common/SafeHTML';
 import { 
     FiBookOpen, FiActivity, FiUsers, FiSettings, FiPlus, 
     FiEdit2, FiArchive, FiCheck, FiSearch, FiMail, 
@@ -947,7 +949,7 @@ const AdminRulesDashboard = () => {
                                 {previewHtml ? (
                                     <div className="border border-slate-250 rounded-xl p-4 bg-slate-50 min-h-[160px] max-h-[300px] overflow-y-auto text-sm text-slate-700 leading-relaxed prose prose-emerald max-w-none">
                                         {ruleForm.content ? (
-                                            <div dangerouslySetInnerHTML={{ __html: ruleForm.content }} />
+                                            <SafeHTML html={ruleForm.content} />
                                         ) : (
                                             <p className="text-slate-400 italic">No content written yet.</p>
                                         )}

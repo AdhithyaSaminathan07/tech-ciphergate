@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import appContext from '../../context/AppContext';
+import { AuthContext } from '../../context/AuthContext';
 
 // --- UI Components from Template ---
 
@@ -214,6 +215,7 @@ const GenerateQuestions = () => {
   const [showWorkerDropdown, setShowWorkerDropdown] = useState(false);
   const [showTopicDetails, setShowTopicDetails] = useState(false);
   const { subdomain } = useContext(appContext);
+  const { user, isAdmin } = useContext(AuthContext);
   const [generationProgress, setGenerationProgress] = useState({
     isGenerating: false,
     percentage: 0,
@@ -322,15 +324,8 @@ const GenerateQuestions = () => {
     };
   }, [generationProgress.isGenerating, generationProgress.percentage]);
 
-  // --- Authentication Check (Original) ---
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const [isAuthorized, setIsAuthorized] = useState(user && user.role === 'admin');
-  
-  // Update authorization when user changes
-  useEffect(() => {
-    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-    setIsAuthorized(currentUser && currentUser.role === 'admin');
-  }, []);
+  // --- Authentication Check ---
+  // Using AuthContext instead of localStorage
 
   // --- API Functions (Original) ---
   const fetchWorkers = async () => {
@@ -353,7 +348,6 @@ const GenerateQuestions = () => {
 
   const loadIndividualTopics = async () => {
     if (!dateRange.startDate || !dateRange.endDate) return;
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
     if (!user || user.role !== 'admin') {
       setError('Admin privileges required to load individual topics.');
       return;
@@ -479,7 +473,6 @@ const GenerateQuestions = () => {
   const handleGenerate = async () => {
     setError('');
     setMessage('');
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
     const token = localStorage.getItem('token');
     if (!user || user.role !== 'admin') {
       setError('Access denied. This feature requires admin privileges. Please log in as admin.');
@@ -644,7 +637,7 @@ const GenerateQuestions = () => {
 
   if (loading) return <Loader />;
 
-  if (!isAuthorized) {
+  if (!isAdmin) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8 max-w-md mx-auto text-center">

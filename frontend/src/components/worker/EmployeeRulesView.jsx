@@ -6,6 +6,7 @@ import {
     FiChevronDown, FiChevronUp
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
+import SafeHTML from '../common/SafeHTML';
 
 const EmployeeRulesView = () => {
     const [rules, setRules] = useState([]);
@@ -215,7 +216,7 @@ const EmployeeRulesView = () => {
 
                                                     {/* Rule content */}
                                                     <div className="mt-2.5 sm:mt-3.5 text-xs sm:text-sm text-slate-650 leading-relaxed font-normal print:text-slate-800 overflow-x-auto">
-                                                        <div dangerouslySetInnerHTML={{ __html: rule.content }} />
+                                                        <SafeHTML html={rule.content} />
                                                     </div>
 
                                                     {/* Attachments */}

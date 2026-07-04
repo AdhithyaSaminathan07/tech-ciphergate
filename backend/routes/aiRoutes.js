@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const multer = require('multer');
+const { uploadAiMemory, verifyMagicBytes } = require('../utils/uploadConfig');
 const { 
   analyzeTask, 
   searchSecondBrain, 
@@ -16,18 +16,7 @@ const {
 const { protect, adminOnly } = require('../middleware/authMiddleware');
 
 // Multer config: memory storage, 50MB per file limit, up to 20 files
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024, files: 20 },
-  fileFilter: (req, file, cb) => {
-    const allowedExts = /\.(txt|md|pdf|json)$/i;
-    if (allowedExts.test(file.originalname)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only .txt, .md, .pdf, .json files are allowed'), false);
-    }
-  }
-});
+const upload = uploadAiMemory(50);
 
 // ─── Existing AI Routes ───────────────────────────────────────────────────────
 router.post('/analyze-task', protect, analyzeTask);

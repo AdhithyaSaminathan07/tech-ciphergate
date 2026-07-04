@@ -23,6 +23,7 @@ import { AuthContext } from '../../context/AuthContext';
 import WelcomeBanner from './WelcomeBanner';
 import SalesVelocityWidget from './SalesVelocityWidget';
 import renewalService from '../../services/renewalService';
+import { getDashboardSalaryStats } from '../../services/salaryService';
 import { getSalaryProjects, getBulkSalaryReport } from '../../services/salaryService';
 import api from '../../services/api';
 
@@ -186,12 +187,7 @@ const Dashboard = () => {
         getAttendanceSummary({ subdomain }),
         getTickets({ subdomain }),
         renewalService.getRenewals({ subdomain }),
-        // Fetch current month's salary reports for all workers (Live Daily)
-        getBulkSalaryReport(
-          subdomain,
-          `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`,
-          new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toLocaleDateString('en-CA')
-        )
+        getDashboardSalaryStats(subdomain)
       ]);
 
       const workersData = results[0].status === 'fulfilled' ? results[0].value : [];
@@ -204,7 +200,7 @@ const Dashboard = () => {
       const attendanceSummary = results[8].status === 'fulfilled' ? results[8].value : { percentage: 0 };
       const ticketsData = results[9].status === 'fulfilled' ? results[9].value : [];
       const renewalsData = results[10]?.status === 'fulfilled' ? results[10].value.data || [] : [];
-      const bulkSalaryData = results[11]?.status === 'fulfilled' ? results[11].value.reports || [] : [];
+      const cachedStats = results[11]?.status === 'fulfilled' ? results[11].value : null;
 
       const deptsSafe = Array.isArray(departmentsDataRaw) ? departmentsDataRaw : [];
       const pending = leavesData.filter(l => l.status === 'Pending');
@@ -213,11 +209,9 @@ const Dashboard = () => {
       const unread = commentsData.filter(c => c.isNew || c.replies?.some(r => r.isNew));
       const activeWorkers = workersData.filter(w => w.status !== 'Relieved');
 
-      const activeWorkerIds = new Set(activeWorkers.map(w => w._id.toString()));
       const monthlyBaseSalary = activeWorkers.reduce((acc, w) => acc + (Number(w.salary) || 0), 0);
-      const totalNetPayout = bulkSalaryData
-        .filter(r => activeWorkerIds.has(r.workerId))
-        .reduce((acc, r) => acc + (Number(r.grossFinalSalary || r.totalFinalSalary) || 0), 0);
+      
+      const totalNetPayout = cachedStats?.totalNetPayout || monthlyBaseSalary;
 
       let expiringSoon = 0, expired = 0;
       renewalsData.forEach(r => {
@@ -247,24 +241,12 @@ const Dashboard = () => {
       setDepartments(deptsSafe);
       setAttendancePercentage(attendanceSummary?.percentage || 0);
       setTickets(ticketsData);
-
-      // Calculate Top Teams from Bulk Salary Reports
-      const teamEarnings = {};
-      bulkSalaryData
-        .filter(r => activeWorkerIds.has(r.workerId))
-        .forEach(report => {
-          const deptName = report.department;
-          if (deptName && deptName !== 'N/A') {
-            teamEarnings[deptName] = (teamEarnings[deptName] || 0) + (report.totalFinalSalary || 0);
-          }
-        });
-
-      const sortedTeams = Object.entries(teamEarnings)
-        .map(([name, amount]) => ({ name, amount }))
-        .sort((a, b) => b.amount - a.amount)
-        .slice(0, 3);
-
-      setTopTeams(sortedTeams);
+      
+      if (cachedStats && cachedStats.topTeams) {
+        setTopTeams(cachedStats.topTeams);
+      } else {
+        setTopTeams([]);
+      }
       // Fetch public settings for bug bounty popup
       try {
         if (subdomain && subdomain !== 'main') {

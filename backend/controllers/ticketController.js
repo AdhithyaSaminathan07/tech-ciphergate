@@ -336,7 +336,7 @@ exports.uploadTicketReference = async (req, res) => {
         const fullBaseUrl = `${req.protocol}://${req.get('host')}`;
         const referenceFiles = req.files.map(file => ({
             _id: new mongoose.Types.ObjectId(),
-            url: `${fullBaseUrl}/uploads/${file.filename}`,
+            url: `${fullBaseUrl}/uploads/tickets/${file.filename}`,
             name: file.originalname,
             type: file.mimetype,
             size: file.size,
@@ -418,7 +418,7 @@ exports.deleteTicketReference = async (req, res) => {
         const filename = file.url.split('/').pop();
         const path = require('path');
         const fs = require('fs');
-        const filePath = path.join(__dirname, '..', 'uploads', filename);
+        const filePath = path.join(__dirname, '..', 'uploads', 'tickets', filename);
         if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
         }

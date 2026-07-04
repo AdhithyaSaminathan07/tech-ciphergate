@@ -25,9 +25,7 @@ const uploadUtils = async (file) => {
   formData.append('photo', file);
 
   try {
-    const response = await api.post('/workers/upload-photo', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    const response = await api.post('/workers/upload-photo', formData);
 
     const url = response.data?.url;
     if (!url) throw new Error('No URL returned from server');

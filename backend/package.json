@@ -5,8 +5,8 @@
     "description": "Task Tracker API",
     "main": "server.js",
     "scripts": {
-        "start": "nodemon --no-deprecation server.js",
-        "dev": "nodemon --no-deprecation server.js",
+        "start": "nodemon --ignore logs/ --ignore uploads/ --no-deprecation server.js",
+        "dev": "nodemon --ignore logs/ --ignore uploads/ --no-deprecation server.js",
         "migrate:holidays": "node migrations/updateHolidaysForEmployeeSpecific.js",
         "test:aws": "node tests/awsConnection.test.js",
         "test:sync": "node tests/syncAws.test.js",
@@ -29,12 +29,15 @@
         "@octokit/rest": "^22.0.1",
         "axios": "^1.13.2",
         "bcryptjs": "^2.4.3",
-        "cors": "^2.8.5",
+        "cookie-parser": "^1.4.7",
+        "cors": "^2.8.6",
         "date-fns": "^4.1.0",
         "dotenv": "^16.4.7",
         "express": "^4.21.2",
         "express-async-handler": "^1.2.0",
-        "express-rate-limit": "^8.4.1",
+        "express-mongo-sanitize": "^2.2.0",
+        "express-rate-limit": "^8.5.2",
+        "file-type": "^16.5.4",
         "helmet": "^8.2.0",
         "html2canvas": "^1.4.1",
         "jsonwebtoken": "^9.0.2",
@@ -49,10 +52,12 @@
         "socket.io": "^4.8.1",
         "tdl": "^8.0.2",
         "telegram": "^2.26.22",
-        "uuid": "^14.0.0",
+        "uuid": "^14.0.1",
         "validator": "^13.15.15",
         "web-push": "^3.6.7",
-        "ws": "^8.18.2"
+        "winston": "^3.19.0",
+        "ws": "^8.18.2",
+        "zod": "^3.25.76"
     },
     "devDependencies": {
         "nodemon": "^3.1.9"

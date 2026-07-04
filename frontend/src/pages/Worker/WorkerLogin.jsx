@@ -16,6 +16,7 @@ import appContext from '../../context/AppContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import Modal from '../../components/common/Modal'; // Add this line
 import Button from '../../components/common/Button';
+import { getFullFileUrl } from '../../utils/fileUtils';
 
 const WorkerLogin = () => {
   const [showWrongSubdomainModal, setShowWrongSubdomainModal] = useState(false);
@@ -166,7 +167,7 @@ const WorkerLogin = () => {
       navigate('/worker');
     } catch (error) {
       // Show error message but don't redirect
-      toast.error(error.message || 'Login failed. Check your credentials.');
+      toast.error(error.response?.data?.message || error.message || 'Login failed. Check your credentials.');
       // Clear password field for retry
       setPassword('');
     } finally {
@@ -510,11 +511,15 @@ const WorkerLogin = () => {
                     <img
                       src={
                         worker.photo
-                          ? worker.photo
+                          ? getFullFileUrl(worker.photo)
                           : `https://ui-avatars.com/api/?name=${encodeURIComponent(worker.name)}&background=0d9488&color=fff`
                       }
                       alt="Employee"
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(worker.name)}&background=0d9488&color=fff`;
+                      }}
                     />
                   </div>
                   <h3 className={`font-semibold truncate ${selectedWorker?._id === worker._id ? 'text-[#0d9488]' : 'text-black'}`}>
@@ -555,11 +560,15 @@ const WorkerLogin = () => {
                     <img
                       src={
                         selectedWorker.photo
-                          ? selectedWorker.photo
+                          ? getFullFileUrl(selectedWorker.photo)
                           : `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedWorker.name)}&background=0d9488&color=fff`
                       }
                       alt="Employee"
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedWorker.name)}&background=0d9488&color=fff`;
+                      }}
                     />
                   </div>
                   <div className="min-w-0">

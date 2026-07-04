@@ -247,7 +247,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                     {/* Content Overlay */}
                     <div className={`relative z-10 h-full flex items-stretch justify-between ${isAdmin ? 'px-2 md:px-8' : 'px-2 md:px-6'}`}>
                         {/* Left Side: Logo & Menu */}
-                        <div className="flex items-center gap-1 h-full min-w-0 lg:min-w-[240px]">
+                        <div className="flex items-center gap-2 h-full flex-1 min-w-0 lg:min-w-[240px]">
                             {isAdmin && (
                                 <button
                                     onClick={onMenuClick}
@@ -257,9 +257,16 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                 </button>
                             )}
 
-                            <h1
-                                className={`font-extrabold text-emerald-800 tracking-tight truncate ${isAdmin ? 'text-lg md:text-xl' : 'text-base md:text-lg'}`}
-                            >
+                            {/* Company Logo */}
+                            <img src="/logo.png" alt="Logo" className="md:hidden h-6 sm:h-8 w-auto shrink-0 object-contain" onError={(e) => { e.target.style.display = 'none' }} />
+                            
+                            {/* Desktop Title (Hidden on mobile) */}
+                            <h1 className={`hidden md:block font-extrabold text-emerald-800 tracking-tight truncate ${isAdmin ? 'text-xl' : 'text-lg'}`}>
+                                {title || 'Dashboard'}
+                            </h1>
+
+                            {/* Mobile Title */}
+                            <h1 className="md:hidden font-extrabold text-emerald-800 tracking-tight text-xs sm:text-sm line-clamp-2 leading-tight">
                                 {title || 'Dashboard'}
                             </h1>
                         </div>
@@ -304,9 +311,9 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                                 initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                                 animate={{ opacity: 1, y: 0, scale: 1 }}
                                                 exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                className="absolute right-0 mt-3 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-[350]"
+                                                className="absolute right-0 mt-3 w-48 sm:w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-[350] origin-top-right"
                                             >
-                                                <div className="p-2 space-y-1">
+                                                <div className="p-1.5 sm:p-2 space-y-0.5 sm:space-y-1">
                                                     {[
                                                         { label: 'Apply for Leave', icon: <FaCalendarCheck />, path: '/worker/leave-apply' },
                                                         { label: 'Invoices', icon: <FaFileInvoice />, path: '/worker/invoices' },
@@ -318,7 +325,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                                         <button
                                                             key={item.path}
                                                             onClick={() => { navigate(item.path); setIs3DotOpen(false); }}
-                                                            className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-[#0d9488] rounded-xl transition-all"
+                                                            className="w-full flex items-center gap-3 px-3 py-2.5 sm:px-4 sm:py-3 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-[#0d9488] rounded-xl transition-all"
                                                         >
                                                             <span className="text-slate-400 group-hover:text-[#0d9488]">{item.icon}</span>
                                                             <span>{item.label}</span>
@@ -330,79 +337,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                     </AnimatePresence>
                                 </div>
                             )}
-                            {/* Quick Actions (+) */}
-                            <div className="relative" ref={quickActionsRef}>
-                                <button
-                                    onClick={() => setIsQuickActionsOpen(!isQuickActionsOpen)}
-                                    className={`p-2 rounded-xl transition-all duration-300 ${isQuickActionsOpen ? 'bg-teal-100 text-teal-700' : 'bg-teal-50 text-teal-600 hover:bg-teal-100'}`}
-                                    title="Quick Actions"
-                                >
-                                    <Plus size={18} strokeWidth={2.5} />
-                                </button>
-
-                                <AnimatePresence>
-                                    {isQuickActionsOpen && (
-                                        <motion.div
-                                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                            className="absolute right-0 mt-3 w-52 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-[350]"
-                                        >
-                                            <div className="p-2 space-y-1">
-                                                {isAdmin ? (
-                                                    <>
-                                                        <button
-                                                            onClick={() => { navigate('/admin/workers'); setIsQuickActionsOpen(false); }}
-                                                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-[#0d9488] rounded-xl transition-all"
-                                                        >
-                                                            <Plus size={16} />
-                                                            <span>New Employee</span>
-                                                        </button>
-                                                        <button
-                                                            onClick={() => { navigate('/admin/tasks'); setIsQuickActionsOpen(false); }}
-                                                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-[#0d9488] rounded-xl transition-all"
-                                                        >
-                                                            <Plus size={16} />
-                                                            <span>New Task</span>
-                                                        </button>
-                                                        <button
-                                                            onClick={() => { navigate('/admin/departments'); setIsQuickActionsOpen(false); }}
-                                                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-[#0d9488] rounded-xl transition-all"
-                                                        >
-                                                            <Plus size={16} />
-                                                            <span>New Department</span>
-                                                        </button>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <button
-                                                            onClick={() => { navigate('/worker/leave-apply'); setIsQuickActionsOpen(false); }}
-                                                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-[#0d9488] rounded-xl transition-all"
-                                                        >
-                                                            <Plus size={16} />
-                                                            <span>Apply for Leave</span>
-                                                        </button>
-                                                        <button
-                                                            onClick={() => { navigate('/worker/food-request'); setIsQuickActionsOpen(false); }}
-                                                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-[#0d9488] rounded-xl transition-all"
-                                                        >
-                                                            <Plus size={16} />
-                                                            <span>Request Food</span>
-                                                        </button>
-                                                        <button
-                                                            onClick={() => { navigate('/worker/invoices'); setIsQuickActionsOpen(false); }}
-                                                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-[#0d9488] rounded-xl transition-all"
-                                                        >
-                                                            <Plus size={16} />
-                                                            <span>My Invoices</span>
-                                                        </button>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
+                            {/* Quick Actions Removed */}
 
                             {/* Notifications */}
                             <div className="relative" ref={dropdownRef}>
@@ -596,7 +531,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                                             </div>
                                                         </div>
                                                         <div className="flex-1 min-w-0">
-                                                            <h3 className="text-[13px] font-black tracking-tight truncate">{user.displayName || user.name}</h3>
+                                                            <h3 className="text-[13px] text-white font-black tracking-tight truncate">{user.displayName || user.name}</h3>
                                                             <div className="flex items-center gap-1.5 mt-0.5">
                                                                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                                                                 <span className="text-[9px] font-black text-teal-400 tracking-[0.15em]">{user.role || 'Member'}</span>

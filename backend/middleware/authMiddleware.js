@@ -6,12 +6,18 @@ const Admin = require('../models/Admin');
 const protect = asyncHandler(async (req, res, next) => {
   let token;
 
-  if (!req.headers.authorization || !req.headers.authorization.startsWith('Bearer')) {
+  // Check for token in cookies first, then authorization header
+  if (req.cookies && req.cookies.token) {
+    token = req.cookies.token;
+  } else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  if (!token) {
     return res.status(401).json({ message: 'Not authorized, no token' });
   }
 
   try {
-    token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // Use the role from the token to find the user in the correct collection
@@ -23,11 +29,12 @@ const protect = asyncHandler(async (req, res, next) => {
       req.user = user.toObject();
       req.user.role = 'admin';
     } else if (decoded.role === 'worker') {
-      const user = await Worker.findById(decoded.id).select('-password');
+      const user = await Worker.findById(decoded.id).select('-password').populate('department', 'name');
       if (!user) {
         return res.status(401).json({ message: 'Worker not found' });
       }
       req.user = user.toObject();
+      req.user.department = user.department ? user.department.name : 'Unassigned';
       req.user.role = 'worker';
     } else {
       // Fallback for older tokens or if role is missing in token
@@ -36,11 +43,12 @@ const protect = asyncHandler(async (req, res, next) => {
         req.user = user.toObject();
         req.user.role = 'admin';
       } else {
-        user = await Worker.findById(decoded.id).select('-password');
+        user = await Worker.findById(decoded.id).select('-password').populate('department', 'name');
         if (!user) {
           return res.status(401).json({ message: 'User not found' });
         }
         req.user = user.toObject();
+        req.user.department = user.department ? user.department.name : 'Unassigned';
         req.user.role = 'worker';
       }
     }

@@ -1,6 +1,8 @@
 const express = require('express');
 const { protect, adminOnly, adminOrWorker, workerOnly } = require('../middleware/authMiddleware');
-const { giveBonus, removeBonus, resetSalary, getWorkerSalaryReport, getMySalaryReport, getCompensationReport, getBulkSalaryReport, getTopTeamsEarnings, addDeveloperProject, getDeveloperProjects, deleteDeveloperProject, getAllDeveloperProjectsSummary, createSalaryProject, getSalaryProjects, getSalaryProjectsForWorker, updateSalaryProject, deleteSalaryProject, recordProjectPayment, recordAllProjectPayments, getProjectAdjustmentLedger, getPayrollRecord, addPayrollAdjustment, updatePayrollAdjustment, deletePayrollAdjustment, restorePayrollAdjustment, updatePayrollStatus } = require('../controllers/salaryController');
+const { validateRequest } = require('../middleware/validateMiddleware');
+const { generateSalarySchema, updateSalarySchema } = require('../validations/salarySchemas');
+const { giveBonus, removeBonus, resetSalary, getWorkerSalaryReport, getMySalaryReport, getCompensationReport, getBulkSalaryReport, getTopTeamsEarnings, addDeveloperProject, getDeveloperProjects, deleteDeveloperProject, getAllDeveloperProjectsSummary, createSalaryProject, getSalaryProjects, getSalaryProjectsForWorker, updateSalaryProject, deleteSalaryProject, recordProjectPayment, recordAllProjectPayments, getProjectAdjustmentLedger, getPayrollRecord, addPayrollAdjustment, updatePayrollAdjustment, deletePayrollAdjustment, restorePayrollAdjustment, updatePayrollStatus, getDashboardSalaryStats } = require('../controllers/salaryController');
 const router = express.Router();
 
 router.route('/give-bonus/:id').post(protect, adminOnly, giveBonus);
@@ -9,8 +11,9 @@ router.route('/reset-salary').post(protect, adminOnly, resetSalary);
 router.route('/report/:id').get(protect, adminOnly, getWorkerSalaryReport);
 router.route('/my-report').get(protect, adminOrWorker, getMySalaryReport);
 router.route('/bulk-report').get(protect, adminOnly, getBulkSalaryReport);
+router.route('/dashboard-stats').get(protect, adminOnly, getDashboardSalaryStats);
 router.route('/top-teams-earnings').get(protect, getTopTeamsEarnings);
-router.route('/compensation-report').post(protect, getCompensationReport); // Add this route
+router.route('/compensation-report').post(protect, validateRequest(generateSalarySchema), getCompensationReport); // Add this route
 
 // Developer project routes
 router.route('/developer-project').post(protect, addDeveloperProject);
@@ -32,12 +35,10 @@ router.route('/project-adjustment-ledger/:workerId').get(protect, getProjectAdju
 
 // ─── Enterprise Payroll Adjustments Routes ───
 router.route('/payroll-records/:workerId').get(protect, adminOnly, getPayrollRecord);
-router.route('/payroll-records/:workerId/adjustments').post(protect, adminOnly, addPayrollAdjustment);
-router.route('/payroll-records/:workerId/adjustments/:adjustmentId').put(protect, adminOnly, updatePayrollAdjustment);
+router.route('/payroll-records/:workerId/adjustments').post(protect, adminOnly, validateRequest(updateSalarySchema), addPayrollAdjustment);
+router.route('/payroll-records/:workerId/adjustments/:adjustmentId').put(protect, adminOnly, validateRequest(updateSalarySchema), updatePayrollAdjustment);
 router.route('/payroll-records/:workerId/adjustments/:adjustmentId').delete(protect, adminOnly, deletePayrollAdjustment);
 router.route('/payroll-records/:workerId/adjustments/:adjustmentId/restore').post(protect, adminOnly, restorePayrollAdjustment);
 router.route('/payroll-records/:workerId/status').put(protect, adminOnly, updatePayrollStatus);
 
-module.exports = router;
-
-
+module.exports = router;

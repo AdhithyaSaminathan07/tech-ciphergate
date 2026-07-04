@@ -79,6 +79,19 @@ export const getBulkSalaryReport = async (subdomain, fromDate, toDate) => {
   }
 };
 
+export const getDashboardSalaryStats = async (subdomain) => {
+  try {
+    const token = getAuthToken();
+    const response = await api.get('/salary/dashboard-stats', {
+      params: { subdomain },
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response ? error.response.data : new Error('Failed to get dashboard salary stats');
+  }
+};
+
 // Get compensation report for all workers
 export const getCompensationReport = async (subdomain, filters = {}) => {
   try {

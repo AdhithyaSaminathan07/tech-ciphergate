@@ -73,7 +73,7 @@ const AdminLogin = () => {
 
             navigate('/admin');
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Login failed. Please check your credentials.');
+            toast.error(error.response?.data?.message || error.message || 'Login failed. Please check your credentials.');
         } finally {
             setIsLoading(false);
         }

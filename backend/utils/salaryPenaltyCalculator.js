@@ -108,6 +108,10 @@ const calculateTaskPenalties = ({ worker, tickets, report, fromDate, toDate }) =
       // Rules only apply to days after the due date
       if (dateStr <= dueDateStr) return false;
 
+      // Do not apply penalties to future days that haven't occurred yet
+      const todayStr = getDateStr(new Date());
+      if (dateStr > todayStr) return false;
+
       // Find review cycles submitted on or before dateStr
       const activeCycles = mappedCycles.filter(c => c.submissionDateStr <= dateStr);
 

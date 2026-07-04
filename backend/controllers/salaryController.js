@@ -11,6 +11,7 @@ const ProjectPaymentLedger = require('../models/ProjectPaymentLedger');
 const { calculateWorkerProductivity } = require('../utils/productivityCalculator');
 const Ticket = require('../models/ticketModel');
 const { calculateTaskPenalties } = require('../utils/salaryPenaltyCalculator');
+const DashboardSalaryStat = require('../models/DashboardSalaryStat');
 
 // ─── Helper: Calculate 5X Unauthorized Absence Penalty ─────────────────────
 // Applies ONLY to past days where employee was absent (no punch-in),
@@ -103,22 +104,27 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
       continue;
     }
 
-    // ── Safety Rule: Pending leave → employee waiting for approval, NO 5X ──
-    const hasPendingLeave = leavesForDay.some(l => l.status === 'Pending');
-    if (hasPendingLeave) {
-      d.setDate(d.getDate() + 1);
-      continue;
-    }
-
-    // ── Now determine 5X trigger: Rejected leave OR no leave at all ──
+    // ── Now determine 5X trigger: Rejected leave, Pending leave OR no leave at all ──
     const hasRejectedLeave = leavesForDay.some(l => l.status === 'Rejected');
+    const hasPendingLeave = leavesForDay.some(l => l.status === 'Pending');
     const hasNoLeave = leavesForDay.length === 0;
 
-    if (hasRejectedLeave || hasNoLeave) {
+    if (hasRejectedLeave || hasPendingLeave || hasNoLeave) {
       const penaltyAmount = parseFloat((perDaySalary * 5).toFixed(4));
-      const leaveStatus = hasRejectedLeave ? 'Rejected' : 'No Leave Request';
-      const status = hasRejectedLeave ? 'Unauthorized Leave' : 'Unauthorized Absence';
-      const reason = hasRejectedLeave ? 'Leave Request Rejected' : 'Absent Without Leave Request';
+      
+      let leaveStatus = 'No Leave Request';
+      let status = 'Unauthorized Absence';
+      let reason = 'Absent Without Leave Request';
+
+      if (hasRejectedLeave) {
+        leaveStatus = 'Rejected';
+        status = 'Unauthorized Leave';
+        reason = 'Leave Request Rejected';
+      } else if (hasPendingLeave) {
+        leaveStatus = 'Pending';
+        status = 'Unauthorized Leave';
+        reason = 'Leave Request Pending Approval';
+      }
 
       penalties.push({
         date: dateStr,
@@ -1777,6 +1783,32 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
       }
     }));
 
+      // Save totalNetPayout and topTeams to DashboardSalaryStat
+      const teamEarnings = {};
+      const activeWorkerIds = new Set(workers.map(w => w._id.toString()));
+      
+      let totalNetPayout = 0;
+      adjustedResults.forEach(r => {
+        if (activeWorkerIds.has(r.workerId)) {
+          totalNetPayout += (Number(r.grossFinalSalary || r.totalFinalSalary) || 0);
+          
+          if (r.department && r.department !== 'N/A') {
+            teamEarnings[r.department] = (teamEarnings[r.department] || 0) + (Number(r.totalFinalSalary) || 0);
+          }
+        }
+      });
+      
+      const sortedTeams = Object.entries(teamEarnings)
+        .map(([name, amount]) => ({ name, amount }))
+        .sort((a, b) => b.amount - a.amount)
+        .slice(0, 3);
+        
+      await DashboardSalaryStat.findOneAndUpdate(
+        { subdomain },
+        { totalNetPayout, topTeams: sortedTeams, lastCalculated: new Date() },
+        { upsert: true, new: true }
+      );
+
     res.status(200).json({ reports: adjustedResults });
   } catch (error) {
     console.error('Bulk salary report error:', error);
@@ -2371,6 +2403,67 @@ const updatePayrollStatus = async (req, res) => {
   }
 };
 
+const getDashboardSalaryStats = asyncHandler(async (req, res) => {
+  const { subdomain } = req.query;
+
+  if (!subdomain) {
+    return res.status(400).json({ message: 'Subdomain is required' });
+  }
+
+  try {
+    const stat = await DashboardSalaryStat.findOne({ subdomain });
+    
+    // Check if stat exists and is less than 7 days old
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    
+    if (stat && stat.lastCalculated > oneWeekAgo && !req.query.forceRecalculate) {
+      return res.status(200).json(stat);
+    }
+    
+    // If we reach here, we need to calculate it (heavy processing)
+    // We will simulate the bulk salary logic for the current month
+    const now = new Date();
+    const fromDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const toDate = new Date(now.getFullYear(), now.getMonth() + 1, 0).toLocaleDateString('en-CA');
+    
+    // For calculating the stats properly, we would ideally just call the logic in getBulkSalaryReport,
+    // but since we want this as an API, we can either re-use getTopTeamsEarnings logic or just return empty for now
+    // and wait for the admin to generate a bulk report.
+    // However, to ensure they see SOMETHING if it's missing, let's just do a basic fallback or call the heavy logic.
+    // Actually, we can just use the fast approximation for totalNetPayout based on active workers base salary!
+    const workers = await Worker.find({ subdomain, status: { $ne: 'Relieved' } }).populate('department');
+    
+    const teamEarnings = {};
+    let totalNetPayout = 0;
+    
+    workers.forEach(worker => {
+      const deptName = worker.department?.name || 'N/A';
+      const salary = Number(worker.finalSalary || worker.salary) || 0;
+      totalNetPayout += salary;
+      if (deptName !== 'N/A') {
+        teamEarnings[deptName] = (teamEarnings[deptName] || 0) + salary;
+      }
+    });
+    
+    const sortedTeams = Object.entries(teamEarnings)
+      .map(([name, amount]) => ({ name, amount }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 3);
+      
+    const newStat = await DashboardSalaryStat.findOneAndUpdate(
+      { subdomain },
+      { totalNetPayout, topTeams: sortedTeams, lastCalculated: new Date() },
+      { upsert: true, new: true }
+    );
+    
+    return res.status(200).json(newStat);
+  } catch (error) {
+    console.error('Dashboard salary stats error:', error);
+    res.status(500).json({ message: 'Failed to fetch dashboard salary stats' });
+  }
+});
+
 module.exports = {
   giveBonus,
   removeBonus,
@@ -2397,5 +2490,6 @@ module.exports = {
   updatePayrollAdjustment,
   deletePayrollAdjustment,
   restorePayrollAdjustment,
-  updatePayrollStatus
+  updatePayrollStatus,
+  getDashboardSalaryStats
 };

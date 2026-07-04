@@ -25,8 +25,13 @@ export const getFullFileUrl = (url) => {
         ? new URL(baseURL).origin 
         : window.location.origin;
         
-    const pathPart = url.startsWith('/') ? url : `/${url}`;
-    
+    let pathPart = url;
+    if (!url.includes('/')) {
+        // Legacy file names (e.g., 1782191681341_461306.png)
+        pathPart = `/uploads/workers/${url}`;
+    } else if (!url.startsWith('/')) {
+        pathPart = `/${url}`;
+    }
     // For relative paths, use encodeURI to handle spaces but keep slashes and special chars
     // This avoids double encoding if the browser also tries to encode
     return `${origin}${encodeURI(pathPart)}`;

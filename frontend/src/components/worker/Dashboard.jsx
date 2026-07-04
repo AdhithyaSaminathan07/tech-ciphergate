@@ -92,6 +92,7 @@ const Dashboard = () => {
     totalUnauthorizedPenalty: 0,
     unauthorizedAbsencePenalties: [],
     delayedTasks: [],
+    taskPenalty: 0,
     report: null
   });
   const [topTeams, setTopTeams] = useState([]);
@@ -106,6 +107,7 @@ const Dashboard = () => {
         totalUnauthorizedPenalty: data.totalUnauthorizedPenalty ?? 0,
         unauthorizedAbsencePenalties: data.unauthorizedAbsencePenalties ?? [],
         delayedTasks: data.delayedTasks ?? [],
+        taskPenalty: data.taskPenalty,
         report: data.report ?? null
       });
     } catch (error) {
@@ -237,80 +239,20 @@ const Dashboard = () => {
       return { taskPenalties: [], totalTaskPenalty: 0 };
     }
 
-    const parseSalary = (str) => {
-      if (!str) return 0;
-      const cleaned = str.replace(/[^0-9.]/g, '');
-      return parseFloat(cleaned) || 0;
-    };
-
-    const now = new Date();
-    const reportYear = now.getFullYear();
-
-    const claimedDays = new Set();
-    let totalDeductionVal = 0;
-
     const taskPenalties = salaryData.delayedTasks.map(task => {
-      if (task.protectionState !== undefined) {
-        return {
-          ...task,
-          taskDeduction: task.taskDeduction,
-          period: task.period,
-          overdueWorkingDays: task.overdueWorkingDays,
-          protectionState: task.protectionState
-        };
-      }
-
-      const start = new Date(task.endDate);
-      start.setDate(start.getDate() + 1);
-      start.setHours(0, 0, 0, 0);
-
-      const end = task.doneDate ? new Date(task.doneDate) : new Date();
-      end.setHours(23, 59, 59, 999);
-
-      let taskDeduction = 0;
-      const dailyList = [];
-
-      if (salaryData.report?.report) {
-        salaryData.report.report.forEach(day => {
-          const dDate = new Date(`${day.date}, ${reportYear}`);
-          if (dDate >= start && dDate <= end) {
-            const amt = parseSalary(day.totalSalary);
-            if (!claimedDays.has(day.date)) {
-              claimedDays.add(day.date);
-              totalDeductionVal += amt;
-              taskDeduction += amt;
-              dailyList.push({ date: day.date, amount: amt });
-            } else {
-              dailyList.push({ date: day.date, amount: 0, alreadyDeducted: true });
-            }
-          }
-        });
-      } else {
-        const diffTime = Math.max(0, end - start);
-        const overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        taskDeduction = 0;
-        for (let i = 0; i < overdueDays; i++) {
-          dailyList.push({ date: 'N/A', amount: 0 });
-        }
-      }
-
-      const overdueWorkingDays = dailyList.length > 0 ? dailyList.length : Math.max(0, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
-
       return {
         ...task,
-        taskDeduction,
-        dailyList,
-        overdueWorkingDays,
-        period: `${start.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} → ${task.doneDate ? new Date(task.doneDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'Ongoing'}`
+        taskDeduction: task.taskDeduction || 0,
+        period: task.period || 'No Date',
+        overdueWorkingDays: task.overdueWorkingDays || 0,
+        protectionState: task.protectionState || 'None'
       };
     });
 
-    const totalTaskPenalty = salaryData.taskPenalty !== undefined
-      ? salaryData.taskPenalty
-      : taskPenalties.reduce((sum, t) => sum + t.taskDeduction, 0);
+    const totalTaskPenalty = salaryData.taskPenalty ?? taskPenalties.reduce((sum, t) => sum + (t.taskDeduction || 0), 0);
 
     return { taskPenalties, totalTaskPenalty };
-  }, [salaryData.delayedTasks, salaryData.report, salaryData.taskPenalty]);
+  }, [salaryData.delayedTasks, salaryData.taskPenalty]);
 
   if (isLoading) {
     return (

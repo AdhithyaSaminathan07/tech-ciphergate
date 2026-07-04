@@ -113,6 +113,10 @@ export default defineConfig({
     },
 build: {
     chunkSizeWarningLimit: 1000,
+    sourcemap: false, // Disable sourcemaps in production
+},
+esbuild: {
+    drop: ['console', 'debugger'], // Strip console logs and debuggers in production
 },
     server: {
         port: 3000,

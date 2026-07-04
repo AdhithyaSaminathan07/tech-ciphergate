@@ -19,24 +19,13 @@ const {
     getRulesStatus
 } = require('../controllers/ruleController');
 
+const { validateRequest } = require('../middleware/validateMiddleware');
+const { createRuleSchema, updateRuleSchema, updateRulesConfigSchema } = require('../validations/ruleSchemas');
 const { protect, adminOnly, workerOnly, adminOrWorker } = require('../middleware/authMiddleware');
 
-// Ensure uploads directory exists
-const uploadDir = path.join(__dirname, '../uploads/rules');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-}
+const { uploadDocument, verifyMagicBytes } = require('../utils/uploadConfig');
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-        cb(null, `${Date.now()}-${file.originalname}`);
-    }
-});
-
-const upload = multer({ storage });
+const upload = uploadDocument('uploads/rules');
 
 // Worker & Admin shared endpoints
 router.get('/active', protect, getActiveRules);
@@ -51,7 +40,7 @@ router.post('/accept', protect, workerOnly, submitAcceptance);
 router.get('/admin/dashboard', protect, adminOnly, getAdminDashboardStats);
 router.get('/acceptances', protect, adminOnly, getAcceptanceMonitoringList);
 router.post('/remind', protect, adminOnly, sendReminder);
-router.put('/admin/config', protect, adminOnly, updateRulesConfig);
+router.put('/admin/config', protect, adminOnly, validateRequest(updateRulesConfigSchema), updateRulesConfig);
 
 // CRUD routes
 router.route('/')

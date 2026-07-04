@@ -1,19 +1,108 @@
 // backend/controllers/authController.js
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const asyncHandler = require('express-async-handler');
 const Admin = require('../models/Admin');
 const Worker = require('../models/Worker');
-
-const crypto = require('crypto');
+const RefreshToken = require('../models/RefreshToken');
 const { sendPasswordResetEmail } = require('../config/email');
+const { logAudit } = require('../services/logger');
 
-// Generate JWT
-const generateToken = (id, role) => {
-  return jwt.sign({ id, role }, process.env.JWT_SECRET, {
-    expiresIn: '30d'
+const BCRYPT_SALT_ROUNDS = 12;
+
+// Helper: Set secure cookies
+const setCookies = (res, accessToken, refreshToken) => {
+  res.cookie('token', accessToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'Lax',
+    maxAge: 30 * 60 * 1000 // 30 minutes
+  });
+
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'Lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
   });
 };
+
+// Generate Tokens
+const generateTokens = async (userId, role) => {
+  const accessToken = jwt.sign({ id: userId, role }, process.env.JWT_SECRET, {
+    expiresIn: '30m'
+  });
+
+  const refreshToken = crypto.randomBytes(40).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+
+  await RefreshToken.create({
+    userId,
+    userModel: role === 'admin' ? 'Admin' : 'Worker',
+    tokenHash,
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+  });
+
+  return { accessToken, refreshToken };
+};
+
+// @desc    Refresh Token
+// @route   POST /api/auth/refresh
+// @access  Public
+const refreshSession = asyncHandler(async (req, res) => {
+  const { refreshToken } = req.cookies;
+
+  if (!refreshToken) {
+    return res.status(401).json({ message: 'No refresh token' });
+  }
+
+  const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+  const storedToken = await RefreshToken.findOne({ tokenHash });
+
+  if (!storedToken) {
+    // Token reuse detected or invalid token
+    // In a strict implementation, we would revoke ALL tokens for the user here
+    return res.status(403).json({ message: 'Invalid refresh token' });
+  }
+
+  if (storedToken.expiresAt < new Date()) {
+    await RefreshToken.deleteOne({ _id: storedToken._id });
+    return res.status(403).json({ message: 'Refresh token expired' });
+  }
+
+  // Delete old refresh token (Rotation)
+  await RefreshToken.deleteOne({ _id: storedToken._id });
+
+  // Generate new tokens
+  const { accessToken, refreshToken: newRefreshToken } = await generateTokens(storedToken.userId, storedToken.userModel === 'Admin' ? 'admin' : 'worker');
+  setCookies(res, accessToken, newRefreshToken);
+
+  res.json({ message: 'Token refreshed' });
+});
+
+// @desc    Logout user
+// @route   POST /api/auth/logout
+// @access  Public
+const logout = asyncHandler(async (req, res) => {
+  const { refreshToken } = req.cookies;
+
+  if (refreshToken) {
+    const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    await RefreshToken.deleteOne({ tokenHash });
+  }
+
+  res.clearCookie('token');
+  res.clearCookie('refreshToken');
+  res.setHeader('Clear-Site-Data', '"cookies", "storage"');
+
+  if (req.user) {
+    logAudit({ action: 'LOGOUT', actor: req.user, outcome: 'SUCCESS', ip: req.ip });
+  }
+
+  res.json({ message: 'Logged out successfully' });
+});
+
 
 // @desc    Check subdomain availability
 // @route   POST /api/auth/admin/subdomain-available
@@ -52,33 +141,26 @@ const subdomainAvailable = asyncHandler(async (req, res) => {
 const registerAdmin = asyncHandler(async (req, res) => {
   const { username, subdomain, email, password } = req.body;
 
-  // Validate input
   if (!username || !subdomain || !email || !password) {
     res.status(400);
     throw new Error('Please provide all required fields');
   }
 
-  // Check if admin already exists
   const adminExists = await Admin.findOne({ $or: [{ username }, { email }] });
-
   if (adminExists) {
     res.status(400);
     throw new Error('Admin already exists');
   }
 
-  // check if subdomain exixts
   const subdomainExists = await Admin.findOne({ subdomain });
-
   if (subdomainExists) {
     res.status(400);
     throw new Error('Company name already exists');
   }
 
-  // Hash password
-  const salt = await bcrypt.genSalt(10);
+  const salt = await bcrypt.genSalt(BCRYPT_SALT_ROUNDS);
   const hashedPassword = await bcrypt.hash(password, salt);
 
-  // Create admin
   const admin = await Admin.create({
     username,
     subdomain,
@@ -88,13 +170,18 @@ const registerAdmin = asyncHandler(async (req, res) => {
   });
 
   if (admin) {
+    const { accessToken, refreshToken } = await generateTokens(admin._id, 'admin');
+    setCookies(res, accessToken, refreshToken);
+
+    logAudit({ action: 'REGISTER_ADMIN', actor: admin, outcome: 'SUCCESS', ip: req.ip });
+
     res.status(201).json({
       _id: admin._id,
       username: admin.username,
       subdomain: admin.subdomain,
       email: admin.email,
       role: admin.role,
-      token: generateToken(admin._id, 'admin')
+      // We don't send the token in the body anymore for security
     });
   } else {
     res.status(400);
@@ -106,25 +193,30 @@ const registerAdmin = asyncHandler(async (req, res) => {
 // @route   POST /api/auth/admin
 // @access  Public
 const loginAdmin = asyncHandler(async (req, res) => {
+  console.log('--- LOGIN ADMIN ATTEMPT ---', req.body);
   const { username, password } = req.body;
 
-  // Find admin and include password field
   const admin = await Admin.findOne({ username }).select('+password');
 
-    if (admin && (await bcrypt.compare(password, admin.password))) {
-      res.json({
-        _id: admin._id,
-        username: admin.username,
-        email: admin.email,
-        photo: admin.photo,
-        role: 'admin',
-        subdomain: admin.subdomain,
-        organizationId: admin.organizationId,
-        token: generateToken(admin._id, 'admin')
-      });
-    } else {
+  if (admin && (await bcrypt.compare(password, admin.password))) {
+    const { accessToken, refreshToken } = await generateTokens(admin._id, 'admin');
+    setCookies(res, accessToken, refreshToken);
+
+    logAudit({ action: 'LOGIN_ADMIN', actor: admin, outcome: 'SUCCESS', ip: req.ip });
+
+    res.json({
+      _id: admin._id,
+      username: admin.username,
+      email: admin.email,
+      photo: admin.photo,
+      role: 'admin',
+      subdomain: admin.subdomain,
+      organizationId: admin.organizationId
+    });
+  } else {
+    logAudit({ action: 'LOGIN_ADMIN', actor: { _id: username, role: 'unknown' }, outcome: 'FAILURE', ip: req.ip });
     res.status(401);
-    throw new Error('Invalid credentials');
+    throw new Error('DEBUG: Admin lookup failed for username: "' + username + '". Admin exists: ' + !!admin);
   }
 });
 
@@ -154,41 +246,46 @@ const checkAdminInitialization = asyncHandler(async (req, res) => {
   }
 });
 
-
 // @desc    Login worker
 // @route   POST /api/auth/worker
 // @access  Public
 const loginWorker = asyncHandler(async (req, res) => {
   const { username, password, subdomain } = req.body;
 
-  const worker = await Worker.findOne({ username, subdomain }).populate('department', 'name');
+  const worker = await Worker.findOne({ username, subdomain }).select('+password').populate('department', 'name');
 
   if (!worker) {
+    logAudit({ action: 'LOGIN_WORKER', actor: { _id: username, role: 'unknown' }, outcome: 'FAILURE', ip: req.ip });
     res.status(401);
     throw new Error("Worker not found, check your Company name.");
   }
 
   if (worker.status !== 'Active') {
+    logAudit({ action: 'LOGIN_WORKER', actor: worker, outcome: 'FAILURE', ip: req.ip, details: { reason: 'Inactive account' } });
     res.status(401);
     throw new Error("Account is inactive. Please contact your administrator.");
   }
 
   if (worker && (await bcrypt.compare(password, worker.password))) {
+    const { accessToken, refreshToken } = await generateTokens(worker._id, 'worker');
+    setCookies(res, accessToken, refreshToken);
+
+    logAudit({ action: 'LOGIN_WORKER', actor: worker, outcome: 'SUCCESS', ip: req.ip });
+
     res.json({
       _id: worker._id,
       username: worker.username,
       name: worker.name,
       email: worker.email,
       subdomain: worker.subdomain,
-      salary: worker.salary,
-      finalSalary: worker.finalSalary,
       photo: worker.photo,
-      rfid: worker.rfid ? worker.rfid : 'unassigned',
       department: worker.department ? worker.department.name : 'Unassigned',
       role: 'worker',
-      token: generateToken(worker._id, 'worker')
+      rfid: worker.rfid
+      // Sensitive fields like salary are not returned directly in login
     });
   } else {
+    logAudit({ action: 'LOGIN_WORKER', actor: worker, outcome: 'FAILURE', ip: req.ip, details: { reason: 'Invalid password' } });
     res.status(401);
     throw new Error('Invalid credentials');
   }
@@ -208,11 +305,10 @@ const requestPasswordResetOtp = asyncHandler(async (req, res) => {
   const admin = await Admin.findOne({ subdomain });
 
   if (!admin) {
-    res.status(404);
-    throw new Error('Admin for that company name does not exist.');
+    // Return the same success message to prevent information disclosure
+    return res.status(200).json({ message: 'If the company name exists, a password reset OTP has been sent.' });
   }
 
-  // Generate 6-digit numeric OTP and set expiration (10 minutes)
   const resetOtp = Math.floor(100000 + Math.random() * 900000).toString();
   admin.resetPasswordOtp = resetOtp;
   admin.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
@@ -220,7 +316,7 @@ const requestPasswordResetOtp = asyncHandler(async (req, res) => {
 
   try {
     await sendPasswordResetEmail(admin.email, resetOtp);
-    res.status(200).json({ message: 'A password reset OTP has been sent to your registered email address.' });
+    res.status(200).json({ message: 'If the company name exists, a password reset OTP has been sent.' });
   } catch (err) {
     admin.resetPasswordOtp = undefined;
     admin.resetPasswordExpire = undefined;
@@ -252,15 +348,15 @@ const resetPasswordWithOtp = asyncHandler(async (req, res) => {
     throw new Error('Invalid or expired OTP.');
   }
 
-  // Hash new password
-  const salt = await bcrypt.genSalt(10);
+  const salt = await bcrypt.genSalt(BCRYPT_SALT_ROUNDS);
   admin.password = await bcrypt.hash(password, salt);
-  admin.passwordChangedAt = Date.now() - 1000; // Subtract 1s to ensure token issued right after is valid
+  admin.passwordChangedAt = Date.now() - 1000;
 
-  // Clear OTP fields
   admin.resetPasswordOtp = undefined;
   admin.resetPasswordExpire = undefined;
   await admin.save();
+
+  logAudit({ action: 'RESET_PASSWORD', actor: admin, outcome: 'SUCCESS', ip: req.ip });
 
   res.status(200).json({ message: 'Password reset successfully. You can now log in.' });
 });
@@ -278,14 +374,15 @@ const updateMe = asyncHandler(async (req, res) => {
 
   if (req.body.email) admin.email = req.body.email;
   if (req.body.photo) admin.photo = req.body.photo;
-  
+
   if (req.body.password) {
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(BCRYPT_SALT_ROUNDS);
     admin.password = await bcrypt.hash(req.body.password, salt);
-    admin.passwordChangedAt = Date.now() - 1000; // Subtract 1s to account for slight time differences
+    admin.passwordChangedAt = Date.now() - 1000;
   }
 
   const updatedAdmin = await admin.save();
+  logAudit({ action: 'UPDATE_PROFILE', actor: admin, outcome: 'SUCCESS', ip: req.ip });
 
   res.json({
     _id: updatedAdmin._id,
@@ -306,5 +403,7 @@ module.exports = {
   updateMe,
   checkAdminInitialization,
   requestPasswordResetOtp,
-  resetPasswordWithOtp
+  resetPasswordWithOtp,
+  refreshSession,
+  logout
 };

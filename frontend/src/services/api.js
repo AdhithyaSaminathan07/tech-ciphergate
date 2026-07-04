@@ -2,57 +2,90 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
-  // https://task-tracker-backend-1-r8os.onrender.com/api
-  // 'http://localhost:5000/api',
-  withCredentials: true, // If you need cookies for CORS, otherwise can remove
+  withCredentials: true, // Crucial for sending cookies
 });
 
-// Request interceptor: adds token from localStorage
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    // Token removed from console logs for security
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+// Flag to prevent multiple simultaneous refresh requests
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
     } else {
-      console.error('No token found for request');
+      prom.resolve(token);
     }
-    return config;
-  },
+  });
+  failedQueue = [];
+};
+
+// Request interceptor: we no longer inject the token from localStorage
+api.interceptors.request.use(
+  (config) => config,
   (error) => Promise.reject(error)
 );
 
-// Response interceptor: handles 401 unauthorized and 403 rules acceptance
+// Response interceptor: handles 401 unauthorized and attempts refresh
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config;
+
+    // Handle 403 Rules Acceptance
     if (error.response && error.response.status === 403 && error.response.data.rulesAcceptanceRequired) {
       if (window.location.pathname !== '/worker/rules-acceptance') {
-        console.warn('Rules acceptance required. Redirecting...');
         window.location.href = '/worker/rules-acceptance';
-      } else {
-        console.warn('Rules acceptance required, but already on the acceptance page. Suppressing redirect to prevent reload loop.');
       }
       return Promise.reject(error);
     }
 
-    if (error.response && error.response.status === 401) {
-      console.error('Unauthorized access');
-      // Clear localStorage
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      
-      // Check if user is on a worker page or admin page to redirect appropriately
-      const currentPath = window.location.pathname;
-      if (currentPath.startsWith('/worker')) {
-        // For worker routes, we don't want to redirect to admin login
-        // The component should handle the error display
-        console.log('Worker authentication failed, staying on current page');
-      } else {
-        // For admin routes, redirect to admin login
-        window.location.href = '/admin/login';
+    // Handle 401 Unauthorized
+    if (error.response && error.response.status === 401 && !originalRequest._retry) {
+      // Don't retry if the failed request was already a refresh attempt or login attempt
+      if (originalRequest.url === '/auth/refresh' || originalRequest.url.includes('/auth/admin') || originalRequest.url.includes('/auth/worker')) {
+        return Promise.reject(error);
+      }
+
+      if (isRefreshing) {
+        return new Promise(function(resolve, reject) {
+          failedQueue.push({ resolve, reject });
+        }).then(token => {
+          return api(originalRequest);
+        }).catch(err => {
+          return Promise.reject(err);
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        // Attempt to refresh the token
+        await axios.post(`${import.meta.env.VITE_API_URL || '/api'}/auth/refresh`, {}, { withCredentials: true });
+        
+        isRefreshing = false;
+        processQueue(null);
+        
+        // Retry the original request
+        return api(originalRequest);
+      } catch (refreshError) {
+        isRefreshing = false;
+        processQueue(refreshError, null);
+        
+        // Refresh failed, user is truly logged out
+        const currentPath = window.location.pathname;
+        if (!currentPath.startsWith('/worker/login') && !currentPath.startsWith('/admin/login')) {
+            if (currentPath.startsWith('/worker')) {
+                window.location.href = '/worker/login';
+            } else {
+                window.location.href = '/admin/login';
+            }
+        }
+        return Promise.reject(refreshError);
       }
     }
+
     return Promise.reject(error);
   }
 );

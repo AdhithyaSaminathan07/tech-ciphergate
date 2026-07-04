@@ -186,12 +186,12 @@ const LeaveRequests = () => {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">My Leave Requests</h1>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold">My Leave Requests</h1>
         <Button
           variant="primary"
           onClick={() => window.location.href = '/worker/leave-apply'}
-          className="text-sm"
+          className="text-sm w-full sm:w-auto"
         >
           + New Request
         </Button>

@@ -1,12 +1,10 @@
 import api from './api';
-import { getAuthToken } from '../utils/authUtils';
 
 export const subdomainAvailable = async (formData) => {
   try {
     const response = await api.post('/auth/admin/subdomain-available', formData);
     return response.data;
   } catch (error) {
-    console.error("Subdomain not available", error);
     throw error.response?.data || new Error('Failed to check subdomain availability');
   }
 };
@@ -34,28 +32,16 @@ export const login = async (credentials, userType) => {
     const response = await api.post(`/auth/${userType}`, credentials);
     const userData = response.data;
     
-    // Include department and salary information when saving to localStorage
-    localStorage.setItem('token', userData.token);
-    localStorage.setItem('tasktracker-subdomain', userData.subdomain);
-    localStorage.setItem('user', JSON.stringify({
-      _id: userData._id,
-      username: userData.username,
-      subdomain: userData.subdomain,
-      rfid: userData.rfid,
-      email: userData.email,
-      role: userData.role,
-      name: userData.name,
-      department: userData.department,
-      photo: userData.photo,
-      // Add these two lines to save salary information
-      salary: userData.salary,
-      finalSalary: userData.finalSalary
-    }));
-
+    // We NO LONGER store sensitive data in localStorage.
+    // Cookies handle the JWT, and React state handles the user object.
+    
     return userData;
   } catch (error) {
-    // Provide more specific error messages based on the error response
     if (error.response?.status === 401) {
+      const backendMessage = error.response?.data?.message;
+      if (backendMessage) {
+        throw new Error(backendMessage);
+      }
       if (userType === 'worker') {
         throw new Error('Invalid employee credentials. Please check your username and password.');
       } else {
@@ -66,31 +52,24 @@ export const login = async (credentials, userType) => {
   }
 };
 
-export const logout = () => {
-  localStorage.removeItem('token');
-  localStorage.removeItem('user');
+export const logout = async () => {
+  try {
+    await api.post('/auth/logout');
+  } catch (error) {
+    console.error('Logout error:', error);
+  }
 };
 
-export const getCurrentUser = () => {
+export const getCurrentUser = async () => {
   try {
-    const token = localStorage.getItem('token');
-    const userJson = localStorage.getItem('user');
-    
-    if (token && userJson) {
-      const user = JSON.parse(userJson);
-      return {
-        ...user,
-        token
-      };
-    }
-    return null;
+    const response = await api.get('/auth/me');
+    return response.data;
   } catch (error) {
     console.error('Error retrieving user:', error);
     return null;
   }
 };
 
-// Corrected initialization check
 export const checkAndInitAdmin = async () => {
   try {
     const response = await api.get('/auth/check-admin');
@@ -101,7 +80,6 @@ export const checkAndInitAdmin = async () => {
   }
 };
 
-// New functions for password reset functionality with OTP
 export const requestPasswordResetOtp = async (data) => {
     try {
         const response = await api.post('/auth/request-reset-otp', data);

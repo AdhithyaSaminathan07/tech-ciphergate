@@ -8,18 +8,16 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // On mount, check if user exists in localStorage
+  // On mount, check if user is authenticated via backend
   useEffect(() => {
-    const loadUser = () => {
+    const loadUser = async () => {
       try {
-        const userData = getCurrentUser();
+        const userData = await getCurrentUser();
         if (userData) {
           setUser(userData);
         }
       } catch (error) {
         console.error('Failed to load user', error);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
       } finally {
         setLoading(false);
       }
@@ -40,16 +38,14 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    logoutService();
+  const logout = async () => {
+    await logoutService();
     setUser(null);
   };
 
   const updateUser = (userData) => {
     setUser(prev => {
-      const current = prev || JSON.parse(localStorage.getItem('user')) || {};
-      const updated = { ...current, ...userData };
-      localStorage.setItem('user', JSON.stringify(updated));
+      const updated = { ...prev, ...userData };
       return updated;
     });
   };

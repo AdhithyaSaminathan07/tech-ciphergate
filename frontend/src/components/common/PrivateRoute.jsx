@@ -21,7 +21,6 @@ const PrivateRoute = ({
 
   // More robust authentication check
   const isAuthorized = 
-    token && 
     user && 
     (allowedRoles.length === 0 || allowedRoles.includes(user.role));
   

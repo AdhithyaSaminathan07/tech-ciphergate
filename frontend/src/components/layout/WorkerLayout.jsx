@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   FaHome,
   FaCalendarPlus,
@@ -31,6 +31,7 @@ const WorkerLayout = ({ children, isTestInProgress }) => {
   const [newComments, setNewComments] = useState(0);
   const [leaveUpdates, setLeaveUpdates] = useState(0);
   const navigate = useNavigate();
+  const location = useLocation();
   const { subdomain } = useContext(appContext);
 
   useEffect(() => {
@@ -119,7 +120,7 @@ const WorkerLayout = ({ children, isTestInProgress }) => {
   const bottomNavItems = [
     { to: '/worker', icon: <FaHome />, label: 'Home' },
     { to: '/worker/work-allocation', icon: <FaTasks />, label: 'Work' },
-    { to: '/worker/leave-requests', icon: <FaCalendarCheck />, label: 'Leave', badgeKey: 'leaves' },
+    { to: '/worker/communication', icon: <FaComments />, label: 'Chat', badgeKey: 'comments' },
     { to: '/worker/attendance', icon: <FaRegCalendarCheck />, label: 'Reports' },
     { to: '/worker/tests', icon: <FaGraduationCap />, label: 'Training' },
   ];
@@ -144,6 +145,9 @@ const WorkerLayout = ({ children, isTestInProgress }) => {
 
   const menuLinks = allLinks.filter(link => !bottomNavPaths.includes(link.to));
 
+  const currentLink = allLinks.find(link => link.to === location.pathname);
+  const pageTitle = currentLink ? currentLink.label : 'Dashboard';
+
   return (
     <div className="flex h-screen bg-[#f8fafc] w-full overflow-hidden">
       {!isTestInProgress && (
@@ -164,6 +168,7 @@ const WorkerLayout = ({ children, isTestInProgress }) => {
       <div className="flex-1 w-full flex flex-col h-screen overflow-hidden relative">
         {!isTestInProgress && (
           <Header 
+            title={pageTitle}
             user={{ ...user, displayName: `${user.name} (${user.department})` }} 
             menuLinks={menuLinks} 
             onLogout={handleLogout}

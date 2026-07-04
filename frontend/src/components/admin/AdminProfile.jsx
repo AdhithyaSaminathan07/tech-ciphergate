@@ -67,9 +67,7 @@ const AdminProfile = () => {
       if (dataToUpdate.photo && dataToUpdate.photo instanceof File) {
         const uploadData = new FormData();
         uploadData.append('photo', dataToUpdate.photo);
-        const res = await api.post('/auth/profile-image', uploadData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
+        const res = await api.post('/auth/profile-image', uploadData);
         dataToUpdate.photo = res.data.photo;
       }
 

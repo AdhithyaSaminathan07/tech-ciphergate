@@ -462,9 +462,9 @@ export default function RepoChat() {
                                     }
                                 </div>
                                 <div className="rc-message-content">
-                                    <div 
-                                        className="rc-message-text"
-                                        dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
+                                    <SafeHTML 
+                                        html={renderMarkdown(msg.content)} 
+                                        className="text-sm font-medium whitespace-pre-wrap break-words leading-relaxed"
                                     />
                                     <div className="rc-message-footer">
                                         <span className="rc-message-time">
