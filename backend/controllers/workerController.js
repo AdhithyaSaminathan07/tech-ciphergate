@@ -219,10 +219,69 @@ const getWorkers = asyncHandler(async (req, res) => {
       query.status = 'Active';
     }
 
-    const workers = await Worker.find(query)
+    const page = parseInt(req.query.page) || parseInt(req.body.page) || null;
+    const limit = parseInt(req.query.limit) || parseInt(req.body.limit) || 10;
+    const searchTerm = req.query.searchTerm || req.body.searchTerm || '';
+    const departmentFilter = req.query.departmentFilter || req.body.departmentFilter || 'All';
+    const batchFilter = req.query.batchFilter || req.body.batchFilter || 'All';
+    const sortBy = req.query.sortBy || req.body.sortBy || 'newest';
+
+    // Apply search term server-side
+    if (searchTerm) {
+      query.$or = [
+        { name: { $regex: searchTerm, $options: 'i' } },
+        { username: { $regex: searchTerm, $options: 'i' } },
+        { rfid: { $regex: searchTerm, $options: 'i' } }
+      ];
+    }
+
+    // Apply department filter server-side
+    if (departmentFilter && departmentFilter !== 'All') {
+      query.department = departmentFilter;
+    }
+
+    // Apply batch filter server-side
+    if (batchFilter && batchFilter !== 'All') {
+      query.batch = batchFilter;
+    }
+
+    let workersQuery = Worker.find(query)
       .select('-password')
-      .populate('department', 'name')
-      .lean();
+      .populate('department', 'name');
+
+    // Apply sorting server-side
+    if (sortBy === 'name-az') {
+      workersQuery = workersQuery.sort({ name: 1 });
+    } else if (sortBy === 'name-za') {
+      workersQuery = workersQuery.sort({ name: -1 });
+    } else if (sortBy === 'newest') {
+      workersQuery = workersQuery.sort({ createdAt: -1 });
+    } else if (sortBy === 'oldest') {
+      workersQuery = workersQuery.sort({ createdAt: 1 });
+    } else {
+      workersQuery = workersQuery.sort({ createdAt: -1 });
+    }
+
+    let workers;
+    let total = 0;
+    let hasMore = false;
+    let activeCount = 0;
+    let relievedCount = 0;
+
+    if (page !== null) {
+      const activeQuery = { ...query, status: 'Active' };
+      const relievedQuery = { ...query, status: 'Relieved' };
+      
+      activeCount = await Worker.countDocuments(activeQuery);
+      relievedCount = await Worker.countDocuments(relievedQuery);
+      
+      total = statusParam === 'Active' ? activeCount : relievedCount;
+      workersQuery = workersQuery.skip((page - 1) * limit).limit(limit);
+      workers = await workersQuery.lean();
+      hasMore = page * limit < total;
+    } else {
+      workers = await workersQuery.lean();
+    }
 
     // Transform workers to include department name, face enrollment status, and full photo URL
     const transformedWorkers = workers.map(worker => ({
@@ -234,7 +293,35 @@ const getWorkers = asyncHandler(async (req, res) => {
         : `https://ui-avatars.com/api/?name=${encodeURIComponent(worker.name)}`
     }));
 
-    res.json(transformedWorkers);
+    try {
+      const fs = require('fs');
+      fs.appendFileSync('logs/query_debug.log', JSON.stringify({
+        timestamp: new Date().toISOString(),
+        subdomain,
+        statusParam,
+        page,
+        limit,
+        total,
+        activeCount,
+        relievedCount,
+        workersReturned: transformedWorkers.length,
+        names: transformedWorkers.map(w => w.name)
+      }) + '\n');
+    } catch (logErr) {
+      console.error('Failed to write debug log:', logErr);
+    }
+
+    if (page !== null) {
+      res.json({
+        workers: transformedWorkers,
+        hasMore,
+        total,
+        activeCount,
+        relievedCount
+      });
+    } else {
+      res.json(transformedWorkers);
+    }
   } catch (error) {
     console.error('Get Workers Error:', error);
     res.status(500);

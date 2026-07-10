@@ -85,7 +85,9 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
     saleType = 'Intrastate',
     customerGst = '',
     invoiceType = 'INVOICE',
-    status = 'Invoice'
+    status = 'Invoice',
+    isPaid = false,
+    paymentRecords = []
   } = initialData || {};
 
   const [invoiceData, setInvoiceData] = useState({
@@ -106,7 +108,9 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
     saleType,
     customerGst,
     invoiceType,
-    status
+    status,
+    isPaid,
+    paymentRecords
   });
 
   const [includeFields, setIncludeFields] = useState({
@@ -144,9 +148,13 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
           mobile: 'Mobile: 7667792779',
           gstin: 'GSTIN: 33KYGPS1983E1Z1'
         },
-        items: initialData.items || [
-          { id: 1, description: '', hsn: '', gst: 0, qty: 1, rate: 0, total: 0, isTotalOverridden: false }
-        ]
+        items: (initialData.items && initialData.items.length > 0) 
+          ? initialData.items.map((item, idx) => ({ ...item, id: item._id || item.id || Date.now() + idx }))
+          : [
+          { id: Date.now(), description: '', hsn: '', gst: 0, qty: 1, rate: 0, total: 0, isTotalOverridden: false }
+        ],
+        isPaid: initialData.isPaid || false,
+        paymentRecords: initialData.paymentRecords || []
       });
     }
   }, [initialData]);
@@ -294,7 +302,7 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
 
   const addItem = () => {
     const newItem = {
-      id: invoiceData.items.length + 1,
+      id: Date.now(),
       description: '',
       hsn: '',
       gst: 0,
@@ -310,6 +318,34 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
     if (invoiceData.items.length > 1) {
       setInvoiceData(prev => ({ ...prev, items: prev.items.filter(item => item.id !== id) }));
     }
+  };
+
+  const addPaymentRecord = () => {
+    const newRecord = {
+      tempId: Date.now(),
+      amount: 0,
+      dateReceived: formattedDate,
+      transactionId: ''
+    };
+    setInvoiceData(prev => ({ ...prev, paymentRecords: [...(prev.paymentRecords || []), newRecord] }));
+  };
+
+  const removePaymentRecord = (index) => {
+    setInvoiceData(prev => ({
+      ...prev,
+      paymentRecords: prev.paymentRecords.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updatePaymentRecord = (index, field, value) => {
+    setInvoiceData(prev => {
+      const updatedRecords = [...prev.paymentRecords];
+      if (field === 'amount') {
+        value = value === '' ? 0 : Number(value);
+      }
+      updatedRecords[index] = { ...updatedRecords[index], [field]: value };
+      return { ...prev, paymentRecords: updatedRecords };
+    });
   };
 
   const handleCheckboxChange = (field) => {
@@ -379,6 +415,12 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
       const invoiceTypeText = invoiceData.invoiceType;
       const invoiceTypeWidth = pdf.getTextWidth(invoiceTypeText);
       pdf.text(invoiceTypeText, pageWidth - marginRight - invoiceTypeWidth, marginTop + 15);
+
+      if (invoiceData.isPaid) {
+        pdf.setFontSize(14);
+        pdf.setTextColor(0, 132, 61); // Green color for PAID
+        pdf.text("PAID", pageWidth - marginRight - invoiceTypeWidth - 20, marginTop + 15);
+      }
 
       pdf.setFontSize(10);
       pdf.setTextColor(51, 51, 51);
@@ -544,8 +586,8 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
       let finalY = pdf.lastAutoTable.finalY + 3; // Light gap after table
 
       // --- FOOTER CONFIGURATION ---
-      // This height encompasses: Payment Method + Seal + Thank You + Lines
-      const footerHeight = 60;
+      // This height encompasses: Payment Method + Seal + Thank You + Lines + Payment Records
+      const footerHeight = 60 + (invoiceData.paymentRecords?.length ? invoiceData.paymentRecords.length * 5 + 10 : 0);
 
       // --- TOTALS SECTION ---
       // Estimate height needed for Totals section (Words + Table)
@@ -690,6 +732,19 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
           pdf.text(`UPI ID: ${invoiceData.upiId}`, paymentLeftX, payDetailsY);
           payDetailsY += paymentLineHeight;
         }
+      }
+
+      if (invoiceData.paymentRecords && invoiceData.paymentRecords.length > 0) {
+        payDetailsY += 4;
+        pdf.setFont("helvetica", "bold");
+        pdf.text("Payment History:", paymentLeftX, payDetailsY);
+        payDetailsY += paymentLineHeight;
+        pdf.setFont("helvetica", "normal");
+        
+        invoiceData.paymentRecords.forEach((record, idx) => {
+          pdf.text(`${idx + 1}. Amount: Rs.${record.amount} | Date: ${record.dateReceived} | Txn ID: ${record.transactionId}`, paymentLeftX, payDetailsY);
+          payDetailsY += paymentLineHeight;
+        });
       }
 
       try {
@@ -1667,7 +1722,8 @@ temporarily interrupt app availability. We will provide advance notice when poss
                     )}
                     <th className="py-2 px-3 border-r border-gray-300 text-right text-white text-xs font-bold">QTY</th>
                     <th className="py-2 px-3 border-r border-gray-300 text-right text-white text-xs font-bold">PRICE</th>
-                    <th className="py-2 px-3 text-right text-white text-xs font-bold">TOTAL</th>
+                    <th className={`py-2 px-3 text-right text-white text-xs font-bold ${!isPreviewMode ? 'border-r border-gray-300' : ''}`}>TOTAL</th>
+                    {!isPreviewMode && <th className="py-2 px-3 text-center text-white text-xs font-bold w-10"></th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -1730,7 +1786,7 @@ temporarily interrupt app availability. We will provide advance notice when poss
                               className="w-full px-1 py-1 text-right focus:outline-none focus:bg-gray-100 text-sm font-normal"
                             />
                           </td>
-                          <td className="py-2 px-3 text-right font-medium">
+                          <td className={`py-2 px-3 text-right font-medium ${!isPreviewMode ? 'border-r border-gray-300' : ''}`}>
                             <input
                               type="number"
                               min="0"
@@ -1740,6 +1796,15 @@ temporarily interrupt app availability. We will provide advance notice when poss
                               className="w-full px-1 py-1 text-right focus:outline-none focus:bg-gray-100 text-sm font-normal"
                             />
                           </td>
+                          {!isPreviewMode && (
+                            <td className="py-2 px-3 text-center">
+                              {invoiceData.items.length > 1 && (
+                                <button type="button" onClick={() => removeItem(item.id)} className="text-red-500 hover:text-red-700" title="Remove Item">
+                                  <svg className="w-4 h-4 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                </button>
+                              )}
+                            </td>
+                          )}
                         </tr>
                       );
                     } else {
@@ -1755,7 +1820,8 @@ temporarily interrupt app availability. We will provide advance notice when poss
                           )}
                           <td className="py-2 px-3 border-r border-gray-300">&nbsp;</td>
                           <td className="py-2 px-3 border-r border-gray-300">&nbsp;</td>
-                          <td className="py-2 px-3">&nbsp;</td>
+                          <td className={`py-2 px-3 ${!isPreviewMode ? 'border-r border-gray-300' : ''}`}>&nbsp;</td>
+                          {!isPreviewMode && <td className="py-2 px-3">&nbsp;</td>}
                         </tr>
                       );
                     }
@@ -1763,7 +1829,7 @@ temporarily interrupt app availability. We will provide advance notice when poss
                 </tbody>
                 <tfoot>
                   <tr className="bg-white">
-                    <td colSpan={invoiceData.gstEnabled ? 7 : 5} className="py-2 px-3 text-right">
+                    <td colSpan={invoiceData.gstEnabled ? (isPreviewMode ? 7 : 8) : (isPreviewMode ? 5 : 6)} className="py-2 px-3 text-right">
                       <button
                         onClick={addItem}
                         className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-md transition duration-300 text-xs"
@@ -1961,6 +2027,66 @@ temporarily interrupt app availability. We will provide advance notice when poss
             </div>
           </div>
         </div>
+
+        {!isPreviewMode && (
+          <div className="mb-6 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <h2 className="text-lg font-semibold mb-3">Payment Details</h2>
+            <div className="mb-4">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="isPaid"
+                  checked={invoiceData.isPaid || false}
+                  onChange={(e) => setInvoiceData(prev => ({ ...prev, isPaid: e.target.checked }))}
+                  className="h-5 w-5 text-green-600 rounded mr-2"
+                />
+                <span className="text-gray-700 font-bold">Mark Invoice as Paid</span>
+              </label>
+            </div>
+            
+            <div className="space-y-3">
+              <h3 className="font-semibold text-sm text-gray-700">Payment Records</h3>
+              {invoiceData.paymentRecords && invoiceData.paymentRecords.map((record, idx) => (
+                <div key={record._id || record.tempId || idx} className="flex flex-wrap items-center gap-3 p-3 bg-white border border-gray-200 rounded">
+                  <div className="flex-1 min-w-[120px]">
+                    <label className="block text-xs text-gray-500 mb-1">Amount</label>
+                    <input 
+                      type="number" 
+                      value={record.amount} 
+                      onChange={(e) => updatePaymentRecord(idx, 'amount', e.target.value)} 
+                      className="w-full px-2 py-1 border rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-sm"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-[140px]">
+                    <label className="block text-xs text-gray-500 mb-1">Date Received</label>
+                    <input 
+                      type="date" 
+                      value={record.dateReceived} 
+                      onChange={(e) => updatePaymentRecord(idx, 'dateReceived', e.target.value)} 
+                      className="w-full px-2 py-1 border rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-sm"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-[150px]">
+                    <label className="block text-xs text-gray-500 mb-1">Transaction ID</label>
+                    <input 
+                      type="text" 
+                      value={record.transactionId} 
+                      onChange={(e) => updatePaymentRecord(idx, 'transactionId', e.target.value)} 
+                      className="w-full px-2 py-1 border rounded focus:outline-none focus:ring-1 focus:ring-green-500 text-sm"
+                      placeholder="Txn ID"
+                    />
+                  </div>
+                  <button type="button" onClick={() => removePaymentRecord(idx)} className="mt-5 text-red-500 hover:text-red-700">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  </button>
+                </div>
+              ))}
+              <button type="button" onClick={addPaymentRecord} className="text-sm text-green-600 font-semibold hover:text-green-700 flex items-center">
+                <span className="mr-1">+</span> Add Payment Record
+              </button>
+            </div>
+          </div>
+        )}
       </fieldset >
     </div >
   );

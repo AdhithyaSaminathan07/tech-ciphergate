@@ -270,7 +270,12 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onDeleteInvoice, onStatu
                     </span>
                   </td>
                   <td className="py-3.5 px-4 text-sm font-bold text-gray-900 text-right whitespace-nowrap">
-                    ₹{calculateTotal(invoice).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    <div className="flex items-center justify-end gap-2">
+                      {invoice.isPaid && (
+                        <div className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" title="Paid"></div>
+                      )}
+                      <span>₹{calculateTotal(invoice).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
                   </td>
                   <td className="py-3.5 px-4">
                     <div className="flex flex-col gap-1.5">

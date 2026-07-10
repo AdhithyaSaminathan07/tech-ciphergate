@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import {
     Trophy,
     GitCommit,
@@ -15,7 +15,11 @@ import {
     X,
     Save,
     CheckCircle,
-    Database
+    Database,
+    Activity,
+    Clock,
+    Lock,
+    Globe
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -131,6 +135,44 @@ export default function LiveLeaderboard() {
         branch: "",
     })
 
+    const [syncJob, setSyncJob] = useState(null)
+    const hasTriggeredInitialSync = useRef(false)
+
+    const pollSyncStatus = (jobId) => {
+        const interval = setInterval(async () => {
+            try {
+                const res = await githubService.getSyncStatus(jobId);
+                if (res && res.success) {
+                    setSyncJob(res);
+                    if (res.status === 'Completed' || res.status === 'Failed') {
+                        clearInterval(interval);
+                        // Wait 3s for MongoDB to commit the cache write before reading
+                        setTimeout(() => loadData(), 3000);
+                    }
+                }
+            } catch (err) {
+                console.error("Error polling sync status:", err);
+                clearInterval(interval);
+            }
+        }, 3000);
+    };
+
+    const handleSyncNow = async () => {
+        try {
+            const res = await githubService.triggerSync();
+            if (res && res.success && res.jobId) {
+                setSyncJob({
+                    jobId: res.jobId,
+                    status: 'Pending',
+                    progress: '0 / 0'
+                });
+                pollSyncStatus(res.jobId);
+            }
+        } catch (err) {
+            console.error("Error triggering sync:", err);
+        }
+    };
+
     const handleManualSave = async () => {
         if (!data) return
 
@@ -176,15 +218,17 @@ export default function LiveLeaderboard() {
                 setData(result)
                 setError(null)
 
-                // Generate derived data for saving
-                const leaderboard = createContributorLeaderboard(
-                    result.contributors,
-                    result.commits,
-                    result.pullRequests,
-                    result.analyzedData
-                )
-                // Save to MongoDB automatically
-                await saveContributorsToDatabase(leaderboard);
+                // Generate derived data for saving if we have actual contributors
+                if (result.contributors && result.contributors.length > 0) {
+                    const leaderboard = createContributorLeaderboard(
+                        result.contributors,
+                        result.commits,
+                        result.pullRequests,
+                        result.analyzedData
+                    )
+                    // Save to MongoDB automatically
+                    await saveContributorsToDatabase(leaderboard);
+                }
             } else {
                 setError("Failed to fetch GitHub data.")
             }
@@ -196,6 +240,38 @@ export default function LiveLeaderboard() {
             setRefreshing(false)
         }
     }
+
+    useEffect(() => {
+        const checkInitialSyncStatus = async () => {
+            try {
+                const res = await githubService.getSyncStatus();
+                if (res && res.success && (res.status === 'Pending' || res.status === 'Running')) {
+                    setSyncJob(res);
+                    pollSyncStatus(res.jobId);
+                } else if (res && res.success) {
+                    setSyncJob(res);
+                }
+            } catch (err) {
+                console.error("Error checking initial sync status:", err);
+            }
+        };
+        checkInitialSyncStatus();
+        loadData();
+    }, [])
+
+    // Auto-trigger sync ONCE when data loads with all zeros on a fresh DB
+    useEffect(() => {
+        if (!data) return;
+        if (hasTriggeredInitialSync.current) return; // only trigger once per page load
+        const stats = data.stats || {};
+        const isEmpty = !stats.totalRepos && !stats.totalCommits && !stats.totalPRs;
+        const noSyncRunning = !syncJob || (syncJob.status !== 'Pending' && syncJob.status !== 'Running');
+        if (isEmpty && noSyncRunning && !data.showingCached) {
+            hasTriggeredInitialSync.current = true;
+            console.log('[GitHub Leaderboard] Fresh DB — triggering initial sync (once)...');
+            handleSyncNow();
+        }
+    }, [data]);
 
     const clearGitHubCache = async () => {
         setClearingCache(true);
@@ -458,6 +534,81 @@ export default function LiveLeaderboard() {
                             Reset
                         </Button>
                     </div>
+                </div>
+            )}
+
+            {/* First-Time Setup Banner — shown on fresh live DB with all zeros */}
+            {data && !data.showingCached && !data.stats?.totalRepos && (
+                <div className="mb-6 p-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg max-w-4xl mx-auto">
+                    <div className="flex items-center space-x-3">
+                        <Database className="h-6 w-6 text-blue-200 shrink-0" />
+                        <div>
+                            <p className="font-bold text-base">GitHub Data Not Yet Synced</p>
+                            <p className="text-sm text-blue-200 mt-0.5">
+                                {syncJob && (syncJob.status === 'Pending' || syncJob.status === 'Running')
+                                    ? `Syncing repositories... ${syncJob.progress || '0 / 0'} done. This takes 2–5 minutes.`
+                                    : 'This is the first time loading GitHub data on this server. Click Sync to initialize.'}
+                            </p>
+                        </div>
+                    </div>
+                    <Button
+                        onClick={handleSyncNow}
+                        disabled={syncJob && (syncJob.status === 'Pending' || syncJob.status === 'Running')}
+                        className="bg-white text-blue-700 hover:bg-blue-50 font-bold shrink-0"
+                        size="sm"
+                    >
+                        {syncJob && (syncJob.status === 'Pending' || syncJob.status === 'Running') ? (
+                            <><Activity className="h-4 w-4 mr-2 animate-spin" /> Syncing...</>
+                        ) : (
+                            <><Activity className="h-4 w-4 mr-2" /> Start Initial Sync</>
+                        )}
+                    </Button>
+                </div>
+            )}
+
+            {/* Sync Job Status Banner */}
+            {syncJob && (syncJob.status === 'Pending' || syncJob.status === 'Running') && data?.stats?.totalRepos > 0 && (
+                <div className="mb-6 p-4 bg-blue-950/80 border border-blue-800 text-blue-200 rounded-lg flex items-center justify-between max-w-4xl mx-auto">
+                    <div className="flex items-center space-x-3">
+                        <Activity className="h-5 w-5 text-blue-400 animate-spin" />
+                        <div>
+                            <p className="text-sm font-semibold text-white">Syncing GitHub Data ({syncJob.progress} repos done)</p>
+                            <p className="text-xs text-blue-300">Leaderboard will update automatically as repositories finish syncing</p>
+                        </div>
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => loadData(true)}
+                        disabled={refreshing}
+                        className="bg-blue-900 border-blue-700 hover:bg-blue-800 text-white ml-2"
+                    >
+                        {refreshing ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> : '↻ Refresh'}
+                    </Button>
+                </div>
+            )}
+
+            {/* Showing Cached Banner */}
+            {data && data.showingCached && (
+                <div className="mb-6 p-4 bg-yellow-950/80 border border-yellow-800 text-yellow-200 rounded-lg flex items-center justify-between max-w-4xl mx-auto">
+                    <div className="flex items-center space-x-3">
+                        <Clock className="h-5 w-5 text-yellow-500" />
+                        <div>
+                            <p className="text-sm font-semibold text-white font-medium">Showing Cached Leaderboard</p>
+                            <p className="text-xs text-yellow-400">
+                                Last successful sync: {new Date(data.lastSuccessfulSync).toLocaleTimeString()} ({new Date(data.lastSuccessfulSync).toLocaleDateString()})
+                            </p>
+                        </div>
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSyncNow}
+                        disabled={syncJob && (syncJob.status === 'Pending' || syncJob.status === 'Running')}
+                        className="bg-yellow-900 border-yellow-700 hover:bg-yellow-800 text-white"
+                    >
+                        Sync Now
+                    </Button>
                 </div>
             )}
 

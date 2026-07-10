@@ -1,5 +1,5 @@
 // attendance _31/client/src/components/admin/SalaryManagement.jsx
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import {
@@ -107,6 +107,7 @@ const SalaryManagement = () => {
     const [workers, setWorkers] = useState([]);
     const [departments, setDepartments] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
+    const observerRef = useRef(null);
     const [searchTerm, setSearchTerm] = useState(() => {
         const val = localStorage.getItem('salarySearchTerm');
         return (val === null || val === 'null' || val === 'undefined') ? '' : val;
@@ -262,74 +263,88 @@ const SalaryManagement = () => {
 
     const { subdomain } = useContext(appContext);
 
-    const loadData = async () => {
-        setIsLoading(true);
-        setIsLoadingDepartments(true);
+    const [reports, setReports] = useState([]);
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
+    const [isFetchingNextPage, setIsFetchingNextPage] = useState(false);
+
+    const fetchReports = async (pageNumber, isRefresh = false) => {
+        if (pageNumber === 1 && !isRefresh) {
+            setIsLoading(true);
+        } else if (pageNumber > 1) {
+            setIsFetchingNextPage(true);
+        }
 
         try {
-            const year = new Date().getFullYear();
-            const month = new Date().getMonth() + 1;
+            const year = selectedYear;
+            const month = selectedMonth;
 
-            const formatDateStr = (date) => {
+            const formatDate = (date) => {
                 const d = new Date(date);
                 let m = '' + (d.getMonth() + 1);
                 let day = '' + d.getDate();
                 const yr = d.getFullYear();
-
                 if (m.length < 2) m = '0' + m;
                 if (day.length < 2) day = '0' + day;
-
                 return [yr, m, day].join('-');
             };
 
             const firstDay = new Date(year, month - 1, 1);
             const lastDay = new Date(year, month, 0);
 
-            const fromDate = formatDateStr(firstDay);
-            const toDate = formatDateStr(lastDay);
+            const fromDateStr = formatDate(firstDay);
+            const toDateStr = formatDate(lastDay);
 
-            const [workersData, departmentsData, bulkReportResponse] = await Promise.all([
-                getWorkers({ subdomain }),
-                getDepartments({ subdomain }),
-                getBulkSalaryReport(subdomain, fromDate, toDate).catch(err => {
-                    console.error("Failed to fetch real-time salary reports for main list:", err);
-                    return null;
-                })
-            ]);
+            const response = await getBulkSalaryReport(subdomain, fromDateStr, toDateStr, {
+                page: pageNumber,
+                limit: 10,
+                searchTerm,
+                filterDepartment,
+                filterMinSalary,
+                filterMaxSalary,
+                filterFineStatus,
+                filterBankStatus,
+                sortBy
+            });
 
-            const safeWorkersData = Array.isArray(workersData) ? workersData : [];
-            const safeDepartmentsData = Array.isArray(departmentsData) ? departmentsData : [];
-
-            let enrichedWorkers = safeWorkersData;
-            if (bulkReportResponse && bulkReportResponse.reports) {
-                const reportsMap = {};
-                bulkReportResponse.reports.forEach(r => {
-                    reportsMap[r.workerId] = r;
-                });
-
-                enrichedWorkers = safeWorkersData.map(worker => {
-                    const report = reportsMap[worker._id];
-                    if (report) {
-                        const taskPenalty = report.taskPenalty || 0;
-                        const finalSalary = Math.max(0, report.totalFinalSalary - taskPenalty);
-                        return {
-                            ...worker,
-                            finalSalary: finalSalary
-                        };
-                    }
-                    return worker;
+            if (pageNumber === 1) {
+                setReports(response.reports || []);
+            } else {
+                setReports(prev => {
+                    const existingIds = new Set(prev.map(r => r._id));
+                    const newReports = (response.reports || []).filter(r => !existingIds.has(r._id));
+                    return [...prev, ...newReports];
                 });
             }
 
-            setWorkers(enrichedWorkers);
-            setDepartments(safeDepartmentsData);
+            setHasMore(response.pagination?.hasMore || false);
+            setPage(pageNumber);
         } catch (error) {
-            toast.error('Failed to load data');
+            toast.error('Failed to load salary data');
+            console.error(error);
+        } finally {
+            setIsLoading(false);
+            setIsFetchingNextPage(false);
+        }
+    };
+
+    const loadData = async () => {
+        setIsLoadingDepartments(true);
+
+        try {
+            const [workersData, departmentsData] = await Promise.all([
+                getWorkers({ subdomain }),
+                getDepartments({ subdomain })
+            ]);
+
+            setWorkers(Array.isArray(workersData) ? workersData : []);
+            setDepartments(Array.isArray(departmentsData) ? departmentsData : []);
+        } catch (error) {
+            toast.error('Failed to load metadata');
             console.error(error);
             setWorkers([]);
             setDepartments([]);
         } finally {
-            setIsLoading(false);
             setIsLoadingDepartments(false);
         }
     };
@@ -339,6 +354,32 @@ const SalaryManagement = () => {
         // Set initial date range to current month
         setMonthDateRange();
     }, []);
+
+    useEffect(() => {
+        fetchReports(1, true);
+    }, [searchTerm, filterDepartment, filterMinSalary, filterMaxSalary, filterFineStatus, filterBankStatus, sortBy, selectedMonth, selectedYear]);
+
+    // Infinite scroll observer using callback ref to avoid AnimatePresence race conditions
+    const sentinelRef = useCallback((node) => {
+        if (observerRef.current) {
+            observerRef.current.disconnect();
+        }
+
+        if (node && hasMore && !isFetchingNextPage && !isLoading) {
+            const scrollContainer = document.querySelector('.custom-main-scroll');
+            const observer = new IntersectionObserver((entries) => {
+                if (entries[0].isIntersecting) {
+                    fetchReports(page + 1);
+                }
+            }, {
+                root: scrollContainer || null,
+                rootMargin: '100px',
+                threshold: 0.01
+            });
+            observer.observe(node);
+            observerRef.current = observer;
+        }
+    }, [page, hasMore, isFetchingNextPage, isLoading, searchTerm, filterDepartment, filterMinSalary, filterMaxSalary, filterFineStatus, filterBankStatus, sortBy, selectedMonth, selectedYear]);
 
     // ADD FUNCTION TO CALCULATE MONTHLY FINES
     const calculateMonthlyFines = (worker, month, year) => {
@@ -503,6 +544,7 @@ const SalaryManagement = () => {
             .then((response) => {
                 toast.success(response.message);
                 loadData();
+                fetchReports(1, true);
                 setFormData({
                     bonus: '',
                     fromDate: new Date().toISOString().slice(0, 10),
@@ -531,6 +573,7 @@ const SalaryManagement = () => {
             .then((response) => {
                 toast.success(response.message);
                 loadData();
+                fetchReports(1, true);
             })
             .catch((error) => {
                 toast.error(error.message || 'Failed to give bonus');
@@ -904,6 +947,7 @@ const SalaryManagement = () => {
             const response = await removeBonusAmount(workerToDelete._id);
             toast.success(response.message);
             loadData();
+            fetchReports(1, true);
         } catch (error) {
             toast.error(error.message || 'Failed to remove bonus');
         } finally {
@@ -926,6 +970,7 @@ const SalaryManagement = () => {
                 const response = await deleteFine(workerId, fineId);
                 toast.success(response.message);
                 loadData();
+                fetchReports(1, true);
                 // Refresh the report if it's open
                 if (isReportModalOpen && selectedWorker) {
                     fetchReport();
@@ -1030,7 +1075,7 @@ const SalaryManagement = () => {
             const fromDate = formatDate(firstDay);
             const toDate = formatDate(lastDay);
 
-            const response = await getBulkSalaryReport(subdomain, fromDate, toDate);
+            const response = await getBulkSalaryReport(subdomain, fromDate, toDate, { isExport: true });
             if (response && response.reports) {
                 // Filter to only include the selected workers
                 const filteredReports = response.reports.filter(r => selectedWorkersForReport.includes(r.workerId));
@@ -2287,11 +2332,20 @@ const SalaryManagement = () => {
                         <Spinner size="lg" />
                     </div>
                 ) : (
-                    <Table
-                        columns={columns}
-                        data={filteredWorkers}
-                        noDataMessage="No employees found."
-                    />
+                    <>
+                        <Table
+                            columns={columns}
+                            data={reports}
+                            noDataMessage="No employees found."
+                        />
+                        {isFetchingNextPage && (
+                            <div className="flex justify-center py-4">
+                                <Spinner size="sm" />
+                                <span className="text-xs text-slate-500 font-medium ml-2">Loading more employees...</span>
+                            </div>
+                        )}
+                        <div ref={sentinelRef} id="infinite-scroll-sentinel" className="h-4 w-full" />
+                    </>
                 )}
             </Card>
             <Modal
@@ -2360,7 +2414,7 @@ const SalaryManagement = () => {
                 isOpen={isFineModalOpen}
                 onClose={() => setIsFineModalOpen(false)}
                 preloadedWorkers={workers}
-                onFineAdded={loadData}
+                onFineAdded={() => { loadData(); fetchReports(1, true); }}
             />
 
             {/* PAYROLL ADJUSTMENT MODAL */}
@@ -2378,7 +2432,7 @@ const SalaryManagement = () => {
                         const fromDate = new Date(selectedYear, selectedMonth - 1, 1).toISOString().slice(0, 10);
                         const toDate = new Date(selectedYear, selectedMonth, 0).toISOString().slice(0, 10);
                         setIsBulkReportLoading(true);
-                        getBulkSalaryReport(subdomain, fromDate, toDate)
+                        getBulkSalaryReport(subdomain, fromDate, toDate, { isExport: true })
                             .then(data => {
                                 const filtered = (data.reports || []).filter(r => selectedWorkersForReport.map(w => w._id || w).includes(r.workerId));
                                 setBulkReportData(filtered);

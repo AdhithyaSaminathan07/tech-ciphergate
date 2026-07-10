@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useContext, useRef, useMemo, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { 
@@ -52,6 +52,13 @@ const WorkerManagement = () => {
   const [selectedWorkerForFace, setSelectedWorkerForFace] = useState(null);
   const [workerFaceEmbeddings, setWorkerFaceEmbeddings] = useState([]);
   const [activeTab, setActiveTab] = useState('active'); // active, archived
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isFetchingNextPage, setIsFetchingNextPage] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
+  const [activeCount, setActiveCount] = useState(0);
+  const [relievedCount, setRelievedCount] = useState(0);
+  const observerRef = useRef(null);
 
   const handlePhotoChange = (e) => {
     const file = e.target.files[0];
@@ -97,34 +104,79 @@ const WorkerManagement = () => {
   // Subdomain
   const { subdomain } = useContext(appContext);
 
-  // Load workers and departments
+  // Load departments and settings
   const loadData = async () => {
-    setIsLoading(true);
     setIsLoadingDepartments(true);
+    if (!subdomain || subdomain === 'main') {
+      setIsLoadingDepartments(false);
+      return;
+    }
 
     try {
-      const [workersData, departmentsData, settingsData] = await Promise.all([
-        getWorkers({ subdomain, status: 'all' }),
+      const [departmentsData, settingsData] = await Promise.all([
         getDepartments({ subdomain }),
         getSettings({ subdomain })
       ]);
 
-      const safeWorkersData = Array.isArray(workersData) ? workersData : [];
       const safeDepartmentsData = Array.isArray(departmentsData) ? departmentsData : [];
       const safeSettingsData = settingsData || {};
 
-      setWorkers(safeWorkersData);
       setDepartments(safeDepartmentsData);
       setBatches(safeSettingsData.batches || []);
     } catch (error) {
-      toast.error('Failed to load data');
+      toast.error('Failed to load departments or settings');
       console.error(error);
-      setWorkers([]);
       setDepartments([]);
       setBatches([]);
     } finally {
-      setIsLoading(false);
       setIsLoadingDepartments(false);
+    }
+  };
+
+  // Load workers with pagination and filters
+  const loadWorkers = async (pageNumber = 1, isAppend = false) => {
+    if (!subdomain || subdomain === 'main') return;
+    if (pageNumber === 1) {
+      setIsLoading(true);
+    } else {
+      setIsFetchingNextPage(true);
+    }
+
+    try {
+      const response = await getWorkers(
+        { subdomain, status: activeTab === 'active' ? 'Active' : 'Relieved' },
+        {
+          page: pageNumber,
+          limit: 10,
+          searchTerm,
+          departmentFilter,
+          batchFilter,
+          sortBy
+        }
+      );
+
+      if (response && response.workers) {
+        setWorkers(prev => pageNumber === 1 ? response.workers : [...prev, ...response.workers]);
+        setHasMore(response.hasMore);
+        setPage(pageNumber);
+        setTotalCount(response.total || response.workers.length);
+        setActiveCount(response.activeCount !== undefined ? response.activeCount : (activeTab === 'active' ? response.total : 0));
+        setRelievedCount(response.relievedCount !== undefined ? response.relievedCount : (activeTab === 'archived' ? response.total : 0));
+      } else {
+        const safeWorkers = Array.isArray(response) ? response : [];
+        setWorkers(prev => pageNumber === 1 ? safeWorkers : [...prev, ...safeWorkers]);
+        setHasMore(false);
+        const count = safeWorkers.length;
+        setTotalCount(count);
+        setActiveCount(activeTab === 'active' ? count : 0);
+        setRelievedCount(activeTab === 'archived' ? count : 0);
+      }
+    } catch (error) {
+      console.error('Failed to load workers:', error);
+      toast.error('Failed to load employee records');
+    } finally {
+      setIsLoading(false);
+      setIsFetchingNextPage(false);
     }
   };
 
@@ -139,7 +191,36 @@ const WorkerManagement = () => {
     handleResize(); // Initial check
     
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [subdomain]);
+
+  useEffect(() => {
+    loadWorkers(1, false);
+  }, [subdomain, activeTab, searchTerm, departmentFilter, batchFilter, sortBy]);
+
+  // Infinite scroll observer using callback ref to avoid AnimatePresence race conditions
+  const sentinelRef = useCallback((node) => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+
+    if (node && !isLoading && !isFetchingNextPage && hasMore) {
+      const scrollContainer = document.querySelector('.custom-main-scroll');
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries[0].isIntersecting) {
+            loadWorkers(page + 1, true);
+          }
+        },
+        {
+          root: scrollContainer || null,
+          rootMargin: '100px',
+          threshold: 0.01
+        }
+      );
+      observer.observe(node);
+      observerRef.current = observer;
+    }
+  }, [page, hasMore, isLoading, isFetchingNextPage, subdomain, activeTab, searchTerm, departmentFilter, batchFilter, sortBy]);
 
   const getWorkerId = async () => {
     await getUniqueId()
@@ -157,51 +238,12 @@ const WorkerManagement = () => {
   const processedWorkers = useMemo(() => {
     if (!Array.isArray(workers)) return { active: [], archived: [] };
 
-    let filtered = workers.filter(worker => {
-      // Search Box Filter (Name, Username, RFID)
-      const searchMatch = 
-        worker.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        worker.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (worker.rfid && worker.rfid.toLowerCase().includes(searchTerm.toLowerCase()));
-
-      // Department Filter - Robust matching for both ID and Name
-      const deptId = typeof worker.department === 'object' ? worker.department?._id : worker.department;
-      const selectedDept = departments.find(d => d._id === departmentFilter);
-      
-      const deptMatch = departmentFilter === 'All' || 
-                        deptId === departmentFilter || 
-                        worker.department === departmentFilter || 
-                        worker.department === selectedDept?.name || 
-                        worker.department?.name === selectedDept?.name;
-
-      // Batch Filter
-      const batchMatch = batchFilter === 'All' || worker.batch === batchFilter;
-
-      return searchMatch && deptMatch && batchMatch;
-    });
-
-    // Sorting
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'name-az':
-          return a.name.localeCompare(b.name);
-        case 'name-za':
-          return b.name.localeCompare(a.name);
-        case 'newest':
-          return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-        case 'oldest':
-          return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
-        default:
-          return 0;
-      }
-    });
-
-    // Split into Active vs Archived (for visual separation)
-    const active = filtered.filter(w => w.status === 'Active' || !w.status);
-    const archived = filtered.filter(w => w.status === 'Relieved');
+    // Since the server already did the filtering and sorting, we just separate them
+    const active = workers.filter(w => w.status === 'Active' || !w.status);
+    const archived = workers.filter(w => w.status === 'Relieved');
 
     return { active, archived };
-  }, [workers, searchTerm, departmentFilter, batchFilter, sortBy]);
+  }, [workers]);
 
   // Combined list for display
   const displayWorkers = [...processedWorkers.active, ...processedWorkers.archived];
@@ -443,9 +485,9 @@ const WorkerManagement = () => {
       });
 
       generateQRCode(trimmedUsername, formData.rfid);
-      setWorkers(prev => [...prev, newWorker]);
       setIsAddModalOpen(false);
       toast.success('Employee added successfully');
+      loadWorkers(1, false);
     } catch (error) {
       console.error('Add Employee Error:', error);
       toast.error(error.message || 'Failed to add employee');
@@ -555,6 +597,7 @@ const WorkerManagement = () => {
       setIsEditModalOpen(false);
       toast.success('Employee updated successfully');
       loadData();
+      loadWorkers(1, false);
     } catch (error) {
       console.error('Update Error:', error);
       toast.error(error.message || 'Failed to update employee');
@@ -584,6 +627,7 @@ const WorkerManagement = () => {
       await updateWorker(workerId, { status: newStatus });
       toast.success(`Employee marked as ${newStatus}`);
       loadData();
+      loadWorkers(1, false);
     } catch (error) {
       toast.error('Failed to update status');
     }
@@ -596,6 +640,7 @@ const WorkerManagement = () => {
       setIsDeleteModalOpen(false);
       toast.success('Employee deleted successfully');
       loadData();
+      loadWorkers(1, false);
     } catch (error) {
       toast.error(error.message || 'Failed to delete employee');
     }
@@ -897,7 +942,7 @@ const WorkerManagement = () => {
             <span className="truncate tracking-wide">Active</span>
           </div>
           <span className={`px-1.5 md:px-2 py-0.5 rounded-full text-[10px] font-bold ${activeTab === 'active' ? 'bg-teal-50 text-teal-700' : 'bg-slate-200/70 text-slate-500'}`}>
-            {processedWorkers.active.length}
+            {activeCount}
           </span>
         </button>
         <button
@@ -909,7 +954,7 @@ const WorkerManagement = () => {
             <span className="truncate tracking-wide">Relieved</span>
           </div>
           <span className={`px-1.5 md:px-2 py-0.5 rounded-full text-[10px] font-bold ${activeTab === 'archived' ? 'bg-orange-50 text-orange-700' : 'bg-slate-200/70 text-slate-500'}`}>
-            {processedWorkers.archived.length}
+            {relievedCount}
           </span>
         </button>
       </div>
@@ -1037,7 +1082,7 @@ const WorkerManagement = () => {
                     <UserCheck className="h-5 w-5 text-green-500" />
                     <h2 className="text-lg font-bold text-gray-900">Active Employees</h2>
                     <span className="bg-green-100 text-green-700 text-xs px-2.5 py-0.5 rounded-full font-bold">
-                      {processedWorkers.active.length}
+                      {totalCount}
                     </span>
                   </div>
                   
@@ -1059,7 +1104,7 @@ const WorkerManagement = () => {
                     </div>
                   )}
                   
-                  {processedWorkers.active.length === 0 && (
+                  {totalCount === 0 && (
                     <div className="py-20 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200">
                       <div className="bg-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
                         <Users className="h-8 w-8 text-gray-300" />
@@ -1087,7 +1132,7 @@ const WorkerManagement = () => {
                     <UserX className="h-5 w-5 text-gray-400" />
                     <h2 className="text-lg font-bold text-gray-500">Relieved & Archived</h2>
                     <span className="bg-gray-100 text-gray-600 text-xs px-2.5 py-0.5 rounded-full font-bold">
-                      {processedWorkers.archived.length}
+                      {totalCount}
                     </span>
                   </div>
                   
@@ -1109,7 +1154,7 @@ const WorkerManagement = () => {
                     </div>
                   )}
 
-                  {processedWorkers.archived.length === 0 && (
+                  {totalCount === 0 && (
                     <div className="py-20 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200">
                       <div className="bg-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
                         <UserX className="h-8 w-8 text-gray-300" />
@@ -1133,7 +1178,11 @@ const WorkerManagement = () => {
                 </div>
               )}
 
-
+              {hasMore && (
+                <div ref={sentinelRef} id="infinite-scroll-sentinel" className="py-6 flex justify-center items-center">
+                  <Spinner size="md" />
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

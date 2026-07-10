@@ -243,10 +243,6 @@ const AdminLayout = () => {
       children: [
         { to: '/admin/work-allocation', label: 'Work Allocation', icon: <FaNetworkWired /> },
         { to: '/admin/performance-rewards', label: 'Performance & Rewards', icon: <FaTrophy /> },
-        { to: '/admin/tasks', label: 'Tasks', icon: <FaTasks /> },
-        { to: '/admin/custom-tasks', label: 'Custom Tasks', icon: <FaClipboardList /> },
-        { to: '/admin/topics', label: 'Topics', icon: <FaTags /> },
-        { to: '/admin/columns', label: 'Kanban Boards', icon: <FaColumns /> },
         { to: '/admin/github-tracker', label: 'GitHub Tracker', icon: <FaGithub /> },
         { to: '/admin/kpi-management', label: 'KPI Management', icon: <FaChartLine /> },
         { to: '/admin/second-brain', label: 'AI Second Brain', icon: <FaBrain /> },

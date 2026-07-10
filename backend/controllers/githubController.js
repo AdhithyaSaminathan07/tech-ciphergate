@@ -267,71 +267,68 @@ const saveContributors = async (req, res) => {
             });
         }
 
-        const savedContributors = [];
+        const bulkOps = [];
         const errors = [];
 
-        const batchSize = 10;
-        for (let i = 0; i < contributors.length; i += batchSize) {
-            const batch = contributors.slice(i, i + batchSize);
+        contributors.forEach((contributorData) => {
+            try {
+                if (!contributorData.login) {
+                    throw new Error(`Missing login field`);
+                }
 
-            await Promise.all(batch.map(async (contributorData) => {
-                try {
-                    if (!contributorData.login) {
-                        throw new Error(`Missing login field`);
-                    }
+                const cleanContributorData = {
+                    ...contributorData,
+                    github_username,
+                    last_updated: new Date(),
+                    score: parseFloat(contributorData.score) || 0,
+                    valid_commits: parseInt(contributorData.valid_commits) || 0,
+                    spam_commits: parseInt(contributorData.spam_commits) || 0,
+                    valid_prs: parseInt(contributorData.valid_prs) || 0,
+                    spam_prs: parseInt(contributorData.spam_prs) || 0,
+                    commits: parseInt(contributorData.valid_commits) || parseInt(contributorData.commits) || 0,
+                    prs: parseInt(contributorData.valid_prs) || parseInt(contributorData.prs) || 0,
+                    merges: parseInt(contributorData.merges) || 0,
+                    pushes: parseInt(contributorData.pushes) || 0,
+                    pulls: parseInt(contributorData.pulls) || 0,
+                    repo_count: parseInt(contributorData.repo_count) || 0,
+                    branch_count: parseInt(contributorData.branch_count) || 0,
+                    total_contributions: parseInt(contributorData.total_valid_contributions) || parseInt(contributorData.total_contributions) || 0,
+                    recent_activities: (contributorData.recent_activities || []).map(activity => ({
+                        ...activity,
+                        date: new Date(activity.date),
+                        files: Array.isArray(activity.files) ? activity.files : []
+                    }))
+                };
 
-                    const cleanContributorData = {
-                        ...contributorData,
-                        github_username,
-                        last_updated: new Date(),
-                        score: parseFloat(contributorData.score) || 0,
-                        valid_commits: parseInt(contributorData.valid_commits) || 0,
-                        spam_commits: parseInt(contributorData.spam_commits) || 0,
-                        valid_prs: parseInt(contributorData.valid_prs) || 0,
-                        spam_prs: parseInt(contributorData.spam_prs) || 0,
-                        commits: parseInt(contributorData.valid_commits) || parseInt(contributorData.commits) || 0,
-                        prs: parseInt(contributorData.valid_prs) || parseInt(contributorData.prs) || 0,
-                        merges: parseInt(contributorData.merges) || 0,
-                        pushes: parseInt(contributorData.pushes) || 0,
-                        pulls: parseInt(contributorData.pulls) || 0,
-                        repo_count: parseInt(contributorData.repo_count) || 0,
-                        branch_count: parseInt(contributorData.branch_count) || 0,
-                        total_contributions: parseInt(contributorData.total_valid_contributions) || parseInt(contributorData.total_contributions) || 0,
-                        recent_activities: (contributorData.recent_activities || []).map(activity => ({
-                            ...activity,
-                            date: new Date(activity.date),
-                            files: Array.isArray(activity.files) ? activity.files : []
-                        }))
-                    };
-
-                    const contributor = await Contributor.findOneAndUpdate(
-                        {
+                bulkOps.push({
+                    updateOne: {
+                        filter: {
                             login: contributorData.login,
                             github_username: github_username
                         },
-                        cleanContributorData,
-                        {
-                            upsert: true,
-                            new: true,
-                            runValidators: true
-                        }
-                    );
+                        update: { $set: cleanContributorData },
+                        upsert: true
+                    }
+                });
+            } catch (error) {
+                errors.push({
+                    login: contributorData.login || 'unknown',
+                    error: error.message
+                });
+            }
+        });
 
-                    savedContributors.push(contributor);
-
-                } catch (error) {
-                    errors.push({
-                        login: contributorData.login,
-                        error: error.message
-                    });
-                }
-            }));
+        let bulkResult = null;
+        if (bulkOps.length > 0) {
+            bulkResult = await Contributor.bulkWrite(bulkOps, { runValidators: true });
         }
+
+        const savedCount = bulkResult ? (bulkResult.upsertedCount + bulkResult.modifiedCount) : 0;
 
         res.json({
             success: true,
-            message: `Saved ${savedContributors.length} contributors`,
-            data: savedContributors,
+            message: `Saved ${savedCount} contributors`,
+            data: [], // Returning empty array for frontend compatibility
             errors: errors.length > 0 ? errors.slice(0, 5) : undefined,
             total_processed: contributors.length
         });
@@ -496,6 +493,30 @@ const getLiveLeaderboard = async (req, res) => {
             });
         }
 
+        // Check if a sync job is currently running
+        const activeJob = await GitHubSyncJob.findOne({
+            subdomain,
+            status: { $in: ['Pending', 'Running'] }
+        }).sort({ createdAt: -1 });
+
+        // No repo_details found at all — this is a truly fresh DB with no sync yet.
+        // Auto-trigger a background sync so data starts flowing automatically.
+        if (!activeJob) {
+            console.log(`[GitHub Controller] No leaderboard cache for subdomain "${subdomain}". Auto-triggering background sync.`);
+            try {
+                const { triggerAsyncSync } = require('../services/githubSyncService');
+                triggerAsyncSync(subdomain).catch(err => {
+                    console.error('[GitHub Controller] Auto-sync trigger failed:', err.message);
+                });
+            } catch (syncErr) {
+                console.error('[GitHub Controller] Could not load sync service:', syncErr.message);
+            }
+        }
+
+        const message = activeJob
+            ? 'Sync in progress — data will appear shortly'
+            : 'Synchronizing initial GitHub data. Please refresh in a moment.';
+
         console.warn(`[GitHub Controller] No cached leaderboard found for subdomain: ${subdomain}. Returning fallback.`);
         return res.json({
             repositories: [],
@@ -520,7 +541,8 @@ const getLiveLeaderboard = async (req, res) => {
                 spamPRs: 0
             },
             showingCached: false,
-            message: 'Synchronizing initial GitHub data. Please refresh in a moment.'
+            syncInProgress: !!activeJob,
+            message
         });
     } catch (error) {
         console.error("Error in getLiveLeaderboard:", error);

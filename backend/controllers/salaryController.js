@@ -1524,7 +1524,102 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
   }
 
   try {
-    const workers = await Worker.find({ subdomain, status: { $ne: 'Relieved' } }).populate('department').select('+fines');
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const isExport = req.query.isExport === 'true';
+    const { searchTerm, filterDepartment, filterMinSalary, filterMaxSalary, filterFineStatus, filterBankStatus, sortBy } = req.query;
+
+    const query = { subdomain, status: { $ne: 'Relieved' } };
+
+    // 1. Search Term (name, rfid, or department name)
+    if (searchTerm) {
+      const Department = require('../models/Department');
+      const matchedDepts = await Department.find({ subdomain, name: { $regex: searchTerm, $options: 'i' } });
+      const matchedDeptIds = matchedDepts.map(d => d._id);
+
+      query.$or = [
+        { name: { $regex: searchTerm, $options: 'i' } },
+        { rfid: { $regex: searchTerm, $options: 'i' } },
+        { department: { $in: matchedDeptIds } }
+      ];
+    }
+
+    // 2. Department filter
+    if (filterDepartment && filterDepartment !== 'All') {
+      query.department = filterDepartment;
+    }
+
+    // 3. Min/Max Salary
+    if (filterMinSalary) {
+      query.salary = { ...query.salary, $gte: parseFloat(filterMinSalary) };
+    }
+    if (filterMaxSalary) {
+      query.salary = { ...query.salary, $lte: parseFloat(filterMaxSalary) };
+    }
+
+    // 4. Fine Status (Has Fines / No Fines)
+    if (filterFineStatus && filterFineStatus !== 'All') {
+      const startOfMonth = new Date(fromDate);
+      const endOfMonth = new Date(toDate);
+      if (filterFineStatus === 'Has Fines') {
+        query.fines = {
+          $elemMatch: {
+            date: { $gte: startOfMonth, $lte: endOfMonth }
+          }
+        };
+      } else if (filterFineStatus === 'No Fines') {
+        query.fines = {
+          $not: {
+            $elemMatch: {
+              date: { $gte: startOfMonth, $lte: endOfMonth }
+            }
+          }
+        };
+      }
+    }
+
+    // 5. Bank Status
+    if (filterBankStatus && filterBankStatus !== 'All') {
+      if (filterBankStatus === 'Added') {
+        query['bankDetails.accountNumber'] = { $exists: true, $ne: '' };
+        query['bankDetails.ifscCode'] = { $exists: true, $ne: '' };
+      } else if (filterBankStatus === 'Pending') {
+        query.$or = [
+          { 'bankDetails.accountNumber': { $exists: false } },
+          { 'bankDetails.accountNumber': '' },
+          { 'bankDetails.ifscCode': { $exists: false } },
+          { 'bankDetails.ifscCode': '' }
+        ];
+      }
+    }
+
+    // Determine total matching workers count
+    const totalWorkersCount = await Worker.countDocuments(query);
+
+    // Dynamic sort vs DB sort
+    const needsInMemorySort = ['final-asc', 'final-desc', 'fine-desc'].includes(sortBy);
+
+    let workersQuery = Worker.find(query).populate('department').select('+fines');
+
+    if (!needsInMemorySort && !isExport && req.query.page) {
+      if (sortBy === 'name-asc') {
+        workersQuery = workersQuery.sort({ name: 1 });
+      } else if (sortBy === 'name-desc') {
+        workersQuery = workersQuery.sort({ name: -1 });
+      } else if (sortBy === 'salary-asc') {
+        workersQuery = workersQuery.sort({ salary: 1 });
+      } else if (sortBy === 'salary-desc') {
+        workersQuery = workersQuery.sort({ salary: -1 });
+      } else {
+        workersQuery = workersQuery.sort({ name: 1 }); // default fallback
+      }
+      workersQuery = workersQuery.skip((page - 1) * limit).limit(limit);
+    } else if (!needsInMemorySort) {
+      // Default sorting for non-paginated queries (e.g. export or no-page)
+      workersQuery = workersQuery.sort({ name: 1 });
+    }
+
+    const workers = await workersQuery;
     const holidays = await Holiday.find({});
     const settings = await Settings.findOne({ subdomain });
     const batches = settings ? settings.batches : [];
@@ -1556,6 +1651,61 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
       month: bulkMonth,
       year: bulkYear
     }).populate('adjustments.addedBy', 'name');
+
+    // PRE-FETCH AND PRE-COMPUTE DATA FOR LOOP OPTIMIZATION
+    const attendanceByDate = {};
+    allAttendanceData.forEach(att => {
+      if (att.presence) {
+        if (!attendanceByDate[att.date]) attendanceByDate[att.date] = { company: [], dept: {} };
+        const wId = att.worker.toString();
+        attendanceByDate[att.date].company.push(wId);
+        const attWorker = workers.find(w => w._id.toString() === wId);
+        if (attWorker) {
+          const attWorkerDeptId = attWorker.department?._id?.toString() || attWorker.department?.toString();
+          if (!attendanceByDate[att.date].dept[attWorkerDeptId]) {
+             attendanceByDate[att.date].dept[attWorkerDeptId] = [];
+          }
+          attendanceByDate[att.date].dept[attWorkerDeptId].push(wId);
+        }
+      }
+    });
+
+    const datesArr = [];
+    let curD = new Date(fromDate);
+    const eD = new Date(toDate);
+    while (curD <= eD) {
+      datesArr.push(curD.toISOString().split('T')[0]);
+      curD.setDate(curD.getDate() + 1);
+    }
+
+    const buildPenaltyMapsForWorker = (wId, wDeptId, thresh, dArr) => {
+        const cMap = {};
+        const dMap = {};
+        const cEnabled = thresh.company?.enabled ?? true;
+        const dEnabled = thresh.department?.enabled ?? true;
+        if (!cEnabled && !dEnabled) return { companyPenaltyMap: cMap, deptPenaltyMap: dMap };
+        
+        const cVal = thresh.company?.value ?? thresh.company ?? 80;
+        const dVal = thresh.department?.value ?? thresh.department ?? 80;
+        const tDeptW = workers.filter(w => (w.department?._id?.toString() || w.department?.toString()) === wDeptId).length;
+        
+        const wIdStr = wId.toString();
+        dArr.forEach(dateStr => {
+           const dayData = attendanceByDate[dateStr] || { company: [], dept: {} };
+           if (cEnabled) {
+             const oW = Math.max(1, workers.length - 1);
+             const pW = dayData.company.filter(id => id !== wIdStr).length;
+             cMap[dateStr] = ((pW / oW) * 100) < cVal;
+           }
+           if (dEnabled) {
+             const deptList = dayData.dept[wDeptId] || [];
+             const oDW = Math.max(1, tDeptW - 1);
+             const pDW = deptList.filter(id => id !== wIdStr).length;
+             dMap[dateStr] = ((pDW / oDW) * 100) < dVal;
+           }
+        });
+        return { companyPenaltyMap: cMap, deptPenaltyMap: dMap };
+    };
 
     const results = await Promise.all(workers.map(async worker => {
       const workerId = worker._id.toString();
@@ -1596,7 +1746,7 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         const thresh = adv.thresholds || {};
         const workerDeptId = worker.department?._id?.toString() || worker.department?.toString();
 
-        const penaltyMaps = await calculateDailyAttendancePenalties(subdomain, fromDate, toDate, workerId, workerDeptId, thresh);
+        const penaltyMaps = buildPenaltyMapsForWorker(workerId, workerDeptId, thresh, datesArr);
         companyPenaltyMap = penaltyMaps.companyPenaltyMap;
         deptPenaltyMap = penaltyMaps.deptPenaltyMap;
       }
@@ -1682,6 +1832,12 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
       // We'll calculate this in a post-processing step below
       return {
         workerId,
+        _id: worker._id,
+        rfid: worker.rfid,
+        salary: worker.salary,
+        bankDetails: worker.bankDetails,
+        fines: worker.fines,
+        bonuses: worker.bonuses,
         name: worker.name,
         department: worker.department?.name || 'N/A',
         totalWorkingDays: report.summary?.totalWorkingDaysInPeriod || 0,
@@ -1721,14 +1877,98 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
     const currentMonth = now.getMonth() + 1;
     const isPastMonth = (bulkYear < currentYear) || (bulkYear === currentYear && bulkMonth < currentMonth);
 
+    // Pre-fetch all past ledger entries and relevant projects to avoid N+1 queries during project adjustments
+    const allPastLedgers = await ProjectPaymentLedger.find({
+      subdomain,
+      isSettled: true,
+      $or: [
+        { year: { $lt: bulkYear } },
+        { year: bulkYear, month: { $lt: bulkMonth } }
+      ]
+    });
+    
+    const uniqueProjectIdsForLedgers = [...new Set(allPastLedgers.map(l => l.projectId.toString()))];
+    const allPastProjects = await SalaryProject.find({ _id: { $in: uniqueProjectIdsForLedgers } }).populate('developers');
+    const pastProjectsMap = {};
+    allPastProjects.forEach(p => pastProjectsMap[p._id.toString()] = p);
+
+    const calculateProjectAdjustmentsOptimized = async (wId) => {
+      const workerLedgers = allPastLedgers.filter(l => l.employeeId.toString() === wId.toString());
+      if (workerLedgers.length === 0) return { totalAdjustment: 0, adjustmentDetails: [] };
+
+      const projectMap = {};
+      workerLedgers.forEach(entry => {
+        const pStr = entry.projectId.toString();
+        if (pastProjectsMap[pStr] && !projectMap[pStr]) {
+          const project = pastProjectsMap[pStr];
+          const devCount = project.developers.length || 1;
+          const share = project.projectProfit / devCount;
+          const start = new Date(project.startDate);
+          const end = new Date(project.endDate);
+          let workingDays = 0;
+          const cur = new Date(start);
+          while (cur <= end) {
+            if (cur.getDay() !== 0) workingDays++;
+            cur.setDate(cur.getDate() + 1);
+          }
+          projectMap[pStr] = {
+             projectName: project.projectName,
+             currentTotalWorkingDays: workingDays,
+             currentPerDayValue: workingDays > 0 ? share / workingDays : 0
+          };
+        }
+      });
+
+      let totalAdjustment = 0;
+      const adjustmentDetails = [];
+      const ledgerUpdates = [];
+
+      for (const entry of workerLedgers) {
+        const project = projectMap[entry.projectId.toString()];
+        if (!project) continue;
+        const currentEntitlement = entry.paidWorkingDays * project.currentPerDayValue;
+        const adjustment = currentEntitlement - entry.paidAmount;
+
+        // Queue updates
+        ledgerUpdates.push(ProjectPaymentLedger.updateOne(
+          { _id: entry._id },
+          {
+            currentPerDayValue: project.currentPerDayValue,
+            currentEntitlement,
+            adjustmentAmount: adjustment,
+            updatedAt: new Date()
+          }
+        ));
+
+        totalAdjustment += adjustment;
+        adjustmentDetails.push({
+          projectId: entry.projectId,
+          projectName: project.projectName,
+          month: entry.month,
+          year: entry.year,
+          paidAmount: entry.paidAmount,
+          paidPerDayValue: entry.paidPerDayValue,
+          paidWorkingDays: entry.paidWorkingDays,
+          currentPerDayValue: project.currentPerDayValue,
+          currentEntitlement,
+          adjustment,
+          originalTotalDays: entry.projectTotalWorkingDaysAtPayment,
+          currentTotalDays: project.currentTotalWorkingDays
+        });
+      }
+      if (ledgerUpdates.length > 0) {
+        await Promise.all(ledgerUpdates);
+      }
+      return { totalAdjustment, adjustmentDetails };
+    };
+
     const adjustedResults = await Promise.all(results.map(async (result) => {
       try {
         if (isPastMonth) {
+          // It's acceptable to use the existing helper since it only acts for past months once
           await autoRecordProjectPaymentsHelper(result.workerId, result.subdomain || subdomain, bulkMonth, bulkYear);
         }
-        const { totalAdjustment, adjustmentDetails } = await calculateProjectAdjustments(
-          result.workerId, result.subdomain || subdomain, bulkMonth, bulkYear
-        );
+        const { totalAdjustment, adjustmentDetails } = await calculateProjectAdjustmentsOptimized(result.workerId);
         const finalSalaryWithAdjustment = Math.max(0, result.totalFinalSalary + totalAdjustment);
 
         // Enterprise Payroll Module: Attach Payroll Record
@@ -1752,6 +1992,8 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
           
         const payableSalary = Math.max(0, attendanceSalary + totalAdditions - totalDeductions);
 
+        const finalSalaryCalculated = Math.max(0, (payableSalary !== undefined ? payableSalary : finalSalaryWithAdjustment) - (result.taskPenalty || 0));
+
         return {
           ...result,
           projectAdjustment: totalAdjustment,
@@ -1761,6 +2003,7 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
           attendanceSalary: attendanceSalary,
           totalAdditions,
           totalDeductions,
+          finalSalary: finalSalaryCalculated,
           fullReport: {
             ...result.fullReport,
             projectAdjustment: totalAdjustment,
@@ -1770,9 +2013,11 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         };
       } catch (err) {
         // If adjustment calculation fails, return original result
+        const finalSalaryCalculated = Math.max(0, result.totalFinalSalary - (result.taskPenalty || 0));
         return {
           ...result,
           projectAdjustment: 0,
+          finalSalary: finalSalaryCalculated,
           fullReport: {
             ...result.fullReport,
             projectAdjustment: 0,
@@ -1783,7 +2028,8 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
       }
     }));
 
-      // Save totalNetPayout and topTeams to DashboardSalaryStat
+    // Save totalNetPayout and topTeams to DashboardSalaryStat only when page is not present or isExport is true
+    if (isExport || !req.query.page) {
       const teamEarnings = {};
       const activeWorkerIds = new Set(workers.map(w => w._id.toString()));
       
@@ -1808,6 +2054,47 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         { totalNetPayout, topTeams: sortedTeams, lastCalculated: new Date() },
         { upsert: true, new: true }
       );
+    }
+
+    if (needsInMemorySort) {
+      if (sortBy === 'final-asc') {
+        adjustedResults.sort((a, b) => a.finalSalary - b.finalSalary);
+      } else if (sortBy === 'final-desc') {
+        adjustedResults.sort((a, b) => b.finalSalary - a.finalSalary);
+      } else if (sortBy === 'fine-desc') {
+        adjustedResults.sort((a, b) => {
+          const fineA = a.fullReport?.totalFinesAmount || 0;
+          const fineB = b.fullReport?.totalFinesAmount || 0;
+          return fineB - fineA;
+        });
+      }
+
+      if (!isExport && req.query.page) {
+        const startIndex = (page - 1) * limit;
+        const paginatedResults = adjustedResults.slice(startIndex, startIndex + limit);
+        return res.status(200).json({
+          reports: paginatedResults,
+          pagination: {
+            page,
+            limit,
+            total: totalWorkersCount,
+            hasMore: page * limit < totalWorkersCount
+          }
+        });
+      }
+    }
+
+    if (!isExport && req.query.page) {
+      return res.status(200).json({
+        reports: adjustedResults,
+        pagination: {
+          page,
+          limit,
+          total: totalWorkersCount,
+          hasMore: page * limit < totalWorkersCount
+        }
+      });
+    }
 
     res.status(200).json({ reports: adjustedResults });
   } catch (error) {

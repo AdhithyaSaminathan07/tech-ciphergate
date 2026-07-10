@@ -16,10 +16,10 @@ const backfillReviewCycles = (ticket) => {
   if (ticket.reviewCycles && ticket.reviewCycles.length > 0) {
     return ticket.reviewCycles;
   }
-  
+
   const cycles = [];
   const history = [...(ticket.statusHistory || [])].sort((a, b) => new Date(a.changedAt) - new Date(b.changedAt));
-  
+
   history.forEach(entry => {
     const time = entry.changedAt;
     if (entry.status === 'Review') {
@@ -52,7 +52,7 @@ const backfillReviewCycles = (ticket) => {
       }
     }
   });
-  
+
   return cycles;
 };
 
@@ -157,14 +157,14 @@ const calculateTaskPenalties = ({ worker, tickets, report, fromDate, toDate }) =
     // Determine the range of days to evaluate: from day after due date to toDate or today, whichever is later
     const startEvalDate = new Date(ticket.endDate);
     startEvalDate.setDate(startEvalDate.getDate() + 1);
-    
+
     // We evaluate up to the report's toDate, or the latest decision/submission date if it extends beyond toDate
     const toDateObj = new Date(toDate);
-    const lastCycleDate = mappedCycles.length > 0 
+    const lastCycleDate = mappedCycles.length > 0
       ? new Date(Math.max(...mappedCycles.map(c => Math.max(c.submissionTime, c.decisionTime || 0))))
       : new Date(0);
     const evalEndDate = new Date(Math.max(toDateObj.getTime(), lastCycleDate.getTime(), Date.now()));
-    
+
     // Iterate through report days to match actual salary deductions in the report period
     if (report && report.report) {
       report.report.forEach(day => {
@@ -189,10 +189,10 @@ const calculateTaskPenalties = ({ worker, tickets, report, fromDate, toDate }) =
     // 5. Calculate overdue working days for UI listing
     let overdueWorkingDays = 0;
     const cur = new Date(startEvalDate);
-    cur.setHours(0,0,0,0);
+    cur.setHours(0, 0, 0, 0);
     const endLimit = evalEndDate < new Date() ? evalEndDate : new Date();
-    endLimit.setHours(23,59,59,999);
-    
+    endLimit.setHours(23, 59, 59, 999);
+
     while (cur <= endLimit) {
       const dateStr = getDateStr(cur);
       if (isPenalizedOnDate(dateStr)) {
@@ -205,7 +205,7 @@ const calculateTaskPenalties = ({ worker, tickets, report, fromDate, toDate }) =
     // Possible states: "Submitted on time", "Awaiting review", "Deduction active", "Approved", "None"
     let protectionState = 'None';
     const todayStr = getDateStr(new Date());
-    
+
     if (ticket.status === 'Done') {
       protectionState = 'Approved';
     } else {
@@ -233,7 +233,7 @@ const calculateTaskPenalties = ({ worker, tickets, report, fromDate, toDate }) =
     // Period format
     const startPeriodStr = startEvalDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
     const doneCycle = mappedCycles.find(c => c.decision === 'Approved');
-    const endPeriodStr = doneCycle 
+    const endPeriodStr = doneCycle
       ? doneCycle.submissionTime.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
       : 'Ongoing';
 

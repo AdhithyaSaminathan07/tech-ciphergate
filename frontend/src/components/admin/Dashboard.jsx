@@ -7,25 +7,13 @@ import {
   FaUsers, FaTasks, FaCalendarAlt, FaBuilding,
   FaChartBar, FaArrowRight, FaComments, FaMoneyBillWave, FaWallet
 } from 'react-icons/fa';
-import { getWorkers } from '../../services/workerService';
-import { getAllTasks } from '../../services/taskService';
-import { getAllLeaves } from '../../services/leaveService';
-import { getAllComments } from '../../services/commentService';
-import { getTopics } from '../../services/topicService';
-import { getColumns } from '../../services/columnService';
-import { getMealsSummary } from '../../services/foodRequestService';
-import { getDepartments } from '../../services/departmentService';
-import { getAttendanceSummary } from '../../services/attendanceService';
-import { getTickets } from '../../services/ticketService';
+import { getAdminDashboardSummary } from '../../services/dashboardService';
+import api from '../../services/api';
 import Spinner from '../common/Spinner';
 import appContext from '../../context/AppContext';
 import { AuthContext } from '../../context/AuthContext';
 import WelcomeBanner from './WelcomeBanner';
 import SalesVelocityWidget from './SalesVelocityWidget';
-import renewalService from '../../services/renewalService';
-import { getDashboardSalaryStats } from '../../services/salaryService';
-import { getSalaryProjects, getBulkSalaryReport } from '../../services/salaryService';
-import api from '../../services/api';
 
 /* ─────────────────────────────────────────
    Circular Progress
@@ -175,78 +163,15 @@ const Dashboard = () => {
   const loadDashboardData = async () => {
     setIsLoading(true);
     try {
-      const results = await Promise.allSettled([
-        getWorkers({ subdomain }),
-        getAllTasks({ subdomain }),
-        getTopics({ subdomain }),
-        getColumns({ subdomain }),
-        getAllLeaves({ subdomain }),
-        getAllComments({ subdomain }),
-        getMealsSummary({ subdomain }),
-        getDepartments({ subdomain }),
-        getAttendanceSummary({ subdomain }),
-        getTickets({ subdomain }),
-        renewalService.getRenewals({ subdomain }),
-        getDashboardSalaryStats(subdomain)
-      ]);
-
-      const workersData = results[0].status === 'fulfilled' ? results[0].value : [];
-      const tasksData = results[1].status === 'fulfilled' ? results[1].value : [];
-      const topicsData = results[2].status === 'fulfilled' ? results[2].value : [];
-      const leavesData = results[4].status === 'fulfilled' ? results[4].value : [];
-      const commentsData = results[5].status === 'fulfilled' ? results[5].value : [];
-      const mealsSummary = results[6].status === 'fulfilled' ? results[6].value : { total: 0 };
-      const departmentsDataRaw = results[7].status === 'fulfilled' ? results[7].value : [];
-      const attendanceSummary = results[8].status === 'fulfilled' ? results[8].value : { percentage: 0 };
-      const ticketsData = results[9].status === 'fulfilled' ? results[9].value : [];
-      const renewalsData = results[10]?.status === 'fulfilled' ? results[10].value.data || [] : [];
-      const cachedStats = results[11]?.status === 'fulfilled' ? results[11].value : null;
-
-      const deptsSafe = Array.isArray(departmentsDataRaw) ? departmentsDataRaw : [];
-      const pending = leavesData.filter(l => l.status === 'Pending');
-      const approved = leavesData.filter(l => l.status === 'Approved');
-      const rejected = leavesData.filter(l => l.status === 'Rejected');
-      const unread = commentsData.filter(c => c.isNew || c.replies?.some(r => r.isNew));
-      const activeWorkers = workersData.filter(w => w.status !== 'Relieved');
-
-      const monthlyBaseSalary = activeWorkers.reduce((acc, w) => acc + (Number(w.salary) || 0), 0);
+      const dashboardData = await getAdminDashboardSummary(subdomain);
       
-      const totalNetPayout = cachedStats?.totalNetPayout || monthlyBaseSalary;
+      setStats(dashboardData.stats);
+      setPendingLeaves(dashboardData.pendingLeaves);
+      setDepartments(dashboardData.departments);
+      setAttendancePercentage(dashboardData.attendancePercentage);
+      setTickets(dashboardData.attentionTickets); // Only use attentionTickets to satisfy the UI map logic below (attentionTickets variable)
+      setTopTeams(dashboardData.topTeams);
 
-      let expiringSoon = 0, expired = 0;
-      renewalsData.forEach(r => {
-        if (r.domain_status === 'EXPIRING_SOON' || r.server_status === 'EXPIRING_SOON') expiringSoon++;
-        if (r.domain_status === 'EXPIRED' || r.server_status === 'EXPIRED') expired++;
-      });
-
-      setStats({
-        workers: activeWorkers.length,
-        tasks: tasksData.length,
-        topics: topicsData.length,
-        foodRequests: mealsSummary.total,
-        leaves: { total: leavesData.length, pending: pending.length, approved: approved.length, rejected: rejected.length },
-        comments: { total: commentsData.length, unread: unread.length },
-        tickets: {
-          todo: ticketsData.filter(t => t.status === 'To Do').length,
-          inProgress: ticketsData.filter(t => t.status === 'In Progress').length,
-          review: ticketsData.filter(t => t.status === 'Review').length,
-          done: ticketsData.filter(t => t.status === 'Done').length,
-        },
-        kpi: calculateKpiStats(ticketsData),
-        renewals: { total: renewalsData.length, expiringSoon, expired },
-        salary: { base: monthlyBaseSalary, payout: totalNetPayout }
-      });
-
-      setPendingLeaves(pending.slice(0, 4));
-      setDepartments(deptsSafe);
-      setAttendancePercentage(attendanceSummary?.percentage || 0);
-      setTickets(ticketsData);
-      
-      if (cachedStats && cachedStats.topTeams) {
-        setTopTeams(cachedStats.topTeams);
-      } else {
-        setTopTeams([]);
-      }
       // Fetch public settings for bug bounty popup
       try {
         if (subdomain && subdomain !== 'main') {
@@ -317,9 +242,7 @@ const Dashboard = () => {
     );
   }
 
-  const attentionTickets = tickets.filter(
-    t => t.status === 'Review' || t.status === 'In Progress'
-  );
+  const attentionTickets = tickets || [];
 
   /* ── attendance colour helper ── */
   const deptColor = (pct) =>

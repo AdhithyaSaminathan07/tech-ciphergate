@@ -66,11 +66,11 @@ export const getMySalaryReport = async () => {
   }
 };
 
-export const getBulkSalaryReport = async (subdomain, fromDate, toDate) => {
+export const getBulkSalaryReport = async (subdomain, fromDate, toDate, filters = {}) => {
   try {
     const token = getAuthToken();
     const response = await api.get('/salary/bulk-report', {
-      params: { subdomain, fromDate, toDate },
+      params: { subdomain, fromDate, toDate, ...filters },
       headers: { Authorization: `Bearer ${token}` }
     });
     return response.data;

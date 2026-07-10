@@ -374,13 +374,14 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers }) =>
     return (
         <div className="space-y-5">
             <div className="flex flex-col gap-2">
-                <span className="text-gray-400 font-bold text-[10px] uppercase tracking-wider">Assign To</span>
-                <div className="flex gap-2 p-1 bg-gray-100 rounded-xl w-fit">
+                <span className="text-slate-400 font-extrabold text-[10px] uppercase tracking-widest">Assign To</span>
+                <div className="flex gap-1.5 p-1 bg-slate-100 rounded-xl w-full">
                     {['Team', 'Individual', 'Both'].map(type => (
                         <button
                             key={type}
+                            type="button"
                             onClick={() => handleTypeChange(type)}
-                            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${assignmentType === type ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`flex-1 text-center py-2 rounded-lg text-xs font-bold transition-all ${assignmentType === type ? 'bg-white text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             {type}
                         </button>
@@ -453,6 +454,10 @@ const WorkAllocation = () => {
     const { subdomain } = useContext(appContext);
     const { socket } = useSocket();
     const saveTimeoutRef = useRef(null);
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
+    const [isFetchingNextPage, setIsFetchingNextPage] = useState(false);
+    const observerRef = useRef(null);
 
     // Modal state
     const [selectedTicket, setSelectedTicket] = useState(null);
@@ -497,6 +502,19 @@ const WorkAllocation = () => {
     const [dragOverCol, setDragOverCol] = useState(null);
     const [touchDraggedTicket, setTouchDraggedTicket] = useState(null);
     const [activeMobileTab, setActiveMobileTab] = useState('To Do');
+    const [activeModalTab, setActiveModalTab] = useState('details'); // details, assign, execution
+
+    const columnsContainerRef = useRef(null);
+    const isScrollingRef = useRef(false);
+
+    useEffect(() => {
+        if (isModalOpen) {
+            setActiveModalTab('details');
+            if (columnsContainerRef.current) {
+                columnsContainerRef.current.scrollTop = 0;
+            }
+        }
+    }, [isModalOpen]);
 
     // Delete Confirmation State
     const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, ticket: null });
@@ -520,7 +538,38 @@ const WorkAllocation = () => {
 
     const columns = ['To Do', 'In Progress', 'Review', 'Done'];
 
-    useEffect(() => { fetchData(); }, [subdomain]);
+    useEffect(() => {
+        loadWorkersData();
+    }, [subdomain]);
+
+    useEffect(() => {
+        loadTicketsData(1, false);
+    }, [subdomain, searchTerm, filterAssignee, filterTeam, filterPriority, filterMonth]);
+
+    // Infinite scroll observer using callback ref to avoid AnimatePresence race conditions
+    const sentinelRef = useCallback((node) => {
+        if (observerRef.current) {
+            observerRef.current.disconnect();
+        }
+
+        if (node && !loading && !isFetchingNextPage && hasMore) {
+            const scrollContainer = document.querySelector('.custom-main-scroll');
+            const observer = new IntersectionObserver(
+                (entries) => {
+                    if (entries[0].isIntersecting) {
+                        loadTicketsData(page + 1, true);
+                    }
+                },
+                {
+                    root: scrollContainer || null,
+                    rootMargin: '100px',
+                    threshold: 0.01
+                }
+            );
+            observer.observe(node);
+            observerRef.current = observer;
+        }
+    }, [page, hasMore, loading, isFetchingNextPage, subdomain, searchTerm, filterAssignee, filterTeam, filterPriority, filterMonth]);
 
     useEffect(() => {
         setExpandedSubTasks({});
@@ -594,20 +643,56 @@ const WorkAllocation = () => {
         }));
     };
 
-    const fetchData = async () => {
-        setLoading(true);
+    const loadWorkersData = async () => {
+        if (!subdomain) return;
         try {
-            const [ticketsData, workersData] = await Promise.all([
-                getTickets({ subdomain }),
-                getWorkers({ subdomain })
-            ]);
-            setTickets(ticketsData);
+            const workersData = await getWorkers({ subdomain });
             setWorkers(workersData);
         } catch (error) {
-            console.error('Error fetching data:', error);
+            console.error('Error fetching workers:', error);
+        }
+    };
+
+    const loadTicketsData = async (pageNumber = 1, isAppend = false) => {
+        if (!subdomain) return;
+        if (pageNumber === 1) {
+            setLoading(true);
+        } else {
+            setIsFetchingNextPage(true);
+        }
+
+        try {
+            const response = await getTickets({
+                subdomain,
+                page: pageNumber,
+                limit: 10,
+                searchTerm,
+                filterAssignee,
+                filterTeam,
+                filterPriority,
+                filterMonth
+            });
+
+            if (response && response.tickets) {
+                setTickets(prev => pageNumber === 1 ? response.tickets : [...prev, ...response.tickets]);
+                setHasMore(response.hasMore);
+                setPage(pageNumber);
+            } else {
+                const ticketsData = Array.isArray(response) ? response : [];
+                setTickets(prev => pageNumber === 1 ? ticketsData : [...prev, ...ticketsData]);
+                setHasMore(false);
+            }
+        } catch (error) {
+            console.error('Error fetching tickets:', error);
         } finally {
             setLoading(false);
+            setIsFetchingNextPage(false);
         }
+    };
+
+    const fetchData = async () => {
+        loadWorkersData();
+        loadTicketsData(1, false);
     };
 
     const fetchCompletions = async (ticketId) => {
@@ -1313,60 +1398,7 @@ const WorkAllocation = () => {
         }
     };
 
-    const filteredTickets = tickets.filter(t => {
-        const matchesSearch = t.title?.toLowerCase().includes(searchTerm.toLowerCase());
-
-        // Handle assignee filter (check both single assignee and assignees array)
-        let matchesAssignee = true;
-        if (filterAssignee === 'unassigned') {
-            matchesAssignee = !t.assignee && (!t.assignees || t.assignees.length === 0);
-        } else if (filterAssignee) {
-            const assigneeId = t.assignee?._id || t.assignee;
-            const inAssignees = t.assignees?.some(a => (typeof a === 'object' ? a._id === filterAssignee : a === filterAssignee));
-            matchesAssignee = assigneeId === filterAssignee || inAssignees;
-        }
-
-        const matchesPriority = filterPriority ? t.priority === filterPriority : true;
-
-        let matchesTeam = true;
-        if (filterTeam) {
-            if (filterTeam === 'unassigned') {
-                matchesTeam = !t.team;
-            } else {
-                if (t.team) {
-                    matchesTeam = t.team === filterTeam;
-                } else {
-                    // Fallback to checking assignee's team if task has no team set
-                    const assigneeWorker = workers.find(w => w._id === (t.assignee?._id || t.assignee));
-                    let teamMatched = assigneeWorker && assigneeWorker.department === filterTeam;
-
-                    // Also check assignees array if fallback didn't match
-                    if (!teamMatched && t.assignees?.length > 0) {
-                        teamMatched = t.assignees.some(a => {
-                            const wId = typeof a === 'object' ? a._id : a;
-                            const w = workers.find(worker => worker._id === wId);
-                            return w && w.department === filterTeam;
-                        });
-                    }
-                    matchesTeam = teamMatched;
-                }
-            }
-        }
-
-        // Month filter: match tasks whose createdAt, startDate, or endDate falls in the selected month
-        let matchesMonth = true;
-        if (filterMonth) {
-            const [fy, fm] = filterMonth.split('-').map(Number);
-            const inMonth = (dateStr) => {
-                if (!dateStr) return false;
-                const d = new Date(dateStr);
-                return d.getFullYear() === fy && (d.getMonth() + 1) === fm;
-            };
-            matchesMonth = inMonth(t.createdAt) || inMonth(t.startDate) || inMonth(t.endDate);
-        }
-
-        return matchesSearch && matchesAssignee && matchesPriority && matchesTeam && matchesMonth;
-    });
+    const filteredTickets = tickets;
 
     // ─── Workload Engine (memoized for performance with large teams) ───────────
     const activeStatuses = new Set(['To Do', 'In Progress', 'Review']);
@@ -1465,6 +1497,52 @@ const WorkAllocation = () => {
         }
     }, [drawerFilter, assignedDevelopers, idleDevelopers, overloadedDevelopers, sortedByWorkload]);
 
+    const scrollToTab = (tabId) => {
+        setActiveModalTab(tabId);
+        const container = columnsContainerRef.current;
+        if (!container) return;
+        if (window.innerWidth >= 768) return;
+
+        const targetId = `modal-sec-${tabId}`;
+        const targetElement = container.querySelector(`#${targetId}`);
+        if (targetElement) {
+            isScrollingRef.current = true;
+            container.scrollTo({
+                top: targetElement.offsetTop,
+                behavior: 'smooth'
+            });
+            setTimeout(() => {
+                isScrollingRef.current = false;
+            }, 500);
+        }
+    };
+
+    const handleModalScroll = (e) => {
+        if (window.innerWidth >= 768) return;
+        if (isScrollingRef.current) return;
+        const container = e.currentTarget;
+        const scrollTop = container.scrollTop;
+        
+        const tabIds = ['details', 'assign', 'execution'];
+        let activeTab = 'details';
+        let minDiff = Infinity;
+
+        tabIds.forEach((tabId) => {
+            const el = container.querySelector(`#modal-sec-${tabId}`);
+            if (el) {
+                const diff = Math.abs(el.offsetTop - scrollTop);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    activeTab = tabId;
+                }
+            }
+        });
+
+        if (activeModalTab !== activeTab) {
+            setActiveModalTab(activeTab);
+        }
+    };
+
     if (loading) return <Spinner />;
 
 
@@ -1472,252 +1550,417 @@ const WorkAllocation = () => {
         <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col">
             {/* Sticky Header Area - Handles Page-level context */}
             <div className="sticky top-0 z-[100] bg-white border-b border-slate-200/60 shadow-sm backdrop-blur-xl bg-white/95">
-                <div className="px-3 sm:px-6 md:px-10 py-3 sm:py-5">
-                    {/* Single Row Controls Container */}
-                    <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-2.5 lg:gap-4">
-
-                        {/* Left Group: Search input & Filter selects */}
-                        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-3 flex-1">
-                            {/* Search box and Mobile Filter Toggle */}
-                            <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
-                                <div className="relative flex-1 md:w-64 border border-slate-200 rounded-xl bg-white shadow-sm focus-within:border-teal-500 transition-all h-8 sm:h-10 flex items-center shrink-0">
-                                    <Search className="w-3 h-3 absolute left-3 text-slate-400" />
-                                    <input
-                                        type="text"
-                                        placeholder="Search tasks..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full pl-8 pr-3 py-1.5 bg-transparent text-[10px] sm:text-xs font-semibold text-slate-700 outline-none placeholder:text-slate-300"
-                                    />
-                                </div>
-                                <button
-                                    onClick={() => setShowFiltersMobile(!showFiltersMobile)}
-                                    className="md:hidden flex items-center justify-center h-8 w-8 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl border border-slate-200 transition-all active:scale-95 shrink-0"
-                                    title="Toggle Filters"
-                                >
-                                    <Filter className={`w-4 h-4 transition-transform ${showFiltersMobile ? 'text-teal-600' : 'text-slate-400'}`} />
-                                </button>
-                            </div>
-
-                            {/* Dropdowns - Collapsed by default on mobile, always visible on desktop */}
-                            <div className={`${showFiltersMobile ? 'flex' : 'hidden md:flex'} flex-row flex-wrap items-center gap-2 w-full md:w-auto mt-2 md:mt-0`}>
-                                <div className="w-[calc(50%-4px)] sm:w-[190px] shrink-0">
-                                    <Select value={filterAssignee} onValueChange={(val) => setFilterAssignee(val === "all_assignees" ? "" : val)}>
-                                        <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
-                                            <SelectValue placeholder="All Employees" />
-                                        </SelectTrigger>
-                                        <SelectContent className="z-[200]">
-                                            <SelectItem value="all_assignees">All Employees</SelectItem>
-                                            <SelectItem value="unassigned">Unassigned</SelectItem>
-                                            {sortedByWorkload.map(w => {
-                                                const { activeTasks } = getWorkerLoad(w._id);
-                                                const { dot, text } = workloadColor(activeTasks);
-                                                return (
-                                                    <SelectItem key={w._id} value={w._id}>
-                                                        <span className="flex items-center gap-2 text-[10px] sm:text-xs">
-                                                            <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`}></span>
-                                                            <span>{w.name}</span>
-                                                            <span className={`text-[10px] font-bold ml-auto ${text}`}>({activeTasks})</span>
-                                                        </span>
-                                                    </SelectItem>
-                                                );
-                                            })}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-
-                                <div className="w-[calc(50%-4px)] sm:w-[140px] shrink-0">
-                                    <Select value={filterTeam} onValueChange={(val) => setFilterTeam(val === "all_teams" ? "" : val)}>
-                                        <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
-                                            <SelectValue placeholder="All Teams" />
-                                        </SelectTrigger>
-                                        <SelectContent className="z-[200]">
-                                            <SelectItem value="all_teams">All Teams</SelectItem>
-                                            {[...new Set(workers.filter(w => w.status !== 'Relieved').map(w => w.department).filter(Boolean))].map(team => (
-                                                <SelectItem key={team} value={team} className="text-[10px] sm:text-xs">{team}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="w-[calc(50%-4px)] sm:w-[120px] shrink-0">
-                                    <Select value={filterPriority} onValueChange={(val) => setFilterPriority(val === "all_priorities" ? "" : val)}>
-                                        <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
-                                            <SelectValue placeholder="Priority" />
-                                        </SelectTrigger>
-                                        <SelectContent className="z-[200]">
-                                            <SelectItem value="all_priorities" className="text-[10px] sm:text-xs">Priority</SelectItem>
-                                            <SelectItem value="High" className="text-[10px] sm:text-xs">High</SelectItem>
-                                            <SelectItem value="Medium" className="text-[10px] sm:text-xs">Medium</SelectItem>
-                                            <SelectItem value="Low" className="text-[10px] sm:text-xs">Low</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                {/* Month Filter */}
-                                <div className="w-[calc(50%-4px)] sm:w-[140px] shrink-0">
-                                    <Select
-                                        value={filterMonth || 'all_months'}
-                                        onValueChange={(val) => setFilterMonth(val === 'all_months' ? '' : val)}
-                                    >
-                                        <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
-                                            <SelectValue placeholder="This Month" />
-                                        </SelectTrigger>
-                                        <SelectContent className="z-[200]">
-                                            <SelectItem value="all_months" className="text-[10px] sm:text-xs">All Months</SelectItem>
-                                            {(() => {
-                                                const months = [];
-                                                const now = new Date();
-                                                for (let i = 0; i < 12; i++) {
-                                                    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-                                                    const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                                                    const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
-                                                    months.push(<SelectItem key={val} value={val} className="text-[10px] sm:text-xs">{label}</SelectItem>);
-                                                }
-                                                return months;
-                                            })()}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                {(filterAssignee || filterTeam || filterPriority || searchTerm || filterMonth !== currentMonthValue) && (
-                                    <button
-                                        onClick={() => {
-                                            setFilterAssignee('');
-                                            setFilterTeam('');
-                                            setFilterPriority('');
-                                            setSearchTerm('');
-                                            setFilterMonth(currentMonthValue);
-                                        }}
-                                        className="w-[calc(50%-4px)] sm:w-auto text-[10px] text-rose-500 hover:text-rose-600 font-bold uppercase tracking-wider px-2 py-2 rounded-xl bg-rose-50/50 hover:bg-rose-50 border border-rose-100/30 sm:border-none sm:bg-transparent text-center sm:text-left h-8 sm:h-auto flex items-center justify-center transition-all"
-                                    >
-                                        Reset
-                                    </button>
-                                )}
-                            </div>
+                <div className="px-2.5 sm:px-6 md:px-10 py-1.5 sm:py-5">
+                    {/* 📱 MOBILE ONLY COMPACT CONTROLS ROW (md:hidden) */}
+                    <div className="md:hidden flex items-center gap-1.5 w-full">
+                        {/* Search Input */}
+                        <div className="relative flex-1 border border-slate-200 rounded-xl bg-white shadow-sm focus-within:border-teal-500 transition-all h-8 flex items-center min-w-0">
+                            <Search className="w-3.5 h-3.5 absolute left-2.5 text-slate-400" />
+                            <input
+                                type="text"
+                                placeholder="Search tasks..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full pl-8 pr-2 py-1.5 bg-transparent text-[11px] font-semibold text-slate-700 outline-none placeholder:text-slate-300"
+                            />
                         </div>
 
-                        {/* Right Group: Action buttons */}
-                        <div className="grid grid-cols-2 sm:flex sm:flex-row items-center gap-2 sm:gap-3 shrink-0 w-full lg:w-auto mt-1.5 lg:mt-0">
-                            <button
-                                onClick={() => setIsStatsModalOpen(true)}
-                                className="order-2 sm:order-none bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold h-8 sm:h-10 px-3 sm:px-4 rounded-xl flex items-center justify-center text-[10px] sm:text-xs transition-all border border-slate-200 w-full sm:w-auto"
+                        {/* Filter Toggle Icon */}
+                        <button
+                            onClick={() => setShowFiltersMobile(!showFiltersMobile)}
+                            className="flex items-center justify-center h-8 w-8 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl border border-slate-200 transition-all active:scale-95 shrink-0"
+                            title="Toggle Filters"
+                        >
+                            <Filter className={`w-3.5 h-3.5 transition-transform ${showFiltersMobile ? 'text-teal-650' : 'text-slate-400'}`} />
+                        </button>
+
+                        {/* Stats Dashboard Icon Button */}
+                        <button
+                            onClick={() => setIsStatsModalOpen(true)}
+                            className="bg-slate-50 hover:bg-slate-100 text-slate-600 h-8 w-8 rounded-xl flex items-center justify-center border border-slate-200 shrink-0 transition-all active:scale-95"
+                            title="Dashboard Overview"
+                        >
+                            <BarChart2 className="w-4 h-4 text-slate-500" />
+                        </button>
+
+                        {/* Deleted Tasks Icon Button */}
+                        <button
+                            onClick={() => {
+                                fetchDeletedTickets();
+                                setIsDeletedModalOpen(true);
+                            }}
+                            className="bg-slate-50 hover:bg-slate-100 text-slate-600 h-8 w-8 rounded-xl flex items-center justify-center border border-slate-200 shrink-0 transition-all active:scale-95"
+                            title="Deleted Tasks"
+                        >
+                            <History className="w-4 h-4 text-slate-500" />
+                        </button>
+
+                        {/* Plus (New Task) Icon Button */}
+                        <button
+                            onClick={() => {
+                                setInlineCreateStatus(null);
+                                setSelectedTicket({
+                                    _id: 'new', title: '', description: '', priority: 'Medium', status: 'To Do', issueType: 'Task', storyPoints: 0, labels: [], assignee: null, assignees: [], team: '', startDate: '', endDate: '', checklist: [{ text: '', completed: false }]
+                                });
+                                const tempId = Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+                                setTempTicketId(tempId);
+                                setModalFilterTeam('');
+                                setIsModalOpen(true);
+                            }}
+                            className="bg-blue-600 hover:bg-blue-700 text-white h-8 w-8 rounded-xl flex items-center justify-center shadow-md shadow-blue-100 shrink-0 transition-all active:scale-95"
+                            title="New Task"
+                        >
+                            <Plus className="w-4 h-4" />
+                        </button>
+                    </div>
+
+                    {/* Dropdowns (Mobile filter panel below the row) */}
+                    <div className={`md:hidden ${showFiltersMobile ? 'flex' : 'hidden'} flex-row flex-wrap items-center gap-2 w-full mt-2`}>
+                        <div className="w-[calc(50%-4px)] shrink-0">
+                            <Select value={filterAssignee} onValueChange={(val) => setFilterAssignee(val === "all_assignees" ? "" : val)}>
+                                <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 text-[10px] font-semibold text-slate-600 px-2.5">
+                                    <SelectValue placeholder="All Employees" />
+                                </SelectTrigger>
+                                <SelectContent className="z-[200]">
+                                    <SelectItem value="all_assignees">All Employees</SelectItem>
+                                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                                    {sortedByWorkload.map(w => {
+                                        const { activeTasks } = getWorkerLoad(w._id);
+                                        const { dot, text } = workloadColor(activeTasks);
+                                        return (
+                                            <SelectItem key={w._id} value={w._id}>
+                                                <span className="flex items-center gap-2 text-[10px]">
+                                                    <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`}></span>
+                                                    <span>{w.name}</span>
+                                                    <span className={`text-[10px] font-bold ml-auto ${text}`}>({activeTasks})</span>
+                                                </span>
+                                            </SelectItem>
+                                        );
+                                    })}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="w-[calc(50%-4px)] shrink-0">
+                            <Select value={filterTeam} onValueChange={(val) => setFilterTeam(val === "all_teams" ? "" : val)}>
+                                <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 text-[10px] font-semibold text-slate-600 px-2.5">
+                                    <SelectValue placeholder="All Teams" />
+                                </SelectTrigger>
+                                <SelectContent className="z-[200]">
+                                    <SelectItem value="all_teams">All Teams</SelectItem>
+                                    {[...new Set(workers.filter(w => w.status !== 'Relieved').map(w => w.department).filter(Boolean))].map(team => (
+                                        <SelectItem key={team} value={team} className="text-[10px]">{team}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="w-[calc(50%-4px)] shrink-0">
+                            <Select value={filterPriority} onValueChange={(val) => setFilterPriority(val === "all_priorities" ? "" : val)}>
+                                <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 text-[10px] font-semibold text-slate-600 px-2.5">
+                                    <SelectValue placeholder="Priority" />
+                                </SelectTrigger>
+                                <SelectContent className="z-[200]">
+                                    <SelectItem value="all_priorities" className="text-[10px]">Priority</SelectItem>
+                                    <SelectItem value="High" className="text-[10px]">High</SelectItem>
+                                    <SelectItem value="Medium" className="text-[10px]">Medium</SelectItem>
+                                    <SelectItem value="Low" className="text-[10px]">Low</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* Month Filter */}
+                        <div className="w-[calc(50%-4px)] shrink-0">
+                            <Select
+                                value={filterMonth || 'all_months'}
+                                onValueChange={(val) => setFilterMonth(val === 'all_months' ? '' : val)}
                             >
-                                <BarChart2 className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
-                                <span>Dashboard</span>
-                            </button>
+                                <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 text-[10px] font-semibold text-slate-600 px-2.5">
+                                    <SelectValue placeholder="This Month" />
+                                </SelectTrigger>
+                                <SelectContent className="z-[200]">
+                                    <SelectItem value="all_months" className="text-[10px]">All Months</SelectItem>
+                                    {(() => {
+                                        const months = [];
+                                        const now = new Date();
+                                        for (let i = 0; i < 12; i++) {
+                                            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                                            const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                                            const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+                                            months.push(<SelectItem key={val} value={val} className="text-[10px]">{label}</SelectItem>);
+                                        }
+                                        return months;
+                                    })()}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {(filterAssignee || filterTeam || filterPriority || searchTerm || filterMonth !== currentMonthValue) && (
                             <button
                                 onClick={() => {
-                                    setInlineCreateStatus(null);
-                                    setSelectedTicket({
-                                        _id: 'new', title: '', description: '', priority: 'Medium', status: 'To Do', issueType: 'Task', storyPoints: 0, labels: [], assignee: null, assignees: [], team: '', startDate: '', endDate: '', checklist: [{ text: '', completed: false }]
-                                    });
-                                    const tempId = Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-                                    setTempTicketId(tempId);
-                                    setModalFilterTeam('');
-                                    setIsModalOpen(true);
+                                    setFilterAssignee('');
+                                    setFilterTeam('');
+                                    setFilterPriority('');
+                                    setSearchTerm('');
+                                    setFilterMonth(currentMonthValue);
                                 }}
-                                className="col-span-2 order-1 sm:order-none bg-blue-600 hover:bg-blue-700 text-white font-bold h-8 sm:h-10 px-4 sm:px-6 rounded-xl flex items-center justify-center text-[10px] sm:text-xs transition-all shadow-lg shadow-blue-100 active:scale-95 w-full sm:w-auto"
+                                className="w-full text-[10px] text-rose-500 hover:text-rose-600 font-bold uppercase tracking-wider px-2 py-2 rounded-xl bg-rose-50/50 hover:bg-rose-50 border border-rose-100/30 text-center h-8 flex items-center justify-center transition-all"
                             >
-                                <Plus className="w-3.5 h-3.5 mr-1.5" /> New Task
+                                Reset Filters
                             </button>
-                            <button
-                                onClick={() => {
-                                    fetchDeletedTickets();
-                                    setIsDeletedModalOpen(true);
-                                }}
-                                className="order-3 sm:order-none bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold h-8 sm:h-10 px-3 sm:px-4 rounded-xl flex items-center justify-center text-[10px] sm:text-xs transition-all border border-slate-200 w-full sm:w-auto"
-                            >
-                                <History className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
-                                <span>Deleted Tasks</span>
-                            </button>
+                        )}
+                    </div>
+
+                    {/* 💻 DESKTOP ONLY ORIGINAL CONTROLS LAYOUT (hidden md:block) */}
+                    <div className="hidden md:block">
+                        {/* Single Row Controls Container */}
+                        <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-2 lg:gap-4">
+
+                            {/* Left Group: Search input & Filter selects */}
+                            <div className="flex flex-col md:flex-row items-stretch md:items-center gap-1.5 md:gap-3 flex-1">
+                                {/* Search box and Mobile Filter Toggle */}
+                                <div className="flex items-center gap-1.5 w-full md:w-auto shrink-0">
+                                    <div className="relative flex-1 md:w-64 border border-slate-200 rounded-xl bg-white shadow-sm focus-within:border-teal-500 transition-all h-8 sm:h-10 flex items-center shrink-0">
+                                        <Search className="w-3 h-3 absolute left-3 text-slate-400" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search tasks..."
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            className="w-full pl-8 pr-3 py-1.5 bg-transparent text-[10px] sm:text-xs font-semibold text-slate-700 outline-none placeholder:text-slate-300"
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={() => setShowFiltersMobile(!showFiltersMobile)}
+                                        className="md:hidden flex items-center justify-center h-8 w-8 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl border border-slate-200 transition-all active:scale-95 shrink-0"
+                                        title="Toggle Filters"
+                                    >
+                                        <Filter className={`w-4 h-4 transition-transform ${showFiltersMobile ? 'text-teal-650' : 'text-slate-400'}`} />
+                                    </button>
+                                </div>
+
+                                {/* Dropdowns - Collapsed by default on mobile, always visible on desktop */}
+                                <div className={`${showFiltersMobile ? 'flex' : 'hidden md:flex'} flex-row flex-wrap items-center gap-2 w-full md:w-auto mt-2 md:mt-0`}>
+                                    <div className="w-[calc(50%-4px)] sm:w-[190px] shrink-0">
+                                        <Select value={filterAssignee} onValueChange={(val) => setFilterAssignee(val === "all_assignees" ? "" : val)}>
+                                            <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
+                                                <SelectValue placeholder="All Employees" />
+                                            </SelectTrigger>
+                                            <SelectContent className="z-[200]">
+                                                <SelectItem value="all_assignees">All Employees</SelectItem>
+                                                <SelectItem value="unassigned">Unassigned</SelectItem>
+                                                {sortedByWorkload.map(w => {
+                                                    const { activeTasks } = getWorkerLoad(w._id);
+                                                    const { dot, text } = workloadColor(activeTasks);
+                                                    return (
+                                                        <SelectItem key={w._id} value={w._id}>
+                                                            <span className="flex items-center gap-2 text-[10px] sm:text-xs">
+                                                                <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`}></span>
+                                                                <span>{w.name}</span>
+                                                                <span className={`text-[10px] font-bold ml-auto ${text}`}>({activeTasks})</span>
+                                                            </span>
+                                                        </SelectItem>
+                                                    );
+                                                })}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+
+                                    <div className="w-[calc(50%-4px)] sm:w-[140px] shrink-0">
+                                        <Select value={filterTeam} onValueChange={(val) => setFilterTeam(val === "all_teams" ? "" : val)}>
+                                            <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
+                                                <SelectValue placeholder="All Teams" />
+                                            </SelectTrigger>
+                                            <SelectContent className="z-[200]">
+                                                <SelectItem value="all_teams">All Teams</SelectItem>
+                                                {[...new Set(workers.filter(w => w.status !== 'Relieved').map(w => w.department).filter(Boolean))].map(team => (
+                                                    <SelectItem key={team} value={team} className="text-[10px] sm:text-xs">{team}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    <div className="w-[calc(50%-4px)] sm:w-[120px] shrink-0">
+                                        <Select value={filterPriority} onValueChange={(val) => setFilterPriority(val === "all_priorities" ? "" : val)}>
+                                            <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
+                                                <SelectValue placeholder="Priority" />
+                                            </SelectTrigger>
+                                            <SelectContent className="z-[200]">
+                                                <SelectItem value="all_priorities" className="text-[10px] sm:text-xs">Priority</SelectItem>
+                                                <SelectItem value="High" className="text-[10px] sm:text-xs">High</SelectItem>
+                                                <SelectItem value="Medium" className="text-[10px] sm:text-xs">Medium</SelectItem>
+                                                <SelectItem value="Low" className="text-[10px] sm:text-xs">Low</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {/* Month Filter */}
+                                    <div className="w-[calc(50%-4px)] sm:w-[140px] shrink-0">
+                                        <Select
+                                            value={filterMonth || 'all_months'}
+                                            onValueChange={(val) => setFilterMonth(val === 'all_months' ? '' : val)}
+                                        >
+                                            <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
+                                                <SelectValue placeholder="This Month" />
+                                            </SelectTrigger>
+                                            <SelectContent className="z-[200]">
+                                                <SelectItem value="all_months" className="text-[10px] sm:text-xs">All Months</SelectItem>
+                                                {(() => {
+                                                    const months = [];
+                                                    const now = new Date();
+                                                    for (let i = 0; i < 12; i++) {
+                                                        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                                                        const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                                                        const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+                                                        months.push(<SelectItem key={val} value={val} className="text-[10px] sm:text-xs">{label}</SelectItem>);
+                                                    }
+                                                    return months;
+                                                })()}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {(filterAssignee || filterTeam || filterPriority || searchTerm || filterMonth !== currentMonthValue) && (
+                                        <button
+                                            onClick={() => {
+                                                setFilterAssignee('');
+                                                setFilterTeam('');
+                                                setFilterPriority('');
+                                                setSearchTerm('');
+                                                setFilterMonth(currentMonthValue);
+                                            }}
+                                            className="w-[calc(50%-4px)] sm:w-auto text-[10px] text-rose-500 hover:text-rose-600 font-bold uppercase tracking-wider px-2 py-2 rounded-xl bg-rose-50/50 hover:bg-rose-50 border border-rose-100/30 sm:border-none sm:bg-transparent text-center sm:text-left h-8 sm:h-auto flex items-center justify-center transition-all"
+                                        >
+                                            Reset
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Right Group: Action buttons */}
+                            <div className="grid grid-cols-2 sm:flex sm:flex-row items-center gap-1.5 sm:gap-3 shrink-0 w-full lg:w-auto mt-1 lg:mt-0">
+                                <button
+                                    onClick={() => setIsStatsModalOpen(true)}
+                                    className="order-2 sm:order-none bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold h-8 sm:h-10 px-2.5 sm:px-4 rounded-xl flex items-center justify-center text-[10px] sm:text-xs transition-all border border-slate-200 w-full sm:w-auto"
+                                >
+                                    <BarChart2 className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
+                                    <span>Dashboard</span>
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setInlineCreateStatus(null);
+                                        setSelectedTicket({
+                                            _id: 'new', title: '', description: '', priority: 'Medium', status: 'To Do', issueType: 'Task', storyPoints: 0, labels: [], assignee: null, assignees: [], team: '', startDate: '', endDate: '', checklist: [{ text: '', completed: false }]
+                                        });
+                                        const tempId = Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+                                        setTempTicketId(tempId);
+                                        setModalFilterTeam('');
+                                        setIsModalOpen(true);
+                                    }}
+                                    className="col-span-2 order-1 sm:order-none bg-blue-600 hover:bg-blue-700 text-white font-bold h-8 sm:h-10 px-3 sm:px-6 rounded-xl flex items-center justify-center text-[10px] sm:text-xs transition-all shadow-lg shadow-blue-100 active:scale-95 w-full sm:w-auto"
+                                >
+                                    <Plus className="w-3.5 h-3.5 mr-1.5" /> New Task
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        fetchDeletedTickets();
+                                        setIsDeletedModalOpen(true);
+                                    }}
+                                    className="order-3 sm:order-none bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold h-8 sm:h-10 px-2.5 sm:px-4 rounded-xl flex items-center justify-center text-[10px] sm:text-xs transition-all border border-slate-200 w-full sm:w-auto"
+                                >
+                                    <History className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
+                                    <span>Deleted Tasks</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
             {/* ── Workforce Overview Bar ──────────────────────────────────────── */}
-            <div className="px-3 lg:px-4 pt-3 pb-1">
-                <div className="flex md:flex-wrap overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 scrollbar-none gap-3">
+            <div className="px-2.5 lg:px-4 pt-1.5 pb-1">
+                <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:gap-3 w-full">
+                    <div className="grid grid-cols-4 gap-1 sm:flex sm:flex-row sm:gap-3 flex-1">
+                        {/* Stat: Total Employees */}
+                        <button onClick={() => setDrawerFilter('all')} className="flex items-center gap-1 sm:gap-3 bg-white rounded-lg sm:rounded-xl px-1.5 py-1 sm:px-4 sm:py-2.5 border border-slate-200/60 shadow-sm min-w-0 sm:min-w-[120px] hover:shadow-md hover:border-slate-300 transition-all cursor-pointer text-left">
+                            <div className="hidden sm:flex w-8 h-8 rounded-lg bg-slate-100 items-center justify-center shrink-0">
+                                <Users className="w-4 h-4 text-slate-500" />
+                            </div>
+                            <div className="min-w-0">
+                                <div className="text-[7px] sm:text-[11px] text-slate-400 font-semibold uppercase tracking-wide leading-none truncate">Total</div>
+                                <div className="text-xs sm:text-lg font-black text-slate-800 leading-tight mt-0.5 sm:mt-0">{activeWorkers.length}</div>
+                            </div>
+                        </button>
 
-                    {/* Stat: Total Employees */}
-                    <button onClick={() => setDrawerFilter('all')} className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-slate-200/60 shadow-sm min-w-[120px] hover:shadow-md hover:border-slate-300 transition-all cursor-pointer text-left">
-                        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                            <Users className="w-4 h-4 text-slate-500" />
-                        </div>
-                        <div>
-                            <div className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider leading-none">Total</div>
-                            <div className="text-lg font-black text-slate-800 leading-tight">{activeWorkers.length}</div>
-                        </div>
-                    </button>
+                        {/* Stat: Assigned */}
+                        <button onClick={() => setDrawerFilter('assigned')} className="flex items-center gap-1 sm:gap-3 bg-white rounded-lg sm:rounded-xl px-1.5 py-1 sm:px-4 sm:py-2.5 border border-blue-100 shadow-sm min-w-0 sm:min-w-[120px] hover:shadow-md hover:border-blue-300 transition-all cursor-pointer text-left">
+                            <div className="hidden sm:flex w-8 h-8 rounded-lg bg-blue-50 items-center justify-center shrink-0">
+                                <CheckSquare className="w-4 h-4 text-blue-500" />
+                            </div>
+                            <div className="min-w-0">
+                                <div className="text-[7px] sm:text-[11px] text-blue-400 font-semibold uppercase tracking-wide leading-none truncate">Assigned</div>
+                                <div className="text-xs sm:text-lg font-black text-blue-700 leading-tight mt-0.5 sm:mt-0">{assignedDevelopers.length}</div>
+                            </div>
+                        </button>
 
-                    {/* Stat: Assigned */}
-                    <button onClick={() => setDrawerFilter('assigned')} className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-blue-100 shadow-sm min-w-[120px] hover:shadow-md hover:border-blue-300 transition-all cursor-pointer text-left">
-                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-                            <CheckSquare className="w-4 h-4 text-blue-500" />
-                        </div>
-                        <div>
-                            <div className="text-[11px] text-blue-400 font-semibold uppercase tracking-wider leading-none">Assigned</div>
-                            <div className="text-lg font-black text-blue-700 leading-tight">{assignedDevelopers.length}</div>
-                        </div>
-                    </button>
+                        {/* Stat: Idle */}
+                        <button onClick={() => setDrawerFilter('idle')} className="flex items-center gap-1 sm:gap-3 bg-white rounded-lg sm:rounded-xl px-1.5 py-1 sm:px-4 sm:py-2.5 border border-emerald-100 shadow-sm min-w-0 sm:min-w-[120px] hover:shadow-md hover:border-emerald-300 transition-all cursor-pointer text-left">
+                            <div className="hidden sm:flex w-8 h-8 rounded-lg bg-emerald-50 items-center justify-center shrink-0">
+                                <User className="w-4 h-4 text-emerald-500" />
+                            </div>
+                            <div className="min-w-0">
+                                <div className="text-[7px] sm:text-[11px] text-emerald-500 font-semibold uppercase tracking-wide leading-none truncate">Idle</div>
+                                <div className="text-xs sm:text-lg font-black text-emerald-700 leading-tight mt-0.5 sm:mt-0">{idleDevelopers.length}</div>
+                            </div>
+                        </button>
 
-                    {/* Stat: Idle */}
-                    <button onClick={() => setDrawerFilter('idle')} className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-emerald-100 shadow-sm min-w-[120px] hover:shadow-md hover:border-emerald-300 transition-all cursor-pointer text-left">
-                        <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
-                            <User className="w-4 h-4 text-emerald-500" />
-                        </div>
-                        <div>
-                            <div className="text-[11px] text-emerald-500 font-semibold uppercase tracking-wider leading-none">Idle</div>
-                            <div className="text-lg font-black text-emerald-700 leading-tight">{idleDevelopers.length}</div>
-                        </div>
-                    </button>
-
-                    {/* Stat: Overloaded */}
-                    <button onClick={() => setDrawerFilter('overloaded')} className="flex items-center gap-3 bg-white rounded-xl px-4 py-2.5 border border-rose-100 shadow-sm min-w-[120px] hover:shadow-md hover:border-rose-300 transition-all cursor-pointer text-left">
-                        <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center shrink-0">
-                            <AlertCircle className="w-4 h-4 text-rose-500" />
-                        </div>
-                        <div>
-                            <div className="text-[11px] text-rose-400 font-semibold uppercase tracking-wider leading-none">Overloaded</div>
-                            <div className="text-lg font-black text-rose-700 leading-tight">{overloadedDevelopers.length}</div>
-                        </div>
-                    </button>
+                        {/* Stat: Overloaded */}
+                        <button onClick={() => setDrawerFilter('overloaded')} className="flex items-center gap-1 sm:gap-3 bg-white rounded-lg sm:rounded-xl px-1.5 py-1 sm:px-4 sm:py-2.5 border border-rose-100 shadow-sm min-w-0 sm:min-w-[120px] hover:shadow-md hover:border-rose-300 transition-all cursor-pointer text-left">
+                            <div className="hidden sm:flex w-8 h-8 rounded-lg bg-rose-50 items-center justify-center shrink-0">
+                                <AlertCircle className="w-4 h-4 text-rose-500" />
+                            </div>
+                            <div className="min-w-0">
+                                <div className="text-[7px] sm:text-[11px] text-rose-400 font-semibold uppercase tracking-wide leading-none truncate">Overload</div>
+                                <div className="text-xs sm:text-lg font-black text-rose-700 leading-tight mt-0.5 sm:mt-0">{overloadedDevelopers.length}</div>
+                            </div>
+                        </button>
+                    </div>
 
                     {/* Available Developers Card */}
                     {idleDevelopers.length > 0 && (
                         <button
                             onClick={() => setDrawerFilter('idle')}
-
-                            className="flex items-center gap-3 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl px-4 py-2.5 border border-emerald-200/60 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all duration-200 group cursor-pointer text-left"
+                            className="flex items-center justify-between sm:justify-start gap-2 sm:gap-3 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg sm:rounded-xl px-2.5 py-1 sm:px-4 sm:py-2.5 border border-emerald-200/60 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all duration-200 group cursor-pointer text-left w-full sm:w-auto"
                         >
-                            <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
-                                <Zap className="w-4 h-4 text-emerald-600" />
-                            </div>
-                            <div>
-                                <div className="text-[11px] text-emerald-600 font-bold uppercase tracking-wider leading-none mb-1">Available Now</div>
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                    {idleDevelopers.slice(0, 4).map(w => (
-                                        <span key={w._id} className="text-[10px] font-semibold text-emerald-700 bg-white/70 px-1.5 py-0.5 rounded-md border border-emerald-200/50">
-                                            {w.name.split(' ')[0]}
-                                        </span>
-                                    ))}
-                                    {idleDevelopers.length > 4 && (
-                                        <span className="text-[10px] font-bold text-emerald-600">+{idleDevelopers.length - 4} more</span>
-                                    )}
+                            <div className="flex items-center gap-1.5 sm:gap-3">
+                                <div className="w-5 h-5 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
+                                    <Zap className="w-3 h-3 sm:w-4 sm:h-4 text-emerald-600" />
+                                </div>
+                                <div>
+                                    <div className="text-[9px] sm:text-[11px] text-emerald-600 font-bold uppercase tracking-wide leading-none mb-0.5">Available Now</div>
+                                    <div className="flex items-center gap-1 flex-wrap">
+                                        {idleDevelopers.slice(0, 4).map(w => (
+                                            <span key={w._id} className="text-[8px] sm:text-[10px] font-semibold text-emerald-700 bg-white/70 px-1 py-0.5 rounded border border-emerald-200/50">
+                                                {w.name.split(' ')[0]}
+                                            </span>
+                                        ))}
+                                        {idleDevelopers.length > 4 && (
+                                            <span className="text-[8px] sm:text-[10px] font-bold text-emerald-600">+{idleDevelopers.length - 4} more</span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                            <ChevronDown className="w-3.5 h-3.5 text-emerald-500 ml-1 -rotate-90 group-hover:translate-x-0.5 transition-transform" />
+                            <ChevronDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-500 ml-1 -rotate-90 group-hover:translate-x-0.5 transition-transform shrink-0" />
                         </button>
                     )}
                 </div>
             </div>
 
             {/* Kanban Board Area - Grid layout for true equal-width columns */}
-            <div className="flex-1 p-3 lg:p-4 pt-3 scroll-smooth overflow-x-auto">
-                {/* Mobile Status Tabs */}
-                <div className="md:hidden flex overflow-x-auto space-x-1.5 p-2 bg-slate-100 rounded-xl mb-3 scrollbar-none">
+            <div className="flex-1 p-2.5 lg:p-4 pt-2.5 scroll-smooth overflow-x-auto">
+                {/* Mobile Status Tabs — 4-column grid, no horizontal scroll */}
+                <div className="md:hidden grid grid-cols-4 gap-0.5 p-0.5 bg-slate-100 rounded-lg mb-2">
                     {columns.map(status => {
                         const count = filteredTickets.filter(t => t.status === status).length;
                         const isActive = activeMobileTab === status;
@@ -1725,15 +1968,14 @@ const WorkAllocation = () => {
                             <button
                                 key={status}
                                 onClick={() => setActiveMobileTab(status)}
-                                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all duration-200 border ${
-                                    isActive
-                                        ? 'bg-white text-slate-800 shadow-sm border-slate-200'
-                                        : 'bg-transparent text-slate-500 border-transparent hover:text-slate-700'
-                                }`}
+                                className={`flex flex-col items-center justify-center gap-0 py-1 rounded-md text-[8px] font-bold transition-all duration-200 border ${isActive
+                                    ? 'bg-white text-slate-800 shadow-sm border-slate-200'
+                                    : 'bg-transparent text-slate-400 border-transparent'
+                                    }`}
                             >
-                                <span className={`w-2 h-2 rounded-full ${status === 'To Do' ? 'bg-slate-400' : status === 'In Progress' ? 'bg-blue-500' : status === 'Review' ? 'bg-purple-500' : 'bg-emerald-500'}`}></span>
-                                <span>{status}</span>
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${isActive ? 'bg-slate-100 text-slate-600' : 'bg-slate-200/50 text-slate-400'}`}>{count}</span>
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 mb-0.5 ${status === 'To Do' ? 'bg-slate-400' : status === 'In Progress' ? 'bg-blue-500' : status === 'Review' ? 'bg-purple-500' : 'bg-emerald-500'}`}></span>
+                                <span className="leading-tight truncate w-full text-center px-0.5">{status === 'In Progress' ? 'In Prog.' : status}</span>
+                                <span className={`text-[7px] mt-0.5 ${isActive ? 'text-slate-500' : 'text-slate-400'}`}>{count}</span>
                             </button>
                         );
                     })}
@@ -1800,11 +2042,11 @@ const WorkAllocation = () => {
                                             setModalFilterTeam(ticket.team || '');
                                             setIsModalOpen(true);
                                         }}
-                                        className={`p-4 rounded-xl border border-slate-200/60 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group active:scale-[0.98] bg-white relative
+                                        className={`p-2 sm:p-4 rounded-xl border border-slate-200/60 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group active:scale-[0.98] bg-white relative
                                             ${isOverdue(ticket.endDate, ticket.status) ? 'border-rose-200 shadow-rose-50' : 'shadow-[0_2px_8px_rgba(0,0,0,0.04)]'} 
                                             ${status === 'To Do' ? 'border-l-4 border-l-slate-400' : status === 'In Progress' ? 'border-l-4 border-l-blue-500' : status === 'Review' ? 'border-l-4 border-l-purple-500' : 'border-l-4 border-l-emerald-500'}`}
                                     >
-                                        <div className="flex justify-between items-start mb-3.5">
+                                        <div className="flex justify-between items-start mb-1.5 sm:mb-3">
                                             <div className="flex flex-wrap gap-1.5 items-center max-w-[85%]">
                                                 {(ticket.startDate || ticket.endDate) && (
                                                     <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border shrink-0
@@ -1814,13 +2056,12 @@ const WorkAllocation = () => {
                                                     </div>
                                                 )}
                                                 {ticket.endDate && (
-                                                    <span className={`px-2 py-1 text-[9px] font-extrabold uppercase rounded-md border tracking-wider transition-all duration-300 shrink-0 ${
-                                                        getProtectionState(ticket) === 'Submitted on time' ? 'bg-teal-50 text-teal-700 border-teal-200 shadow-sm shadow-teal-50/50 animate-pulse' :
+                                                    <span className={`px-2 py-1 text-[9px] font-extrabold uppercase rounded-md border tracking-wider transition-all duration-300 shrink-0 ${getProtectionState(ticket) === 'Submitted on time' ? 'bg-teal-50 text-teal-700 border-teal-200 shadow-sm shadow-teal-50/50 animate-pulse' :
                                                         getProtectionState(ticket) === 'Awaiting review' ? 'bg-amber-50 text-amber-700 border-amber-200 shadow-sm shadow-amber-50/50' :
-                                                        getProtectionState(ticket) === 'Deduction active' ? 'bg-rose-50 text-rose-700 border-rose-200 shadow-sm shadow-rose-50/50' :
-                                                        getProtectionState(ticket) === 'Approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm shadow-emerald-50/50' :
-                                                        'bg-slate-50 text-slate-500 border-slate-200'
-                                                    }`}>
+                                                            getProtectionState(ticket) === 'Deduction active' ? 'bg-rose-50 text-rose-700 border-rose-200 shadow-sm shadow-rose-50/50' :
+                                                                getProtectionState(ticket) === 'Approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm shadow-emerald-50/50' :
+                                                                    'bg-slate-50 text-slate-500 border-slate-200'
+                                                        }`}>
                                                         {getProtectionState(ticket) === 'None' ? 'On Track' : getProtectionState(ticket)}
                                                     </span>
                                                 )}
@@ -1836,13 +2077,13 @@ const WorkAllocation = () => {
                                             </button>
                                         </div>
 
-                                        <div className="mb-4">
-                                            <div className="text-[14px] font-bold text-slate-800 leading-snug group-hover:text-blue-600 transition-colors">
+                                        <div className="mb-2.5 sm:mb-4">
+                                            <div className="text-xs sm:text-[14px] font-bold text-slate-800 leading-snug group-hover:text-blue-600 transition-colors">
                                                 {ticket.title}
                                             </div>
                                         </div>
 
-                                        <div className="flex flex-col gap-4">
+                                        <div className="flex flex-col gap-1.5 sm:gap-4">
                                             {/* Resolution Feedback (Match Image Orange Note Style) */}
                                             {ticket.feedback && (
                                                 <div className="px-3 py-2.5 bg-[#fff7ed] border border-[#ffedd5] rounded-lg text-[10px] text-[#9a3412] font-semibold leading-relaxed shadow-sm">
@@ -1869,8 +2110,8 @@ const WorkAllocation = () => {
                                                 </div>
                                             )}
 
-                                            <div className="flex flex-col gap-2 pt-2">
-                                                <div className="flex gap-2">
+                                            <div className="flex flex-col gap-1 pt-0.5 sm:pt-2">
+                                                <div className="flex gap-1">
                                                     {status === 'Review' ? (
                                                         <>
                                                             <button
@@ -1878,7 +2119,7 @@ const WorkAllocation = () => {
                                                                     e.stopPropagation();
                                                                     updateStatus(ticket._id, 'Done');
                                                                 }}
-                                                                className="flex-1 py-1.5 bg-[#f0fdfa] text-[#0d9488] text-[9px] font-bold uppercase rounded-lg border border-[#ccfbf1] hover:bg-[#0d9488] hover:text-white transition-all tracking-wider shadow-sm"
+                                                                className="flex-1 flex items-center justify-center h-5 bg-[#f0fdfa] text-[#0d9488] text-[7px] font-bold uppercase rounded-full border border-[#ccfbf1] hover:bg-[#0d9488] hover:text-white transition-all tracking-normal shadow-sm"
                                                             >
                                                                 Approve
                                                             </button>
@@ -1887,7 +2128,7 @@ const WorkAllocation = () => {
                                                                     e.stopPropagation();
                                                                     setRejectConfirm({ isOpen: true, ticket, reason: '' });
                                                                 }}
-                                                                className="px-2.5 py-1.5 bg-rose-50 text-rose-600 text-[9px] font-bold uppercase rounded-lg border border-rose-100 hover:bg-rose-500 hover:text-white transition-all shadow-sm"
+                                                                className="flex-1 flex items-center justify-center h-5 bg-rose-50 text-rose-600 text-[7px] font-bold uppercase rounded-full border border-rose-100 hover:bg-rose-500 hover:text-white transition-all tracking-normal shadow-sm"
                                                             >
                                                                 Reject
                                                             </button>
@@ -1901,9 +2142,9 @@ const WorkAllocation = () => {
                                                                         const prevStatus = columns[columns.indexOf(status) - 1];
                                                                         updateStatus(ticket._id, prevStatus);
                                                                     }}
-                                                                    className="flex-1 py-1.5 bg-white text-slate-500 text-[10px] font-bold uppercase rounded-lg border border-slate-200 hover:bg-slate-50 hover:text-slate-800 transition-all tracking-wider shadow-sm"
+                                                                    className="flex-1 flex items-center justify-center h-5 bg-white text-slate-500 text-[7px] font-bold uppercase rounded-full border border-slate-200 hover:bg-slate-50 hover:text-slate-800 transition-all tracking-normal shadow-sm"
                                                                 >
-                                                                    Move Back
+                                                                    Back
                                                                 </button>
                                                             )}
                                                             {status !== 'Done' && (
@@ -1913,7 +2154,7 @@ const WorkAllocation = () => {
                                                                         const nextStatus = columns[columns.indexOf(status) + 1];
                                                                         updateStatus(ticket._id, nextStatus);
                                                                     }}
-                                                                    className="flex-1 py-1.5 bg-blue-600 text-white text-[10px] font-bold uppercase rounded-lg border border-blue-700 hover:bg-blue-700 transition-all tracking-wider shadow-md shadow-blue-100"
+                                                                    className="flex-1 flex items-center justify-center h-5 bg-blue-600 text-white text-[7px] font-bold uppercase rounded-full border border-blue-700 hover:bg-blue-700 transition-all tracking-normal shadow-sm"
                                                                 >
                                                                     Move Next
                                                                 </button>
@@ -2015,42 +2256,54 @@ const WorkAllocation = () => {
                         </div>
                     ))}
                 </div>
+                {hasMore && (
+                    <div ref={sentinelRef} id="infinite-scroll-sentinel" className="py-6 flex justify-center items-center">
+                        <Spinner size="md" />
+                    </div>
+                )}
             </div>
 
             {/* Full-Screen Workspace Task Modal */}
             {isModalOpen && selectedTicket && (
                 <div className="fixed inset-0 bg-black/60 z-[600] flex flex-col items-center justify-center backdrop-blur-sm transition-all duration-300 p-2">
-                    <div className="bg-white rounded-2xl lg:rounded-3xl shadow-2xl w-full max-w-[97vw] h-[96vh] flex flex-col animate-in zoom-in-95 duration-300 overflow-y-auto md:overflow-hidden border border-white/20">
+                    <div className="bg-white rounded-2xl lg:rounded-3xl shadow-2xl w-full max-w-[97vw] h-[96vh] flex flex-col animate-in zoom-in-95 duration-300 overflow-hidden border border-white/20">
 
                         {/* Header */}
-                        <div className="px-3 py-3 sm:px-6 md:px-8 flex flex-col md:flex-row justify-between items-stretch md:items-center text-gray-600 shrink-0 border-b border-gray-100 bg-gray-50/30 gap-3">
-                            <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap">
-                                <div className="flex items-center space-x-1 text-[10px] sm:text-xs font-bold bg-white px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg shadow-sm border border-gray-200 uppercase tracking-widest text-teal-600">
-                                    <IssueIcon type={selectedTicket.issueType} />
-                                    <span>{selectedTicket._id === 'new' ? 'New Workspace' : `Task: ${selectedTicket._id.substring(selectedTicket._id.length - 6).toUpperCase()}`}</span>
+                        <div className="px-3 py-2 sm:px-6 md:px-8 flex flex-col md:flex-row justify-between items-stretch md:items-center text-slate-600 shrink-0 border-b border-slate-100 bg-slate-50/20 gap-2 md:gap-3">
+                            <div className="flex items-center justify-between md:justify-start gap-2 w-full md:w-auto">
+                                <div className="flex items-center gap-1.5 sm:gap-2.5 flex-wrap">
+                                    <div className="flex items-center space-x-1.5 text-[9px] sm:text-xs font-black bg-white px-2 py-1 sm:px-3 sm:py-2 rounded-xl shadow-sm border border-slate-200 uppercase tracking-wider text-teal-605">
+                                        <IssueIcon type={selectedTicket.issueType} />
+                                        <span>{selectedTicket._id === 'new' ? 'New Workspace' : `Task: ${selectedTicket._id.substring(selectedTicket._id.length - 6).toUpperCase()}`}</span>
+                                    </div>
+                                    {selectedTicket.team && (
+                                        <div className="bg-teal-50/60 text-teal-700 px-2 py-1 sm:px-3 sm:py-2 rounded-xl text-[9px] sm:text-[10px] font-extrabold uppercase border border-teal-100 flex items-center gap-1 shadow-sm">
+                                            <Users className="w-3.5 h-3.5" /> Team: {selectedTicket.team}
+                                        </div>
+                                    )}
+                                    {selectedTicket._id !== 'new' && selectedTicket.endDate && (
+                                        <div className={`px-2 py-1 sm:px-3 sm:py-2 rounded-xl text-[9px] sm:text-[10px] font-extrabold uppercase border flex items-center gap-1 shadow-sm ${getProtectionState(selectedTicket) === 'Submitted on time' ? 'bg-teal-50 text-teal-700 border-teal-100 shadow-sm animate-pulse' :
+                                            getProtectionState(selectedTicket) === 'Awaiting review' ? 'bg-amber-50 text-amber-700 border-amber-100 shadow-sm' :
+                                                getProtectionState(selectedTicket) === 'Deduction active' ? 'bg-rose-50 text-rose-700 border-rose-100 shadow-sm' :
+                                                    getProtectionState(selectedTicket) === 'Approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm' :
+                                                        'bg-slate-50 text-slate-500 border-slate-200'
+                                            }`}>
+                                            Salary: {getProtectionState(selectedTicket) === 'None' ? 'On Track' : getProtectionState(selectedTicket)}
+                                        </div>
+                                    )}
                                 </div>
-                                {selectedTicket.team && (
-                                    <div className="bg-teal-50 text-teal-700 px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg text-[9px] sm:text-[10px] font-bold uppercase border border-teal-100 flex items-center gap-1 shadow-sm">
-                                        <Users className="w-3.5 h-3.5" /> Team: {selectedTicket.team}
-                                    </div>
-                                )}
-                                {selectedTicket._id !== 'new' && selectedTicket.endDate && (
-                                    <div className={`px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg text-[9px] sm:text-[10px] font-extrabold uppercase border flex items-center gap-1 shadow-sm ${
-                                        getProtectionState(selectedTicket) === 'Submitted on time' ? 'bg-teal-50 text-teal-700 border-teal-100 shadow-sm animate-pulse' :
-                                        getProtectionState(selectedTicket) === 'Awaiting review' ? 'bg-amber-50 text-amber-700 border-amber-100 shadow-sm' :
-                                        getProtectionState(selectedTicket) === 'Deduction active' ? 'bg-rose-50 text-rose-700 border-rose-100 shadow-sm' :
-                                        getProtectionState(selectedTicket) === 'Approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm' :
-                                        'bg-slate-50 text-slate-500 border-slate-200'
-                                    }`}>
-                                        Salary Protection: {getProtectionState(selectedTicket) === 'None' ? 'On Track' : getProtectionState(selectedTicket)}
-                                    </div>
-                                )}
+                                <button onClick={() => setIsModalOpen(false)} className="md:hidden p-1 rounded-lg text-gray-400 hover:text-red-500 bg-slate-100 border border-slate-250">
+                                    <X className="w-4 h-4" />
+                                </button>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-slate-600">
-                                <div className="flex items-center gap-1.5">
-                                    <span className="text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-wider">Phase Status:</span>
+
+                            {/* 📱 Mobile: single compact row — Phase Status + AI Brain + Create */}
+                            <div className="flex items-center gap-2 w-full md:w-auto justify-start md:justify-end">
+                                {/* Phase Status */}
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap hidden sm:inline">Phase:</span>
                                     <Select value={selectedTicket.status} onValueChange={(val) => updateSelectedTicket({ status: val })}>
-                                        <SelectTrigger className="bg-white border border-gray-200 h-7 sm:h-9 px-2 sm:px-3 text-[10px] sm:text-xs font-bold shadow-sm rounded-lg w-28 sm:w-36 focus:ring-1 focus:ring-teal-500">
+                                        <SelectTrigger className="bg-white border border-slate-200 h-8 sm:h-9 px-2.5 text-[10px] sm:text-xs font-bold shadow-sm rounded-xl w-28 sm:w-36 focus:ring-1 focus:ring-teal-500 focus:border-teal-505">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent className="z-[700]">
@@ -2060,15 +2313,17 @@ const WorkAllocation = () => {
                                         </SelectContent>
                                     </Select>
                                 </div>
+
                                 {/* AI Second Brain Button */}
                                 <button
                                     onClick={() => setShowBrainModal(true)}
-                                    className="flex items-center gap-1 bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:from-violet-700 hover:to-indigo-700 transition-all shadow-md shadow-violet-100 active:scale-95"
+                                    className="flex items-center gap-1 bg-gradient-to-r from-violet-600 to-indigo-600 text-white h-8 sm:h-9 px-2.5 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-wider hover:from-violet-700 hover:to-indigo-700 transition-all shadow-md shadow-violet-100 active:scale-95 shrink-0"
                                     title="Upload chat files to AI Second Brain"
                                 >
                                     <Brain className="w-3 h-3" />
-                                    <span>AI Second Brain</span>
+                                    <span className="hidden xs:inline">AI Brain</span>
                                 </button>
+
                                 {selectedTicket._id === 'new' && (
                                     <button
                                         disabled={!selectedTicket.title}
@@ -2076,33 +2331,22 @@ const WorkAllocation = () => {
                                             setLoading(true);
                                             try {
                                                 const taskToSave = { ...selectedTicket };
-
-                                                // Remove UI-only fields
                                                 delete taskToSave._id;
                                                 taskToSave.subdomain = subdomain;
-
-                                                // Ensure assignee and assignees are sent as IDs
                                                 if (taskToSave.assignee && typeof taskToSave.assignee === 'object') {
                                                     taskToSave.assignee = taskToSave.assignee._id;
                                                 }
-
                                                 if (taskToSave.assignees && Array.isArray(taskToSave.assignees)) {
                                                     taskToSave.assignees = taskToSave.assignees.map(a =>
                                                         (a && typeof a === 'object') ? a._id : a
                                                     ).filter(Boolean);
                                                 }
-
                                                 if (taskToSave.checklist && Array.isArray(taskToSave.checklist)) {
                                                     taskToSave.checklist = sanitizeChecklistForApi(taskToSave.checklist);
                                                 }
-
-                                                // Clean up dates
                                                 if (taskToSave.startDate === '') taskToSave.startDate = undefined;
                                                 if (taskToSave.endDate === '') taskToSave.endDate = undefined;
-
-                                                if (selectedTicket._id === 'new') {
-                                                    taskToSave.tempId = tempTicketId;
-                                                }
+                                                if (selectedTicket._id === 'new') { taskToSave.tempId = tempTicketId; }
                                                 const newT = await createTicket(taskToSave);
                                                 setTickets([newT, ...tickets]);
                                                 setIsModalOpen(false);
@@ -2112,810 +2356,882 @@ const WorkAllocation = () => {
                                                 setLoading(false);
                                             }
                                         }}
-                                        className="bg-teal-600 text-white px-3 py-1.5 sm:px-6 sm:py-2.5 rounded-lg text-[10px] sm:text-xs font-bold hover:bg-teal-700 transition-all shadow-md active:scale-[0.98] flex items-center gap-1.5 group disabled:opacity-50"
+                                        className="flex-1 sm:flex-none bg-teal-600 text-white h-7 sm:h-9 px-2 sm:px-4 rounded-lg text-[10px] sm:text-xs font-bold hover:bg-teal-700 transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-1 disabled:opacity-50"
                                     >
-                                        <Check className="w-4 h-4" /> Create Workspace
+                                        <Check className="w-3 h-3" /><span>Create</span>
                                     </button>
                                 )}
-                                <button onClick={() => setIsModalOpen(false)} className="p-1.5 sm:p-2.5 rounded-lg text-gray-400 transition-all bg-gray-100 border border-gray-200 hover:bg-red-50 hover:text-red-500">
+
+                                <button onClick={() => setIsModalOpen(false)} className="hidden md:flex p-2 rounded-lg text-gray-400 transition-all bg-gray-100 border border-gray-200 hover:bg-red-50 hover:text-red-500">
                                     <X className="w-4 h-4 sm:w-5 sm:h-5" />
                                 </button>
                             </div>
-
-                            {/* AI Second Brain Upload Modal */}
-                            {showBrainModal && (
-                                <div
-                                    className="fixed inset-0 bg-black/50 z-[800] flex items-center justify-center backdrop-blur-sm p-4"
-                                    onClick={(e) => { if (e.target === e.currentTarget) setShowBrainModal(false); }}
-                                >
-                                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
-                                        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                                            <div className="flex items-center gap-2">
-                                                <Brain className="w-5 h-5 text-violet-600" />
-                                                <span className="font-bold text-gray-800">AI Second Brain — Upload Files</span>
-                                            </div>
-                                            <button
-                                                onClick={() => setShowBrainModal(false)}
-                                                className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-gray-600 transition-colors"
-                                            >
-                                                <X className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                        <div className="p-5">
-                                            <PersonalBrainManager />
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
                         </div>
 
-                        {/* Body - Responsive Layout */}
-                        <div className="flex-1 overflow-y-auto md:overflow-hidden bg-white">
-                            <div className="grid grid-cols-1 md:grid-cols-[28%_44%_28%] md:h-full divide-y md:divide-y-0 md:divide-x divide-gray-100">
-
-                                {/* 🔹 COLUMN 1: Task Input & Checklist (LEFT) */}
-                                <div className="md:h-full flex flex-col px-4 py-4 lg:px-6 lg:py-6 overflow-hidden">
-                                    <div className="shrink-0 mb-3 lg:mb-4">
-                                        <div className="flex items-center gap-2 mb-1.5">
-                                            <AlignLeft className="w-3.5 h-3.5 text-teal-600" />
-                                            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Workspace Definition</span>
-                                        </div>
-                                        <TitleInput
-                                            initialValue={selectedTicket.title}
-                                            onUpdate={async (newTitle) => {
-                                                updateSelectedTicket({ title: newTitle }, true);
-                                                // AI analysis is no longer triggered automatically.
-                                                // Use the "Analyze with AI" button to run analysis on demand.
-                                            }}
-                                        />
-
-                                        {selectedTicket._id !== 'new' && selectedTicket.createdAt && (
-                                            <div className="flex items-center gap-4 mt-2 text-[9px] font-bold text-gray-400">
-                                                <div className="flex items-center gap-1 opacity-70 hover:opacity-100 transition-opacity">
-                                                    <Calendar className="w-3 h-3" />
-                                                    <span>Created: {new Date(selectedTicket.createdAt).toLocaleDateString()}</span>
-                                                </div>
-                                                <div className="flex items-center gap-1 opacity-70 hover:opacity-100 transition-opacity">
-                                                    <History className="w-3 h-3" />
-                                                    <span>Mod: {new Date(selectedTicket.updatedAt).toLocaleTimeString()}</span>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="flex-1 flex flex-col min-h-[200px] lg:min-h-0 bg-gray-50/30 rounded-2xl p-3 lg:p-4 border border-gray-100/50">
-                                        <div className="flex justify-between items-center mb-2 shrink-0">
-                                            <label className="text-xs font-bold text-gray-700 flex items-center">
-                                                <List className="w-4 h-4 mr-2 text-teal-600" /> Task Checklist
-                                            </label>
-                                            <span className="text-[9px] font-extrabold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100">
-                                                {selectedTicket.checklist?.length || 0} SUB-TASKS
-                                            </span>
-                                        </div>
-
-                                        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3 pb-2">
-                                            {(selectedTicket.checklist && selectedTicket.checklist.length > 0 ? selectedTicket.checklist : [{ text: '', completed: false, _id: 'default-0' }]).map((item, idx) => (
-                                                <div key={item._id || `item-${idx}`} className="flex items-start gap-3 group p-3 bg-white hover:bg-slate-50/50 rounded-xl transition-all border border-slate-200 hover:border-slate-300 focus-within:border-teal-500 focus-within:ring-1 focus-within:ring-teal-500/20 shadow-sm relative min-h-[58px]">
-                                                    <div className="flex items-center shrink-0 mt-1">
-                                                        <div
-                                                            onClick={() => toggleChecklistItem(idx)}
-                                                            className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-colors cursor-pointer ${item.completed ? 'bg-teal-500 border-teal-500 text-white' : 'border-slate-300 hover:border-teal-500'}`}
-                                                        >
-                                                            {item.completed && <Check className="w-3.5 h-3.5" />}
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex-1 flex items-center min-w-0">
-                                                        <textarea
-                                                            autoFocus={idx > 0 && item.text === ''}
-                                                            value={item.text}
-                                                            onChange={(e) => updateChecklistItemText(idx, e.target.value)}
-                                                            onKeyDown={(e) => {
-                                                                if (e.key === 'Enter') { e.preventDefault(); addChecklistItem(idx); }
-                                                                else if (e.key === 'Backspace' && item.text === '' && (selectedTicket.checklist || []).length > 1) { e.preventDefault(); removeChecklistItem(idx); }
-                                                            }}
-                                                            className={`w-full bg-transparent border-none focus:ring-0 text-sm font-semibold text-slate-700 placeholder-slate-300 outline-none resize-none min-h-[24px] max-h-[120px] leading-relaxed py-1 scrollbar-hidden ${item.completed ? 'text-slate-400 line-through italic' : ''}`}
-                                                            placeholder="Add sub-task details..."
-                                                            rows={1}
-                                                            title={item.text}
-                                                            onInput={(e) => {
-                                                                e.target.style.height = 'auto';
-                                                                e.target.style.height = e.target.scrollHeight + 'px';
-                                                            }}
-                                                            ref={(el) => {
-                                                                if (el) {
-                                                                    el.style.height = 'auto';
-                                                                    el.style.height = el.scrollHeight + 'px';
-                                                                }
-                                                            }}
-                                                        />
-                                                    </div>
-                                                    <button
-                                                        onClick={() => removeChecklistItem(idx)}
-                                                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all rounded-lg shrink-0 mt-0.5"
-                                                    >
-                                                        <X className="w-4 h-4" />
-                                                    </button>
-                                                </div>
-                                            ))}
+                        {/* AI Second Brain Upload Modal */}
+                        {showBrainModal && (
+                            <div
+                                className="fixed inset-0 bg-black/50 z-[800] flex items-center justify-center backdrop-blur-sm p-4"
+                                onClick={(e) => { if (e.target === e.currentTarget) setShowBrainModal(false); }}
+                            >
+                                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+                                    <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                                        <div className="flex items-center gap-2">
+                                            <Brain className="w-5 h-5 text-violet-600" />
+                                            <span className="font-bold text-gray-800">AI Second Brain — Upload Files</span>
                                         </div>
                                         <button
-                                            onClick={() => addChecklistItem()}
-                                            className="mt-2 flex items-center justify-center gap-2 text-teal-600 hover:bg-teal-600 hover:text-white text-[10px] font-extrabold uppercase tracking-widest transition-all p-2.5 bg-white border border-dashed border-teal-200 rounded-xl group shadow-sm active:scale-95"
+                                            onClick={() => setShowBrainModal(false)}
+                                            className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-gray-600 transition-colors"
                                         >
-                                            <Plus className="w-4 h-4 transition-transform group-hover:rotate-90" /> Add Next Point
+                                            <X className="w-4 h-4" />
                                         </button>
                                     </div>
-
-                                    {/* REFINED FIXED Planning Section at Bottom */}
-                                    <div className="shrink-0 mt-2 pt-2 border-t border-gray-100 px-1 pb-1">
-                                        <div className="bg-white border border-gray-200 rounded-[1.25rem] shadow-sm overflow-hidden">
-                                            <div className="bg-gray-50/50 px-4 py-2 border-b border-gray-100 flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <LayoutDashboard className="w-4 h-4 text-teal-600" />
-                                                    <h3 className="text-[10px] font-extrabold text-gray-500 uppercase tracking-widest">Resource Timeline & Tags</h3>
-                                                </div>
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className={`w-2 h-2 rounded-full ${isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'bg-red-500 animate-pulse' : 'bg-teal-500'}`}></span>
-                                                    <span className="text-[8px] font-bold text-gray-400 uppercase">{isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'Overdue' : 'Active'}</span>
-                                                </div>
-                                            </div>
-
-                                            <div className="p-2 lg:p-3 space-y-2 lg:space-y-3">
-                                                <div className="flex flex-col gap-1.5">
-                                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-tight flex items-center gap-1.5">
-                                                        <Calendar className="w-3 h-3 text-teal-600" /> Timeline Period
-                                                    </label>
-                                                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-gray-50/80 p-2 sm:p-1 rounded-xl border border-gray-100">
-                                                        <div className="flex-1 flex flex-col sm:relative gap-1 sm:gap-0 pt-1.5 sm:pt-0">
-                                                            <span className="sm:absolute -top-3.5 left-1 text-[8px] font-bold text-teal-600/50 uppercase">Start Date</span>
-                                                            <input
-                                                                type="date"
-                                                                value={selectedTicket.startDate || ''}
-                                                                onChange={(e) => updateSelectedTicket({ startDate: e.target.value })}
-                                                                onClick={(e) => e.target.showPicker?.()}
-                                                                className="w-full bg-white border border-gray-100 rounded-lg p-1.5 text-[10px] sm:text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-teal-500 shadow-sm cursor-pointer"
-                                                            />
-                                                        </div>
-                                                        <div className="text-gray-300 font-bold text-center hidden sm:block">→</div>
-                                                        <div className="flex-1 flex flex-col sm:relative gap-1 sm:gap-0 pt-1.5 sm:pt-0">
-                                                            <span className="sm:absolute -top-3.5 left-1 text-[8px] font-bold text-teal-600/50 uppercase">End Date</span>
-                                                            <input
-                                                                type="date"
-                                                                value={selectedTicket.endDate || ''}
-                                                                onChange={(e) => updateSelectedTicket({ endDate: e.target.value })}
-                                                                onClick={(e) => e.target.showPicker?.()}
-                                                                className={`w-full rounded-lg p-1.5 text-[10px] sm:text-xs font-bold outline-none focus:ring-2 focus:ring-teal-500 shadow-sm cursor-pointer ${isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-white text-gray-700 border border-gray-100'}`}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="h-0.5 bg-gray-50 mx-1"></div>
-
-                                                <div className="flex flex-col gap-2">
-                                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-tight flex items-center gap-1.5">
-                                                        <Zap className="w-3 h-3 text-orange-500" /> Priority Matrix
-                                                    </label>
-                                                    <div className="flex gap-2">
-                                                        {['Low', 'Medium', 'High'].map(p => (
-                                                            <button
-                                                                key={p}
-                                                                onClick={() => updateSelectedTicket({ priority: p })}
-                                                                className={`px-3 py-1.5 rounded-xl text-[10px] font-extrabold uppercase transition-all flex-1 border-2 ${selectedTicket.priority === p
-                                                                    ? (p === 'High' ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-100' : p === 'Medium' ? 'bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-100' : 'bg-blue-500 border-blue-500 text-white shadow-lg shadow-blue-100')
-                                                                    : 'bg-white border-gray-100 text-gray-400 hover:border-gray-200 hover:bg-gray-50'}`}
-                                                            >
-                                                                {p}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
+                                    <div className="p-5">
+                                        <PersonalBrainManager />
                                     </div>
                                 </div>
+                            </div>
+                        )}
 
-                                {/* 🔹 COLUMN 2: Phase Status & Controls (CENTER) */}
-                                <div className="md:h-full flex flex-col bg-gray-50/10 md:border-r border-gray-100 overflow-hidden">
-                                    {/* Fixed Top Part (Assignment & Quick Assign Side-by-Side) */}
-                                    <div className="shrink-0 p-4 lg:p-5 bg-white border-b border-gray-150 shadow-[0_4px_12px_rgba(0,0,0,0.02)]">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                                            {/* Left Column: Assignment Options */}
-                                            <div>
-                                                <AssignmentSection
-                                                    selectedTicket={selectedTicket}
-                                                    updateSelectedTicket={updateSelectedTicket}
-                                                    workers={workers}
-                                                />
-                                            </div>
+                        {/* Body - Responsive Layout */}
+                        <div className="flex-1 flex flex-col md:overflow-hidden bg-white min-h-0">
+                            {/* Mobile: Sticky section tabs for seamless tab/swipe switching */}
+                            <div className="md:hidden flex items-center justify-around border-b border-slate-200 bg-white px-2 py-2 shrink-0 relative">
+                                {[
+                                    { id: 'details', label: 'Details', icon: AlignLeft },
+                                    { id: 'assign', label: 'Assign & AI', icon: Users },
+                                    { id: 'execution', label: 'Execution', icon: BarChart2 }
+                                ].map((tab) => {
+                                    const Icon = tab.icon;
+                                    const isActive = activeModalTab === tab.id;
+                                    return (
+                                        <button
+                                            key={tab.id}
+                                            type="button"
+                                            onClick={() => scrollToTab(tab.id)}
+                                            className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 text-[10px] font-extrabold uppercase tracking-wider transition-colors ${
+                                                isActive ? 'text-teal-600' : 'text-slate-400 hover:text-slate-600'
+                                            }`}
+                                        >
+                                            <Icon className="w-3.5 h-3.5" />
+                                            <span>{tab.label}</span>
+                                        </button>
+                                    );
+                                })}
+                                {/* Premium sliding indicator line */}
+                                <div
+                                    className="absolute bottom-0 h-0.5 bg-teal-600 transition-all duration-300 ease-out"
+                                    style={{
+                                        width: '33.33%',
+                                        left: `${['details', 'assign', 'execution'].indexOf(activeModalTab) * 33.33}%`
+                                    }}
+                                />
+                            </div>
 
-                                            {/* Right Column: Quick Assign Options */}
-                                            <div className="border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-6">
-                                                {sortedByWorkload.length > 0 && (() => {
-                                                    const currentAssigneeIds = (selectedTicket.assignees || []).map(a => typeof a === 'object' ? a._id : a);
-                                                    const toggleAssignee = (wId) => {
-                                                        if (currentAssigneeIds.includes(wId)) {
-                                                            updateSelectedTicket({ assignees: currentAssigneeIds.filter(id => id !== wId) });
-                                                        } else {
-                                                            updateSelectedTicket({ assignees: [...currentAssigneeIds, wId] });
-                                                        }
-                                                    };
-                                                    return (
-                                                        <div className="space-y-3">
-                                                            <div className="flex items-center justify-between">
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                                                                    <span className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Quick Assign</span>
-                                                                </div>
-                                                                <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tight">Click to add/remove</span>
-                                                            </div>
-                                                            <div className="space-y-3 max-h-[140px] overflow-y-auto pr-1 custom-scrollbar">
-                                                                {/* Idle developers first */}
-                                                                {idleDevelopers.length > 0 && (
-                                                                    <div>
-                                                                        <div className="text-[8px] font-black text-emerald-600 uppercase tracking-wider mb-1">● Idle ({idleDevelopers.length})</div>
-                                                                        <div className="flex flex-wrap gap-1.5">
-                                                                            {idleDevelopers.slice(0, 6).map(w => {
-                                                                                const isSelected = currentAssigneeIds.includes(w._id);
-                                                                                return (
-                                                                                    <button
-                                                                                        key={w._id}
-                                                                                        onClick={() => toggleAssignee(w._id)}
-                                                                                        className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[9px] font-bold transition-all ${isSelected ? 'ring-2 ring-teal-500 bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-emerald-50/50 border-emerald-100 text-emerald-600 hover:shadow-sm hover:border-emerald-300'}`}
-                                                                                    >
-                                                                                        <span className="w-1 h-1 rounded-full bg-emerald-500"></span>
-                                                                                        {w.name.split(' ')[0]}
-                                                                                        {isSelected && <Check className="w-2.5 h-2.5 text-teal-600 ml-0.5" />}
-                                                                                    </button>
-                                                                                );
-                                                                            })}
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-                                                                {/* Busy developers */}
-                                                                {assignedDevelopers.length > 0 && (
-                                                                    <div>
-                                                                        <div className="text-[8px] font-black text-amber-600 uppercase tracking-wider mb-1">● Busy ({assignedDevelopers.length})</div>
-                                                                        <div className="flex flex-wrap gap-1.5">
-                                                                            {assignedDevelopers.slice(0, 6).map(w => {
-                                                                                const { activeTasks } = getWorkerLoad(w._id);
-                                                                                const { dot, badge } = workloadColor(activeTasks);
-                                                                                const isSelected = currentAssigneeIds.includes(w._id);
-                                                                                return (
-                                                                                    <button
-                                                                                        key={w._id}
-                                                                                        onClick={() => toggleAssignee(w._id)}
-                                                                                        className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[9px] font-bold transition-all ${isSelected ? 'ring-2 ring-teal-500 ' + badge : badge + ' hover:shadow-sm'}`}
-                                                                                    >
-                                                                                        <span className={`w-1 h-1 rounded-full ${dot}`}></span>
-                                                                                        {w.name.split(' ')[0]}
-                                                                                        <span className="opacity-60 text-[8px]">({activeTasks})</span>
-                                                                                        {isSelected && <Check className="w-2.5 h-2.5 text-teal-600 ml-0.5" />}
-                                                                                    </button>
-                                                                                );
-                                                                            })}
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })()}
-                                            </div>
+                            <div className="flex-1 overflow-hidden bg-white min-h-0">
+                                <div
+                                    ref={columnsContainerRef}
+                                    onScroll={handleModalScroll}
+                                    className="flex md:grid flex-col md:grid-cols-[28%_44%_28%] overflow-y-auto md:overflow-y-hidden scroll-smooth w-full h-full min-h-0 custom-scrollbar md:h-full md:divide-x divide-slate-100"
+                                >
+
+                                    {/* 🔹 COLUMN 1: Task Input & Checklist (LEFT) */}
+                                    <div id="modal-sec-details" className="w-full md:w-auto flex flex-col px-4 py-4 md:h-full md:overflow-hidden lg:px-6 lg:py-6 overflow-visible md:overflow-y-hidden">
+                                        {/* Mobile section label */}
+                                        <div className="md:hidden flex items-center gap-2 mb-4 pb-2 border-b border-slate-150">
+                                            <AlignLeft className="w-4 h-4 text-teal-600" />
+                                            <span className="text-xs font-black text-slate-700 uppercase tracking-widest">Details</span>
                                         </div>
-                                    </div>
-
-                                    {/* Scrollable Bottom Content */}
-                                    <div className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-5 space-y-4">
-                                        {/* AI Task Optimizer / Assistant */}
-                                        <div className="bg-gradient-to-br from-indigo-50/60 to-teal-50/60 border border-teal-100 rounded-2xl p-4 shadow-sm relative overflow-hidden">
-                                            <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/5 rounded-full blur-2xl"></div>
-                                            <div className="flex items-center justify-between mb-3">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="bg-teal-500 text-white p-1.5 rounded-lg shadow-sm">
-                                                        <Cpu className="w-4 h-4 animate-pulse" />
-                                                    </div>
-                                                    <div>
-                                                        <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1">
-                                                            AI Task Assistant
-                                                            <Sparkles className="w-3 h-3 text-amber-500 fill-amber-500" />
-                                                        </h3>
-                                                        <p className="text-[9px] font-semibold text-slate-400">Optimize priorities, subtasks, & assignments</p>
-                                                    </div>
-                                                </div>
+                                        <div className="shrink-0 mb-3 lg:mb-4">
+                                            <div className="flex items-center gap-2 mb-1.5">
+                                                <AlignLeft className="w-3.5 h-3.5 text-teal-600" />
+                                                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Workspace Definition</span>
                                             </div>
+                                            <TitleInput
+                                                initialValue={selectedTicket.title}
+                                                onUpdate={async (newTitle) => {
+                                                    updateSelectedTicket({ title: newTitle }, true);
+                                                    // AI analysis is no longer triggered automatically.
+                                                    // Use the "Analyze with AI" button to run analysis on demand.
+                                                }}
+                                            />
 
-                                            {!aiAnalysisResult ? (
-                                                <button
-                                                    disabled={isAnalyzing || !selectedTicket.title}
-                                                    onClick={handleAnalyzeTask}
-                                                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition-all shadow-md hover:shadow-teal-100 disabled:opacity-50 active:scale-[0.98]"
-                                                >
-                                                    {isAnalyzing ? (
-                                                        <>
-                                                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                                            <span>Analyzing with DeepSeek...</span>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <Cpu className="w-3.5 h-3.5" />
-                                                            <span>Analyze with AI</span>
-                                                        </>
-                                                    )}
-                                                </button>
-                                            ) : (
-                                                <div className="space-y-4">
-                                                    <div className="grid grid-cols-2 gap-2 bg-white/70 p-2.5 rounded-xl border border-slate-100">
-                                                        <div className="text-[10px]">
-                                                            <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Priority</span>
-                                                            <span className={`font-extrabold uppercase ${aiAnalysisResult.priority === 'High' ? 'text-red-500' :
-                                                                aiAnalysisResult.priority === 'Medium' ? 'text-orange-500' : 'text-blue-500'
-                                                                }`}>{aiAnalysisResult.priority}</span>
-                                                        </div>
-                                                        <div className="text-[10px]">
-                                                            <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Complexity</span>
-                                                            <span className={`font-extrabold uppercase ${aiAnalysisResult.complexity === 'High' ? 'text-purple-600' :
-                                                                aiAnalysisResult.complexity === 'Medium' ? 'text-indigo-600' : 'text-slate-600'
-                                                                }`}>{aiAnalysisResult.complexity}</span>
-                                                        </div>
-                                                        <div className="text-[10px] col-span-2 mt-1.5 pt-1.5 border-t border-slate-100/60 flex justify-between items-center">
-                                                            <div>
-                                                                <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Est. Time</span>
-                                                                <span className="font-extrabold text-slate-700">{aiAnalysisResult.estimatedHours} hrs <span className="text-slate-400 font-normal">({(aiAnalysisResult.estimatedHours / 8).toFixed(1)} Days)</span></span>
-                                                            </div>
-                                                            <button
-                                                                onClick={handleApplySpecs}
-                                                                className="px-2.5 py-1 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-100 rounded-lg text-[9px] font-extrabold uppercase transition-colors"
-                                                            >
-                                                                Apply
-                                                            </button>
-                                                        </div>
+                                            {selectedTicket._id !== 'new' && selectedTicket.createdAt && (
+                                                <div className="flex items-center gap-4 mt-2 text-[9px] font-bold text-gray-400">
+                                                    <div className="flex items-center gap-1 opacity-70 hover:opacity-100 transition-opacity">
+                                                        <Calendar className="w-3 h-3" />
+                                                        <span>Created: {new Date(selectedTicket.createdAt).toLocaleDateString()}</span>
                                                     </div>
-
-                                                    {aiAnalysisResult.subtasks && aiAnalysisResult.subtasks.length > 0 && (
-                                                        <div className="space-y-1.5 bg-white/70 p-2.5 rounded-xl border border-slate-100">
-                                                            <div className="flex items-center justify-between mb-1">
-                                                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Suggested Subtasks</span>
-                                                                <button
-                                                                    onClick={handleMergeSubtasks}
-                                                                    className="px-2.5 py-1 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-100 rounded-lg text-[9px] font-extrabold uppercase transition-colors"
-                                                                >
-                                                                    Merge
-                                                                </button>
-                                                            </div>
-                                                            <div className="space-y-1">
-                                                                {aiAnalysisResult.subtasks.map((sub, i) => {
-                                                                    const isChecked = !!selectedSuggestedSubtasks[i];
-                                                                    const toggleCheck = () => {
-                                                                        setSelectedSuggestedSubtasks(prev => ({
-                                                                            ...prev,
-                                                                            [i]: !prev[i]
-                                                                        }));
-                                                                    };
-
-                                                                    return (
-                                                                        <div key={i} className="flex items-center justify-between gap-1.5 p-1 hover:bg-slate-50 rounded-lg group/subtask transition-colors">
-                                                                            <div className="flex items-start gap-2 text-[11px] text-slate-600 font-semibold leading-relaxed min-w-0 flex-1">
-                                                                                <input
-                                                                                    type="checkbox"
-                                                                                    checked={isChecked}
-                                                                                    onChange={toggleCheck}
-                                                                                    className="w-3.5 h-3.5 mt-0.5 rounded text-teal-600 border-slate-350 focus:ring-teal-500 cursor-pointer shrink-0"
-                                                                                />
-                                                                                <span
-                                                                                    onClick={toggleCheck}
-                                                                                    className="cursor-pointer truncate flex-1"
-                                                                                    title={sub}
-                                                                                >
-                                                                                    {sub}
-                                                                                </span>
-                                                                            </div>
-                                                                            <button
-                                                                                onClick={() => handleMergeSingleSubtask(sub, i)}
-                                                                                className="opacity-0 group-hover/subtask:opacity-100 px-1.5 py-0.5 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded text-[9px] font-black uppercase transition-all shrink-0 ml-1 flex items-center gap-0.5 shadow-sm"
-                                                                                title="Add single subtask to checklist"
-                                                                            >
-                                                                                <Plus className="w-2.5 h-2.5" />
-                                                                                <span>Add</span>
-                                                                            </button>
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                    {aiAnalysisResult.recommendations && aiAnalysisResult.recommendations.length > 0 && (
-                                                        <div className="space-y-2 bg-white/70 p-2.5 rounded-xl border border-slate-100">
-                                                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">AI Recommended Assignees</span>
-                                                            <div className="space-y-2">
-                                                                {aiAnalysisResult.recommendations.map((rec, i) => {
-                                                                    const isAssigned = (selectedTicket.assignees || []).some(a => (typeof a === 'object' ? a._id : a) === rec.developerId);
-                                                                    return (
-                                                                        <div key={i} className="bg-white p-2 rounded-lg border border-slate-100 flex flex-col gap-1.5 shadow-sm">
-                                                                            <div className="flex justify-between items-center">
-                                                                                <div className="flex items-center gap-1.5">
-                                                                                    <span className="text-xs font-bold text-slate-700">{rec.developerName}</span>
-                                                                                    <span className="text-[9px] font-extrabold px-1.5 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-full">{rec.matchScore}% Match</span>
-                                                                                </div>
-                                                                                <button
-                                                                                    onClick={() => handleAssignDev(rec.developerId)}
-                                                                                    className={`px-2.5 py-1 rounded-lg text-[9px] font-extrabold uppercase transition-colors ${isAssigned
-                                                                                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
-                                                                                        : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm'
-                                                                                        }`}
-                                                                                    disabled={isAssigned}
-                                                                                >
-                                                                                    {isAssigned ? 'Assigned' : 'Assign'}
-                                                                                </button>
-                                                                            </div>
-                                                                            {rec.reasons && rec.reasons.length > 0 && (
-                                                                                <div className="space-y-1 pl-1">
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        onClick={() => toggleRecExpand(rec.developerId)}
-                                                                                        className="text-[9px] text-indigo-600 font-bold hover:underline flex items-center gap-0.5"
-                                                                                    >
-                                                                                        {expandedRecs[rec.developerId] ? 'Hide Details ▲' : 'Show Details ▾'}
-                                                                                    </button>
-                                                                                    {expandedRecs[rec.developerId] && (
-                                                                                        <div className="space-y-0.5 mt-0.5 animate-in slide-in-from-top-1 duration-150">
-                                                                                            {rec.reasons.map((r, ri) => (
-                                                                                                <div key={ri} className="text-[10px] text-slate-500 font-medium leading-normal flex items-start gap-1">
-                                                                                                    <span className="text-emerald-500 font-bold shrink-0">✓</span>
-                                                                                                    <span>{r.startsWith('✓') ? r.slice(1).trim() : r}</span>
-                                                                                                </div>
-                                                                                            ))}
-                                                                                        </div>
-                                                                                    )}
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                    <button
-                                                        onClick={handleAnalyzeTask}
-                                                        disabled={isAnalyzing}
-                                                        className="w-full text-center text-[10px] font-black text-teal-600 hover:text-teal-700 bg-transparent py-1 border border-dashed border-teal-200 hover:border-teal-400 rounded-xl transition-all"
-                                                    >
-                                                        {isAnalyzing ? 'Re-analyzing...' : '↻ Re-analyze with AI'}
-                                                    </button>
+                                                    <div className="flex items-center gap-1 opacity-70 hover:opacity-100 transition-opacity">
+                                                        <History className="w-3 h-3" />
+                                                        <span>Mod: {new Date(selectedTicket.updatedAt).toLocaleTimeString()}</span>
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
 
-                                        {/* Employee Query Display */}
-                                        {selectedTicket.workerQuery && (
-                                            <div className="flex flex-col gap-2 pt-1 mb-2 bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-                                                <div className="flex items-center gap-2">
-                                                    <HelpCircle className="w-3 h-3 text-teal-600" />
-                                                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Employee Query</span>
-                                                </div>
-                                                <div className="w-full bg-teal-50 border border-teal-100 rounded-xl p-3 text-xs font-medium text-teal-800">
-                                                    {selectedTicket.workerQuery}
-                                                </div>
+                                        <div className="flex-1 flex flex-col min-h-[200px] lg:min-h-0 bg-gray-50/30 rounded-2xl p-3 lg:p-4 border border-gray-100/50">
+                                            <div className="flex justify-between items-center mb-2 shrink-0">
+                                                <label className="text-xs font-bold text-gray-700 flex items-center">
+                                                    <List className="w-4 h-4 mr-2 text-teal-600" /> Task Checklist
+                                                </label>
+                                                <span className="text-[9px] font-extrabold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100">
+                                                    {selectedTicket.checklist?.length || 0} SUB-TASKS
+                                                </span>
                                             </div>
-                                        )}
 
-                                        <div className="flex flex-col gap-2 pt-1 bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-                                            <div className="flex items-center gap-2">
-                                                <MessageSquare className="w-3 h-3 text-orange-500" />
-                                                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Resolution Feedback</span>
+                                            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3 pb-2">
+                                                {(selectedTicket.checklist && selectedTicket.checklist.length > 0 ? selectedTicket.checklist : [{ text: '', completed: false, _id: 'default-0' }]).map((item, idx) => (
+                                                    <div key={item._id || `item-${idx}`} className="flex items-start gap-3 group p-3 bg-white hover:bg-slate-50/50 rounded-xl transition-all border border-slate-200 hover:border-slate-300 focus-within:border-teal-500 focus-within:ring-1 focus-within:ring-teal-500/20 shadow-sm relative min-h-[58px]">
+                                                        <div className="flex items-center shrink-0 mt-1">
+                                                            <div
+                                                                onClick={() => toggleChecklistItem(idx)}
+                                                                className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-colors cursor-pointer ${item.completed ? 'bg-teal-500 border-teal-500 text-white' : 'border-slate-300 hover:border-teal-500'}`}
+                                                            >
+                                                                {item.completed && <Check className="w-3.5 h-3.5" />}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex-1 flex items-center min-w-0">
+                                                            <textarea
+                                                                autoFocus={idx > 0 && item.text === ''}
+                                                                value={item.text}
+                                                                onChange={(e) => updateChecklistItemText(idx, e.target.value)}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === 'Enter') { e.preventDefault(); addChecklistItem(idx); }
+                                                                    else if (e.key === 'Backspace' && item.text === '' && (selectedTicket.checklist || []).length > 1) { e.preventDefault(); removeChecklistItem(idx); }
+                                                                }}
+                                                                className={`w-full bg-transparent border-none focus:ring-0 text-sm font-semibold text-slate-700 placeholder-slate-300 outline-none resize-none min-h-[24px] max-h-[120px] leading-relaxed py-1 scrollbar-hidden ${item.completed ? 'text-slate-400 line-through italic' : ''}`}
+                                                                placeholder="Add sub-task details..."
+                                                                rows={1}
+                                                                title={item.text}
+                                                                onInput={(e) => {
+                                                                    e.target.style.height = 'auto';
+                                                                    e.target.style.height = e.target.scrollHeight + 'px';
+                                                                }}
+                                                                ref={(el) => {
+                                                                    if (el) {
+                                                                        el.style.height = 'auto';
+                                                                        el.style.height = el.scrollHeight + 'px';
+                                                                    }
+                                                                }}
+                                                            />
+                                                        </div>
+                                                        <button
+                                                            onClick={() => removeChecklistItem(idx)}
+                                                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all rounded-lg shrink-0 mt-0.5"
+                                                        >
+                                                            <X className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                ))}
                                             </div>
-                                            <AutoGrowingTextarea
-                                                value={selectedTicket.feedback || ''}
-                                                onChange={(newVal) => updateSelectedTicket({ feedback: newVal }, true)}
-                                                className="w-full bg-orange-50/50 border-none rounded-xl p-3 text-xs font-medium text-orange-800 placeholder-orange-300 focus:ring-2 focus:ring-orange-200 transition-all"
-                                                placeholder="Add review notes..."
-                                            />
+                                            <button
+                                                onClick={() => addChecklistItem()}
+                                                className="mt-2 flex items-center justify-center gap-2 text-teal-600 hover:bg-teal-600 hover:text-white text-[10px] font-extrabold uppercase tracking-widest transition-all p-2.5 bg-white border border-dashed border-teal-200 rounded-xl group shadow-sm active:scale-95"
+                                            >
+                                                <Plus className="w-4 h-4 transition-transform group-hover:rotate-90" /> Add Next Point
+                                            </button>
                                         </div>
 
-                                        {selectedTicket._id !== 'new' && (
-                                            <button
-                                                onClick={() => handleDeleteTicket(selectedTicket)}
-                                                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-red-100 bg-red-50/30 text-red-600 hover:bg-red-500 hover:text-white transition-all font-bold text-[9px] uppercase tracking-widest group shadow-sm active:scale-95 animate-in fade-in duration-200"
-                                            >
-                                                <Trash2 className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" /> Permanently Delete
-                                            </button>
-                                        )}
+                                        {/* REFINED FIXED Planning Section at Bottom */}
+                                        <div className="shrink-0 mt-2 pt-2.5 border-t border-gray-100 px-0.5 pb-1 animate-in fade-in duration-300">
+                                            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                                                <div className="bg-slate-50/50 px-3.5 py-2 border-b border-slate-100 flex items-center justify-between">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <LayoutDashboard className="w-3.5 h-3.5 text-teal-600" />
+                                                        <h3 className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Timeline & Tags</h3>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'bg-rose-500 animate-pulse' : 'bg-teal-500'}`}></span>
+                                                        <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wide">{isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'Overdue' : 'Active'}</span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="p-3 space-y-4">
+                                                    {/* Timeline Period */}
+                                                    <div className="flex flex-col gap-1.5">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <Calendar className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                                                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Timeline</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 w-full">
+                                                            <div className="flex-1 min-w-0">
+                                                                <span className="block text-[8px] font-black text-teal-600/75 uppercase tracking-wide mb-1">Start Date</span>
+                                                                <input
+                                                                    type="date"
+                                                                    value={selectedTicket.startDate || ''}
+                                                                    onChange={(e) => updateSelectedTicket({ startDate: e.target.value })}
+                                                                    onClick={(e) => e.target.showPicker?.()}
+                                                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 focus:bg-white shadow-sm cursor-pointer"
+                                                                />
+                                                            </div>
+                                                            <span className="text-slate-350 font-bold text-xs self-end pb-2">→</span>
+                                                            <div className="flex-1 min-w-0">
+                                                                <span className="block text-[8px] font-black text-teal-600/75 uppercase tracking-wide mb-1">End Date</span>
+                                                                <input
+                                                                    type="date"
+                                                                    value={selectedTicket.endDate || ''}
+                                                                    onChange={(e) => updateSelectedTicket({ endDate: e.target.value })}
+                                                                    onClick={(e) => e.target.showPicker?.()}
+                                                                    className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-semibold outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 focus:bg-white shadow-sm cursor-pointer ${
+                                                                        isOverdue(selectedTicket.endDate, selectedTicket.status)
+                                                                            ? 'bg-rose-50 border-rose-200 text-rose-700'
+                                                                            : 'bg-slate-50 border-slate-200 text-slate-700'
+                                                                    }`}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Priority Matrix */}
+                                                    <div className="flex flex-col gap-1.5">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <Zap className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                                                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Priority</span>
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            {['Low', 'Medium', 'High'].map(p => (
+                                                                <button
+                                                                    key={p}
+                                                                    type="button"
+                                                                    onClick={() => updateSelectedTicket({ priority: p })}
+                                                                    className={`flex-1 py-2 rounded-xl text-xs font-extrabold uppercase transition-all border flex items-center justify-center text-center ${selectedTicket.priority === p
+                                                                        ? (p === 'High' ? 'bg-red-500 border-red-500 text-white shadow-md' : p === 'Medium' ? 'bg-orange-500 border-orange-500 text-white shadow-md' : 'bg-blue-500 border-blue-500 text-white shadow-md')
+                                                                        : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300 hover:bg-slate-50'
+                                                                        }`}
+                                                                >
+                                                                    <span>{p}</span>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
 
-                                {/* 🔹 COLUMN 3: Execution & Analytics (RIGHT - MOVED FROM CENTER) */}
-                                <div className="md:h-full flex flex-col px-4 py-4 lg:px-6 lg:py-6 overflow-y-auto custom-scrollbar bg-gray-50/20">
-                                    <div className="flex-1 flex flex-col min-h-0">
-
-                                        {/* Progress Card & Shared Task References Grid */}
-                                        {selectedTicket._id !== 'new' ? (
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 shrink-0">
-                                                {/* Left Column: Progress Card */}
-                                                <div className="bg-white border border-teal-100/50 rounded-2xl p-4 shadow-sm relative overflow-hidden flex flex-col justify-center">
-                                                    <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
-                                                    <div className="flex justify-between items-center mb-3">
-                                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-                                                            <BarChart2 className="w-3.5 h-3.5 text-teal-500" />
-                                                            Overall Completion
-                                                        </span>
-                                                        <span className="text-[11px] font-extrabold bg-teal-50 text-teal-600 px-2 py-0.5 rounded-full border border-teal-100">
-                                                            {selectedTicket.status === 'Done' ? 100 : (selectedTicket.status === 'Review' ? 90 : (selectedTicket.status === 'In Progress' ? 25 : 0))}% DONE
-                                                        </span>
-                                                    </div>
-                                                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden shadow-inner flex">
-                                                        <div
-                                                            className="bg-teal-500 h-2 transition-all duration-1000 ease-out"
-                                                            style={{ width: `${selectedTicket.status === 'Done' ? 100 : (selectedTicket.status === 'Review' ? 90 : (selectedTicket.status === 'In Progress' ? 25 : 0))}%` }}
-                                                        ></div>
-                                                    </div>
+                                    {/* 🔹 COLUMN 2: Phase Status & Controls (CENTER) */}
+                                    <div id="modal-sec-assign" className="w-full md:w-auto flex flex-col bg-slate-50/30 md:h-full md:overflow-hidden md:border-r border-slate-100 overflow-visible md:overflow-y-hidden">
+                                        {/* Mobile section label */}
+                                        <div className="md:hidden flex items-center gap-2 px-4 pt-4 pb-2 border-b border-slate-150">
+                                            <Users className="w-4 h-4 text-teal-600" />
+                                            <span className="text-xs font-black text-slate-700 uppercase tracking-widest">Assign & AI</span>
+                                        </div>
+                                        <div className="hidden md:flex items-center gap-1.5 px-3 pt-3 pb-2 border-b border-slate-100">
+                                            <Users className="w-3.5 h-3.5 text-teal-600" />
+                                            <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Assign & AI</span>
+                                        </div>
+                                        {/* Fixed Top Part (Assignment & Quick Assign Side-by-Side) */}
+                                        <div className="shrink-0 p-4 lg:p-5 bg-white border-b border-gray-150 shadow-[0_4px_12px_rgba(0,0,0,0.02)]">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                                                {/* Left Column: Assignment Options */}
+                                                <div>
+                                                    <AssignmentSection
+                                                        selectedTicket={selectedTicket}
+                                                        updateSelectedTicket={updateSelectedTicket}
+                                                        workers={workers}
+                                                    />
                                                 </div>
 
-                                                {/* Right Column: Shared Task References Card */}
-                                                <div className="bg-white border border-teal-100/50 rounded-2xl p-4 shadow-sm relative overflow-hidden flex flex-col justify-between">
-                                                    <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
-                                                    <div className="flex justify-between items-center mb-3">
-                                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-                                                            <Paperclip className="w-3.5 h-3.5 text-teal-500" />
-                                                            Task References
-                                                        </span>
-                                                        <input
-                                                            type="file"
-                                                            ref={taskRefFileInputRef}
-                                                            onChange={handleTaskRefFileChange}
-                                                            multiple
-                                                            className="hidden"
-                                                            accept="image/*"
-                                                        />
-                                                        <button
-                                                            onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
-                                                            className="text-[10px] font-extrabold uppercase bg-teal-50 text-teal-600 hover:bg-teal-100 px-2 py-1 rounded-lg border border-teal-100 transition-colors"
-                                                        >
-                                                            Upload
-                                                        </button>
-                                                    </div>
-
-                                                    {/* Drag & Drop Zone */}
-                                                    <div
-                                                        onDragOver={(e) => { e.preventDefault(); setIsDraggingTaskRef(true); }}
-                                                        onDragEnter={(e) => { e.preventDefault(); setIsDraggingTaskRef(true); }}
-                                                        onDragLeave={(e) => { e.preventDefault(); setIsDraggingTaskRef(false); }}
-                                                        onDrop={async (e) => {
-                                                            e.preventDefault();
-                                                            setIsDraggingTaskRef(false);
-                                                            const files = e.dataTransfer.files;
-                                                            await uploadTaskRefFiles(files, selectedTicket._id);
-                                                        }}
-                                                        className={`text-center py-2 px-3 border border-dashed rounded-xl transition-all cursor-pointer ${isDraggingTaskRef
-                                                            ? 'border-teal-500 bg-teal-50/50'
-                                                            : 'border-gray-200 hover:border-teal-400 hover:bg-gray-50/30'
-                                                            }`}
-                                                        onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
-                                                    >
-                                                        <p className="text-[10px] font-bold text-gray-400">
-                                                            {isDraggingTaskRef ? 'Drop files here!' : 'Drag & drop references here'}
-                                                        </p>
-                                                    </div>
-
-                                                    {/* Previews of uploaded task references */}
-                                                    {selectedTicket.referenceFiles && selectedTicket.referenceFiles.length > 0 && (
-                                                        <div className="flex flex-wrap gap-2 mt-3 max-h-[80px] overflow-y-auto custom-scrollbar">
-                                                            {selectedTicket.referenceFiles.map(file => (
-                                                                <div key={file._id} className="relative w-8 h-8 rounded-lg border border-gray-200 overflow-hidden group shadow-sm shrink-0">
-                                                                    <img
-                                                                        src={getFullFileUrl(file.url)}
-                                                                        alt={file.name}
-                                                                        className="w-full h-full object-cover cursor-pointer"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            setZoomedImage(getFullFileUrl(file.url));
-                                                                        }}
-                                                                    />
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            handleDeleteTaskReference(selectedTicket._id, file._id);
-                                                                        }}
-                                                                        className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                    >
-                                                                        <Trash2 className="w-3 h-3 text-red-400" />
-                                                                    </button>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="mb-6 shrink-0">
-                                                {/* Full-width Task References Card for New Task */}
-                                                <div className="bg-white border border-teal-100/50 rounded-2xl p-4 shadow-sm relative overflow-hidden flex flex-col justify-between min-h-[140px]">
-                                                    <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
-                                                    <div className="flex justify-between items-center mb-3">
-                                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-                                                            <Paperclip className="w-3.5 h-3.5 text-teal-500" />
-                                                            Task References
-                                                        </span>
-                                                        <input
-                                                            type="file"
-                                                            ref={taskRefFileInputRef}
-                                                            onChange={handleTaskRefFileChange}
-                                                            multiple
-                                                            className="hidden"
-                                                            accept="image/*"
-                                                        />
-                                                        <button
-                                                            onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
-                                                            className="text-[10px] font-extrabold uppercase bg-teal-50 text-teal-600 hover:bg-teal-100 px-2 py-1 rounded-lg border border-teal-100 transition-colors"
-                                                        >
-                                                            Upload
-                                                        </button>
-                                                    </div>
-
-                                                    {/* Drag & Drop Zone */}
-                                                    <div
-                                                        onDragOver={(e) => { e.preventDefault(); setIsDraggingTaskRef(true); }}
-                                                        onDragEnter={(e) => { e.preventDefault(); setIsDraggingTaskRef(true); }}
-                                                        onDragLeave={(e) => { e.preventDefault(); setIsDraggingTaskRef(false); }}
-                                                        onDrop={async (e) => {
-                                                            e.preventDefault();
-                                                            setIsDraggingTaskRef(false);
-                                                            const files = e.dataTransfer.files;
-                                                            await uploadTaskRefFiles(files, selectedTicket._id);
-                                                        }}
-                                                        className={`text-center py-4 px-3 border border-dashed rounded-xl transition-all cursor-pointer ${isDraggingTaskRef
-                                                            ? 'border-teal-500 bg-teal-50/50'
-                                                            : 'border-gray-200 hover:border-teal-400 hover:bg-gray-50/30'
-                                                            }`}
-                                                        onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
-                                                    >
-                                                        <p className="text-[10px] font-bold text-gray-400">
-                                                            {isDraggingTaskRef ? 'Drop files here!' : 'Drag & drop references here'}
-                                                        </p>
-                                                    </div>
-
-                                                    {/* Previews of uploaded task references */}
-                                                    {selectedTicket.referenceFiles && selectedTicket.referenceFiles.length > 0 && (
-                                                        <div className="flex flex-wrap gap-2 mt-3 max-h-[80px] overflow-y-auto custom-scrollbar">
-                                                            {selectedTicket.referenceFiles.map(file => (
-                                                                <div key={file._id} className="relative w-8 h-8 rounded-lg border border-gray-200 overflow-hidden group shadow-sm shrink-0">
-                                                                    <img
-                                                                        src={getFullFileUrl(file.url)}
-                                                                        alt={file.name}
-                                                                        className="w-full h-full object-cover cursor-pointer"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            setZoomedImage(getFullFileUrl(file.url));
-                                                                        }}
-                                                                    />
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            handleDeleteTaskReference(selectedTicket._id, file._id);
-                                                                        }}
-                                                                        className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                    >
-                                                                        <Trash2 className="w-3 h-3 text-red-400" />
-                                                                    </button>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Execution Breakdown Area (SCROLLABLE) */}
-                                        <div className="flex-1 flex flex-col min-h-0">
-                                            <div className="flex items-center gap-2 mb-4 shrink-0">
-                                                <div className="w-8 h-8 bg-teal-100 rounded-lg flex items-center justify-center">
-                                                    <Users className="w-4 h-4 text-teal-600" />
-                                                </div>
-                                                <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Resource Execution Graph</h3>
-                                            </div>
-
-                                            <div className="flex-1 overflow-y-auto custom-scrollbar pr-3 space-y-4 pb-6">
-                                                {isFetchingCompletions ? (
-                                                    <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-                                                        <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                                                        <p className="text-xs font-bold uppercase tracking-widest">Loading Analytics...</p>
-                                                    </div>
-                                                ) : selectedTicket.assignees?.length > 0 ? (
-                                                    selectedTicket.checklist?.map((item, idx) => {
-                                                        const itemCompletions = ticketCompletions.filter(c => String(c.subTaskId) === String(item._id) || String(c.subTaskId) === String(idx));
+                                                {/* Right Column: Quick Assign Options */}
+                                                <div className="border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-6">
+                                                    {sortedByWorkload.length > 0 && (() => {
+                                                        const currentAssigneeIds = (selectedTicket.assignees || []).map(a => typeof a === 'object' ? a._id : a);
+                                                        const toggleAssignee = (wId) => {
+                                                            if (currentAssigneeIds.includes(wId)) {
+                                                                updateSelectedTicket({ assignees: currentAssigneeIds.filter(id => id !== wId) });
+                                                            } else {
+                                                                updateSelectedTicket({ assignees: [...currentAssigneeIds, wId] });
+                                                            }
+                                                        };
                                                         return (
-                                                            <div key={item._id || idx} className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all">
-                                                                <div className="bg-gray-50/80 px-4 py-3 border-b border-gray-100 flex justify-between items-center">
-                                                                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                                        <span className="text-[9px] font-black bg-teal-100 text-teal-700 px-2 py-0.5 rounded border border-teal-200 shrink-0">
-                                                                            ST-{String(idx + 1).padStart(2, '0')}
-                                                                        </span>
-                                                                        <div className="flex flex-col min-w-0">
-                                                                            <span
-                                                                                className={`text-xs font-bold text-gray-800 cursor-pointer hover:text-teal-600 transition-colors ${expandedSubTasks[idx] ? 'whitespace-pre-wrap break-words' : 'truncate'}`}
-                                                                                title={expandedSubTasks[idx] ? "Click to collapse" : "Click to view more details"}
-                                                                                onClick={() => toggleSubTaskExpand(idx)}
-                                                                            >
-                                                                                {item.text || `Point ${idx + 1}`}
-                                                                            </span>
-                                                                            {item.text && item.text.length > 40 && (
-                                                                                <button
-                                                                                    onClick={() => toggleSubTaskExpand(idx)}
-                                                                                    className="text-[9px] text-teal-600 hover:text-teal-800 font-bold mt-0.5 text-left hover:underline select-none"
-                                                                                >
-                                                                                    {expandedSubTasks[idx] ? 'Show less' : '... more details'}
-                                                                                </button>
-                                                                            )}
-                                                                        </div>
+                                                            <div className="space-y-3">
+                                                                <div className="flex items-center justify-between">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                                                                        <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Quick Assign</span>
                                                                     </div>
-                                                                    <div className="flex -space-x-1.5">
-                                                                        {selectedTicket.assignees.slice(0, 5).map(w => (
-                                                                            <div key={w._id || w} className={`w-5 h-5 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-extrabold shadow-sm ${itemCompletions.some(c => String(c.workerId?._id || c.workerId) === String(w._id || w)) ? 'bg-teal-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
-                                                                                {(w.name || 'W').charAt(0)}
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
+                                                                    <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Click to add/remove</span>
                                                                 </div>
+                                                                <div className="space-y-3 max-h-[140px] overflow-y-auto pr-1 custom-scrollbar">
+                                                                    {/* Idle developers first */}
+                                                                    {idleDevelopers.length > 0 && (
+                                                                        <div>
+                                                                            <div className="text-[9px] font-extrabold text-emerald-600 uppercase tracking-wider mb-1">● Idle ({idleDevelopers.length})</div>
+                                                                            <div className="flex flex-wrap gap-1.5">
+                                                                                {idleDevelopers.slice(0, 6).map(w => {
+                                                                                    const isSelected = currentAssigneeIds.includes(w._id);
+                                                                                    return (
+                                                                                        <button
+                                                                                            key={w._id}
+                                                                                            type="button"
+                                                                                            onClick={() => toggleAssignee(w._id)}
+                                                                                            className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[9px] font-bold transition-all ${isSelected ? 'ring-2 ring-teal-500 bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-emerald-50/50 border-emerald-100 text-emerald-600 hover:shadow-sm hover:border-emerald-300'}`}
+                                                                                        >
+                                                                                            <span className="w-1 h-1 rounded-full bg-emerald-500"></span>
+                                                                                            {w.name.split(' ')[0]}
+                                                                                            {isSelected && <Check className="w-2.5 h-2.5 text-teal-600 ml-0.5" />}
+                                                                                        </button>
+                                                                                    );
+                                                                                })}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                    {/* Busy developers */}
+                                                                    {assignedDevelopers.length > 0 && (
+                                                                        <div>
+                                                                            <div className="text-[9px] font-extrabold text-amber-600 uppercase tracking-wider mb-1">● Busy ({assignedDevelopers.length})</div>
+                                                                            <div className="flex flex-wrap gap-1.5">
+                                                                                {assignedDevelopers.slice(0, 6).map(w => {
+                                                                                    const { activeTasks } = getWorkerLoad(w._id);
+                                                                                    const { dot, badge } = workloadColor(activeTasks);
+                                                                                    const isSelected = currentAssigneeIds.includes(w._id);
+                                                                                    return (
+                                                                                        <button
+                                                                                            key={w._id}
+                                                                                            onClick={() => toggleAssignee(w._id)}
+                                                                                            className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[9px] font-bold transition-all ${isSelected ? 'ring-2 ring-teal-500 ' + badge : badge + ' hover:shadow-sm'}`}
+                                                                                        >
+                                                                                            <span className={`w-1 h-1 rounded-full ${dot}`}></span>
+                                                                                            {w.name.split(' ')[0]}
+                                                                                            <span className="opacity-60 text-[8px]">({activeTasks})</span>
+                                                                                            {isSelected && <Check className="w-2.5 h-2.5 text-teal-600 ml-0.5" />}
+                                                                                        </button>
+                                                                                    );
+                                                                                })}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                </div>
+                                            </div>
+                                        </div>
 
-                                                                <div className="p-3 space-y-3">
-                                                                    {selectedTicket.assignees.map(worker => {
-                                                                        const workerId = worker._id || worker;
-                                                                        const comp = itemCompletions.find(c => String(c.workerId?._id || c.workerId) === String(workerId));
-                                                                        const isDone = comp && comp.isCompleted;
-                                                                        const hasProof = comp?.proofFiles?.length > 0;
+                                        {/* Scrollable Bottom Content */}
+                                        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-5 space-y-4">
+                                            {/* AI Task Optimizer / Assistant */}
+                                            <div className="bg-gradient-to-br from-indigo-50/60 to-teal-50/60 border border-teal-100 rounded-2xl p-4 shadow-sm relative overflow-hidden">
+                                                <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/5 rounded-full blur-2xl"></div>
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="bg-teal-500 text-white p-1.5 rounded-lg shadow-sm">
+                                                            <Cpu className="w-4 h-4 animate-pulse" />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                                                                AI Task Assistant
+                                                                <Sparkles className="w-3 h-3 text-amber-500 fill-amber-500" />
+                                                            </h3>
+                                                            <p className="text-[9px] font-semibold text-slate-400">Optimize priorities, subtasks, & assignments</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {!aiAnalysisResult ? (
+                                                    <button
+                                                        disabled={isAnalyzing || !selectedTicket.title}
+                                                        onClick={handleAnalyzeTask}
+                                                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition-all shadow-md hover:shadow-teal-100 disabled:opacity-50 active:scale-[0.98]"
+                                                    >
+                                                        {isAnalyzing ? (
+                                                            <>
+                                                                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                                <span>Analyzing with DeepSeek...</span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Cpu className="w-3.5 h-3.5" />
+                                                                <span>Analyze with AI</span>
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                ) : (
+                                                    <div className="space-y-4">
+                                                        <div className="grid grid-cols-2 gap-2 bg-white/70 p-2.5 rounded-xl border border-slate-100">
+                                                            <div className="text-[10px]">
+                                                                <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Priority</span>
+                                                                <span className={`font-extrabold uppercase ${aiAnalysisResult.priority === 'High' ? 'text-red-500' :
+                                                                    aiAnalysisResult.priority === 'Medium' ? 'text-orange-500' : 'text-blue-500'
+                                                                    }`}>{aiAnalysisResult.priority}</span>
+                                                            </div>
+                                                            <div className="text-[10px]">
+                                                                <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Complexity</span>
+                                                                <span className={`font-extrabold uppercase ${aiAnalysisResult.complexity === 'High' ? 'text-purple-600' :
+                                                                    aiAnalysisResult.complexity === 'Medium' ? 'text-indigo-600' : 'text-slate-600'
+                                                                    }`}>{aiAnalysisResult.complexity}</span>
+                                                            </div>
+                                                            <div className="text-[10px] col-span-2 mt-1.5 pt-1.5 border-t border-slate-100/60 flex justify-between items-center">
+                                                                <div>
+                                                                    <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Est. Time</span>
+                                                                    <span className="font-extrabold text-slate-700">{aiAnalysisResult.estimatedHours} hrs <span className="text-slate-400 font-normal">({(aiAnalysisResult.estimatedHours / 8).toFixed(1)} Days)</span></span>
+                                                                </div>
+                                                                <button
+                                                                    onClick={handleApplySpecs}
+                                                                    className="px-2.5 py-1 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-100 rounded-lg text-[9px] font-extrabold uppercase transition-colors"
+                                                                >
+                                                                    Apply
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
+                                                        {aiAnalysisResult.subtasks && aiAnalysisResult.subtasks.length > 0 && (
+                                                            <div className="space-y-1.5 bg-white/70 p-2.5 rounded-xl border border-slate-100">
+                                                                <div className="flex items-center justify-between mb-1">
+                                                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Suggested Subtasks</span>
+                                                                    <button
+                                                                        onClick={handleMergeSubtasks}
+                                                                        className="px-2.5 py-1 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-100 rounded-lg text-[9px] font-extrabold uppercase transition-colors"
+                                                                    >
+                                                                        Merge
+                                                                    </button>
+                                                                </div>
+                                                                <div className="space-y-1">
+                                                                    {aiAnalysisResult.subtasks.map((sub, i) => {
+                                                                        const isChecked = !!selectedSuggestedSubtasks[i];
+                                                                        const toggleCheck = () => {
+                                                                            setSelectedSuggestedSubtasks(prev => ({
+                                                                                ...prev,
+                                                                                [i]: !prev[i]
+                                                                            }));
+                                                                        };
 
                                                                         return (
-                                                                            <div key={workerId} className="flex items-center justify-between p-3 rounded-2xl bg-gray-50/50 border border-gray-100 hover:bg-white hover:border-teal-200 hover:shadow-sm transition-all group">
-                                                                                <div className="flex items-center gap-3 flex-1 min-w-0 mr-4">
-                                                                                    <div className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-[10px] font-black text-teal-600 shadow-sm shrink-0">
-                                                                                        {(worker.name || 'W').charAt(0).toUpperCase()}
-                                                                                    </div>
-                                                                                    <span className="text-sm font-bold text-gray-700 truncate" title={worker.name || 'Worker'}>
-                                                                                        {worker.name || 'Worker'}
+                                                                            <div key={i} className="flex items-center justify-between gap-1.5 p-1 hover:bg-slate-50 rounded-lg group/subtask transition-colors">
+                                                                                <div className="flex items-start gap-2 text-[11px] text-slate-600 font-semibold leading-relaxed min-w-0 flex-1">
+                                                                                    <input
+                                                                                        type="checkbox"
+                                                                                        checked={isChecked}
+                                                                                        onChange={toggleCheck}
+                                                                                        className="w-3.5 h-3.5 mt-0.5 rounded text-teal-600 border-slate-350 focus:ring-teal-500 cursor-pointer shrink-0"
+                                                                                    />
+                                                                                    <span
+                                                                                        onClick={toggleCheck}
+                                                                                        className="cursor-pointer truncate flex-1"
+                                                                                        title={sub}
+                                                                                    >
+                                                                                        {sub}
                                                                                     </span>
                                                                                 </div>
-
-                                                                                <div className="flex items-center gap-3 shrink-0 ml-auto">
-                                                                                    {/* Status Badge */}
-                                                                                    {isDone ? (
-                                                                                        <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-green-100 shadow-sm">
-                                                                                            <CheckCircle2 className="w-3.5 h-3.5" /> Done
-                                                                                        </span>
-                                                                                    ) : (
-                                                                                        <span className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-600 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-orange-100 shadow-sm">
-                                                                                            <Clock className="w-3.5 h-3.5" /> Pending
-                                                                                        </span>
-                                                                                    )}
-
-                                                                                    {/* Proof Status Button */}
-                                                                                    <span className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-600 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-orange-100 hover:bg-orange-100 transition-all shadow-sm cursor-pointer" onClick={() => triggerReferenceUpload(selectedTicket._id === 'new' ? tempTicketId : selectedTicket._id, selectedTicket._id === 'new' ? idx : (item._id || idx), workerId)}>
-                                                                                        <Paperclip className="w-3.5 h-3.5" /> {comp?.referenceFiles?.length > 0 ? 'REF ✓' : 'REF'}
-                                                                                    </span>
-
-                                                                                    {/* View Action */}
-                                                                                    {hasProof && (
-                                                                                        <button
-                                                                                            onClick={() => setProofViewer({ isOpen: true, files: comp.proofFiles, userName: worker.name, subTaskText: item.text })}
-                                                                                            className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-teal-700 transition-all shadow-md shadow-teal-100 active:scale-95 ml-2 group"
-                                                                                        >
-                                                                                            <Eye className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" /> View
-                                                                                        </button>
-                                                                                    )}
-                                                                                </div>
+                                                                                <button
+                                                                                    onClick={() => handleMergeSingleSubtask(sub, i)}
+                                                                                    className="opacity-0 group-hover/subtask:opacity-100 px-1.5 py-0.5 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded text-[9px] font-black uppercase transition-all shrink-0 ml-1 flex items-center gap-0.5 shadow-sm"
+                                                                                    title="Add single subtask to checklist"
+                                                                                >
+                                                                                    <Plus className="w-2.5 h-2.5" />
+                                                                                    <span>Add</span>
+                                                                                </button>
                                                                             </div>
                                                                         );
                                                                     })}
                                                                 </div>
                                                             </div>
-                                                        );
-                                                    })
-                                                ) : (
-                                                    <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
-                                                        <Users className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-                                                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">No Execution Data</p>
+                                                        )}
+
+                                                        {aiAnalysisResult.recommendations && aiAnalysisResult.recommendations.length > 0 && (
+                                                            <div className="space-y-2 bg-white/70 p-2.5 rounded-xl border border-slate-100">
+                                                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">AI Recommended Assignees</span>
+                                                                <div className="space-y-2">
+                                                                    {aiAnalysisResult.recommendations.map((rec, i) => {
+                                                                        const isAssigned = (selectedTicket.assignees || []).some(a => (typeof a === 'object' ? a._id : a) === rec.developerId);
+                                                                        return (
+                                                                            <div key={i} className="bg-white p-2 rounded-lg border border-slate-100 flex flex-col gap-1.5 shadow-sm">
+                                                                                <div className="flex justify-between items-center">
+                                                                                    <div className="flex items-center gap-1.5">
+                                                                                        <span className="text-xs font-bold text-slate-700">{rec.developerName}</span>
+                                                                                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-full">{rec.matchScore}% Match</span>
+                                                                                    </div>
+                                                                                    <button
+                                                                                        onClick={() => handleAssignDev(rec.developerId)}
+                                                                                        className={`px-2.5 py-1 rounded-lg text-[9px] font-extrabold uppercase transition-colors ${isAssigned
+                                                                                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                                                                                            : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm'
+                                                                                            }`}
+                                                                                        disabled={isAssigned}
+                                                                                    >
+                                                                                        {isAssigned ? 'Assigned' : 'Assign'}
+                                                                                    </button>
+                                                                                </div>
+                                                                                {rec.reasons && rec.reasons.length > 0 && (
+                                                                                    <div className="space-y-1 pl-1">
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={() => toggleRecExpand(rec.developerId)}
+                                                                                            className="text-[9px] text-indigo-600 font-bold hover:underline flex items-center gap-0.5"
+                                                                                        >
+                                                                                            {expandedRecs[rec.developerId] ? 'Hide Details ▲' : 'Show Details ▾'}
+                                                                                        </button>
+                                                                                        {expandedRecs[rec.developerId] && (
+                                                                                            <div className="space-y-0.5 mt-0.5 animate-in slide-in-from-top-1 duration-150">
+                                                                                                {rec.reasons.map((r, ri) => (
+                                                                                                    <div key={ri} className="text-[10px] text-slate-500 font-medium leading-normal flex items-start gap-1">
+                                                                                                        <span className="text-emerald-500 font-bold shrink-0">✓</span>
+                                                                                                        <span>{r.startsWith('✓') ? r.slice(1).trim() : r}</span>
+                                                                                                    </div>
+                                                                                                ))}
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        <button
+                                                            onClick={handleAnalyzeTask}
+                                                            disabled={isAnalyzing}
+                                                            className="w-full text-center text-[10px] font-black text-teal-600 hover:text-teal-700 bg-transparent py-1 border border-dashed border-teal-200 hover:border-teal-400 rounded-xl transition-all"
+                                                        >
+                                                            {isAnalyzing ? 'Re-analyzing...' : '↻ Re-analyze with AI'}
+                                                        </button>
                                                     </div>
                                                 )}
+                                            </div>
+
+                                            {/* Employee Query Display */}
+                                            {selectedTicket.workerQuery && (
+                                                <div className="flex flex-col gap-2 pt-1 mb-2 bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+                                                    <div className="flex items-center gap-2">
+                                                        <HelpCircle className="w-3 h-3 text-teal-600" />
+                                                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Employee Query</span>
+                                                    </div>
+                                                    <div className="w-full bg-teal-50 border border-teal-100 rounded-xl p-3 text-xs font-medium text-teal-800">
+                                                        {selectedTicket.workerQuery}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <div className="flex flex-col gap-2 pt-1 bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+                                                <div className="flex items-center gap-2">
+                                                    <MessageSquare className="w-3 h-3 text-orange-500" />
+                                                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Resolution Feedback</span>
+                                                </div>
+                                                <AutoGrowingTextarea
+                                                    value={selectedTicket.feedback || ''}
+                                                    onChange={(newVal) => updateSelectedTicket({ feedback: newVal }, true)}
+                                                    className="w-full bg-orange-50/50 border-none rounded-xl p-3 text-xs font-medium text-orange-800 placeholder-orange-300 focus:ring-2 focus:ring-orange-200 transition-all"
+                                                    placeholder="Add review notes..."
+                                                />
+                                            </div>
+
+                                            {selectedTicket._id !== 'new' && (
+                                                <button
+                                                    onClick={() => handleDeleteTicket(selectedTicket)}
+                                                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-red-100 bg-red-50/30 text-red-600 hover:bg-red-500 hover:text-white transition-all font-bold text-[9px] uppercase tracking-widest group shadow-sm active:scale-95 animate-in fade-in duration-200"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" /> Permanently Delete
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* 🔹 COLUMN 3: Execution & Analytics (RIGHT - MOVED FROM CENTER) */}
+                                    <div id="modal-sec-execution" className="w-full md:w-auto flex flex-col px-4 py-4 md:h-full md:overflow-y-auto custom-scrollbar bg-slate-50/10 lg:px-6 lg:py-6 overflow-visible md:overflow-y-auto">
+                                        {/* Mobile section label */}
+                                        <div className="md:hidden flex items-center gap-2 mb-4 pb-2 border-b border-slate-150">
+                                            <BarChart2 className="w-4 h-4 text-teal-600" />
+                                            <span className="text-xs font-black text-slate-700 uppercase tracking-widest">Execution</span>
+                                        </div>
+                                        <div className="hidden md:flex items-center gap-1.5 mb-2 pb-2 border-b border-slate-100">
+                                            <BarChart2 className="w-3.5 h-3.5 text-teal-600" />
+                                            <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Execution</span>
+                                        </div>
+                                        <div className="flex-1 flex flex-col min-h-0">
+
+                                            {/* Progress Card & Shared Task References Grid */}
+                                            {selectedTicket._id !== 'new' ? (
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 shrink-0">
+                                                    {/* Left Column: Progress Card */}
+                                                    <div className="bg-white border border-teal-100/50 rounded-2xl p-4 shadow-sm relative overflow-hidden flex flex-col justify-center">
+                                                        <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
+                                                        <div className="flex justify-between items-center mb-3">
+                                                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                                                                <BarChart2 className="w-3.5 h-3.5 text-teal-500" />
+                                                                Overall Completion
+                                                            </span>
+                                                            <span className="text-[11px] font-extrabold bg-teal-50 text-teal-600 px-2 py-0.5 rounded-full border border-teal-100">
+                                                                {selectedTicket.status === 'Done' ? 100 : (selectedTicket.status === 'Review' ? 90 : (selectedTicket.status === 'In Progress' ? 25 : 0))}% DONE
+                                                            </span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden shadow-inner flex">
+                                                            <div
+                                                                className="bg-teal-500 h-2 transition-all duration-1000 ease-out"
+                                                                style={{ width: `${selectedTicket.status === 'Done' ? 100 : (selectedTicket.status === 'Review' ? 90 : (selectedTicket.status === 'In Progress' ? 25 : 0))}%` }}
+                                                            ></div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Right Column: Shared Task References Card */}
+                                                    <div className="bg-white border border-teal-100/50 rounded-2xl p-4 shadow-sm relative overflow-hidden flex flex-col justify-between">
+                                                        <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
+                                                        <div className="flex justify-between items-center mb-3">
+                                                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                                                                <Paperclip className="w-3.5 h-3.5 text-teal-500" />
+                                                                Task References
+                                                            </span>
+                                                            <input
+                                                                type="file"
+                                                                ref={taskRefFileInputRef}
+                                                                onChange={handleTaskRefFileChange}
+                                                                multiple
+                                                                className="hidden"
+                                                                accept="image/*"
+                                                            />
+                                                            <button
+                                                                onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
+                                                                className="text-[10px] font-extrabold uppercase bg-teal-50 text-teal-600 hover:bg-teal-100 px-2 py-1 rounded-lg border border-teal-100 transition-colors"
+                                                            >
+                                                                Upload
+                                                            </button>
+                                                        </div>
+
+                                                        {/* Drag & Drop Zone */}
+                                                        <div
+                                                            onDragOver={(e) => { e.preventDefault(); setIsDraggingTaskRef(true); }}
+                                                            onDragEnter={(e) => { e.preventDefault(); setIsDraggingTaskRef(true); }}
+                                                            onDragLeave={(e) => { e.preventDefault(); setIsDraggingTaskRef(false); }}
+                                                            onDrop={async (e) => {
+                                                                e.preventDefault();
+                                                                setIsDraggingTaskRef(false);
+                                                                const files = e.dataTransfer.files;
+                                                                await uploadTaskRefFiles(files, selectedTicket._id);
+                                                            }}
+                                                            className={`text-center py-2 px-3 border border-dashed rounded-xl transition-all cursor-pointer ${isDraggingTaskRef
+                                                                ? 'border-teal-500 bg-teal-50/50'
+                                                                : 'border-gray-200 hover:border-teal-400 hover:bg-gray-50/30'
+                                                                }`}
+                                                            onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
+                                                        >
+                                                            <p className="text-[10px] font-bold text-gray-400">
+                                                                {isDraggingTaskRef ? 'Drop files here!' : 'Drag & drop references here'}
+                                                            </p>
+                                                        </div>
+
+                                                        {/* Previews of uploaded task references */}
+                                                        {selectedTicket.referenceFiles && selectedTicket.referenceFiles.length > 0 && (
+                                                            <div className="flex flex-wrap gap-2 mt-3 max-h-[80px] overflow-y-auto custom-scrollbar">
+                                                                {selectedTicket.referenceFiles.map(file => (
+                                                                    <div key={file._id} className="relative w-8 h-8 rounded-lg border border-gray-200 overflow-hidden group shadow-sm shrink-0">
+                                                                        <img
+                                                                            src={getFullFileUrl(file.url)}
+                                                                            alt={file.name}
+                                                                            className="w-full h-full object-cover cursor-pointer"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                setZoomedImage(getFullFileUrl(file.url));
+                                                                            }}
+                                                                        />
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleDeleteTaskReference(selectedTicket._id, file._id);
+                                                                            }}
+                                                                            className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                        >
+                                                                            <Trash2 className="w-3 h-3 text-red-400" />
+                                                                        </button>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="mb-6 shrink-0">
+                                                    {/* Full-width Task References Card for New Task */}
+                                                    <div className="bg-white border border-teal-100/50 rounded-2xl p-4 shadow-sm relative overflow-hidden flex flex-col justify-between min-h-[140px]">
+                                                        <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
+                                                        <div className="flex justify-between items-center mb-3">
+                                                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                                                                <Paperclip className="w-3.5 h-3.5 text-teal-500" />
+                                                                Task References
+                                                            </span>
+                                                            <input
+                                                                type="file"
+                                                                ref={taskRefFileInputRef}
+                                                                onChange={handleTaskRefFileChange}
+                                                                multiple
+                                                                className="hidden"
+                                                                accept="image/*"
+                                                            />
+                                                            <button
+                                                                onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
+                                                                className="text-[10px] font-extrabold uppercase bg-teal-50 text-teal-600 hover:bg-teal-100 px-2 py-1 rounded-lg border border-teal-100 transition-colors"
+                                                            >
+                                                                Upload
+                                                            </button>
+                                                        </div>
+
+                                                        {/* Drag & Drop Zone */}
+                                                        <div
+                                                            onDragOver={(e) => { e.preventDefault(); setIsDraggingTaskRef(true); }}
+                                                            onDragEnter={(e) => { e.preventDefault(); setIsDraggingTaskRef(true); }}
+                                                            onDragLeave={(e) => { e.preventDefault(); setIsDraggingTaskRef(false); }}
+                                                            onDrop={async (e) => {
+                                                                e.preventDefault();
+                                                                setIsDraggingTaskRef(false);
+                                                                const files = e.dataTransfer.files;
+                                                                await uploadTaskRefFiles(files, selectedTicket._id);
+                                                            }}
+                                                            className={`text-center py-4 px-3 border border-dashed rounded-xl transition-all cursor-pointer ${isDraggingTaskRef
+                                                                ? 'border-teal-500 bg-teal-50/50'
+                                                                : 'border-gray-200 hover:border-teal-400 hover:bg-gray-50/30'
+                                                                }`}
+                                                            onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
+                                                        >
+                                                            <p className="text-[10px] font-bold text-gray-400">
+                                                                {isDraggingTaskRef ? 'Drop files here!' : 'Drag & drop references here'}
+                                                            </p>
+                                                        </div>
+
+                                                        {/* Previews of uploaded task references */}
+                                                        {selectedTicket.referenceFiles && selectedTicket.referenceFiles.length > 0 && (
+                                                            <div className="flex flex-wrap gap-2 mt-3 max-h-[80px] overflow-y-auto custom-scrollbar">
+                                                                {selectedTicket.referenceFiles.map(file => (
+                                                                    <div key={file._id} className="relative w-8 h-8 rounded-lg border border-gray-200 overflow-hidden group shadow-sm shrink-0">
+                                                                        <img
+                                                                            src={getFullFileUrl(file.url)}
+                                                                            alt={file.name}
+                                                                            className="w-full h-full object-cover cursor-pointer"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                setZoomedImage(getFullFileUrl(file.url));
+                                                                            }}
+                                                                        />
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleDeleteTaskReference(selectedTicket._id, file._id);
+                                                                            }}
+                                                                            className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                        >
+                                                                            <Trash2 className="w-3 h-3 text-red-400" />
+                                                                        </button>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Execution Breakdown Area (SCROLLABLE) */}
+                                            <div className="flex-1 flex flex-col min-h-0">
+                                                <div className="flex items-center gap-2 mb-4 shrink-0">
+                                                    <div className="w-8 h-8 bg-teal-100 rounded-lg flex items-center justify-center">
+                                                        <Users className="w-4 h-4 text-teal-600" />
+                                                    </div>
+                                                    <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Resource Execution Graph</h3>
+                                                </div>
+
+                                                <div className="flex-1 overflow-y-auto custom-scrollbar pr-3 space-y-4 pb-6">
+                                                    {isFetchingCompletions ? (
+                                                        <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                                                            <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                                                            <p className="text-xs font-bold uppercase tracking-widest">Loading Analytics...</p>
+                                                        </div>
+                                                    ) : selectedTicket.assignees?.length > 0 ? (
+                                                        selectedTicket.checklist?.map((item, idx) => {
+                                                            const itemCompletions = ticketCompletions.filter(c => String(c.subTaskId) === String(item._id) || String(c.subTaskId) === String(idx));
+                                                            return (
+                                                                <div key={item._id || idx} className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all">
+                                                                    <div className="bg-gray-50/80 px-4 py-3 border-b border-gray-100 flex justify-between items-center">
+                                                                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                                            <span className="text-[9px] font-black bg-teal-100 text-teal-700 px-2 py-0.5 rounded border border-teal-200 shrink-0">
+                                                                                ST-{String(idx + 1).padStart(2, '0')}
+                                                                            </span>
+                                                                            <div className="flex flex-col min-w-0">
+                                                                                <span
+                                                                                    className={`text-xs font-bold text-gray-800 cursor-pointer hover:text-teal-600 transition-colors ${expandedSubTasks[idx] ? 'whitespace-pre-wrap break-words' : 'truncate'}`}
+                                                                                    title={expandedSubTasks[idx] ? "Click to collapse" : "Click to view more details"}
+                                                                                    onClick={() => toggleSubTaskExpand(idx)}
+                                                                                >
+                                                                                    {item.text || `Point ${idx + 1}`}
+                                                                                </span>
+                                                                                {item.text && item.text.length > 40 && (
+                                                                                    <button
+                                                                                        onClick={() => toggleSubTaskExpand(idx)}
+                                                                                        className="text-[9px] text-teal-600 hover:text-teal-800 font-bold mt-0.5 text-left hover:underline select-none"
+                                                                                    >
+                                                                                        {expandedSubTasks[idx] ? 'Show less' : '... more details'}
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="flex -space-x-1.5">
+                                                                            {selectedTicket.assignees.slice(0, 5).map(w => (
+                                                                                <div key={w._id || w} className={`w-5 h-5 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-extrabold shadow-sm ${itemCompletions.some(c => String(c.workerId?._id || c.workerId) === String(w._id || w)) ? 'bg-teal-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                                                                                    {(w.name || 'W').charAt(0)}
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="p-3 space-y-3">
+                                                                        {selectedTicket.assignees.map(worker => {
+                                                                            const workerId = worker._id || worker;
+                                                                            const comp = itemCompletions.find(c => String(c.workerId?._id || c.workerId) === String(workerId));
+                                                                            const isDone = comp && comp.isCompleted;
+                                                                            const hasProof = comp?.proofFiles?.length > 0;
+
+                                                                            return (
+                                                                                <div key={workerId} className="flex items-center justify-between p-3 rounded-2xl bg-gray-50/50 border border-gray-100 hover:bg-white hover:border-teal-200 hover:shadow-sm transition-all group">
+                                                                                    <div className="flex items-center gap-3 flex-1 min-w-0 mr-4">
+                                                                                        <div className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-[10px] font-black text-teal-600 shadow-sm shrink-0">
+                                                                                            {(worker.name || 'W').charAt(0).toUpperCase()}
+                                                                                        </div>
+                                                                                        <span className="text-sm font-bold text-gray-700 truncate" title={worker.name || 'Worker'}>
+                                                                                            {worker.name || 'Worker'}
+                                                                                        </span>
+                                                                                    </div>
+
+                                                                                    <div className="flex items-center gap-3 shrink-0 ml-auto">
+                                                                                        {/* Status Badge */}
+                                                                                        {isDone ? (
+                                                                                            <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-green-100 shadow-sm">
+                                                                                                <CheckCircle2 className="w-3.5 h-3.5" /> Done
+                                                                                            </span>
+                                                                                        ) : (
+                                                                                            <span className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-600 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-orange-100 shadow-sm">
+                                                                                                <Clock className="w-3.5 h-3.5" /> Pending
+                                                                                            </span>
+                                                                                        )}
+
+                                                                                        {/* Proof Status Button */}
+                                                                                        <span className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-600 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-orange-100 hover:bg-orange-100 transition-all shadow-sm cursor-pointer" onClick={() => triggerReferenceUpload(selectedTicket._id === 'new' ? tempTicketId : selectedTicket._id, selectedTicket._id === 'new' ? idx : (item._id || idx), workerId)}>
+                                                                                            <Paperclip className="w-3.5 h-3.5" /> {comp?.referenceFiles?.length > 0 ? 'REF ✓' : 'REF'}
+                                                                                        </span>
+
+                                                                                        {/* View Action */}
+                                                                                        {hasProof && (
+                                                                                            <button
+                                                                                                onClick={() => setProofViewer({ isOpen: true, files: comp.proofFiles, userName: worker.name, subTaskText: item.text })}
+                                                                                                className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-teal-700 transition-all shadow-md shadow-teal-100 active:scale-95 ml-2 group"
+                                                                                            >
+                                                                                                <Eye className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" /> View
+                                                                                            </button>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </div>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })
+                                                    ) : (
+                                                        <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
+                                                            <Users className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                                                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">No Execution Data</p>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>

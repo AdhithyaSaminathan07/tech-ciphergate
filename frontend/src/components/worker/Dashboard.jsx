@@ -2,8 +2,7 @@ import { useState, useEffect, useContext, useMemo } from 'react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../hooks/useAuth';
 import { getMyTasks } from '../../services/taskService';
-import { getTopics } from '../../services/topicService';
-import { getColumns } from '../../services/columnService';
+import { getWorkerDashboardSummary } from '../../services/dashboardService';
 import { getMySalaryReport } from '../../services/salaryService';
 import TaskForm from './TaskForm';
 import Scoreboard from './Scoreboard';
@@ -78,6 +77,7 @@ const Dashboard = () => {
   const [tasks, setTasks] = useState([]);
   const [topics, setTopics] = useState([]);
   const [columns, setColumns] = useState([]);
+  const [tasksSummary, setTasksSummary] = useState({ totalPoints: 0, totalCount: 0 });
   const [showAllRecentTasks, setShowAllRecentTasks] = useState(false);
   const [showFaceAttendance, setShowFaceAttendance] = useState(false);
   const [showRFIDAttendance, setShowRFIDAttendance] = useState(false);
@@ -204,14 +204,14 @@ const Dashboard = () => {
           fetchSalary(),
           fetchTopTeams(),
           (async () => {
-            const [tasksData, topicsData, columnsData] = await Promise.all([
-              getMyTasks(),
-              getTopics({ subdomain: user.subdomain }),
-              getColumns({ subdomain: user.subdomain })
-            ]);
-            setTasks(tasksData);
-            setTopics(topicsData.filter(topic => topic.department === 'all' || topic.department === user.department));
-            setColumns(columnsData.filter(column => column.department === 'all' || column.department === user.department));
+            const summary = await getWorkerDashboardSummary(subdomain);
+            setTasks(summary.tasksSummary.recentTasks);
+            setTasksSummary({
+              totalPoints: summary.tasksSummary.totalPoints,
+              totalCount: summary.tasksSummary.totalCount
+            });
+            setTopics(summary.topics || []);
+            setColumns(summary.columns || []);
           })()
         ]);
       } catch (error) {
@@ -232,7 +232,7 @@ const Dashboard = () => {
     toast.success('Task submitted successfully!');
   };
 
-  const totalPoints = useMemo(() => tasks.reduce((acc, t) => acc + (t.points || 0), 0), [tasks]);
+  const totalPoints = useMemo(() => tasksSummary.totalPoints + tasks.filter(t => !t._id).reduce((acc, t) => acc + (t.points || 0), 0), [tasksSummary.totalPoints, tasks]);
 
   const calculatedTaskPenalties = useMemo(() => {
     if (!salaryData.delayedTasks || salaryData.delayedTasks.length === 0) {
@@ -688,13 +688,10 @@ const Dashboard = () => {
                         <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-100 shadow-sm">Verified</span>
                       </div>
                     ))}
-                    {tasks.length > 5 && (
-                      <button
-                        onClick={() => setShowAllRecentTasks(!showAllRecentTasks)}
-                        className="w-full text-xs font-bold text-slate-500 hover:text-teal-600 transition-colors py-2"
-                      >
-                        {showAllRecentTasks ? 'Show Less' : `View All ${tasks.length} Tasks`}
-                      </button>
+                    {tasksSummary.totalCount > 5 && (
+                      <div className="w-full text-xs font-bold text-slate-500 hover:text-teal-600 transition-colors py-2 text-center">
+                        <Link to="/worker/tasks">View All {tasksSummary.totalCount} Tasks</Link>
+                      </div>
                     )}
                   </>
                 )}

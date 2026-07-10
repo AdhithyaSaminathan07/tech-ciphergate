@@ -61,14 +61,14 @@ export const createWorker = async (workerData) => {
   }
 };
 
-export const getWorkers = async (subdomainParam) => {
+export const getWorkers = async (subdomainParam, params = {}) => {
   try {
     const subdomain = typeof subdomainParam === 'object' ? subdomainParam.subdomain : subdomainParam;
     const status = typeof subdomainParam === 'object' && subdomainParam.status ? subdomainParam.status : 'Active';
     // Add timestamp to prevent caching
     const timestamp = new Date().getTime();
-    const response = await api.post(`/workers/all?_t=${timestamp}`, { subdomain, status });
-    return response.data || [];
+    const response = await api.post(`/workers/all?_t=${timestamp}`, { subdomain, status, ...params });
+    return response.data;
   } catch (error) {
     console.error('Workers fetch error:', error);
     throw error.response ? error.response.data : new Error('Failed to fetch workers');

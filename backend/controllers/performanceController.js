@@ -525,15 +525,36 @@ const getLeaderboard = asyncHandler(async (req, res) => {
         }).filter(Boolean);
     }
 
-    // Attach badges and rank
-    const leaderboard = await Promise.all(workers.map(async (w, idx) => {
-        const badges = await Badge.find({ worker: w._id, subdomain }).select('badgeType badgeName badgeEmoji').lean();
-        const weekStart = new Date();
-        weekStart.setDate(weekStart.getDate() - 7);
-        const weekAgg = await PerformancePoints.aggregate([
-            { $match: { worker: w._id, subdomain, createdAt: { $gte: weekStart } } },
-            { $group: { _id: null, total: { $sum: '$pointsEarned' } } }
-        ]);
+    // Attach badges and rank in-memory
+    const allBadges = await Badge.find({ subdomain }).select('worker badgeType badgeName badgeEmoji').lean();
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() - 7);
+    const allWeeklyGains = await PerformancePoints.aggregate([
+        { $match: { subdomain, createdAt: { $gte: weekStart } } },
+        { $group: { _id: '$worker', total: { $sum: '$pointsEarned' } } }
+    ]);
+
+    // Create maps for O(1) lookup
+    const badgesMap = {};
+    allBadges.forEach(b => {
+        const wId = b.worker.toString();
+        if (!badgesMap[wId]) badgesMap[wId] = [];
+        badgesMap[wId].push({
+            badgeType: b.badgeType,
+            badgeName: b.badgeName,
+            badgeEmoji: b.badgeEmoji
+        });
+    });
+
+    const weeklyGainMap = {};
+    allWeeklyGains.forEach(wg => {
+        weeklyGainMap[wg._id.toString()] = wg.total;
+    });
+
+    const leaderboard = workers.map((w, idx) => {
+        const wIdStr = w._id.toString();
+        const badges = badgesMap[wIdStr] || [];
+        const weeklyGain = weeklyGainMap[wIdStr] || 0;
         return {
             rank: idx + 1,
             _id: w._id,
@@ -542,7 +563,7 @@ const getLeaderboard = asyncHandler(async (req, res) => {
             department: typeof w.department === 'object' ? (w.department?.name || 'N/A') : w.department,
             totalPoints: w.performancePoints || 0,
             filteredPoints: w.filteredPoints !== undefined ? w.filteredPoints : w.performancePoints || 0,
-            weeklyGain: weekAgg[0]?.total || 0,
+            weeklyGain,
             currentStreak: w.currentStreak || 0,
             longestStreak: w.longestStreak || 0,
             performanceLevel: w.performanceLevel || 'Beginner',
@@ -550,7 +571,7 @@ const getLeaderboard = asyncHandler(async (req, res) => {
             totalDelayedTickets: w.totalDelayedTickets || 0,
             badges
         };
-    }));
+    });
 
     res.json({ leaderboard, filter, total: leaderboard.length });
 });
@@ -619,22 +640,47 @@ const getAdminEmployeeAnalytics = asyncHandler(async (req, res) => {
         .sort({ performancePoints: -1 })
         .lean();
 
-    const analytics = await Promise.all(workers.map(async (w, idx) => {
-        const avgEfficiencyAgg = await PerformancePoints.aggregate([
-            { $match: { worker: w._id, subdomain, efficiencyRatio: { $ne: null } } },
-            { $group: { _id: null, avg: { $avg: '$efficiencyRatio' } } }
-        ]);
-        const avgEfficiency = Math.round((avgEfficiencyAgg[0]?.avg || 0) * 100) / 100;
+    // Fetch badges, weekly gains, and efficiencies in bulk
+    const allBadges = await Badge.find({ subdomain }).select('worker badgeType badgeName badgeEmoji').lean();
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() - 7);
+    const allWeeklyGains = await PerformancePoints.aggregate([
+        { $match: { subdomain, createdAt: { $gte: weekStart } } },
+        { $group: { _id: '$worker', total: { $sum: '$pointsEarned' } } }
+    ]);
+    const allAvgEfficiencies = await PerformancePoints.aggregate([
+        { $match: { subdomain, efficiencyRatio: { $ne: null } } },
+        { $group: { _id: '$worker', avg: { $avg: '$efficiencyRatio' } } }
+    ]);
 
-        const weekStart = new Date();
-        weekStart.setDate(weekStart.getDate() - 7);
-        const weekAgg = await PerformancePoints.aggregate([
-            { $match: { worker: w._id, subdomain, createdAt: { $gte: weekStart } } },
-            { $group: { _id: null, total: { $sum: '$pointsEarned' } } }
-        ]);
-        const weeklyPoints = weekAgg[0]?.total || 0;
+    // Create maps for O(1) lookup
+    const badgesMap = {};
+    allBadges.forEach(b => {
+        const wId = b.worker.toString();
+        if (!badgesMap[wId]) badgesMap[wId] = [];
+        badgesMap[wId].push({
+            badgeType: b.badgeType,
+            badgeName: b.badgeName,
+            badgeEmoji: b.badgeEmoji
+        });
+    });
 
-        const badges = await Badge.find({ worker: w._id, subdomain }).select('badgeType badgeName badgeEmoji').lean();
+    const weeklyGainMap = {};
+    allWeeklyGains.forEach(wg => {
+        weeklyGainMap[wg._id.toString()] = wg.total;
+    });
+
+    const avgEfficiencyMap = {};
+    allAvgEfficiencies.forEach(ae => {
+        avgEfficiencyMap[ae._id.toString()] = ae.avg;
+    });
+
+    const analytics = workers.map((w, idx) => {
+        const wIdStr = w._id.toString();
+        const badges = badgesMap[wIdStr] || [];
+        const weeklyPoints = weeklyGainMap[wIdStr] || 0;
+        const avgEffRaw = avgEfficiencyMap[wIdStr] || 0;
+        const avgEfficiency = Math.round(avgEffRaw * 100) / 100;
 
         return {
             rank: idx + 1,
@@ -653,7 +699,7 @@ const getAdminEmployeeAnalytics = asyncHandler(async (req, res) => {
             avgEfficiency,
             badges
         };
-    }));
+    });
 
     res.json({ analytics });
 });

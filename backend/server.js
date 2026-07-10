@@ -113,6 +113,7 @@ const startServer = async () => {
     const aiRoutes = require('./routes/aiRoutes');
     const serverRoutes = require('./routes/serverRoutes');
     const webhookRoutes = require('./routes/webhookRoutes');
+    const dashboardRoutes = require('./routes/dashboardRoutes'); // ADD THIS
 
     // Test App routes
     const testQuestionRoutes = require('./routes/testQuestionRoutes');
@@ -162,6 +163,7 @@ const startServer = async () => {
     app.use('/api/ai', aiRoutes);
     app.use('/api/server', serverRoutes);
     app.use('/api/webhook', webhookRoutes);
+    app.use('/api/dashboard', dashboardRoutes);
 
 
     // Test App routes

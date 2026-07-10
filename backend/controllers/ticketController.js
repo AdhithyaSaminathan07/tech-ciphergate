@@ -53,21 +53,94 @@ exports.getTickets = async (req, res) => {
             query.subdomain = subdomain;
         }
 
-        // Add optional assignee filter
-        if (req.query.assignee) {
+        const page = parseInt(req.query.page) || null;
+        const limit = parseInt(req.query.limit) || 10;
+        const searchTerm = req.query.searchTerm || '';
+        const filterAssignee = req.query.filterAssignee || req.query.assignee || '';
+        const filterTeam = req.query.filterTeam || req.query.team || '';
+        const filterPriority = req.query.filterPriority || req.query.priority || '';
+        const filterMonth = req.query.filterMonth || '';
+
+        // Search Term Filter
+        if (searchTerm) {
             query.$or = [
-                { assignee: req.query.assignee },
-                { assignees: { $in: [req.query.assignee] } }
+                { title: { $regex: searchTerm, $options: 'i' } },
+                { description: { $regex: searchTerm, $options: 'i' } }
             ];
         }
 
-        const tickets = await Ticket.find(query)
+        // Assignee Filter
+        if (filterAssignee) {
+            if (filterAssignee === 'unassigned') {
+                query.assignee = { $exists: false };
+                query.assignees = { $size: 0 };
+            } else {
+                query.$or = [
+                    { assignee: filterAssignee },
+                    { assignees: { $in: [filterAssignee] } }
+                ];
+            }
+        }
+
+        // Priority Filter
+        if (filterPriority && filterPriority !== 'All') {
+            query.priority = filterPriority;
+        }
+
+        // Team/Department Filter
+        if (filterTeam) {
+            if (filterTeam === 'unassigned') {
+                query.team = { $exists: false };
+            } else {
+                // Find all active/relieved workers in this department to match their tasks
+                const Worker = require('../models/Worker');
+                const workersInDept = await Worker.find({ department: filterTeam }).select('_id');
+                const workerIds = workersInDept.map(w => w._id);
+                query.$or = [
+                    { team: filterTeam },
+                    { assignee: { $in: workerIds } },
+                    { assignees: { $in: workerIds } }
+                ];
+            }
+        }
+
+        // Month Filter
+        if (filterMonth) {
+            const [fy, fm] = filterMonth.split('-').map(Number);
+            const startOfMonth = new Date(fy, fm - 1, 1);
+            const endOfMonth = new Date(fy, fm, 0, 23, 59, 59, 999);
+            query.$and = query.$and || [];
+            query.$and.push({
+                $or: [
+                    { createdAt: { $gte: startOfMonth, $lte: endOfMonth } },
+                    { startDate: { $gte: startOfMonth, $lte: endOfMonth } },
+                    { endDate: { $gte: startOfMonth, $lte: endOfMonth } }
+                ]
+            });
+        }
+
+        const total = await Ticket.countDocuments(query);
+
+        let ticketsQuery = Ticket.find(query)
             .populate('assignee', 'name username status')
             .populate('assignees', 'name username department status')
-            .sort({ createdAt: -1 })
-            .lean();
+            .sort({ createdAt: -1 });
 
-        res.status(200).json(tickets);
+        if (page !== null) {
+            ticketsQuery = ticketsQuery.skip((page - 1) * limit).limit(limit);
+        }
+
+        const tickets = await ticketsQuery.lean();
+
+        if (page !== null) {
+            res.status(200).json({
+                tickets,
+                hasMore: page * limit < total,
+                total
+            });
+        } else {
+            res.status(200).json(tickets);
+        }
     } catch (error) {
         res.status(500).json({ message: 'Server error retrieving tickets', error: error.message });
     }

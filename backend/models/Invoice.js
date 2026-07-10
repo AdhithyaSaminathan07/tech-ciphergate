@@ -72,6 +72,12 @@ const invoiceSchema = new mongoose.Schema({
     enum: ['Invoice', 'Payment Received', 'Work completion', 'Closure agreement'], 
     default: 'Invoice' 
   },
+  isPaid: { type: Boolean, default: false },
+  paymentRecords: [{
+    amount: { type: Number },
+    dateReceived: { type: String },
+    transactionId: { type: String }
+  }],
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

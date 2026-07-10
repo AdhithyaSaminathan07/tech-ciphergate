@@ -8,7 +8,7 @@ import Spinner from '../common/Spinner';
 import { useAuth } from '../../hooks/useAuth';
 import {
     Search, CheckSquare, AlertCircle, Bookmark, Zap, ArrowUp, ArrowDown,
-    Minus, X, User, AlignLeft, Calendar, Users, Paperclip, CheckCircle2, History, Upload, File, HelpCircle, Download, FileText
+    Minus, X, User, AlignLeft, Calendar, Users, Paperclip, CheckCircle2, History, Upload, File, HelpCircle, Download, FileText, Info
 } from 'lucide-react';
 import { getFullFileUrl } from '../../utils/fileUtils';
 
@@ -103,6 +103,7 @@ const WorkerWorkAllocation = () => {
     const [dragOverCol, setDragOverCol] = useState(null);
     const [touchDraggedTicket, setTouchDraggedTicket] = useState(null);
     const [activeMobileTab, setActiveMobileTab] = useState('To Do');
+    const [activeModalTab, setActiveModalTab] = useState('details'); // details, properties
 
     // Completion states
     const [ticketCompletions, setTicketCompletions] = useState([]);
@@ -131,6 +132,7 @@ const WorkerWorkAllocation = () => {
         setExpandedSubTasks({});
         if (selectedTicket) {
             fetchCompletions(selectedTicket._id);
+            setActiveModalTab('details');
         } else {
             setTicketCompletions([]);
         }
@@ -428,18 +430,18 @@ const WorkerWorkAllocation = () => {
     return (
         <div className="flex flex-col h-full bg-white text-gray-800">
             {/* Header Area */}
-            <div className="p-3 md:p-6 pb-2 md:pb-4">
-                <div className="flex justify-between items-center gap-4 mb-2 md:mb-3">
+            <div className="p-3 md:p-6 pb-2 md:pb-4 border-b border-gray-100">
+                <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 mb-2 md:mb-3">
                     <div>
-                        <h1 className="text-xl md:text-2xl font-bold text-gray-800">My Tasks</h1>
+                        <h1 className="text-base sm:text-xl md:text-2xl font-bold text-gray-800">My Tasks</h1>
                         <p className="hidden md:block text-gray-500 text-sm mt-1">Manage and update status of your assigned tasks.</p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
                         {/* Month filter dropdown */}
                         <select
                             value={filterMonth}
                             onChange={(e) => setFilterMonth(e.target.value)}
-                            className="h-8 md:h-10 text-[10px] md:text-xs font-semibold text-slate-600 bg-white border border-gray-300 rounded-xl px-2 shadow-sm outline-none focus:border-teal-500 transition-all cursor-pointer"
+                            className="h-8 md:h-10 text-[10px] md:text-xs font-semibold text-slate-600 bg-white border border-gray-300 rounded-xl px-2 shadow-sm outline-none focus:border-teal-500 transition-all cursor-pointer flex-1 sm:flex-initial"
                         >
                             <option value="">All Months</option>
                             {(() => {
@@ -455,7 +457,7 @@ const WorkerWorkAllocation = () => {
                             })()}
                         </select>
                         {/* Search bar */}
-                        <div className="relative w-28 sm:w-40 md:w-64 border border-gray-300 rounded-xl bg-white shadow-sm focus-within:border-teal-500 transition-all h-8 md:h-10 flex items-center">
+                        <div className="relative flex-1 sm:flex-initial w-full sm:w-40 md:w-64 border border-gray-300 rounded-xl bg-white shadow-sm focus-within:border-teal-500 transition-all h-8 md:h-10 flex items-center">
                             <Search className="w-3 h-3 md:w-4 md:h-4 absolute left-2.5 md:left-3.5 text-gray-400" />
                             <input
                                 type="text"
@@ -609,31 +611,31 @@ const WorkerWorkAllocation = () => {
                                         )}
 
                                         <div className="flex flex-wrap gap-2 mb-4 lg:hidden">
-                                            {status !== 'To Do' && status !== 'Done' && status !== 'Review' && (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        const prevStatus = columns[columns.indexOf(status) - 1];
-                                                        updateStatus(ticket._id, prevStatus);
-                                                    }}
-                                                    className="flex-1 py-1.5 bg-gray-50 text-gray-500 rounded-lg border border-gray-100 text-[10px] font-bold uppercase tracking-wider"
-                                                >
-                                                    Move Back
-                                                </button>
-                                            )}
-                                            {status !== 'Done' && status !== 'Review' && (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        const nextStatus = columns[columns.indexOf(status) + 1];
-                                                        updateStatus(ticket._id, nextStatus);
-                                                    }}
-                                                    className="flex-1 py-1.5 bg-teal-50 text-teal-700 rounded-lg border border-teal-100 text-[10px] font-bold uppercase tracking-wider"
-                                                >
-                                                    {status === 'In Progress' ? 'Submit for Review' : 'Move Next'}
-                                                </button>
-                                            )}
-                                        </div>
+                                             {status !== 'To Do' && status !== 'Done' && status !== 'Review' && (
+                                                 <button
+                                                     onClick={(e) => {
+                                                         e.stopPropagation();
+                                                         const prevStatus = columns[columns.indexOf(status) - 1];
+                                                         updateStatus(ticket._id, prevStatus);
+                                                     }}
+                                                     className="flex-1 flex items-center justify-center py-1.5 bg-gray-50 text-gray-500 rounded-full border border-gray-100 text-[10px] font-bold uppercase tracking-wider transition-all"
+                                                 >
+                                                     Move Back
+                                                 </button>
+                                             )}
+                                             {status !== 'Done' && status !== 'Review' && (
+                                                 <button
+                                                     onClick={(e) => {
+                                                         e.stopPropagation();
+                                                         const nextStatus = columns[columns.indexOf(status) + 1];
+                                                         updateStatus(ticket._id, nextStatus);
+                                                     }}
+                                                     className="flex-1 flex items-center justify-center py-1.5 bg-teal-50 text-teal-700 rounded-full border border-teal-100 text-[10px] font-bold uppercase tracking-wider transition-all"
+                                                 >
+                                                     {status === 'In Progress' ? 'Submit for Review' : 'Move Next'}
+                                                 </button>
+                                             )}
+                                         </div>
 
                                         <div className="flex justify-between items-center mt-auto">
                                             <div className="flex items-center space-x-1.5">
@@ -673,12 +675,12 @@ const WorkerWorkAllocation = () => {
             {/* Responsive Detail Modal */}
             {isModalOpen && selectedTicket && (
                 <div className="fixed inset-0 bg-black/40 z-[600] flex flex-col items-center justify-center sm:p-6 backdrop-blur-sm transition-opacity">
-                    <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-[1300px] h-[95vh] sm:h-[90vh] flex flex-col mt-auto sm:mt-0 overflow-y-auto md:overflow-hidden">
+                    <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-[1300px] h-[95vh] sm:h-[90vh] flex flex-col mt-auto sm:mt-0 overflow-hidden">
 
                         {/* Header */}
-                        <div className="px-3 py-3 sm:px-6 md:px-8 flex flex-col md:flex-row justify-between items-stretch md:items-center text-gray-600 shrink-0 border-b border-gray-100 bg-gray-50/50 gap-3">
-                            <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap">
-                                <div className="flex items-center space-x-1 text-[10px] sm:text-xs font-bold bg-white px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg shadow-sm border border-gray-200 uppercase tracking-widest text-teal-600">
+                        <div className="px-4 py-3 sm:px-6 md:px-8 flex flex-col sm:flex-row justify-between items-stretch sm:items-center text-gray-600 shrink-0 border-b border-gray-100 bg-gray-50/50 gap-3">
+                            <div className="flex items-center justify-between sm:justify-start gap-2 flex-1 sm:flex-initial">
+                                <div className="flex items-center space-x-1.5 text-[10px] sm:text-xs font-bold bg-white px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg shadow-sm border border-gray-200 uppercase tracking-widest text-teal-600">
                                     <IssueIcon type={selectedTicket.issueType} />
                                     <span className="uppercase text-gray-700">{selectedTicket.issueType}</span>
                                 </div>
@@ -689,11 +691,14 @@ const WorkerWorkAllocation = () => {
                                                     getProtectionState(selectedTicket) === 'Approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm' :
                                                         'bg-slate-50 text-slate-500 border-slate-200'
                                         }`}>
-                                        Salary Protection: {getProtectionState(selectedTicket) === 'None' ? 'On Track' : getProtectionState(selectedTicket)}
+                                        Salary: {getProtectionState(selectedTicket) === 'None' ? 'On Track' : getProtectionState(selectedTicket)}
                                     </div>
                                 )}
+                                <button onClick={() => setIsModalOpen(false)} className="sm:hidden p-1.5 rounded-lg text-gray-400 hover:text-red-500 bg-gray-100 border border-gray-200">
+                                    <X className="w-4 h-4" />
+                                </button>
                             </div>
-                            <div className="flex items-center space-x-1 self-end md:self-auto">
+                            <div className="hidden sm:flex items-center space-x-1">
                                 <button onClick={() => setIsModalOpen(false)} className="p-1.5 sm:p-2 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors bg-gray-100">
                                     <X className="w-4 h-4 sm:w-5 sm:h-5" />
                                 </button>
@@ -701,9 +706,35 @@ const WorkerWorkAllocation = () => {
                         </div>
 
                         {/* Body */}
-                        <div className="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-hidden font-sans">
-                            {/* Main Content Area */}
-                            <div className="w-full md:w-[65%] overflow-y-auto px-6 py-6 md:border-r border-gray-100 custom-scrollbar">
+                        <div className="flex-1 flex flex-col md:overflow-hidden font-sans min-h-0 bg-white">
+                            {/* Mobile Tab Navigation */}
+                            <div className="md:hidden flex border-b border-slate-100 bg-slate-50/50 p-1.5 gap-1 shrink-0">
+                                {[
+                                    { id: 'details', label: 'Task Details', icon: AlignLeft },
+                                    { id: 'properties', label: 'Properties & Scheduling', icon: Info }
+                                ].map(tab => {
+                                    const Icon = tab.icon;
+                                    const isActive = activeModalTab === tab.id;
+                                    return (
+                                        <button
+                                            key={tab.id}
+                                            onClick={() => setActiveModalTab(tab.id)}
+                                            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-1 rounded-xl text-[10px] font-bold transition-all border ${
+                                                isActive
+                                                    ? 'bg-white text-teal-600 border-slate-200 shadow-sm'
+                                                    : 'bg-transparent text-slate-500 border-transparent hover:text-slate-700'
+                                            }`}
+                                        >
+                                            <Icon className="w-3.5 h-3.5" />
+                                            <span>{tab.label}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            <div className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden bg-white min-h-0">
+                                {/* Main Content Area */}
+                                <div className={`w-full md:w-[65%] overflow-y-auto px-6 py-6 md:border-r border-gray-100 custom-scrollbar ${activeModalTab === 'details' ? 'block' : 'hidden md:block'}`}>
                                 <h2 className="w-full text-2xl font-bold text-gray-800 p-3 -ml-3 mb-6">
                                     {selectedTicket.title}
                                 </h2>
@@ -951,7 +982,7 @@ const WorkerWorkAllocation = () => {
                                                     type="text"
                                                     placeholder="Type your question here..."
                                                     id="workerQueryInput"
-                                                    className="flex-1 bg-white border border-gray-200 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-teal-500"
+                                                    className="flex-1 min-w-0 bg-white border border-gray-200 rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-teal-500"
                                                 />
                                                 <button
                                                     onClick={async () => {
@@ -969,7 +1000,7 @@ const WorkerWorkAllocation = () => {
                                                             toast.error('Failed to send question');
                                                         }
                                                     }}
-                                                    className="bg-teal-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-teal-700 transition-all"
+                                                    className="shrink-0 bg-teal-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-teal-700 transition-all"
                                                 >
                                                     Send
                                                 </button>
@@ -980,7 +1011,7 @@ const WorkerWorkAllocation = () => {
                             </div>
 
                             {/* Sidebar Details Area */}
-                            <div className="w-full md:w-[35%] overflow-y-auto p-6 md:p-8 text-sm bg-gray-50/30 border-t md:border-t-0 custom-scrollbar">
+                            <div className={`w-full md:w-[35%] overflow-y-auto p-6 md:p-8 text-sm bg-gray-50/30 border-t md:border-t-0 custom-scrollbar ${activeModalTab === 'properties' ? 'block' : 'hidden md:block'}`}>
                                 <div className="space-y-6">
 
                                     <div className="flex flex-col gap-3">
@@ -1100,6 +1131,7 @@ const WorkerWorkAllocation = () => {
                         </div>
                     </div>
                 </div>
+            </div>
             )}
 
             {/* Sub-Task Proof Upload Modal */}

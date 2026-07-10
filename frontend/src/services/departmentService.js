@@ -37,17 +37,16 @@ export const createDepartment = async (departmentData) => {
   }
 };
 
-export const getDepartments = async (subdomain) => {
+export const getDepartments = async (subdomain, params = {}) => {
   try {
     const token = getAuthToken();
     
-    const response = await api.post('/departments/all', subdomain, {
+    const response = await api.post('/departments/all', { ...subdomain, ...params }, {
       headers: { Authorization: `Bearer ${token}` }
     });
     
     console.log('Departments API Response:', response.data);
-    return Array.isArray(response.data) ? response.data : [];
-    
+    return response.data;
   } catch (error) {
     console.error('Departments fetch error:', error);
     throw error.response ? error.response.data : new Error('Failed to fetch departments');

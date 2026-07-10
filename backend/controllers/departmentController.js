@@ -104,22 +104,33 @@ const createDepartment = asyncHandler(async (req, res) => {
 });
 
 const getDepartments = asyncHandler(async (req, res) => {
-  const { subdomain } = req.body;
+  const subdomain = req.body.subdomain || req.query.subdomain;
   if (!subdomain || subdomain === 'main') {
     res.status(400);
     throw new Error('Subdomain is missing or invalid.');
   }
 
   try {
-    // 1. Load all departments for this subdomain with populated fields
-    const departments = await Department
-      .find({ subdomain })
+    const page = parseInt(req.query.page) || parseInt(req.body.page) || null;
+    const limit = parseInt(req.query.limit) || parseInt(req.body.limit) || 10;
+
+    let query = { subdomain };
+    const total = await Department.countDocuments(query);
+
+    let departmentsQuery = Department
+      .find(query)
       .populate([
         { path: 'projectLead', select: 'name username photo' },
         { path: 'projectManager', select: 'name username photo' },
         { path: 'assignedDevelopers', select: 'name username photo' }
       ])
       .sort({ createdAt: -1 });
+
+    if (page !== null) {
+      departmentsQuery = departmentsQuery.skip((page - 1) * limit).limit(limit);
+    }
+
+    const departments = await departmentsQuery;
 
     // Get today's date in India Timezone
     const indiaTimezoneDate = new Intl.DateTimeFormat('en-CA', {
@@ -130,43 +141,59 @@ const getDepartments = asyncHandler(async (req, res) => {
     });
     const currentDateFormatted = indiaTimezoneDate.format(new Date());
 
-    // 2. For each department, fetch its workers and build the response
-    const departmentsWithData = await Promise.all(
-      departments.map(async (department) => {
-        // Find all workers in this department, selecting only name & photo
-        const employees = await Worker
-          .find({ department: department._id, status: 'Active' })
-          .select('name photo');
+    // 2. Pre-fetch all active workers and today's presence in one go
+    const allActiveWorkers = await Worker
+      .find({ subdomain, status: 'Active' })
+      .select('name photo department')
+      .lean();
 
-        // Calculate attendance percentage for this department
-        const workerIds = employees.map(e => e._id);
+    const presentWorkerIds = await Attendance.distinct('worker', {
+      subdomain,
+      date: currentDateFormatted,
+      presence: true
+    });
+    const presentWorkersSet = new Set(presentWorkerIds.map(id => id.toString()));
 
-        let percentage = 0;
-        let presentCount = 0;
+    // Group employees by department ID for fast O(1) lookup
+    const employeesByDept = {};
+    allActiveWorkers.forEach(w => {
+      const deptId = w.department ? w.department.toString() : 'none';
+      if (!employeesByDept[deptId]) employeesByDept[deptId] = [];
+      employeesByDept[deptId].push(w);
+    });
 
-        if (workerIds.length > 0) {
-          const presentWorkerIds = await Attendance.distinct('worker', {
-            worker: { $in: workerIds },
-            date: currentDateFormatted,
-            presence: true
-          });
-          presentCount = presentWorkerIds.length;
-          percentage = Math.round((presentCount / workerIds.length) * 100);
-        }
+    const departmentsWithData = departments.map((department) => {
+      const deptIdStr = department._id.toString();
+      const employees = employeesByDept[deptIdStr] || [];
+      const workerIds = employees.map(e => e._id.toString());
 
-        return {
-          // Spread the original department fields (_id, name, createdAt, etc.)
-          ...department.toObject(),
-          workerCount: employees.length,
-          employees,  // [{ name, photo }, …]
-          attendancePercentage: percentage,
-          presentCount // Optional: helpful for debugging or detailed display
-        };
-      })
-    );
+      let percentage = 0;
+      let presentCount = 0;
 
-    // 3. Send back JSON array
-    res.json(departmentsWithData);
+      if (workerIds.length > 0) {
+        presentCount = workerIds.filter(id => presentWorkersSet.has(id)).length;
+        percentage = Math.round((presentCount / workerIds.length) * 100);
+      }
+
+      return {
+        // Spread the original department fields (_id, name, createdAt, etc.)
+        ...department.toObject(),
+        workerCount: employees.length,
+        employees,  // [{ name, photo }, …]
+        attendancePercentage: percentage,
+        presentCount // Optional: helpful for debugging or detailed display
+      };
+    });
+
+    if (page !== null) {
+      res.json({
+        departments: departmentsWithData,
+        hasMore: page * limit < total,
+        total
+      });
+    } else {
+      res.json(departmentsWithData);
+    }
 
   } catch (error) {
     console.error('Get Departments Error:', error);
