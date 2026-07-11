@@ -50,6 +50,7 @@ const getSettingsPublic = async (req, res) => {
     const publicSettings = {
       attendanceLocation: settings.attendanceLocation,
       attendanceAccessControl: settings.attendanceAccessControl,
+      faceRecognition: settings.faceRecognition,
       bugBountyConfig: settings.bugBountyConfig || {
         enabled: true,
         bugReportUrl: 'https://techvaseegrah.com/bug-bounty',

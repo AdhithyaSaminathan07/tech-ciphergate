@@ -143,6 +143,10 @@ const Settings = () => {
             enabled: false,
             amountPerMessage: 0,
             thresholdHours: 24
+        },
+        faceRecognition: {
+            detectorType: 'tinyFaceDetector',
+            matchingThreshold: 0.50
         }
     });
 
@@ -250,6 +254,10 @@ const Settings = () => {
                     enabled: fetchedSettings.unreadMessageFineConfig?.enabled ?? false,
                     amountPerMessage: fetchedSettings.unreadMessageFineConfig?.amountPerMessage ?? 0,
                     thresholdHours: fetchedSettings.unreadMessageFineConfig?.thresholdHours ?? 24
+                },
+                faceRecognition: {
+                    detectorType: fetchedSettings.faceRecognition?.detectorType || 'tinyFaceDetector',
+                    matchingThreshold: fetchedSettings.faceRecognition?.matchingThreshold ?? 0.50
                 }
             };
 
@@ -439,6 +447,19 @@ const Settings = () => {
         const updatedSettings = {
             ...settings,
             unreadMessageFineConfig: updatedFineConfig
+        };
+        setSettings(updatedSettings);
+        checkForChanges(updatedSettings);
+    };
+
+    const handleFaceRecognitionChange = (field, value) => {
+        const updatedFaceRecognition = {
+            ...settings.faceRecognition,
+            [field]: value
+        };
+        const updatedSettings = {
+            ...settings,
+            faceRecognition: updatedFaceRecognition
         };
         setSettings(updatedSettings);
         checkForChanges(updatedSettings);
@@ -1026,6 +1047,85 @@ const Settings = () => {
                     </div>
                 </Card>
 
+                {/* Face Recognition Settings */}
+                <Card className="mb-8 hover:shadow-lg transition-shadow duration-200">
+                    <div className="h-2 bg-gradient-to-r from-blue-500 to-indigo-500" />
+                    <div className="p-6">
+                        <h3 className="text-lg font-semibold mb-6 flex items-center text-gray-900">
+                            <div className="p-2 bg-blue-100 rounded-lg mr-3">
+                                <FiUserCheck className="h-5 w-5 text-blue-600" />
+                            </div>
+                            Face Recognition Configuration
+                        </h3>
+                        <p className="text-sm text-gray-600 mb-6">
+                            Configure client-side biometrics, matching thresholds, and detector options to optimize recognition speed and accuracy.
+                        </p>
+
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700">
+                                        Detector Model
+                                    </label>
+                                    <select
+                                        value={settings.faceRecognition?.detectorType || 'tinyFaceDetector'}
+                                        onChange={(e) => handleFaceRecognitionChange('detectorType', e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                    >
+                                        <option value="tinyFaceDetector">High Speed (Tiny Face Detector)</option>
+                                        <option value="ssdMobilenetv1">High Accuracy (SSD MobileNet V1)</option>
+                                    </select>
+                                    <p className="text-xs text-gray-500">
+                                        {settings.faceRecognition?.detectorType === 'ssdMobilenetv1'
+                                            ? 'Highly precise deep-learning model. Slower on low-end hardware.'
+                                            : 'Ultralight model (~190KB) optimized for real-time browser speed and low latency.'}
+                                    </p>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 flex justify-between">
+                                        <span>Similarity Threshold</span>
+                                        <span className="font-mono text-blue-650 font-bold bg-blue-50 px-2 py-0.5 rounded text-xs">
+                                            {(settings.faceRecognition?.matchingThreshold ?? 0.50).toFixed(2)}
+                                        </span>
+                                    </label>
+                                    <div className="flex items-center space-x-4">
+                                        <input
+                                            type="range"
+                                            min="0.10"
+                                            max="0.80"
+                                            step="0.05"
+                                            value={settings.faceRecognition?.matchingThreshold ?? 0.50}
+                                            onChange={(e) => handleFaceRecognitionChange('matchingThreshold', parseFloat(e.target.value))}
+                                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                        />
+                                    </div>
+                                    <div className="flex justify-between text-[10px] font-bold text-gray-400">
+                                        <span>STRICT (0.10 - 0.35)</span>
+                                        <span className="text-blue-500">OPTIMAL (0.40 - 0.55)</span>
+                                        <span>RELAXED (0.60 - 0.80)</span>
+                                    </div>
+                                    <p className="text-xs text-gray-500">
+                                        Lower distance means higher strictness (fewer false positives, but more rejections under varying light). Default: 0.50.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="pt-2 bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start space-x-3">
+                                <FiInfo className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                                <div className="text-xs text-blue-800 space-y-1">
+                                    <p className="font-bold">ZKTeco Biometric Recommendations:</p>
+                                    <ul className="list-disc list-inside pl-1 space-y-0.5">
+                                        <li>Use <strong>High Speed</strong> for real-time office kiosks or entry gates to ensure lightning-fast processing.</li>
+                                        <li>Configure the threshold to <strong>0.50</strong> for the optimal balance between recognition rate and false matching protection.</li>
+                                        <li>Ensure workers register their faces from slightly different angles (left, right, tilt) to maximize coverage.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </Card>
+
                 {/* Attendance Access Control Settings */}
                 <Card className="mb-8 hover:shadow-lg transition-shadow duration-200">
                     <div className="h-2 bg-gradient-to-r from-pink-400 to-red-400" />
@@ -1410,6 +1510,29 @@ const Settings = () => {
                                         </span>
                                     </div>
                                 </div>
+
+                                <div className="bg-gray-50 p-6 rounded-xl border border-gray-100 h-full flex flex-col justify-between animate-fadeIn">
+                                    <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <h4 className="font-bold text-gray-800">5X Unauthorized Permission Policy</h4>
+                                            <CustomToggle
+                                                checked={settings.advancedLeaveDeduction.enableUnauthorizedPermissionPenalty}
+                                                onChange={() => handleAdvancedSettingsChange('enableUnauthorizedPermissionPenalty', !settings.advancedLeaveDeduction.enableUnauthorizedPermissionPenalty)}
+                                            />
+                                        </div>
+                                        <p className="text-sm text-gray-500 mb-4">
+                                            Apply 5X daily basic pay deduction for past days with unapproved (pending or rejected) leave permissions.
+                                        </p>
+                                    </div>
+                                    <div className="pt-4 border-t border-gray-200 mt-auto flex items-center gap-2">
+                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black tracking-wider transition-colors duration-300 ${settings.advancedLeaveDeduction.enableUnauthorizedPermissionPenalty ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
+                                            {settings.advancedLeaveDeduction.enableUnauthorizedPermissionPenalty ? 'Enabled (5X)' : 'Disabled'}
+                                        </span>
+                                        <span className="text-[10px] text-gray-400 font-bold tracking-wider">
+                                            Applied to unapproved permission hours
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -1422,6 +1545,7 @@ const Settings = () => {
                                     <li>If ANY condition fails (e.g. low dept attendance OR limit exceeded), <strong>{settings.advancedLeaveDeduction.deductionMultiplier}X deduction factor</strong> is recorded for that specific leave request.</li>
                                     <li>If <strong>Include Permission in Penalty</strong> is on, the multiplier applies to late arrival/early departure time as well.</li>
                                     <li>If <strong>5X Unauthorized Absence Policy</strong> is enabled, unapproved or rejected leave/absence results in a 5X daily basic pay penalty.</li>
+                                    <li>If <strong>5X Unauthorized Permission Policy</strong> is enabled, unapproved or rejected permission hours result in a 5X daily basic pay penalty for that duration.</li>
                                 </ul>
                             </div>
                         </div>

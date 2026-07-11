@@ -9,10 +9,12 @@ import { getWorkers, getWorkerById } from '../../services/workerService';
 import { putAttendance, getWorkerLastAttendance } from '../../services/attendanceService';
 import { getCurrentPosition, isWorkerInAllowedLocation } from '../../services/geolocationService';
 import { AlertCircle, MapPin, Smile, UserCheck, CheckCircle2, ShieldAlert } from 'lucide-react';
+import api from '../../services/api';
 
 const FaceAttendance = ({ subdomain, isOpen, onClose, workerMode = false, currentWorker = null, onAttendanceMarked }) => {
   const webcamRef = useRef(null);
   const canvasRef = useRef(null);
+  const activeScanner = useRef(null);
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [workers, setWorkers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -24,19 +26,51 @@ const FaceAttendance = ({ subdomain, isOpen, onClose, workerMode = false, curren
   const [locationChecked, setLocationChecked] = useState(false);
   const [locationAllowed, setLocationAllowed] = useState(true);
   const [currentLocation, setCurrentLocation] = useState(null); // State for current location
+  const [scannerStatus, setScannerStatus] = useState('Initializing camera...');
+  const [faceConfig, setFaceConfig] = useState({
+    detectorType: 'tinyFaceDetector',
+    matchingThreshold: 0.50
+  });
+  const [loadedDetector, setLoadedDetector] = useState(null);
 
-  // Load face detection models
+  // Fetch face recognition settings
+  useEffect(() => {
+    const fetchFaceConfig = async () => {
+      if (!isOpen || !subdomain) return;
+      try {
+        const res = await api.get(`/settings/public/${subdomain}`);
+        if (res.data?.faceRecognition) {
+          setFaceConfig(res.data.faceRecognition);
+        }
+      } catch (err) {
+        console.error('Error fetching face config:', err);
+      }
+    };
+    fetchFaceConfig();
+  }, [isOpen, subdomain]);
+
+  // Load face detection models dynamically
   useEffect(() => {
     const loadModels = async () => {
-      if (!isOpen || isModelLoaded) return;
+      if (!isOpen) return;
+      const targetDetector = faceConfig.detectorType || 'tinyFaceDetector';
       
+      // Skip loading if already loaded
+      if (isModelLoaded && loadedDetector === targetDetector) return;
+      
+      setIsModelLoaded(false);
+      setScannerStatus('Loading AI models...');
       try {
-        // Load models with better error handling and optimization
-        // Using SsdMobilenetv1 for better accuracy and MtcnnOptions for face detection
-        await faceapi.nets.ssdMobilenetv1.loadFromUri('/models');
+        if (targetDetector === 'tinyFaceDetector') {
+          await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
+        } else {
+          await faceapi.nets.ssdMobilenetv1.loadFromUri('/models');
+        }
         await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
         await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
         setIsModelLoaded(true);
+        setLoadedDetector(targetDetector);
+        setScannerStatus('Camera starting up...');
         setError('');
       } catch (err) {
         console.error('Error loading models:', err);
@@ -45,7 +79,7 @@ const FaceAttendance = ({ subdomain, isOpen, onClose, workerMode = false, curren
     };
 
     loadModels();
-  }, [isOpen, isModelLoaded]);
+  }, [isOpen, faceConfig.detectorType]);
 
   // Check location when modal opens
   useEffect(() => {
@@ -143,6 +177,11 @@ const FaceAttendance = ({ subdomain, isOpen, onClose, workerMode = false, curren
       setLocationChecked(false);
       setLocationAllowed(true);
       setCurrentLocation(null); // Reset current location
+      setScannerStatus('Live Camera Scanner');
+      if (activeScanner.current) {
+        clearTimeout(activeScanner.current);
+        activeScanner.current = null;
+      }
     }
   }, [isOpen]);
 
@@ -166,12 +205,12 @@ const FaceAttendance = ({ subdomain, isOpen, onClose, workerMode = false, curren
     );
     
     // Check if face is within the circular frame with improved accuracy
-    // Added stricter size requirements for better face positioning
+    // Relaxed size requirements for better distance compatibility (ZKTeco style)
     return distance <= frameRadius && 
-           box.width >= canvas.width * 0.25 && // Increased from 20% to 25% for better face size
-           box.height >= canvas.height * 0.25 && // Increased from 20% to 25% for better face size
-           box.width <= canvas.width * 0.7 && // Added max size constraint to prevent too close faces
-           box.height <= canvas.height * 0.7; // Added max size constraint to prevent too close faces
+           box.width >= canvas.width * 0.15 && // Relaxed to 15% for ZKTeco-style range
+           box.height >= canvas.height * 0.15 && // Relaxed to 15% for ZKTeco-style range
+           box.width <= canvas.width * 0.8 && // Allowed slightly closer faces (up to 80%)
+           box.height <= canvas.height * 0.8;
   };
 
   // Draw circular frame on canvas
@@ -206,94 +245,116 @@ const FaceAttendance = ({ subdomain, isOpen, onClose, workerMode = false, curren
     ctx.fill();
   };
 
+  // Preprocess low light using temporary canvas and brightness threshold
+  const preprocessLowLight = (video) => {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = video.videoWidth || video.width || 640;
+    tempCanvas.height = video.videoHeight || video.height || 480;
+    const ctx = tempCanvas.getContext('2d');
+    
+    if (!ctx) return video;
+    
+    ctx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+    
+    try {
+      const imgData = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+      const data = imgData.data;
+      let totalLuminance = 0;
+      const step = 8;
+      let count = 0;
+      for (let i = 0; i < data.length; i += 4 * step) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+        totalLuminance += luminance;
+        count++;
+      }
+      
+      const avgBrightness = totalLuminance / count;
+      
+      if (avgBrightness < 85) {
+        ctx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+        ctx.filter = 'brightness(1.50) contrast(1.20) saturate(1.10)';
+        ctx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+        ctx.filter = 'none';
+      }
+    } catch (e) {
+      console.warn('Low light pre-processing failed, using raw video feed:', e);
+    }
+    
+    return tempCanvas;
+  };
+
   // Recognize face from webcam and mark attendance
   const recognizeFaceAndMark = async () => {
     // Check if location is allowed before proceeding
     if (!locationAllowed) {
       setError('Attendance not allowed from your current location. Please move to the designated attendance area.');
-      // In worker mode, close the modal after showing the error
       if (workerMode) {
         setTimeout(() => {
           onClose();
-        }, 3000); // Close after 3 seconds to allow user to read the error message
+        }, 3000);
       }
       return;
     }
     
-    // In worker mode, ensure we have the current worker data
     if (workerMode && !currentWorker) {
       setError('Worker data not available. Please try again.');
       return;
     }
     
-    // In worker mode, ensure we only have the current worker's data
     if (workerMode && workers.length !== 1) {
       setError('Invalid worker data. Please try again.');
       return;
     }
     
-    // In worker mode, ensure the worker in the array matches the currentWorker
     if (workerMode && workers[0].rfid !== currentWorker.rfid) {
       setError('Worker data mismatch. Please try again.');
       return;
     }
     
     if (!webcamRef.current || !isModelLoaded || !workers.length) {
-      setError('Models not loaded or no registered employees with face data.');
-      return;
+      return; // Silently wait
     }
 
     const video = webcamRef.current.video;
-    // Validate video element
     if (!video) {
-      setError('Camera not accessible. Please ensure you have granted camera permissions.');
-      return;
+      return; // Silently wait for camera warmup
     }
     
-    // Wait for video to be ready
     if (video.readyState !== 4) {
-      // Video not ready, wait a bit and try again
-      if (video.networkState === video.NETWORK_LOADING || video.networkState === video.NETWORK_IDLE) {
-        // Video is still loading, wait a moment
-        await new Promise(resolve => setTimeout(resolve, 50)); // Reduced wait time
-        if (video.readyState !== 4) {
-          setError('Camera not ready. Please wait a moment and try again.');
-          return;
-        }
-      } else {
-        setError('Camera not ready. Please wait a moment and try again.');
-        return;
-      }
+      setScannerStatus('Camera warming up...');
+      return; // Silently wait
     }
 
-    // Validate video dimensions
     const videoWidth = video.videoWidth || video.width;
     const videoHeight = video.videoHeight || video.height;
     
     if (!videoWidth || !videoHeight || videoWidth <= 0 || videoHeight <= 0) {
-      setError('Camera not providing valid video feed. Please check your camera connection.');
-      return;
+      return; // Silently wait for valid dimensions
     }
 
     setIsProcessing(true);
-    setError('');
-    setMatchedWorker(null);
 
     try {
-      // Detect face and get descriptor (embedding) with optimized options for speed and accuracy
-      // Using SsdMobilenetv1 with optimized parameters for faster detection
+      const processedVideo = preprocessLowLight(video);
+
+      const detector = faceConfig.detectorType || 'tinyFaceDetector';
+      let detectorOptions;
+      if (detector === 'tinyFaceDetector') {
+        detectorOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.4 });
+      } else {
+        detectorOptions = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.6 });
+      }
+
       const detections = await faceapi
-        .detectSingleFace(video, new faceapi.SsdMobilenetv1Options({ 
-          minConfidence: 0.7,
-          maxResults: 1 // Only return the best result
-        }))
+        .detectSingleFace(processedVideo, detectorOptions)
         .withFaceLandmarks()
         .withFaceDescriptor();
 
-      // Draw circular frame even when no face is detected
       const canvas = canvasRef.current;
       if (canvas) {
-        // Ensure canvas dimensions match video
         const displaySize = { 
           width: video.videoWidth || video.width || 640, 
           height: video.videoHeight || video.height || 480 
@@ -304,162 +365,115 @@ const FaceAttendance = ({ subdomain, isOpen, onClose, workerMode = false, curren
       }
 
       if (detections) {
-        // Comprehensive validation of detection results
         if (!detections.detection || !detections.detection.box) {
-          setError('Face detection failed. Please ensure your face is clearly visible.');
+          setScannerStatus('Face scan incomplete. Please hold still.');
           setIsProcessing(false);
           return;
         }
         
         const box = detections.detection.box;
-        if (box.width <= 0 || box.height <= 0 || 
-            !isFinite(box.width) || !isFinite(box.height)) {
-          setError('Invalid face detection dimensions. Please ensure your face is clearly visible.');
+        if (box.width <= 0 || box.height <= 0 || !isFinite(box.width) || !isFinite(box.height)) {
+          setScannerStatus('Face scan incomplete. Please hold still.');
           setIsProcessing(false);
           return;
         }
 
-        // Draw detection on canvas for visual feedback
         const displaySize = { 
           width: video.videoWidth || video.width || 640, 
           height: video.videoHeight || video.height || 480 
         };
         
-        // Validate display size
         if (displaySize.width <= 0 || displaySize.height <= 0) {
-          setError('Invalid display dimensions. Please refresh the page.');
           setIsProcessing(false);
           return;
         }
         
-        // Ensure canvas is properly initialized
-        const canvas = canvasRef.current;
         if (!canvas) {
-          setError('Canvas not available. Please refresh the page.');
           setIsProcessing(false);
           return;
         }
         
-        // Set canvas dimensions explicitly
         canvas.width = displaySize.width;
         canvas.height = displaySize.height;
-        
         faceapi.matchDimensions(canvas, displaySize);
-        
-        // Draw circular frame
         drawFrame(canvas);
         
-        // Validate that resize operation will work
         try {
           const resizedDetections = faceapi.resizeResults(detections, displaySize);
           
-          // Additional validation after resizing
           if (!resizedDetections.detection || !resizedDetections.detection.box ||
               resizedDetections.detection.box.width <= 0 || resizedDetections.detection.box.height <= 0 ||
               !isFinite(resizedDetections.detection.box.width) || !isFinite(resizedDetections.detection.box.height)) {
-            setError('Face detection processing failed. Please try again.');
+            setScannerStatus('Face scan incomplete. Please hold still.');
             setIsProcessing(false);
             return;
           }
           
-          // Check if face is within the circular frame
           if (!isFaceInFrame(resizedDetections.detection, canvas)) {
-            setError('Please position your face within the circular frame.');
+            setScannerStatus('Align face inside the visual frame.');
             setIsProcessing(false);
             return;
           }
           
-          // Safely draw face detection
           try {
             faceapi.draw.drawDetections(canvas, resizedDetections);
             faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
           } catch (drawError) {
             console.warn('Error drawing face detection:', drawError);
-            // Continue with recognition even if drawing fails
           }
 
-          // Create labeled face descriptors from stored embeddings
           const labeledFaceDescriptors = workers.map(worker => {
-            // Convert stored embeddings to Float32Array as required by face-api.js
-            // Each worker has multiple embeddings (5), so we create multiple descriptors per worker
             const descriptors = worker.faceEmbeddings.map(embedding => new Float32Array(embedding));
             return new faceapi.LabeledFaceDescriptors(worker.rfid, descriptors);
           });
 
-          // Create face matcher with optimized threshold for better accuracy and speed
-          // Lower threshold means higher accuracy but might miss some matches
-          const faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.35); // Slightly higher threshold for faster matching
-          
-          // Find best match for the detected face
+          const matchThreshold = faceConfig.matchingThreshold ?? 0.50;
+          const faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, matchThreshold);
           const bestMatch = faceMatcher.findBestMatch(detections.descriptor);
 
           console.log('Best match result:', bestMatch);
 
-          // Improved matching criteria for better accuracy
-          if (bestMatch && bestMatch.label !== 'unknown' && bestMatch.distance < 0.4) { // Slightly higher threshold for faster matching
-            // Find the matching worker
+          if (bestMatch && bestMatch.label !== 'unknown') {
             const worker = workers.find(w => w.rfid === bestMatch.label);
             if (worker) {
-              // Worker-specific validation: In worker mode, ensure the detected face belongs to the current worker
-              if (workerMode) {
-                if (worker.rfid !== currentWorker.rfid) {
-                  setError('Face recognition failed. You can only mark attendance with your own face.');
-                  setIsProcessing(false);
-                  return;
-                }
+              if (workerMode && worker.rfid !== currentWorker.rfid) {
+                setScannerStatus('Verification failed: Worker ID mismatch.');
+                setIsProcessing(false);
+                return;
               }
               
-              // Set the matched worker
               setMatchedWorker(worker);
+              setScannerStatus('Face recognized! Verifying...');
               
-              // Determine if it's Punch In or Punch Out based on last attendance
               try {
                 const lastAttendanceResponse = await getWorkerLastAttendance(worker.rfid, subdomain);
-                console.log('Last attendance data:', lastAttendanceResponse);
-                // The backend returns the next action in presence field
-                // If presence = true, next action is Punch In
-                // If presence = false, next action is Punch Out
-                // Ensuring consistency with RFID attendance logic:
                 const nextAction = lastAttendanceResponse.presence ? 'Punch In' : 'Punch Out';
-                console.log('Setting attendance type to:', nextAction);
                 setAttendanceType(nextAction);
-                
-                // Directly mark attendance without confirmation popup
                 await handleDirectAttendance(worker, nextAction, subdomain);
               } catch (attendanceError) {
                 console.error('Error getting last attendance:', attendanceError);
-                // Provide more specific error messages for different error types
-                if (attendanceError.message && attendanceError.message.includes('403')) {
-                  setError('Access denied. You can only mark attendance with your own face.');
+                if (attendanceError.response && attendanceError.response.status === 403) {
+                  setError('You can only mark attendance with your own face.');
                 } else {
                   setError('Unable to determine attendance action. Please try again.');
                 }
                 setIsProcessing(false);
-                // Don't show confirmation popup when we can't determine the correct action
                 return;
               }
-
             }
           } else {
-            setError('No matching employee found. Please try again or ensure your face is properly registered.');
+            setScannerStatus('Face not recognized. Keep face steady.');
           }
         } catch (resizeError) {
           console.error('Error resizing detection:', resizeError);
-          setError('Failed to resize face detection. Please try again.');
+          setScannerStatus('Retrying scanning...');
         }
       } else {
-        setError('No face detected. Please make sure your face is clearly visible and positioned within the circular frame.');
+        setScannerStatus('Scan area is empty. Align your face inside the visual frame.');
       }
     } catch (err) {
       console.error('Error recognizing face:', err);
-      // Provide more specific error messages based on the error type
-      if (err.message && err.message.includes('resizeResults')) {
-        setError('Face detection processing failed. Please ensure your camera is working and refresh the page.');
-      } else if (err.message && err.message.includes('tensor')) {
-        setError('Model loading error. Please clear browser cache and refresh the page.');
-      } else {
-        setError('Failed to recognize face. Please try again. (' + (err.message || 'Unknown error') + ')');
-      }
+      setScannerStatus('Camera loading or lighting compensation running...');
     } finally {
       setIsProcessing(false);
     }
@@ -510,20 +524,34 @@ const FaceAttendance = ({ subdomain, isOpen, onClose, workerMode = false, curren
     }
   };
 
-  // Auto-detection loop - Increased frequency for faster scanning
+  // Auto-detection recursive loop
   useEffect(() => {
-    let interval;
-    if (isOpen && isModelLoaded && !showConfirmation && !isProcessing) {
-      interval = setInterval(() => {
-        if (!isProcessing) {
-          recognizeFaceAndMark();
-        }
-      }, 500); // Check every 0.5 seconds for much faster scanning (reduced from 1.5 seconds)
-    }
-    return () => {
-      if (interval) clearInterval(interval);
+    let isMounted = true;
+    
+    const runScannerLoop = async () => {
+      if (!isMounted || !isOpen || !isModelLoaded || showConfirmation) {
+        return;
+      }
+      
+      await recognizeFaceAndMark();
+      
+      if (isMounted && isOpen && !showConfirmation) {
+        activeScanner.current = setTimeout(runScannerLoop, 150);
+      }
     };
-  }, [isOpen, isModelLoaded, showConfirmation, isProcessing]);
+    
+    if (isOpen && isModelLoaded && !showConfirmation) {
+      runScannerLoop();
+    }
+    
+    return () => {
+      isMounted = false;
+      if (activeScanner.current) {
+        clearTimeout(activeScanner.current);
+        activeScanner.current = null;
+      }
+    };
+  }, [isOpen, isModelLoaded, showConfirmation]);
 
   return (
     <>
@@ -630,15 +658,27 @@ const FaceAttendance = ({ subdomain, isOpen, onClose, workerMode = false, curren
               <div className="text-center mb-5">
                 <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-full shadow-sm">
                   <span className="relative flex h-2 w-2">
-                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isProcessing ? 'bg-indigo-400' : 'bg-emerald-400'}`}></span>
-                    <span className={`relative inline-flex rounded-full h-2 w-2 ${isProcessing ? 'bg-indigo-500' : 'bg-emerald-500'}`}></span>
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                      isProcessing 
+                        ? 'bg-indigo-400' 
+                        : scannerStatus.includes('recognized') 
+                          ? 'bg-emerald-400' 
+                          : 'bg-amber-400'
+                    }`}></span>
+                    <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                      isProcessing 
+                        ? 'bg-indigo-500' 
+                        : scannerStatus.includes('recognized') 
+                          ? 'bg-emerald-500' 
+                          : 'bg-amber-500'
+                    }`}></span>
                   </span>
                   <span className="text-xs font-bold text-slate-600 tracking-wide uppercase">
-                    {isProcessing ? 'Recognizing...' : 'Live Camera Scanner'}
+                    {isProcessing ? 'Processing' : scannerStatus.includes('recognized') ? 'Success' : 'Scanning'}
                   </span>
                 </div>
-                <p className="text-sm font-semibold text-slate-700 mt-2">
-                  {isProcessing ? 'Analyzing biometric landmarks...' : 'Align face within the visual overlay'}
+                <p className="text-sm font-semibold text-slate-700 mt-2 min-h-[20px]">
+                  {scannerStatus}
                 </p>
               </div>
 

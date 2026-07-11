@@ -18,7 +18,7 @@ const DashboardSalaryStat = require('../models/DashboardSalaryStat');
 // has no Approved leave, no Pending leave, AND either has a Rejected leave
 // or submitted no leave at all.
 // Permissions are completely excluded — this applies to full-day Leaves only.
-const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves, attendanceData, holidays) => {
+const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves, attendanceData, holidays, settings) => {
   const penalties = [];
   let totalPenalty = 0;
 
@@ -58,8 +58,70 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
     holidayDates.add(hDate);
   });
 
-  // Filter leaves: Only full-day leave types (exclude Permissions entirely)
-  const fullDayLeaves = allLeaves.filter(l => l.leaveType !== 'Permission');
+  const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
+  const enableUnauthorizedPermissionPenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty === true;
+
+  // Compute per-minute salary if permission penalty is enabled
+  let perMinuteSalary = 0;
+  let workStart = 0;
+  let workEnd = 0;
+  let lunchStart = 0;
+  let lunchEnd = 0;
+  let isLunchConsider = false;
+  
+  const timeToMinutes = (timeStr) => {
+    if (!timeStr) return 0;
+    let time = timeStr.trim();
+    const match = time.match(/^(\d+):(\d+)(?:\s*(AM|PM))?$/i);
+    if (!match) return 0;
+    let hours = parseInt(match[1]);
+    const minutes = parseInt(match[2]);
+    const ampm = match[3];
+    if (ampm) {
+      if (ampm.toUpperCase() === 'PM' && hours < 12) hours += 12;
+      if (ampm.toUpperCase() === 'AM' && hours === 12) hours = 0;
+    }
+    return hours * 60 + minutes;
+  };
+
+  if (enableUnauthorizedPermissionPenalty) {
+    const selectedBatch = settings?.batches?.find(batch => batch.batchName === worker.batch);
+    const workStartTime = selectedBatch ? selectedBatch.from : '09:00';
+    const workEndTime = selectedBatch ? selectedBatch.to : '19:00';
+    workStart = timeToMinutes(workStartTime);
+    workEnd = timeToMinutes(workEndTime);
+    let standardWorkingMinutes = workEnd - workStart;
+
+    isLunchConsider = selectedBatch ? selectedBatch.isLunchConsider : false;
+    if (!isLunchConsider) {
+      const lunchFrom = selectedBatch ? selectedBatch.lunchFrom : '12:00';
+      const lunchTo = selectedBatch ? selectedBatch.lunchTo : '13:00';
+      lunchStart = timeToMinutes(lunchFrom);
+      lunchEnd = timeToMinutes(lunchTo);
+      const lunchOverlapStart = Math.max(workStart, lunchStart);
+      const lunchOverlapEnd = Math.min(workEnd, lunchEnd);
+      if (lunchOverlapEnd > lunchOverlapStart) {
+        standardWorkingMinutes -= (lunchOverlapEnd - lunchOverlapStart);
+      }
+    }
+
+    if (settings?.intervals) {
+      settings.intervals.forEach(interval => {
+        if (!interval.isBreakConsider) {
+          const intervalStart = timeToMinutes(interval.from);
+          const intervalEnd = timeToMinutes(interval.to);
+          const intervalOverlapStart = Math.max(workStart, intervalStart);
+          const intervalOverlapEnd = Math.min(workEnd, intervalEnd);
+          if (intervalOverlapEnd > intervalOverlapStart) {
+            standardWorkingMinutes -= (intervalOverlapEnd - intervalOverlapStart);
+          }
+        }
+      });
+    }
+
+    if (standardWorkingMinutes <= 0) standardWorkingMinutes = 540;
+    perMinuteSalary = perDaySalary / standardWorkingMinutes;
+  }
 
   // Iterate every day in the report range
   const d = new Date(fromDateObj);
@@ -84,62 +146,148 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
       continue;
     }
 
-    // ── Safety Rule: If employee punched in, NO 5X ──
-    if (punchInDates.has(dateStr)) {
-      d.setDate(d.getDate() + 1);
-      continue;
-    }
+    let hasDeductedFullDay = false;
 
-    // ── Find any leaves covering this date (full-day types only) ──
-    const leavesForDay = fullDayLeaves.filter(l => {
-      const start = indiaDateFormatter.format(new Date(l.startDate));
-      const end = indiaDateFormatter.format(new Date(l.endDate));
-      return dateStr >= start && dateStr <= end;
-    });
+    // ── 1. Full-day Penalty Check ──
+    if (enableUnauthorizedLeavePenalty) {
+      // Safety Rule: If employee punched in, NO 5X full-day penalty
+      if (!punchInDates.has(dateStr)) {
+        // Find any full-day leaves covering this date
+        const fullDayLeavesForDay = allLeaves.filter(l => {
+          if (l.leaveType === 'Permission') return false;
+          const start = indiaDateFormatter.format(new Date(l.startDate));
+          const end = indiaDateFormatter.format(new Date(l.endDate));
+          return dateStr >= start && dateStr <= end;
+        });
 
-    // ── Safety Rule: Approved leave → normal processing, skip ──
-    const hasApprovedLeave = leavesForDay.some(l => l.status === 'Approved' || l.leaveType === 'Paid Leave');
-    if (hasApprovedLeave) {
-      d.setDate(d.getDate() + 1);
-      continue;
-    }
+        // Safety Rule: Approved leave → normal processing, skip
+        const hasApprovedLeave = fullDayLeavesForDay.some(l => l.status === 'Approved' || l.leaveType === 'Paid Leave');
+        
+        if (!hasApprovedLeave) {
+          const hasRejectedLeave = fullDayLeavesForDay.some(l => l.status === 'Rejected');
+          const hasPendingLeave = fullDayLeavesForDay.some(l => l.status === 'Pending');
+          const hasNoLeave = fullDayLeavesForDay.length === 0;
 
-    // ── Now determine 5X trigger: Rejected leave, Pending leave OR no leave at all ──
-    const hasRejectedLeave = leavesForDay.some(l => l.status === 'Rejected');
-    const hasPendingLeave = leavesForDay.some(l => l.status === 'Pending');
-    const hasNoLeave = leavesForDay.length === 0;
+          if (hasRejectedLeave || hasPendingLeave || hasNoLeave) {
+            const penaltyAmount = parseFloat((perDaySalary * 5).toFixed(4));
+            
+            let leaveStatus = 'No Leave Request';
+            let status = 'Unauthorized Absence';
+            let reason = 'Absent Without Leave Request';
 
-    if (hasRejectedLeave || hasPendingLeave || hasNoLeave) {
-      const penaltyAmount = parseFloat((perDaySalary * 5).toFixed(4));
-      
-      let leaveStatus = 'No Leave Request';
-      let status = 'Unauthorized Absence';
-      let reason = 'Absent Without Leave Request';
+            if (hasRejectedLeave) {
+              leaveStatus = 'Rejected';
+              status = 'Unauthorized Leave';
+              reason = 'Leave Request Rejected';
+            } else if (hasPendingLeave) {
+              leaveStatus = 'Pending';
+              status = 'Unauthorized Leave';
+              reason = 'Leave Request Pending Approval';
+            }
 
-      if (hasRejectedLeave) {
-        leaveStatus = 'Rejected';
-        status = 'Unauthorized Leave';
-        reason = 'Leave Request Rejected';
-      } else if (hasPendingLeave) {
-        leaveStatus = 'Pending';
-        status = 'Unauthorized Leave';
-        reason = 'Leave Request Pending Approval';
+            penalties.push({
+              date: dateStr,
+              displayDate: new Intl.DateTimeFormat('en-IN', {
+                day: '2-digit', month: 'short', year: 'numeric',
+                timeZone: 'Asia/Kolkata'
+              }).format(new Date(dateStr + 'T00:00:00')),
+              status,
+              leaveStatus,
+              penaltyFactor: 5,
+              penaltyAmount,
+              perDaySalary: parseFloat(perDaySalary.toFixed(4)),
+              reason
+            });
+            totalPenalty += penaltyAmount;
+            hasDeductedFullDay = true;
+          }
+        }
       }
+    }
 
-      penalties.push({
-        date: dateStr,
-        displayDate: new Intl.DateTimeFormat('en-IN', {
-          day: '2-digit', month: 'short', year: 'numeric',
-          timeZone: 'Asia/Kolkata'
-        }).format(new Date(dateStr + 'T00:00:00')),
-        status,
-        leaveStatus,
-        penaltyFactor: 5,
-        penaltyAmount,
-        perDaySalary: parseFloat(perDaySalary.toFixed(4)),
-        reason
+    // ── 2. Permission Penalty Check ──
+    if (enableUnauthorizedPermissionPenalty && !hasDeductedFullDay) {
+      // Find any permissions covering this date
+      const permissionsForDay = allLeaves.filter(l => {
+        if (l.leaveType !== 'Permission') return false;
+        const start = indiaDateFormatter.format(new Date(l.startDate));
+        const end = indiaDateFormatter.format(new Date(l.endDate));
+        return dateStr >= start && dateStr <= end;
       });
-      totalPenalty += penaltyAmount;
+
+      const unapprovedPermissions = permissionsForDay.filter(l => l.status === 'Pending' || l.status === 'Rejected');
+
+      unapprovedPermissions.forEach(perm => {
+        const permStart = Math.max(timeToMinutes(perm.startTime), workStart);
+        const permEnd = Math.min(timeToMinutes(perm.endTime), workEnd);
+        let permMinutes = permEnd - permStart;
+
+        if (permMinutes > 0) {
+          // Adjust for lunch overlap
+          if (!isLunchConsider) {
+            const overlapStart = Math.max(permStart, lunchStart);
+            const overlapEnd = Math.min(permEnd, lunchEnd);
+            if (overlapEnd > overlapStart) {
+              permMinutes -= (overlapEnd - overlapStart);
+            }
+          }
+
+          // Adjust for other configured intervals (tea breaks)
+          if (settings?.intervals) {
+            settings.intervals.forEach(interval => {
+              if (!interval.isBreakConsider) {
+                const intervalStart = timeToMinutes(interval.from);
+                const intervalEnd = timeToMinutes(interval.to);
+                const overlapStart = Math.max(permStart, intervalStart);
+                const overlapEnd = Math.min(permEnd, intervalEnd);
+                if (overlapEnd > overlapStart) {
+                  permMinutes -= (overlapEnd - overlapStart);
+                }
+              }
+            });
+          }
+
+          permMinutes = Math.max(0, permMinutes);
+
+          if (permMinutes > 0) {
+            const penaltyAmount = parseFloat((permMinutes * perMinuteSalary * 5).toFixed(4));
+
+            const formatTime = (timeStr) => {
+              if (!timeStr) return '';
+              if (timeStr.includes('AM') || timeStr.includes('PM')) return timeStr;
+              try {
+                const [hourStr, minStr] = timeStr.split(':');
+                let hour = parseInt(hourStr);
+                const ampm = hour >= 12 ? 'PM' : 'AM';
+                const displayHour = hour % 12 || 12;
+                return `${displayHour}:${minStr.substring(0, 2)} ${ampm}`;
+              } catch (e) {
+                return timeStr;
+              }
+            };
+
+            const displayTime = `${formatTime(perm.startTime)} - ${formatTime(perm.endTime)}`;
+            const reason = perm.status === 'Rejected'
+              ? `Permission Request Rejected (${displayTime})`
+              : `Permission Request Pending Approval (${displayTime})`;
+
+            penalties.push({
+              date: dateStr,
+              displayDate: new Intl.DateTimeFormat('en-IN', {
+                day: '2-digit', month: 'short', year: 'numeric',
+                timeZone: 'Asia/Kolkata'
+              }).format(new Date(dateStr + 'T00:00:00')),
+              status: 'Unauthorized Permission',
+              leaveStatus: perm.status,
+              penaltyFactor: 5,
+              penaltyAmount,
+              perDaySalary: parseFloat(perDaySalary.toFixed(4)),
+              reason
+            });
+            totalPenalty += penaltyAmount;
+          }
+        }
+      });
     }
 
     d.setDate(d.getDate() + 1);
@@ -445,14 +593,16 @@ const giveBonus = asyncHandler(async (req, res) => {
   // Get the worker's actual earned salary from the report and apply 5X penalty
   const standardEarnedSalary = productivityReport.summary.finalSalary || 0;
   const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
-  const { totalUnauthorizedPenalty } = enableUnauthorizedLeavePenalty
+  const enableUnauthorizedPermissionPenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty === true;
+  const { totalUnauthorizedPenalty } = (enableUnauthorizedLeavePenalty || enableUnauthorizedPermissionPenalty)
     ? calculateUnauthorizedAbsencePenalty(
         worker,
         fromDate,
         toDate,
         allLeavesForPenalty,
         attendanceData,
-        holidays
+        holidays,
+        settings
       )
     : { totalUnauthorizedPenalty: 0 };
 
@@ -750,15 +900,17 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
     // and either has a Rejected leave OR submitted no leave at all.
     // Permissions are excluded entirely. Does NOT modify leaveData or existing salary logic.
     const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
+    const enableUnauthorizedPermissionPenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty === true;
     const { penalties: unauthorizedAbsencePenalties, totalUnauthorizedPenalty } =
-      enableUnauthorizedLeavePenalty
+      (enableUnauthorizedLeavePenalty || enableUnauthorizedPermissionPenalty)
         ? calculateUnauthorizedAbsencePenalty(
             worker,
             fromDate,
             toDate,
             allLeavesForPenalty,
             attendanceData,
-            holidays
+            holidays,
+            settings
           )
         : { penalties: [], totalUnauthorizedPenalty: 0 };
 
@@ -1040,15 +1192,17 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
 
     // ── 5X Unauthorized Absence Penalty (separate from all existing calculations) ──
     const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
+    const enableUnauthorizedPermissionPenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty === true;
     const { penalties: unauthorizedAbsencePenalties, totalUnauthorizedPenalty } =
-      enableUnauthorizedLeavePenalty
+      (enableUnauthorizedLeavePenalty || enableUnauthorizedPermissionPenalty)
         ? calculateUnauthorizedAbsencePenalty(
             worker,
             start,
             end,
             allLeavesForPenalty,
             attendanceData,
-            holidays
+            holidays,
+            settings
           )
         : { penalties: [], totalUnauthorizedPenalty: 0 };
 
@@ -1799,15 +1953,17 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
 
       // Calculate 5X Unauthorized Absence Penalty
       const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
+      const enableUnauthorizedPermissionPenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty === true;
       const { penalties: unauthorizedAbsencePenalties, totalUnauthorizedPenalty } =
-        enableUnauthorizedLeavePenalty
+        (enableUnauthorizedLeavePenalty || enableUnauthorizedPermissionPenalty)
           ? calculateUnauthorizedAbsencePenalty(
               worker,
               fromDate,
               toDate,
               workerLeaves,
               workerAttendance,
-              holidays
+              holidays,
+              settings
             )
           : { penalties: [], totalUnauthorizedPenalty: 0 };
 
@@ -2196,14 +2352,16 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
       const finalSalaryWithFines = Math.max(0, finalSalaryWithBonus - totalFinesAmount);
 
       const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
-      const { totalUnauthorizedPenalty } = enableUnauthorizedLeavePenalty
+      const enableUnauthorizedPermissionPenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty === true;
+      const { totalUnauthorizedPenalty } = (enableUnauthorizedLeavePenalty || enableUnauthorizedPermissionPenalty)
         ? calculateUnauthorizedAbsencePenalty(
             worker,
             fromDate,
             toDate,
             workerLeaves,
             workerAttendance,
-            holidays
+            holidays,
+            settings
           )
         : { totalUnauthorizedPenalty: 0 };
 

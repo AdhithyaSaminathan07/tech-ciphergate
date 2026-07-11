@@ -47,7 +47,7 @@ const startServer = async () => {
     console.log('🧹 Purged seeded/mock AWS accounts from database.');
 
     const app = express();
-
+    app.set("trust proxy", 1);
     const corsOptions = {
       origin: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -184,35 +184,35 @@ const startServer = async () => {
       res.json({ message: 'Task Tracker API is running' });
     });
 
-if (
-  process.env.NODE_ENV === 'production' ||
-  process.env.ENABLE_SCHEDULERS === 'true'
-) {
-  console.log('🚀 Starting production schedulers...');
+    if (
+      process.env.NODE_ENV === 'production' ||
+      process.env.ENABLE_SCHEDULERS === 'true'
+    ) {
+      console.log('🚀 Starting production schedulers...');
 
-  // Food scheduler
-  const {
-    initializeFoodRequestSchedulers,
-  } = require('./schedulers/foodRequestScheduler');
+      // Food scheduler
+      const {
+        initializeFoodRequestSchedulers,
+      } = require('./schedulers/foodRequestScheduler');
 
-  initializeFoodRequestSchedulers();
+      initializeFoodRequestSchedulers();
 
-  // Existing cron jobs
-  const { startCronJobs } = require('./services/cronJobs');
-  startCronJobs();
+      // Existing cron jobs
+      const { startCronJobs } = require('./services/cronJobs');
+      startCronJobs();
 
-  // Server cron jobs (Developer 2)
-  const {
-    initializeServerCronJobs,
-  } = require('./services/serverCronJobs');
+      // Server cron jobs (Developer 2)
+      const {
+        initializeServerCronJobs,
+      } = require('./services/serverCronJobs');
 
-  initializeServerCronJobs();
+      initializeServerCronJobs();
 
-} else {
-  console.log(
-    '⚠️ Schedulers disabled. Set NODE_ENV=production or ENABLE_SCHEDULERS=true to enable'
-  );
-}
+    } else {
+      console.log(
+        '⚠️ Schedulers disabled. Set NODE_ENV=production or ENABLE_SCHEDULERS=true to enable'
+      );
+    }
 
     // Error handler (should be last)
     app.use(errorHandler);
@@ -270,7 +270,7 @@ process.on('uncaughtException', (error) => {
   console.error('  Memory Usage:', JSON.stringify(process.memoryUsage()));
   console.error('Restarting Process due to Uncaught Exception.');
   console.error('========================================================================');
-  
+
   // Exit the process so PM2 can perform a clean restart
   process.exit(1);
 });

@@ -515,8 +515,9 @@ const recognizeFaceAndMarkAttendance = async (req, res) => {
             }
         }
 
-        // Set a threshold for face recognition (adjust as needed)
-        const threshold = 0.4;
+        // Retrieve dynamic face recognition settings from database
+        const settings = await Settings.findOne({ subdomain });
+        const threshold = settings?.faceRecognition?.matchingThreshold ?? 0.50;
 
         if (!bestMatch || minDistance > threshold) {
             res.status(404);

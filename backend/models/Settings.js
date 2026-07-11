@@ -195,6 +195,10 @@ const settingsSchema = mongoose.Schema({
     enableUnauthorizedLeavePenalty: {
       type: Boolean,
       default: true
+    },
+    enableUnauthorizedPermissionPenalty: {
+      type: Boolean,
+      default: false
     }
   },
 
@@ -452,6 +456,21 @@ const settingsSchema = mongoose.Schema({
       type: Number,
       default: 24,
       min: 1
+    }
+  },
+
+  // Face Recognition Configuration
+  faceRecognition: {
+    detectorType: {
+      type: String,
+      enum: ['ssdMobilenetv1', 'tinyFaceDetector'],
+      default: 'tinyFaceDetector'
+    },
+    matchingThreshold: {
+      type: Number,
+      default: 0.50,
+      min: 0.1,
+      max: 0.9
     }
   }
 

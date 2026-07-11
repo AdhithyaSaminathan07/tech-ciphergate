@@ -3754,7 +3754,11 @@ const SalaryManagement = () => {
                                         </div>
                                         <div className="px-6 py-3 bg-orange-50/60 border-t border-orange-100 flex justify-between items-center">
                                             <p className="text-[10px] font-bold text-orange-400">
-                                                Per-day salary: ₹{reportData.unauthorizedAbsencePenalties[0]?.perDaySalary?.toFixed(2)} × 5 = ₹{reportData.unauthorizedAbsencePenalties[0]?.penaltyAmount?.toFixed(2)} per unauthorized day
+                                                {reportData.unauthorizedAbsencePenalties.some(p => p.status === 'Unauthorized Permission') ? (
+                                                    `5X Penalty applied to unapproved permissions based on duration and per-minute salary`
+                                                ) : (
+                                                    `Per-day salary: ₹${reportData.unauthorizedAbsencePenalties[0]?.perDaySalary?.toFixed(2)} × 5 = ₹${(reportData.unauthorizedAbsencePenalties[0]?.perDaySalary * 5)?.toFixed(2)} per unauthorized day`
+                                                )}
                                             </p>
                                             <p className="text-xs font-black text-orange-600">
                                                 Total Penalty: - ₹{reportData.totalUnauthorizedPenalty.toFixed(2)}
