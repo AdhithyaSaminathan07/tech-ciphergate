@@ -472,11 +472,7 @@ const WorkAllocation = () => {
     const [modalFilterTeam, setModalFilterTeam] = useState('');
     const { subdomain } = useContext(appContext);
     const { socket } = useSocket();
-    const saveTimeoutRef = useRef(null);
-    const [page, setPage] = useState(1);
-    const [hasMore, setHasMore] = useState(true);
-    const [isFetchingNextPage, setIsFetchingNextPage] = useState(false);
-    const observerRef = useRef(null);
+    const [hasMore, setHasMore] = useState(false);
 
     // Modal state
     const [selectedTicket, setSelectedTicket] = useState(null);
@@ -562,33 +558,8 @@ const WorkAllocation = () => {
     }, [subdomain]);
 
     useEffect(() => {
-        loadTicketsData(1, false);
+        loadTicketsData();
     }, [subdomain, searchTerm, filterAssignee, filterTeam, filterPriority, filterMonth]);
-
-    // Infinite scroll observer using callback ref to avoid AnimatePresence race conditions
-    const sentinelRef = useCallback((node) => {
-        if (observerRef.current) {
-            observerRef.current.disconnect();
-        }
-
-        if (node && !loading && !isFetchingNextPage && hasMore) {
-            const scrollContainer = document.querySelector('.custom-main-scroll');
-            const observer = new IntersectionObserver(
-                (entries) => {
-                    if (entries[0].isIntersecting) {
-                        loadTicketsData(page + 1, true);
-                    }
-                },
-                {
-                    root: scrollContainer || null,
-                    rootMargin: '100px',
-                    threshold: 0.01
-                }
-            );
-            observer.observe(node);
-            observerRef.current = observer;
-        }
-    }, [page, hasMore, loading, isFetchingNextPage, subdomain, searchTerm, filterAssignee, filterTeam, filterPriority, filterMonth]);
 
     useEffect(() => {
         setExpandedSubTasks({});
@@ -672,19 +643,13 @@ const WorkAllocation = () => {
         }
     };
 
-    const loadTicketsData = async (pageNumber = 1, isAppend = false) => {
+    const loadTicketsData = async () => {
         if (!subdomain) return;
-        if (pageNumber === 1) {
-            setLoading(true);
-        } else {
-            setIsFetchingNextPage(true);
-        }
+        setLoading(true);
 
         try {
             const response = await getTickets({
                 subdomain,
-                page: pageNumber,
-                limit: 10,
                 searchTerm,
                 filterAssignee,
                 filterTeam,
@@ -692,26 +657,19 @@ const WorkAllocation = () => {
                 filterMonth
             });
 
-            if (response && response.tickets) {
-                setTickets(prev => pageNumber === 1 ? response.tickets : [...prev, ...response.tickets]);
-                setHasMore(response.hasMore);
-                setPage(pageNumber);
-            } else {
-                const ticketsData = Array.isArray(response) ? response : [];
-                setTickets(prev => pageNumber === 1 ? ticketsData : [...prev, ...ticketsData]);
-                setHasMore(false);
-            }
+            const ticketsData = Array.isArray(response) ? response : (response?.tickets || []);
+            setTickets(ticketsData);
+            setHasMore(false);
         } catch (error) {
             console.error('Error fetching tickets:', error);
         } finally {
             setLoading(false);
-            setIsFetchingNextPage(false);
         }
     };
 
     const fetchData = async () => {
         loadWorkersData();
-        loadTicketsData(1, false);
+        loadTicketsData();
     };
 
     const fetchCompletions = async (ticketId) => {
@@ -2282,11 +2240,6 @@ const WorkAllocation = () => {
                         </div>
                     ))}
                 </div>
-                {hasMore && (
-                    <div ref={sentinelRef} id="infinite-scroll-sentinel" className="py-6 flex justify-center items-center">
-                        <Spinner size="md" />
-                    </div>
-                )}
             </div>
 
             {/* Full-Screen Workspace Task Modal */}
