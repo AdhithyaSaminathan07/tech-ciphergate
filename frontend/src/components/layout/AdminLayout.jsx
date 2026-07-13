@@ -492,6 +492,9 @@ const AdminLayout = () => {
       {/* BottomNavigation removed for Admin as per strict separation rules */}
 
       <style>{`
+        .custom-main-scroll {
+          scrollbar-gutter: stable;
+        }
         .custom-main-scroll::-webkit-scrollbar {
           width: 8px;
           height: 8px;

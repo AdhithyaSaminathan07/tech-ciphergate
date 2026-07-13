@@ -1107,4 +1107,8 @@ h3 {
   background: rgba(0, 0, 0, 0.05);
   color: #1E293B;
   opacity: 1;
+}
+
+.custom-main-scroll {
+  scrollbar-gutter: stable;
 }

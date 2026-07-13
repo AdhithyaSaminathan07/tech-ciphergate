@@ -442,7 +442,9 @@ const WorkAllocation = () => {
     const [tickets, setTickets] = useState([]);
     const [workers, setWorkers] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [initialLoading, setInitialLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [searchVal, setSearchVal] = useState('');
     const [filterAssignee, setFilterAssignee] = useState('');
     const [filterTeam, setFilterTeam] = useState('');
     const [filterPriority, setFilterPriority] = useState('');
@@ -450,6 +452,23 @@ const WorkAllocation = () => {
     // Month filter — defaults to current month (YYYY-MM), empty string = all months
     const currentMonthValue = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`; })();
     const [filterMonth, setFilterMonth] = useState(currentMonthValue);
+
+    useEffect(() => {
+        setSearchVal(searchTerm);
+    }, [searchTerm]);
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setSearchTerm(searchVal);
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [searchVal]);
+
+    useEffect(() => {
+        if (!loading && initialLoading) {
+            setInitialLoading(false);
+        }
+    }, [loading, initialLoading]);
     const [modalFilterTeam, setModalFilterTeam] = useState('');
     const { subdomain } = useContext(appContext);
     const { socket } = useSocket();
@@ -1543,7 +1562,7 @@ const WorkAllocation = () => {
         }
     };
 
-    if (loading) return <Spinner />;
+    if (initialLoading) return <Spinner />;
 
 
     return (
@@ -1559,8 +1578,8 @@ const WorkAllocation = () => {
                             <input
                                 type="text"
                                 placeholder="Search tasks..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
+                                value={searchVal}
+                                onChange={(e) => setSearchVal(e.target.value)}
                                 className="w-full pl-8 pr-2 py-1.5 bg-transparent text-[11px] font-semibold text-slate-700 outline-none placeholder:text-slate-300"
                             />
                         </div>
@@ -1701,6 +1720,7 @@ const WorkAllocation = () => {
                                     setFilterAssignee('');
                                     setFilterTeam('');
                                     setFilterPriority('');
+                                    setSearchVal('');
                                     setSearchTerm('');
                                     setFilterMonth(currentMonthValue);
                                 }}
@@ -1725,8 +1745,8 @@ const WorkAllocation = () => {
                                         <input
                                             type="text"
                                             placeholder="Search tasks..."
-                                            value={searchTerm}
-                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            value={searchVal}
+                                            onChange={(e) => setSearchVal(e.target.value)}
                                             className="w-full pl-8 pr-3 py-1.5 bg-transparent text-[10px] sm:text-xs font-semibold text-slate-700 outline-none placeholder:text-slate-300"
                                         />
                                     </div>
@@ -1827,6 +1847,7 @@ const WorkAllocation = () => {
                                                 setFilterAssignee('');
                                                 setFilterTeam('');
                                                 setFilterPriority('');
+                                                setSearchVal('');
                                                 setSearchTerm('');
                                                 setFilterMonth(currentMonthValue);
                                             }}
@@ -1958,7 +1979,7 @@ const WorkAllocation = () => {
             </div>
 
             {/* Kanban Board Area - Grid layout for true equal-width columns */}
-            <div className="flex-1 p-2.5 lg:p-4 pt-2.5 scroll-smooth overflow-x-auto">
+            <div className="flex-1 p-2.5 lg:p-4 pt-2.5 scroll-smooth overflow-x-hidden">
                 {/* Mobile Status Tabs — 4-column grid, no horizontal scroll */}
                 <div className="md:hidden grid grid-cols-4 gap-0.5 p-0.5 bg-slate-100 rounded-lg mb-2">
                     {columns.map(status => {
@@ -1981,7 +2002,12 @@ const WorkAllocation = () => {
                     })}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 min-h-[calc(100vh-280px)] pb-6 w-full">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 min-h-[calc(100vh-280px)] pb-6 w-full relative">
+                    {loading && (
+                        <div className="absolute inset-0 bg-[#f8fafc]/60 backdrop-blur-[1px] flex items-center justify-center z-[50] rounded-2xl transition-all duration-200">
+                            <Spinner size="lg" />
+                        </div>
+                    )}
 
                     {columns.map(status => (
                         <div

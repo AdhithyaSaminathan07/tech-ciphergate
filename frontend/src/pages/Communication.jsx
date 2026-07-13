@@ -47,7 +47,7 @@ const Communication = () => {
     // For local testing, change 3001 to the port your local Instaxbot is running on (e.g. 3001, 5173, etc.)
     const baseUrl = window.location.hostname === 'localhost'
       ? 'http://localhost:3001'
-      : 'https://app.instaxbot.com';
+      : 'https://tech.instaxbot.com';
 
     return `${baseUrl}/login?sso_username=${encodeURIComponent(ssoUser)}&sso_key=${SSO_KEY}&embed=true&role=staff`;
   }, [activeInstagramAccount?.username]);
@@ -58,7 +58,7 @@ const Communication = () => {
 
     const baseUrl = window.location.hostname === 'localhost'
       ? 'http://localhost:3001'
-      : 'https://app.instaxbot.com';
+      : 'https://tech.instaxbot.com';
 
     return `${baseUrl}/login?sso_username=${encodeURIComponent(ssoUser)}&sso_key=${SSO_KEY}&embed=true&role=staff&redirect=comments`;
   }, [activeInstagramAccount?.username]);
