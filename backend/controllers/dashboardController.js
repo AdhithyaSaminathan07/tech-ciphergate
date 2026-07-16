@@ -45,7 +45,6 @@ exports.getAdminDashboard = async (req, res) => {
     // 1. Gather all parallel queries for counts and specific lightweight data
     const [
       workers,
-      tasksCount,
       topicsCount,
       leaves,
       comments,
@@ -56,7 +55,6 @@ exports.getAdminDashboard = async (req, res) => {
       cachedSalaryStats
     ] = await Promise.all([
       Worker.find({ subdomain, status: { $ne: 'Relieved' } }).select('salary'),
-      Task.countDocuments({ subdomain }),
       Topic.countDocuments({ subdomain }),
       Leave.find({ subdomain }).select('status worker startDate').populate('worker', 'name'),
       Comment.find({ subdomain }).select('isNew replies'),
@@ -64,7 +62,7 @@ exports.getAdminDashboard = async (req, res) => {
       Department.find({ subdomain }).lean(),
       Ticket.find({ subdomain }).lean(),
       Renewal.find({ subdomain }).lean(),
-      DashboardSalaryStat.findOne({ subdomain, month: new Date().getMonth() + 1, year: new Date().getFullYear() }).lean()
+      DashboardSalaryStat.findOne({ subdomain }).lean()
     ]);
 
     // Workers & Salary
@@ -89,6 +87,8 @@ exports.getAdminDashboard = async (req, res) => {
     const inProgressCount = allTickets.filter(t => t.status === 'In Progress').length;
     const reviewCount = allTickets.filter(t => t.status === 'Review').length;
     const doneCount = allTickets.filter(t => t.status === 'Done').length;
+    // Active tasks = all work allocation tickets that are not Done
+    const activeTasksCount = todoCount + inProgressCount + reviewCount;
     
     const attentionTickets = allTickets
       .filter(t => t.status === 'Review' || t.status === 'In Progress')
@@ -105,16 +105,15 @@ exports.getAdminDashboard = async (req, res) => {
     });
 
     // Attendance Calculation (Simplified logic for dashboard, normally uses Attendance model)
-    const today = new Date();
-    today.setHours(0,0,0,0);
+    const todayStr = new Date().toISOString().split('T')[0];
     const Attendance = require('../models/Attendance');
     const todaysAttendance = await Attendance.find({ 
       subdomain, 
-      date: { $gte: today } 
+      date: todayStr
     }).lean();
     
-    // Create attendance map
-    const presentWorkers = new Set(todaysAttendance.map(a => a.workerId?.toString()));
+    // Create attendance map (safely fallback to worker schema field)
+    const presentWorkers = new Set(todaysAttendance.map(a => a.worker?.toString() || a.workerId?.toString() || a.worker));
     const attendancePercentage = activeWorkersCount > 0 
       ? Math.round((presentWorkers.size / activeWorkersCount) * 100) 
       : 0;
@@ -137,7 +136,7 @@ exports.getAdminDashboard = async (req, res) => {
       data: {
         stats: {
           workers: activeWorkersCount,
-          tasks: tasksCount,
+          tasks: activeTasksCount,
           topics: topicsCount,
           foodRequests: foodRequestsCount,
           leaves: { total: leaves.length, pending: pendingLeavesAll.length, approved: approvedLeavesCount, rejected: rejectedLeavesCount },

@@ -12,6 +12,7 @@ const { calculateWorkerProductivity } = require('../utils/productivityCalculator
 const Ticket = require('../models/ticketModel');
 const { calculateTaskPenalties } = require('../utils/salaryPenaltyCalculator');
 const DashboardSalaryStat = require('../models/DashboardSalaryStat');
+const WalletTransaction = require('../models/WalletTransaction');
 
 // ─── Helper: Calculate 5X Unauthorized Absence Penalty ─────────────────────
 // Applies ONLY to past days where employee was absent (no punch-in),
@@ -442,12 +443,18 @@ const calculateProjectAdjustments = async (workerId, subdomain, currentMonth, cu
     const currentEntitlement = entry.paidWorkingDays * project.currentPerDayValue;
     const adjustment = currentEntitlement - entry.paidAmount;
 
-    // Update ledger entry with recalculated values (for audit trail)
-    entry.currentPerDayValue = project.currentPerDayValue;
-    entry.currentEntitlement = currentEntitlement;
-    entry.adjustmentAmount = adjustment;
-    entry.updatedAt = new Date();
-    await entry.save();
+    // Update ledger entry with recalculated values (for audit trail) only if they changed
+    if (
+      entry.currentPerDayValue !== project.currentPerDayValue ||
+      entry.currentEntitlement !== currentEntitlement ||
+      entry.adjustmentAmount !== adjustment
+    ) {
+      entry.currentPerDayValue = project.currentPerDayValue;
+      entry.currentEntitlement = currentEntitlement;
+      entry.adjustmentAmount = adjustment;
+      entry.updatedAt = new Date();
+      await entry.save();
+    }
 
     totalAdjustment += adjustment;
     adjustmentDetails.push({
@@ -481,7 +488,9 @@ const calculateDailyAttendancePenalties = async (subdomain, fromDate, toDate, wo
   const companyVal = thresh.company?.value ?? thresh.company ?? 80;
   const deptVal = thresh.department?.value ?? thresh.department ?? 80;
 
-  const allCompanyWorkers = await Worker.find({ subdomain, status: { $ne: 'Relieved' } });
+  const allCompanyWorkers = await Worker.find({ subdomain, status: { $ne: 'Relieved' } })
+    .select('_id department')
+    .lean();
   const totalCompanyWorkers = allCompanyWorkers.length;
   const deptWorkers = allCompanyWorkers.filter(w => {
     const wDeptId = w.department?._id?.toString() || w.department?.toString();
@@ -493,7 +502,7 @@ const calculateDailyAttendancePenalties = async (subdomain, fromDate, toDate, wo
     subdomain,
     date: { $gte: fromDate, $lte: toDate },
     presence: true
-  });
+  }).select('worker date').lean();
 
   const attendanceByDate = {};
   allAttendancesInRange.forEach(att => {
@@ -704,20 +713,10 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
       return res.status(404).json({ message: 'Worker not found' });
     }
 
-    // Since the date field in Attendance model is stored as a string,
-    // we need to fetch all attendance records and filter them manually
-    const allAttendanceData = await Attendance.find({
-      worker: id
-    });
-
-    // Filter attendance data manually by parsing the date strings
-    const fromDateObj = new Date(fromDate);
-    const toDateObj = new Date(toDate);
-
-    const attendanceData = allAttendanceData.filter(record => {
-      // Parse the string date from the record
-      const recordDate = new Date(record.date);
-      return recordDate >= fromDateObj && recordDate <= toDateObj;
+    // Filter attendance data directly in the database using range queries on the date string
+    const attendanceData = await Attendance.find({
+      worker: id,
+      date: { $gte: fromDate, $lte: toDate }
     });
 
     const leaveData = await Leave.find({
@@ -989,14 +988,10 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
       return res.status(404).json({ message: 'Worker not found' });
     }
 
-    const allAttendanceData = await Attendance.find({ worker: id });
-
-    const fromDateObj = new Date(start);
-    const toDateObj = new Date(end);
-
-    const attendanceData = allAttendanceData.filter(record => {
-      const recordDate = new Date(record.date);
-      return recordDate >= fromDateObj && recordDate <= toDateObj;
+    // Filter attendance data directly in the database using range queries on the date string
+    const attendanceData = await Attendance.find({
+      worker: id,
+      date: { $gte: start, $lte: end }
     });
 
     const leaveData = await Leave.find({
@@ -1504,7 +1499,7 @@ const getAllDeveloperProjectsSummary = asyncHandler(async (req, res) => {
 
 // Create a new salary project
 const createSalaryProject = asyncHandler(async (req, res) => {
-  const { projectName, projectAmount, profitPercentage, developers, startDate, endDate, subdomain } = req.body;
+  const { projectName, projectAmount, profitPercentage, walletPercentage, developers, startDate, endDate, subdomain } = req.body;
 
   if (!projectName || !projectAmount || !startDate || !endDate || !subdomain) {
     return res.status(400).json({ message: 'projectName, projectAmount, startDate, endDate, subdomain are required' });
@@ -1518,6 +1513,7 @@ const createSalaryProject = asyncHandler(async (req, res) => {
     projectName,
     projectAmount: parseFloat(projectAmount),
     profitPercentage: parseFloat(profitPercentage || 60),
+    walletPercentage: parseFloat(walletPercentage || 0),
     developers: developers || [],
     startDate: new Date(startDate),
     endDate: new Date(endDate),
@@ -1525,6 +1521,32 @@ const createSalaryProject = asyncHandler(async (req, res) => {
   });
 
   await project.save();
+
+  // Credit wallets if applicable
+  if (project.walletAmount > 0 && project.developers.length > 0) {
+    const Worker = require('../models/Worker');
+    const WalletTransaction = require('../models/WalletTransaction');
+    
+    for (const devId of project.developers) {
+      const worker = await Worker.findById(devId);
+      if (worker) {
+        worker.walletBalance = (worker.walletBalance || 0) + project.perDeveloperWalletShare;
+        await worker.save();
+        
+        await WalletTransaction.create({
+          workerId: devId,
+          projectId: project._id,
+          type: 'Credit',
+          amount: project.perDeveloperWalletShare,
+          balanceAfter: worker.walletBalance,
+          description: `Wallet share (Project: ${project.projectName})`,
+          subdomain,
+          actionBy: req.user ? req.user._id : null
+        });
+      }
+    }
+  }
+
   const populated = await SalaryProject.findById(project._id).populate('developers', 'name rfid department');
 
   res.status(201).json({ message: 'Salary project created', project: populated });
@@ -1610,14 +1632,28 @@ const getSalaryProjectsForWorker = asyncHandler(async (req, res) => {
 // Update a salary project
 const updateSalaryProject = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { projectName, projectAmount, profitPercentage, developers, startDate, endDate } = req.body;
+  const { projectName, projectAmount, profitPercentage, walletPercentage, developers, startDate, endDate } = req.body;
 
   const project = await SalaryProject.findById(id);
   if (!project) return res.status(404).json({ message: 'Salary project not found' });
 
+  // REVERT OLD WALLET CREDITS
+  const Worker = require('../models/Worker');
+  const WalletTransaction = require('../models/WalletTransaction');
+  const oldWalletTxns = await WalletTransaction.find({ projectId: project._id, type: 'Credit' });
+  for (const txn of oldWalletTxns) {
+    const worker = await Worker.findById(txn.workerId);
+    if (worker) {
+      worker.walletBalance = Math.max(0, (worker.walletBalance || 0) - txn.amount);
+      await worker.save();
+    }
+    await WalletTransaction.findByIdAndDelete(txn._id);
+  }
+
   if (projectName !== undefined) project.projectName = projectName;
   if (projectAmount !== undefined) project.projectAmount = parseFloat(projectAmount);
   if (profitPercentage !== undefined) project.profitPercentage = parseFloat(profitPercentage);
+  if (walletPercentage !== undefined) project.walletPercentage = parseFloat(walletPercentage);
   if (developers !== undefined) project.developers = developers;
   if (startDate !== undefined) project.startDate = new Date(startDate);
   if (endDate !== undefined) project.endDate = new Date(endDate);
@@ -1627,6 +1663,28 @@ const updateSalaryProject = asyncHandler(async (req, res) => {
   }
 
   await project.save();
+
+  // APPLY NEW WALLET CREDITS
+  if (project.walletAmount > 0 && project.developers.length > 0) {
+    for (const devId of project.developers) {
+      const worker = await Worker.findById(devId);
+      if (worker) {
+        worker.walletBalance = (worker.walletBalance || 0) + project.perDeveloperWalletShare;
+        await worker.save();
+        
+        await WalletTransaction.create({
+          workerId: devId,
+          projectId: project._id,
+          type: 'Credit',
+          amount: project.perDeveloperWalletShare,
+          balanceAfter: worker.walletBalance,
+          description: `Wallet share (Project: ${project.projectName})`,
+          subdomain: project.subdomain,
+          actionBy: req.user ? req.user._id : null
+        });
+      }
+    }
+  }
 
   // FIX: Sync existing frozen project ledgers to match new project details to avoid unintended adjustments
   const ledgers = await ProjectPaymentLedger.find({ projectId: project._id, isSettled: true });
@@ -1664,6 +1722,20 @@ const updateSalaryProject = asyncHandler(async (req, res) => {
 // Delete a salary project
 const deleteSalaryProject = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  
+  // Revert wallet credits first
+  const Worker = require('../models/Worker');
+  const WalletTransaction = require('../models/WalletTransaction');
+  const oldWalletTxns = await WalletTransaction.find({ projectId: id, type: 'Credit' });
+  for (const txn of oldWalletTxns) {
+    const worker = await Worker.findById(txn.workerId);
+    if (worker) {
+      worker.walletBalance = Math.max(0, (worker.walletBalance || 0) - txn.amount);
+      await worker.save();
+    }
+    await WalletTransaction.findByIdAndDelete(txn._id);
+  }
+
   const project = await SalaryProject.findByIdAndDelete(id);
   if (!project) return res.status(404).json({ message: 'Salary project not found' });
   res.status(200).json({ message: 'Salary project deleted' });
@@ -2148,7 +2220,7 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
           
         const payableSalary = Math.max(0, attendanceSalary + totalAdditions - totalDeductions);
 
-        const finalSalaryCalculated = Math.max(0, (payableSalary !== undefined ? payableSalary : finalSalaryWithAdjustment) - (result.taskPenalty || 0));
+        const finalSalaryCalculated = Math.max(0, finalSalaryWithAdjustment - (result.taskPenalty || 0));
 
         return {
           ...result,
@@ -2268,17 +2340,30 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
   }
 
   try {
+    // 1. Check cache first for instant retrieval
+    const cachedStat = await DashboardSalaryStat.findOne({ subdomain });
+    if (cachedStat && cachedStat.topTeams && cachedStat.topTeams.length > 0) {
+      return res.status(200).json({ topTeams: cachedStat.topTeams });
+    }
+
+    // 2. Cache miss: Compute dates for the completed previous month to freeze calculations
+    const reqStartDate = new Date(fromDate);
+    const prevMonthDate = new Date(reqStartDate.getFullYear(), reqStartDate.getMonth() - 1, 1);
+    const prevYear = prevMonthDate.getFullYear();
+    const prevMonthNum = prevMonthDate.getMonth() + 1;
+    const calcFromDate = `${prevYear}-${String(prevMonthNum).padStart(2, '0')}-01`;
+    const calcToDate = new Date(prevYear, prevMonthNum, 0).toLocaleDateString('en-CA');
+
     const workers = await Worker.find({ subdomain, status: { $ne: 'Relieved' } }).populate('department').select('+fines');
     const holidays = await Holiday.find({});
     const settings = await Settings.findOne({ subdomain });
     const batches = settings ? settings.batches : [];
-    const fromDateObj = new Date(fromDate);
-    const toDateObj = new Date(toDate);
-    const reportYear = fromDateObj.getFullYear();
+    const fromDateObj = new Date(calcFromDate);
+    const toDateObj = new Date(calcToDate);
 
     const allAttendanceData = await Attendance.find({
       subdomain,
-      date: { $gte: fromDate, $lte: toDate }
+      date: { $gte: calcFromDate, $lte: calcToDate }
     });
     const allLeaveData = await Leave.find({
       subdomain
@@ -2306,23 +2391,19 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
         const pObj = p.toObject();
         const devCount = pObj.developers.length || 1;
         const share = pObj.projectProfit / devCount;
-        const start = new Date(pObj.startDate);
-        const end = new Date(pObj.endDate);
-        let workingDays = 0;
-        const cur = new Date(start);
-        while (cur <= end) {
-          if (cur.getDay() !== 0) workingDays++;
-          cur.setDate(cur.getDate() + 1);
-        }
-        return { ...pObj, perDeveloperShare: share, totalWorkingDays: workingDays, perDayValue: workingDays > 0 ? share / workingDays : 0 };
+        return {
+          projectId: pObj._id,
+          projectName: pObj.projectName,
+          perDayValue: share / (pObj.totalWorkingDays || 1)
+        };
       });
 
       // Calculate productivity (filtering only approved/paid leaves for standard logic)
       const report = calculateWorkerProductivity({
         worker,
         attendanceData: workerAttendance,
-        fromDate,
-        toDate,
+        fromDate: calcFromDate,
+        toDate: calcToDate,
         leaveData: workerLeaves.filter(l => l.status === 'Approved' || l.leaveType === 'Paid Leave'),
         projects: enrichedProjects,
         options: {
@@ -2356,8 +2437,8 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
       const { totalUnauthorizedPenalty } = (enableUnauthorizedLeavePenalty || enableUnauthorizedPermissionPenalty)
         ? calculateUnauthorizedAbsencePenalty(
             worker,
-            fromDate,
-            toDate,
+            calcFromDate,
+            calcToDate,
             workerLeaves,
             workerAttendance,
             holidays,
@@ -2374,8 +2455,8 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
         worker,
         tickets: workerTickets,
         report,
-        fromDate,
-        toDate
+        fromDate: calcFromDate,
+        toDate: calcToDate
       });
 
       const totalFinalSalary = Math.max(0, finalSalaryWithFines - totalUnauthorizedPenalty);
@@ -2389,6 +2470,16 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
       .map(([name, amount]) => ({ name, amount }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 3);
+
+    // Save to cache for subsequent 1ms loads
+    await DashboardSalaryStat.findOneAndUpdate(
+      { subdomain },
+      {
+        topTeams: sortedTeams,
+        lastCalculated: new Date()
+      },
+      { upsert: true, new: true }
+    );
 
     res.status(200).json({ topTeams: sortedTeams });
   } catch (error) {
@@ -2909,6 +3000,91 @@ const getDashboardSalaryStats = asyncHandler(async (req, res) => {
   }
 });
 
+// ─── Wallet Controllers ───
+const getWalletBalances = asyncHandler(async (req, res) => {
+  const { subdomain } = req.query;
+  if (!subdomain) return res.status(400).json({ message: 'Subdomain is required' });
+
+  const workers = await Worker.find({ subdomain, status: { $ne: 'Deleted' } })
+    .select('name rfid department walletBalance status')
+    .populate('department', 'name');
+
+  res.status(200).json({ wallets: workers });
+});
+
+const getWalletHistory = asyncHandler(async (req, res) => {
+  const { workerId } = req.params;
+  const { subdomain } = req.query;
+  if (!subdomain || !workerId) return res.status(400).json({ message: 'Subdomain and workerId required' });
+
+  const worker = await Worker.findById(workerId).select('walletBalance');
+
+  const history = await WalletTransaction.find({ workerId, subdomain })
+    .sort({ createdAt: -1 })
+    .populate('actionBy', 'name email');
+
+  res.status(200).json({ history, balance: worker?.walletBalance || 0 });
+});
+
+const debitWallet = asyncHandler(async (req, res) => {
+  const { workerId } = req.params;
+  const { amount, debitType, description, month, year, subdomain } = req.body;
+  
+  if (!amount || amount <= 0) return res.status(400).json({ message: 'Valid amount is required' });
+  if (!debitType || !['Direct', 'Salary'].includes(debitType)) return res.status(400).json({ message: 'Valid debitType required' });
+
+  const worker = await Worker.findById(workerId);
+  if (!worker || worker.subdomain !== subdomain) return res.status(404).json({ message: 'Worker not found' });
+  
+  if ((worker.walletBalance || 0) < amount) {
+    return res.status(400).json({ message: 'Insufficient wallet balance' });
+  }
+
+  worker.walletBalance -= amount;
+  await worker.save();
+
+  const txn = await WalletTransaction.create({
+    workerId,
+    type: 'Debit',
+    amount,
+    balanceAfter: worker.walletBalance,
+    description: `${debitType} Debit: ${description || ''}`,
+    subdomain,
+    actionBy: req.user ? req.user._id : null
+  });
+
+  // If Salary Debit, we auto-create a Payroll Adjustment for the given month/year
+  if (debitType === 'Salary') {
+    if (!month || !year) {
+       // rollback?
+       return res.status(400).json({ message: 'Month and year are required for Salary Debit' });
+    }
+    let record = await PayrollRecord.findOne({ workerId, month, year, subdomain });
+    if (!record) {
+      record = new PayrollRecord({ workerId, month, year, subdomain, adjustments: [], history: [] });
+    }
+    
+    const adjustment = {
+      type: 'addition',
+      category: 'Other',
+      amount: Number(amount),
+      reason: `Wallet Withdrawal: ${description || ''}`,
+      date: new Date(),
+      addedBy: req.user ? req.user._id : null
+    };
+    record.adjustments.push(adjustment);
+    record.history.push({
+      action: 'Added Adjustment (Wallet Debit)',
+      newValue: adjustment,
+      actionBy: req.user ? req.user._id : null
+    });
+    
+    await record.save();
+  }
+
+  res.status(200).json({ message: 'Wallet debited successfully', balance: worker.walletBalance, transaction: txn });
+});
+
 module.exports = {
   giveBonus,
   removeBonus,
@@ -2936,5 +3112,8 @@ module.exports = {
   deletePayrollAdjustment,
   restorePayrollAdjustment,
   updatePayrollStatus,
-  getDashboardSalaryStats
+  getDashboardSalaryStats,
+  getWalletBalances,
+  getWalletHistory,
+  debitWallet
 };

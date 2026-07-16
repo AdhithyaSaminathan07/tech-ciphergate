@@ -307,3 +307,43 @@ export const updatePayrollStatus = async (workerId, data) => {
   const response = await api.put(`/salary/payroll-records/${workerId}/status`, data);
   return response.data;
 };
+
+// ─── Employee Wallet API ───
+
+export const getWalletBalances = async (subdomain) => {
+  try {
+    const token = getAuthToken();
+    const response = await api.get(`/salary/wallets/balances`, {
+      params: { subdomain },
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response ? error.response.data : new Error('Failed to get wallet balances');
+  }
+};
+
+export const getWalletHistory = async (workerId, subdomain) => {
+  try {
+    const token = getAuthToken();
+    const response = await api.get(`/salary/wallets/history/${workerId}`, {
+      params: { subdomain },
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response ? error.response.data : new Error('Failed to get wallet history');
+  }
+};
+
+export const debitWallet = async (workerId, data) => {
+  try {
+    const token = getAuthToken();
+    const response = await api.post(`/salary/wallets/debit/${workerId}`, data, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response ? error.response.data : new Error('Failed to debit wallet');
+  }
+};

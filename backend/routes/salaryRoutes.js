@@ -2,7 +2,7 @@ const express = require('express');
 const { protect, adminOnly, adminOrWorker, workerOnly } = require('../middleware/authMiddleware');
 const { validateRequest } = require('../middleware/validateMiddleware');
 const { generateSalarySchema, updateSalarySchema } = require('../validations/salarySchemas');
-const { giveBonus, removeBonus, resetSalary, getWorkerSalaryReport, getMySalaryReport, getCompensationReport, getBulkSalaryReport, getTopTeamsEarnings, addDeveloperProject, getDeveloperProjects, deleteDeveloperProject, getAllDeveloperProjectsSummary, createSalaryProject, getSalaryProjects, getSalaryProjectsForWorker, updateSalaryProject, deleteSalaryProject, recordProjectPayment, recordAllProjectPayments, getProjectAdjustmentLedger, getPayrollRecord, addPayrollAdjustment, updatePayrollAdjustment, deletePayrollAdjustment, restorePayrollAdjustment, updatePayrollStatus, getDashboardSalaryStats } = require('../controllers/salaryController');
+const { giveBonus, removeBonus, resetSalary, getWorkerSalaryReport, getMySalaryReport, getCompensationReport, getBulkSalaryReport, getTopTeamsEarnings, addDeveloperProject, getDeveloperProjects, deleteDeveloperProject, getAllDeveloperProjectsSummary, createSalaryProject, getSalaryProjects, getSalaryProjectsForWorker, updateSalaryProject, deleteSalaryProject, recordProjectPayment, recordAllProjectPayments, getProjectAdjustmentLedger, getPayrollRecord, addPayrollAdjustment, updatePayrollAdjustment, deletePayrollAdjustment, restorePayrollAdjustment, updatePayrollStatus, getDashboardSalaryStats, getWalletBalances, getWalletHistory, debitWallet } = require('../controllers/salaryController');
 const router = express.Router();
 
 router.route('/give-bonus/:id').post(protect, adminOnly, giveBonus);
@@ -35,10 +35,15 @@ router.route('/project-adjustment-ledger/:workerId').get(protect, getProjectAdju
 
 // ─── Enterprise Payroll Adjustments Routes ───
 router.route('/payroll-records/:workerId').get(protect, adminOnly, getPayrollRecord);
-router.route('/payroll-records/:workerId/adjustments').post(protect, adminOnly, validateRequest(updateSalarySchema), addPayrollAdjustment);
-router.route('/payroll-records/:workerId/adjustments/:adjustmentId').put(protect, adminOnly, validateRequest(updateSalarySchema), updatePayrollAdjustment);
+router.route('/payroll-records/:workerId/adjustments').post(protect, adminOnly, addPayrollAdjustment);
+router.route('/payroll-records/:workerId/adjustments/:adjustmentId').put(protect, adminOnly, updatePayrollAdjustment);
 router.route('/payroll-records/:workerId/adjustments/:adjustmentId').delete(protect, adminOnly, deletePayrollAdjustment);
 router.route('/payroll-records/:workerId/adjustments/:adjustmentId/restore').post(protect, adminOnly, restorePayrollAdjustment);
 router.route('/payroll-records/:workerId/status').put(protect, adminOnly, updatePayrollStatus);
+
+// ─── Employee Wallet Management Routes ───
+router.route('/wallets/balances').get(protect, adminOnly, getWalletBalances);
+router.route('/wallets/history/:workerId').get(protect, adminOrWorker, getWalletHistory);
+router.route('/wallets/debit/:workerId').post(protect, adminOnly, debitWallet);
 
 module.exports = router;

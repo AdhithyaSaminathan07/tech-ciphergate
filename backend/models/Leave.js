@@ -83,4 +83,7 @@ const leaveSchema = mongoose.Schema({
   timestamps: true
 });
 
+leaveSchema.index({ worker: 1 });
+leaveSchema.index({ subdomain: 1 });
+
 module.exports = mongoose.model('Leave', leaveSchema);

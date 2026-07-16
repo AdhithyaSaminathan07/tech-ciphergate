@@ -102,13 +102,21 @@ const PayrollAdjustmentModal = ({ isOpen, onClose, bulkReportData, month, year, 
             toast.success('Adjustment added');
             setNewAdjustment({ type: 'addition', category: 'Bonus', amount: '', reason: '', remarks: '' });
             
-            // Refresh local list data
-            fetchLocalData(localMonth, localYear);
-            
             // Update active state
             if (res.record) {
                 setAdjustments(res.record.adjustments || []);
                 setHistory(res.record.history || []);
+                
+                // Optimistically update the local list data for instant UI reflection
+                const newActiveAdjs = (res.record.adjustments || []).filter(a => !a.isDeleted);
+                const newTotalAdd = newActiveAdjs.filter(a => a.type === 'addition').reduce((sum, a) => sum + a.amount, 0);
+                const newTotalDed = newActiveAdjs.filter(a => a.type === 'deduction').reduce((sum, a) => sum + a.amount, 0);
+                
+                setLocalBulkData(prev => prev.map(w => 
+                    w.workerId === selectedWorker.workerId 
+                    ? { ...w, payrollRecord: res.record, totalAdditions: newTotalAdd, totalDeductions: newTotalDed } 
+                    : w
+                ));
             }
             if (onAdjustmentSaved) onAdjustmentSaved();
         } catch (error) {
@@ -121,12 +129,20 @@ const PayrollAdjustmentModal = ({ isOpen, onClose, bulkReportData, month, year, 
             const res = await deletePayrollAdjustment(selectedWorker.workerId, id, localMonth, localYear, subdomain);
             toast.success('Adjustment deleted');
             
-            // Refresh local list data
-            fetchLocalData(localMonth, localYear);
             
             if (res.record) {
                 setAdjustments(res.record.adjustments || []);
                 setHistory(res.record.history || []);
+                
+                const newActiveAdjs = (res.record.adjustments || []).filter(a => !a.isDeleted);
+                const newTotalAdd = newActiveAdjs.filter(a => a.type === 'addition').reduce((sum, a) => sum + a.amount, 0);
+                const newTotalDed = newActiveAdjs.filter(a => a.type === 'deduction').reduce((sum, a) => sum + a.amount, 0);
+                
+                setLocalBulkData(prev => prev.map(w => 
+                    w.workerId === selectedWorker.workerId 
+                    ? { ...w, payrollRecord: res.record, totalAdditions: newTotalAdd, totalDeductions: newTotalDed } 
+                    : w
+                ));
             }
             if (onAdjustmentSaved) onAdjustmentSaved();
         } catch (error) {
@@ -139,12 +155,20 @@ const PayrollAdjustmentModal = ({ isOpen, onClose, bulkReportData, month, year, 
             const res = await restorePayrollAdjustment(selectedWorker.workerId, id, localMonth, localYear, subdomain);
             toast.success('Adjustment restored');
             
-            // Refresh local list data
-            fetchLocalData(localMonth, localYear);
             
             if (res.record) {
                 setAdjustments(res.record.adjustments || []);
                 setHistory(res.record.history || []);
+                
+                const newActiveAdjs = (res.record.adjustments || []).filter(a => !a.isDeleted);
+                const newTotalAdd = newActiveAdjs.filter(a => a.type === 'addition').reduce((sum, a) => sum + a.amount, 0);
+                const newTotalDed = newActiveAdjs.filter(a => a.type === 'deduction').reduce((sum, a) => sum + a.amount, 0);
+                
+                setLocalBulkData(prev => prev.map(w => 
+                    w.workerId === selectedWorker.workerId 
+                    ? { ...w, payrollRecord: res.record, totalAdditions: newTotalAdd, totalDeductions: newTotalDed } 
+                    : w
+                ));
             }
             if (onAdjustmentSaved) onAdjustmentSaved();
         } catch (error) {
@@ -170,8 +194,20 @@ const PayrollAdjustmentModal = ({ isOpen, onClose, bulkReportData, month, year, 
 
     if (!isOpen) return null;
 
+    const handleModalClose = () => {
+        if (showHistory) {
+            setShowHistory(false);
+        } else if (isManaging) {
+            setIsManaging(false);
+        } else {
+            setIsManaging(false); 
+            setShowHistory(false); 
+            onClose();
+        }
+    };
+
     return (
-        <Modal isOpen={isOpen} onClose={() => { setIsManaging(false); setShowHistory(false); onClose(); }} title="Enterprise Payroll Adjustments" size="4xl">
+        <Modal isOpen={isOpen} onClose={handleModalClose} title="Enterprise Payroll Adjustments" size="4xl">
             {!isManaging ? (
                 <div className="p-4">
                     {/* Filter and Search Bar */}

@@ -488,17 +488,45 @@ const getLeaderboard = asyncHandler(async (req, res) => {
     const subdomain = req.user.subdomain;
     const filter = req.query.filter || 'all'; // all | weekly | monthly | department
     const department = req.query.department;
+    const limit = req.query.limit ? parseInt(req.query.limit) : null;
 
     let workers;
     const baseQuery = { subdomain, status: 'Active' };
     if (department) baseQuery.department = department;
 
+    let myRank = null;
+    let myRankInWeeklyMonthly = null;
+
     if (filter === 'all') {
-        workers = await Worker.find(baseQuery)
+        let workersQuery = Worker.find(baseQuery)
             .select('name username photo performancePoints currentStreak longestStreak performanceLevel department totalCompletedTickets totalDelayedTickets')
             .populate('department', 'name')
-            .sort({ performancePoints: -1 })
-            .lean();
+            .sort({ performancePoints: -1 });
+
+        if (limit) {
+            workersQuery = workersQuery.limit(limit);
+        }
+        workers = await workersQuery.lean();
+
+        // Check if the requesting worker is in the top results. If not, fetch and append them
+        if (limit && req.user && req.user.role === 'worker') {
+            const hasMe = workers.some(w => w._id.toString() === req.user._id.toString());
+            if (!hasMe) {
+                const me = await Worker.findOne({ _id: req.user._id, ...baseQuery })
+                    .select('name username photo performancePoints currentStreak longestStreak performanceLevel department totalCompletedTickets totalDelayedTickets')
+                    .populate('department', 'name')
+                    .lean();
+                if (me) {
+                    workers.push(me);
+                    const rankResult = await Worker.countDocuments({
+                        subdomain,
+                        status: 'Active',
+                        performancePoints: { $gt: req.user.performancePoints || 0 }
+                    });
+                    myRank = rankResult + 1;
+                }
+            }
+        }
     } else {
         // For weekly/monthly, aggregate from PerformancePoints
         const dateFilter = new Date();
@@ -513,15 +541,32 @@ const getLeaderboard = asyncHandler(async (req, res) => {
             { $sort: { filteredPoints: -1 } }
         ]);
 
-        const workerIds = agg.map(a => a._id);
+        let workerIds = agg.map(a => a._id);
+
+        if (limit) {
+            const meId = req.user?._id?.toString();
+            const myIndexInAgg = meId ? workerIds.findIndex(id => id.toString() === meId) : -1;
+            if (myIndexInAgg !== -1) {
+                myRankInWeeklyMonthly = myIndexInAgg + 1;
+            }
+
+            const topWorkerIds = workerIds.slice(0, limit);
+            if (meId && myIndexInAgg !== -1 && myIndexInAgg >= limit) {
+                topWorkerIds.push(meId);
+            }
+            workerIds = topWorkerIds;
+        }
+
         const workerData = await Worker.find({ _id: { $in: workerIds }, ...baseQuery })
             .select('name username photo performancePoints currentStreak longestStreak performanceLevel department totalCompletedTickets totalDelayedTickets')
             .populate('department', 'name')
             .lean();
 
-        workers = agg.map(a => {
-            const w = workerData.find(w => w._id.toString() === a._id.toString());
-            return w ? { ...w, filteredPoints: a.filteredPoints } : null;
+        workers = workerIds.map(id => {
+            const w = workerData.find(w => w._id.toString() === id.toString());
+            if (!w) return null;
+            const aggItem = agg.find(a => a._id.toString() === id.toString());
+            return { ...w, filteredPoints: aggItem?.filteredPoints || 0 };
         }).filter(Boolean);
     }
 
@@ -555,8 +600,14 @@ const getLeaderboard = asyncHandler(async (req, res) => {
         const wIdStr = w._id.toString();
         const badges = badgesMap[wIdStr] || [];
         const weeklyGain = weeklyGainMap[wIdStr] || 0;
+
+        let rank = idx + 1;
+        if (limit && idx === limit && req.user && wIdStr === req.user._id.toString()) {
+            rank = filter === 'all' ? (myRank || rank) : (myRankInWeeklyMonthly || rank);
+        }
+
         return {
-            rank: idx + 1,
+            rank,
             _id: w._id,
             name: w.name,
             photo: w.photo,

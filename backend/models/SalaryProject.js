@@ -18,6 +18,12 @@ const salaryProjectSchema = new mongoose.Schema({
     max: 100,
     default: 60
   },
+  walletPercentage: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 100
+  },
   // Array of developer IDs assigned to this project
   developers: [
     {
@@ -46,6 +52,14 @@ const salaryProjectSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  walletAmount: {
+    type: Number,
+    default: 0
+  },
+  perDeveloperWalletShare: {
+    type: Number,
+    default: 0
+  },
   createdAt: {
     type: Date,
     default: Date.now
@@ -56,11 +70,16 @@ const salaryProjectSchema = new mongoose.Schema({
   }
 });
 
-// Pre-save hook to compute profit and per-developer share
+// Pre-save hook to compute profit, wallet, and per-developer shares
 salaryProjectSchema.pre('save', function (next) {
   this.projectProfit = this.projectAmount * (this.profitPercentage / 100);
+  this.walletAmount = this.projectAmount * ((this.walletPercentage || 0) / 100);
+  
   const devCount = this.developers.length || 1;
+  
   this.perDeveloperShare = this.projectProfit / devCount;
+  this.perDeveloperWalletShare = this.walletAmount / devCount;
+  
   this.updatedAt = Date.now();
   next();
 });

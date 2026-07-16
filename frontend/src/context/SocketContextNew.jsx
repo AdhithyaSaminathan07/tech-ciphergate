@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { io } from 'socket.io-client';
 import appContext from './AppContext';
 import { toast } from 'react-toastify';
+import { useAuth } from '../hooks/useAuth';
 
 const SocketContext = createContext();
 
@@ -17,11 +18,12 @@ export const SocketProvider = ({ children }) => {
     const [socket, setSocket] = useState(null);
     const [isConnected, setIsConnected] = useState(false);
     const { subdomain } = useContext(appContext);
+    const { user } = useAuth();
     const socketRef = useRef(null);
     const toastShownRef = useRef(false);
 
     useEffect(() => {
-        if (!subdomain || subdomain === 'main') {
+        if (!subdomain || subdomain === 'main' || !user) {
             return;
         }
 
@@ -31,13 +33,8 @@ export const SocketProvider = ({ children }) => {
         // ─────────────────────────────────────────────────────────────────────
         const socketUrl = import.meta.env.VITE_SOCKET_URL || window.location.origin;
 
-        // Retrieve token for auth
-        const token = localStorage.getItem('token');
-
-        if (!token) {
-            console.warn('[Socket] No token found, skipping connection');
-            return;
-        }
+        // Retrieve token for auth (fallback/legacy support)
+        const token = localStorage.getItem('token') || '';
 
         const newSocket = io(socketUrl, {
             // Start with polling, then upgrade to websocket (default behavior)
@@ -97,7 +94,7 @@ export const SocketProvider = ({ children }) => {
         return () => {
             newSocket.disconnect();
         };
-    }, [subdomain]);
+    }, [subdomain, user]);
 
     const value = {
         socket,

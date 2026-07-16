@@ -170,7 +170,30 @@ const Dashboard = () => {
       setDepartments(dashboardData.departments);
       setAttendancePercentage(dashboardData.attendancePercentage);
       setTickets(dashboardData.attentionTickets); // Only use attentionTickets to satisfy the UI map logic below (attentionTickets variable)
-      setTopTeams(dashboardData.topTeams);
+
+      // If topTeams is present in cache, use it. Otherwise fetch from salary endpoint.
+      if (dashboardData.topTeams && dashboardData.topTeams.length > 0) {
+        setTopTeams(dashboardData.topTeams);
+      } else {
+        // Trigger computation via salary endpoint (computes prev month, caches result)
+        try {
+          const now = new Date();
+          const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          const prevYear = prevMonthDate.getFullYear();
+          const prevMonth = prevMonthDate.getMonth() + 1;
+          const fromDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
+          const lastDay = new Date(prevYear, prevMonth, 0).getDate();
+          const toDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+          const teamsRes = await api.get('/salary/top-teams-earnings', {
+            params: { subdomain, fromDate, toDate }
+          });
+          setTopTeams(teamsRes.data?.topTeams || []);
+        } catch (teamsErr) {
+          console.error('Failed to load top teams earnings:', teamsErr);
+          setTopTeams([]);
+        }
+      }
 
       // Fetch public settings for bug bounty popup
       try {
@@ -228,6 +251,7 @@ const Dashboard = () => {
     }
   };
 
+
   useEffect(() => {
     if (user) {
       loadDashboardData();
@@ -279,7 +303,7 @@ const Dashboard = () => {
           <div className="col-span-2 md:col-span-1">
             <StatCard title="Total Employees" value={stats.workers} icon={FaUsers} link="/admin/workers" />
           </div>
-          <StatCard title="Active Tasks" value={stats.tasks} icon={FaTasks} link="/admin/tasks" />
+          <StatCard title="Active Tasks" value={stats.tasks} icon={FaTasks} link="/admin/work-allocation" />
           <StatCard title="Topics" value={stats.topics} icon={FaTasks} link="/admin/topics" />
           <StatCard title="Monthly Base Salary" value={`₹${stats.salary.base.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`} icon={FaMoneyBillWave} />
           <StatCard title="Total Net Payout" value={`₹${stats.salary.payout.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`} icon={FaWallet} />

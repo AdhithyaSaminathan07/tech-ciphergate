@@ -213,7 +213,8 @@ const Settings = () => {
                 },
                 monthlyLimit: fetchedSettings.advancedLeaveDeduction?.monthlyLimit || 2,
                 deductionMultiplier: fetchedSettings.advancedLeaveDeduction?.deductionMultiplier || 2,
-                enableUnauthorizedLeavePenalty: fetchedSettings.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== undefined ? fetchedSettings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty : true
+                enableUnauthorizedLeavePenalty: fetchedSettings.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== undefined ? fetchedSettings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty : true,
+                enableUnauthorizedPermissionPenalty: fetchedSettings.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty !== undefined ? fetchedSettings.advancedLeaveDeduction.enableUnauthorizedPermissionPenalty : false
             };
 
             const finalSettings = {

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useContext, useMemo } from 'react';
-import { FaBell, FaCheckDouble, FaCog, FaBellSlash, FaCalendarCheck, FaFileInvoice, FaComments, FaCommentDots, FaHamburger, FaBookOpen } from 'react-icons/fa';
+import { FaBell, FaCheckDouble, FaCog, FaBellSlash, FaCalendarCheck, FaCalendarMinus, FaFileInvoice, FaComments, FaCommentDots, FaHamburger, FaBookOpen } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../../context/NotificationContext';
 import { Bell, CheckCircle2, AlertCircle, Clock, MoreVertical, Settings2, Menu, X, ChevronRight, Search, Plus, LogOut, ChevronDown, Cpu, Sparkles, BrainCircuit } from 'lucide-react';
@@ -316,6 +316,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                                 <div className="p-1.5 sm:p-2 space-y-0.5 sm:space-y-1">
                                                     {[
                                                         { label: 'Apply for Leave', icon: <FaCalendarCheck />, path: '/worker/leave-apply' },
+                                                        { label: 'Leave Requests', icon: <FaCalendarMinus />, path: '/worker/leave-requests' },
                                                         { label: 'Invoices', icon: <FaFileInvoice />, path: '/worker/invoices' },
                                                         { label: 'Comments', icon: <FaComments />, path: '/worker/comments' },
                                                         { label: 'Communication', icon: <FaCommentDots />, path: '/worker/communication' },

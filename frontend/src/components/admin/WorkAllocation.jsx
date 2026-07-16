@@ -1499,7 +1499,7 @@ const WorkAllocation = () => {
         if (isScrollingRef.current) return;
         const container = e.currentTarget;
         const scrollTop = container.scrollTop;
-        
+
         const tabIds = ['details', 'assign', 'execution'];
         let activeTab = 'details';
         let minDiff = Infinity;
@@ -2389,9 +2389,8 @@ const WorkAllocation = () => {
                                             key={tab.id}
                                             type="button"
                                             onClick={() => scrollToTab(tab.id)}
-                                            className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 text-[10px] font-extrabold uppercase tracking-wider transition-colors ${
-                                                isActive ? 'text-teal-600' : 'text-slate-400 hover:text-slate-600'
-                                            }`}
+                                            className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 text-[10px] font-extrabold uppercase tracking-wider transition-colors ${isActive ? 'text-teal-600' : 'text-slate-400 hover:text-slate-600'
+                                                }`}
                                         >
                                             <Icon className="w-3.5 h-3.5" />
                                             <span>{tab.label}</span>
@@ -2553,11 +2552,10 @@ const WorkAllocation = () => {
                                                                     value={selectedTicket.endDate || ''}
                                                                     onChange={(e) => updateSelectedTicket({ endDate: e.target.value })}
                                                                     onClick={(e) => e.target.showPicker?.()}
-                                                                    className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-semibold outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 focus:bg-white shadow-sm cursor-pointer ${
-                                                                        isOverdue(selectedTicket.endDate, selectedTicket.status)
+                                                                    className={`w-full border rounded-xl px-2.5 py-1.5 text-xs font-semibold outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 focus:bg-white shadow-sm cursor-pointer ${isOverdue(selectedTicket.endDate, selectedTicket.status)
                                                                             ? 'bg-rose-50 border-rose-200 text-rose-700'
                                                                             : 'bg-slate-50 border-slate-200 text-slate-700'
-                                                                    }`}
+                                                                        }`}
                                                                 />
                                                             </div>
                                                         </div>

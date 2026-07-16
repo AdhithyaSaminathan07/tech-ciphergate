@@ -13,8 +13,8 @@ export const getMyPointHistory = async ({ limit = 20, page = 1 } = {}) => {
 };
 
 // Get leaderboard (filter: 'all' | 'weekly' | 'monthly', optional department)
-export const getLeaderboard = async ({ filter = 'all', department } = {}) => {
-    const { data } = await api.get('/performance/leaderboard', { params: { filter, department } });
+export const getLeaderboard = async ({ filter = 'all', department, limit } = {}) => {
+    const { data } = await api.get('/performance/leaderboard', { params: { filter, department, limit } });
     return data;
 };
 

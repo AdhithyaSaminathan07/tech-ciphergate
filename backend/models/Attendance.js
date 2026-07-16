@@ -56,4 +56,7 @@ const attendanceSchema = mongoose.Schema({
     timestamps: true
 });
 
+attendanceSchema.index({ worker: 1, date: 1 });
+attendanceSchema.index({ subdomain: 1, date: 1 });
+
 module.exports = mongoose.model('Attendance', attendanceSchema);

@@ -8,7 +8,7 @@ export const useAuth = () => {
     throw new Error('useAuth must be used within an AuthProvider');
   }
 
-  const isAuthenticated = !!(localStorage.getItem('token') && context.user);
+  const isAuthenticated = context.isAuthenticated;
 
   // Add some additional helper methods
   return {

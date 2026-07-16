@@ -8,8 +8,7 @@ import { getWorkerAttendance } from '../../services/attendanceService'; // Chang
 import Table from '../common/Table';
 import TaskSpinner from '../common/Spinner';
 import { GrPowerReset } from "react-icons/gr";
-import api from '../../hooks/useAxios';
-import { getAuthToken } from '../../utils/authUtils';
+import { getWorkerById } from '../../services/workerService';
 
 const WorkerAttendance = () => {
     const { id } = useParams();
@@ -26,14 +25,11 @@ const WorkerAttendance = () => {
         setIsLoading(true);
         try {
             // First get the worker data to get their RFID
-            const token = getAuthToken();
-            const workerResponse = await api.get(`/workers/${id}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setWorker(workerResponse.data);
+            const workerData = await getWorkerById(id);
+            setWorker(workerData);
             
             // Then get attendance data using RFID
-            const data = await getWorkerAttendance({ rfid: workerResponse.data.rfid, subdomain });
+            const data = await getWorkerAttendance({ rfid: workerData.rfid, subdomain });
             const attendanceArray = data?.attendance || [];
             setAttendanceData(Array.isArray(attendanceArray) ? attendanceArray : []);
         } catch (error) {

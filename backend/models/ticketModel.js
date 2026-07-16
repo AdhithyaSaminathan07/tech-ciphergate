@@ -235,6 +235,8 @@ ticketSchema.pre('save', function (next) {
 
 ticketSchema.index({ subdomain: 1, isDeleted: 1 });
 ticketSchema.index({ status: 1 });
+ticketSchema.index({ assignee: 1, subdomain: 1 });
+ticketSchema.index({ assignees: 1, subdomain: 1 });
 
 ticketSchema.post('save', async function(doc) {
   try {

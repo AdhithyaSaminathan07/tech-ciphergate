@@ -2429,12 +2429,18 @@ const SalaryManagement = () => {
                 onAdjustmentSaved={() => {
                     // Re-fetch bulk report to pick up latest adjustments
                     if (bulkReportData && bulkReportData.length > 0) {
-                        const fromDate = new Date(selectedYear, selectedMonth - 1, 1).toISOString().slice(0, 10);
-                        const toDate = new Date(selectedYear, selectedMonth, 0).toISOString().slice(0, 10);
+                        const formatLocal = (d) => {
+                            let m = '' + (d.getMonth() + 1); let day = '' + d.getDate();
+                            if (m.length < 2) m = '0' + m; if (day.length < 2) day = '0' + day;
+                            return [d.getFullYear(), m, day].join('-');
+                        };
+                        const fromDate = formatLocal(new Date(selectedYear, selectedMonth - 1, 1));
+                        const toDate = formatLocal(new Date(selectedYear, selectedMonth, 0));
+                        const currentWorkerIds = bulkReportData.map(w => w.workerId);
                         setIsBulkReportLoading(true);
-                        getBulkSalaryReport(subdomain, fromDate, toDate, { isExport: true })
+                        getBulkSalaryReport(subdomain, fromDate, toDate, { isExport: true, month: selectedMonth, year: selectedYear, _t: Date.now() })
                             .then(data => {
-                                const filtered = (data.reports || []).filter(r => selectedWorkersForReport.map(w => w._id || w).includes(r.workerId));
+                                const filtered = (data.reports || []).filter(r => currentWorkerIds.includes(r.workerId));
                                 setBulkReportData(filtered);
                                 setIsBulkReportLoading(false);
                             })
@@ -2851,7 +2857,7 @@ const SalaryManagement = () => {
                                                                                     {report.totalAbsentDays} <span className="text-[9px] text-rose-400 font-medium">Days</span>
                                                                                 </td>
                                                                                 <td className="px-4 py-4">
-                                                                                    <p className="font-black text-emerald-600 text-sm">₹{Math.max(0, (report.payableSalary !== undefined ? report.payableSalary : report.totalFinalSalary) - (deductionView ? (report.taskPenalty || 0) : 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                                                                    <p className="font-black text-emerald-600 text-sm">₹{Math.max(0, report.totalFinalSalary - (deductionView ? (report.taskPenalty || 0) : 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                                                                     {report.projectAdjustment !== undefined && report.projectAdjustment !== 0 && (
                                                                                         <span className={`inline-flex items-center px-1.5 py-0.5 mt-1 rounded text-[8px] font-black tracking-wider ${report.projectAdjustment < 0 ? 'bg-rose-50 text-rose-600 border border-rose-100/50' : 'bg-emerald-50 text-emerald-600 border border-emerald-100/50'}`}>
                                                                                             {report.projectAdjustment > 0 ? '+' : ''}₹{report.projectAdjustment.toFixed(2)} Adj
@@ -3497,85 +3503,115 @@ const SalaryManagement = () => {
                     {reportData && (
                         <div className="space-y-6">
                             {/* Summary Section - Primary Focus */}
-                            <div className="bg-slate-50/40 rounded-[2.5rem] p-1.5 border border-slate-100/50">
-                                <div className="grid grid-cols-1 lg:grid-cols-12 gap-2">
-                                    {/* Left Metrics Column */}
-                                    <div className="lg:col-span-7 p-8">
-                                        <div className="grid grid-cols-2 gap-x-12 gap-y-8">
-                                            <div>
-                                                <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-2">Monthly Base Salary</p>
-                                                <p className="text-xl font-bold text-slate-800 tracking-tight">₹{reportData.report.summary.originalSalary?.toFixed(2) || '0.00'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-2">Base Salary (SaaS)</p>
-                                                <p className="text-xl font-bold text-slate-800 tracking-tight">₹{reportData.report.summary.expectedSaaSSalary?.toFixed(2) || reportData.report.summary.originalSalary?.toFixed(2) || '0.00'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-2">Total Deductions</p>
-                                                <p className="text-xl font-bold text-rose-500 tracking-tight">- ₹{reportData.report.totalSalaryDeduction?.toFixed(2) || '0.00'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-2">Net Base Salary</p>
-                                                <p className="text-xl font-bold text-slate-800 tracking-tight">₹{reportData.report.summary.netBaseSalary?.toFixed(2) || '0.00'}</p>
-                                            </div>
-                                            {(reportData.report.summary.grossProjectSalary > 0 || reportData.report.summary.totalProjectSalary > 0) && (
-                                                <>
-                                                    <div>
-                                                        <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-2">Gross Project Earnings</p>
-                                                        <p className="text-xl font-bold text-teal-600 tracking-tight">₹{(reportData.report.summary.grossProjectSalary !== undefined ? reportData.report.summary.grossProjectSalary : reportData.report.summary.totalProjectSalary)?.toFixed(2) || '0.00'}</p>
-                                                    </div>
-                                                    {reportData.report.summary.totalProjectDeductions > 0 && (
-                                                        <div>
-                                                            <p className="text-[10px] font-black text-rose-400 tracking-[0.15em] mb-2">Project Deductions</p>
-                                                            <p className="text-xl font-bold text-rose-500 tracking-tight">- ₹{reportData.report.summary.totalProjectDeductions?.toFixed(2) || '0.00'}</p>
-                                                        </div>
-                                                    )}
-                                                    <div>
-                                                        <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-2">Net Project Earnings</p>
-                                                        <p className="text-xl font-bold text-teal-600 tracking-tight">₹{reportData.report.summary.totalProjectSalary?.toFixed(2) || '0.00'}</p>
-                                                    </div>
-                                                </>
-                                            )}
-                                            {reportData.projectAdjustment !== undefined && reportData.projectAdjustment !== 0 && (
-                                                <div>
-                                                    <p className={`text-[10px] font-black tracking-[0.15em] mb-2 ${reportData.projectAdjustment < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>Project Adjustment</p>
-                                                    <p className={`text-xl font-bold tracking-tight ${reportData.projectAdjustment < 0 ? 'text-rose-500' : 'text-emerald-600'}`}>{reportData.projectAdjustment > 0 ? '+' : ''} ₹{reportData.projectAdjustment?.toFixed(2)}</p>
-                                                </div>
-                                            )}
-                                            {reportData.projectAdjustment !== undefined && reportData.projectAdjustment !== 0 && (
-                                                <div>
-                                                    <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-2">Final Project Pay</p>
-                                                    <p className="text-xl font-bold text-slate-800 tracking-tight">₹{Math.max(0, (reportData.report.summary.totalProjectSalary || 0) + (reportData.projectAdjustment || 0)).toFixed(2)}</p>
-                                                </div>
-                                            )}
-                                            {reportData.totalBonusAmount > 0 && (
-                                                <div>
-                                                    <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-2">Bonus Amount</p>
-                                                    <p className="text-xl font-bold text-teal-600 tracking-tight">+ ₹{reportData.totalBonusAmount.toFixed(2)}</p>
-                                                </div>
-                                            )}
-                                            {reportData.totalFinesAmount > 0 && (
-                                                <div>
-                                                    <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-2">Total Fines</p>
-                                                    <p className="text-xl font-bold text-rose-500 tracking-tight">- ₹{reportData.totalFinesAmount.toFixed(2)}</p>
-                                                </div>
-                                            )}
-                                            {reportData.totalUnauthorizedPenalty > 0 && (
-                                                <div>
-                                                    <p className="text-[10px] font-black text-orange-500 tracking-[0.15em] mb-2">⚠ Unauthorized Absence Penalty</p>
-                                                    <p className="text-xl font-bold text-orange-600 tracking-tight">- ₹{reportData.totalUnauthorizedPenalty.toFixed(2)}</p>
-                                                    <p className="text-[9px] font-bold text-orange-400 mt-1">{reportData.unauthorizedAbsencePenalties?.length || 0} day(s) × 5X</p>
-                                                </div>
-                                            )}
+                            <div className="bg-slate-50/50 rounded-[2.5rem] p-3 border border-slate-200/60 shadow-inner flex flex-col gap-4">
+                                {/* Top Metrics Row */}
+                                <div className="p-4 bg-white/40 rounded-[2rem]">
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                        {/* Monthly Base Salary */}
+                                        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
+                                            <div className="absolute top-0 right-0 w-16 h-16 bg-blue-50/50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+                                            <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-1 group-hover:text-blue-500 transition-colors relative z-10">Monthly Base Salary</p>
+                                            <p className="text-xl font-bold text-slate-800 tracking-tight relative z-10">₹{reportData.report.summary.originalSalary?.toFixed(2) || '0.00'}</p>
                                         </div>
-                                    </div>
+                                        
+                                        {/* Base Salary (SaaS) */}
+                                        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
+                                            <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-50/50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+                                            <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-1 group-hover:text-indigo-500 transition-colors relative z-10">Base Salary (SaaS)</p>
+                                            <p className="text-xl font-bold text-slate-800 tracking-tight relative z-10">₹{reportData.report.summary.expectedSaaSSalary?.toFixed(2) || reportData.report.summary.originalSalary?.toFixed(2) || '0.00'}</p>
+                                        </div>
 
-                                    {/* Final Salary Emphasis Card */}
-                                    <div className="lg:col-span-5 bg-white rounded-[2rem] p-10 shadow-[0_20px_40px_-15px_rgba(13,148,136,0.1)] border border-teal-50 flex flex-col justify-center items-center lg:items-end text-center lg:text-right relative overflow-hidden">
-                                        <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500/5 rounded-full -mr-16 -mt-16 blur-2xl"></div>
-                                        <div className="relative z-10">
-                                            <p className="text-[11px] font-black text-teal-600 tracking-[0.25em] mb-3">Total Final Salary</p>
-                                            <div className="text-5xl md:text-6xl font-black text-[#0d9488] tracking-tighter">
+                                        {/* Total Deductions */}
+                                        <div className="bg-rose-50/40 rounded-2xl p-4 border border-rose-100/60 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
+                                            <div className="absolute top-0 right-0 w-16 h-16 bg-rose-100/50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+                                            <p className="text-[10px] font-black text-rose-400/80 tracking-[0.15em] mb-1 group-hover:text-rose-500 transition-colors relative z-10">Total Deductions</p>
+                                            <p className="text-xl font-bold text-rose-600 tracking-tight relative z-10">- ₹{reportData.report.totalSalaryDeduction?.toFixed(2) || '0.00'}</p>
+                                        </div>
+
+                                        {/* Net Base Salary */}
+                                        <div className="bg-emerald-50/40 rounded-2xl p-4 border border-emerald-100/60 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
+                                            <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-100/50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+                                            <p className="text-[10px] font-black text-emerald-600/70 tracking-[0.15em] mb-1 group-hover:text-emerald-600 transition-colors relative z-10">Net Base Salary</p>
+                                            <p className="text-xl font-bold text-emerald-700 tracking-tight relative z-10">₹{reportData.report.summary.netBaseSalary?.toFixed(2) || '0.00'}</p>
+                                        </div>
+
+                                        {(reportData.report.summary.grossProjectSalary > 0 || reportData.report.summary.totalProjectSalary > 0) && (
+                                            <>
+                                                <div className="bg-white rounded-2xl p-4 border border-teal-100 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
+                                                    <div className="absolute top-0 right-0 w-16 h-16 bg-teal-50/50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+                                                    <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-1 group-hover:text-teal-600 transition-colors relative z-10">Gross Project Earnings</p>
+                                                    <p className="text-xl font-bold text-teal-600 tracking-tight relative z-10">₹{(reportData.report.summary.grossProjectSalary !== undefined ? reportData.report.summary.grossProjectSalary : reportData.report.summary.totalProjectSalary)?.toFixed(2) || '0.00'}</p>
+                                                </div>
+                                                {reportData.report.summary.totalProjectDeductions > 0 && (
+                                                    <div className="bg-rose-50/40 rounded-2xl p-4 border border-rose-100/60 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
+                                                        <div className="absolute top-0 right-0 w-16 h-16 bg-rose-100/50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+                                                        <p className="text-[10px] font-black text-rose-400/80 tracking-[0.15em] mb-1 group-hover:text-rose-500 transition-colors relative z-10">Project Deductions</p>
+                                                        <p className="text-xl font-bold text-rose-600 tracking-tight relative z-10">- ₹{reportData.report.summary.totalProjectDeductions?.toFixed(2) || '0.00'}</p>
+                                                    </div>
+                                                )}
+                                                <div className="bg-teal-50/40 rounded-2xl p-4 border border-teal-100/60 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
+                                                    <div className="absolute top-0 right-0 w-16 h-16 bg-teal-100/50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+                                                    <p className="text-[10px] font-black text-teal-600/70 tracking-[0.15em] mb-1 group-hover:text-teal-700 transition-colors relative z-10">Net Project Earnings</p>
+                                                    <p className="text-xl font-bold text-teal-700 tracking-tight relative z-10">₹{reportData.report.summary.totalProjectSalary?.toFixed(2) || '0.00'}</p>
+                                                </div>
+                                            </>
+                                        )}
+                                        {reportData.projectAdjustment !== undefined && reportData.projectAdjustment !== 0 && (
+                                            <div className={`rounded-2xl p-4 border shadow-sm hover:shadow-md transition-all group relative overflow-hidden ${reportData.projectAdjustment < 0 ? 'bg-rose-50/40 border-rose-100/60' : 'bg-emerald-50/40 border-emerald-100/60'}`}>
+                                                <div className={`absolute top-0 right-0 w-16 h-16 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110 ${reportData.projectAdjustment < 0 ? 'bg-rose-100/50' : 'bg-emerald-100/50'}`}></div>
+                                                <p className={`text-[10px] font-black tracking-[0.15em] mb-1 relative z-10 ${reportData.projectAdjustment < 0 ? 'text-rose-400/80 group-hover:text-rose-500' : 'text-emerald-500/80 group-hover:text-emerald-600'} transition-colors`}>Project Adjustment</p>
+                                                <p className={`text-xl font-bold tracking-tight relative z-10 ${reportData.projectAdjustment < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{reportData.projectAdjustment > 0 ? '+' : ''} ₹{reportData.projectAdjustment?.toFixed(2)}</p>
+                                            </div>
+                                        )}
+                                        {reportData.projectAdjustment !== undefined && reportData.projectAdjustment !== 0 && (
+                                            <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
+                                                <div className="absolute top-0 right-0 w-16 h-16 bg-slate-50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+                                                <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-1 group-hover:text-slate-600 transition-colors relative z-10">Final Project Pay</p>
+                                                <p className="text-xl font-bold text-slate-800 tracking-tight relative z-10">₹{Math.max(0, (reportData.report.summary.totalProjectSalary || 0) + (reportData.projectAdjustment || 0)).toFixed(2)}</p>
+                                            </div>
+                                        )}
+                                        {reportData.totalBonusAmount > 0 && (
+                                            <div className="bg-amber-50/40 rounded-2xl p-4 border border-amber-100/60 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
+                                                <div className="absolute top-0 right-0 w-16 h-16 bg-amber-100/50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+                                                <p className="text-[10px] font-black text-amber-500/80 tracking-[0.15em] mb-1 group-hover:text-amber-600 transition-colors relative z-10">Bonus Amount</p>
+                                                <p className="text-xl font-bold text-amber-600 tracking-tight relative z-10">+ ₹{reportData.totalBonusAmount.toFixed(2)}</p>
+                                            </div>
+                                        )}
+                                        {reportData.totalFinesAmount > 0 && (
+                                            <div className="bg-rose-50/40 rounded-2xl p-4 border border-rose-100/60 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
+                                                <div className="absolute top-0 right-0 w-16 h-16 bg-rose-100/50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+                                                <p className="text-[10px] font-black text-rose-400/80 tracking-[0.15em] mb-1 group-hover:text-rose-500 transition-colors relative z-10">Total Fines</p>
+                                                <p className="text-xl font-bold text-rose-600 tracking-tight relative z-10">- ₹{reportData.totalFinesAmount.toFixed(2)}</p>
+                                            </div>
+                                        )}
+                                        {reportData.totalUnauthorizedPenalty > 0 && (
+                                            <div className="bg-orange-50/50 rounded-2xl p-4 border border-orange-200/60 shadow-sm hover:shadow-md transition-all group relative overflow-hidden col-span-2 md:col-span-2 lg:col-span-2">
+                                                <div className="absolute top-0 right-0 w-24 h-24 bg-orange-100/50 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-110"></div>
+                                                <p className="text-[10px] font-black text-orange-500 tracking-[0.15em] mb-1 relative z-10">⚠ Unauthorized Absence Penalty</p>
+                                                <p className="text-xl font-bold text-orange-600 tracking-tight relative z-10">- ₹{reportData.totalUnauthorizedPenalty.toFixed(2)}</p>
+                                                <p className="text-[9px] font-bold text-orange-400 mt-1 relative z-10">{reportData.unauthorizedAbsencePenalties?.length || 0} day(s) × 5X</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Final Salary Emphasis Card (Bottom) */}
+                                <div className="relative mt-2">
+                                    <div className="absolute inset-0 bg-gradient-to-r from-teal-400 to-emerald-600 rounded-[2rem] blur-xl opacity-20"></div>
+                                    <div className="w-full bg-gradient-to-r from-white to-teal-50/50 rounded-[2rem] p-6 md:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white flex flex-col md:flex-row justify-between items-center relative overflow-hidden backdrop-blur-xl">
+                                        <div className="absolute -top-24 -right-24 w-64 h-64 bg-teal-400/10 rounded-full blur-3xl"></div>
+                                        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-emerald-400/10 rounded-full blur-3xl"></div>
+                                        
+                                        <div className="relative z-10 flex flex-col items-center md:items-start mb-6 md:mb-0">
+                                            <div className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-white/60 border border-teal-100/50 shadow-sm mb-2 backdrop-blur-md">
+                                                <div className="w-2 h-2 rounded-full bg-teal-500 animate-pulse"></div>
+                                                <p className="text-[10px] font-black text-teal-700 tracking-[0.25em] uppercase">Total Final Salary</p>
+                                            </div>
+                                            <p className="text-xs font-bold text-slate-500 tracking-wide text-center md:text-left max-w-xs">After all deductions & adjustments</p>
+                                        </div>
+
+                                        <div className="relative z-10 flex flex-col items-center md:items-end text-center md:text-right">
+                                            <div className="text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-teal-700 to-emerald-600 tracking-tighter drop-shadow-sm">
                                                 {(() => {
                                                     const parseSalary = (str) => {
                                                         if (!str) return 0;

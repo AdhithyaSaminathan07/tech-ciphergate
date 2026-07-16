@@ -19,11 +19,10 @@ export const NotificationProvider = ({ children }) => {
     const { user } = useAuth();
     const lastSoundPlayRef = useRef(0);
 
-    const token = localStorage.getItem('token');
     const apiBase = '/user-notifications';
 
     useEffect(() => {
-        if (!token || !user) return;
+        if (!user) return;
 
         const fetchNotifications = async () => {
             try {
@@ -47,7 +46,7 @@ export const NotificationProvider = ({ children }) => {
         };
 
         fetchNotifications();
-    }, [token, user]);
+    }, [user]);
 
     useEffect(() => {
         if (!socket || !isConnected || !user?._id) return;

@@ -44,7 +44,7 @@ const WelcomeBanner = ({ userName, pendingReviews, totalTasks, completionRate, t
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm md:text-base font-bold text-slate-800 flex items-center gap-2">
               <FaCrown className="text-amber-400 drop-shadow-sm" />
-              Top Teams - Live Monthly Earnings
+              Top Teams - Last Month Earnings
             </h2>
             <span className="text-[10px] font-bold text-white bg-green-500/80 px-2 py-0.5 rounded-md tracking-wider">
               Top 3 List

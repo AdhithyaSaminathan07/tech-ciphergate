@@ -13,7 +13,7 @@ const MiniLeaderboard = ({ onViewFull }) => {
     useEffect(() => {
         const load = async () => {
             try {
-                const result = await getLeaderboard({ filter: 'all' });
+                const result = await getLeaderboard({ filter: 'all', limit: 3 });
                 setData(result.leaderboard || []);
             } catch (e) {
                 console.error('Failed to load mini leaderboard:', e);

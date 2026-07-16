@@ -29,6 +29,7 @@ import MiniLeaderboard from './MiniLeaderboard';
 import PointHistory from './PointHistory';
 import LeaderboardModal from './LeaderboardModal';
 import PointAnimation from './PointAnimation';
+import MyWalletCard from './MyWalletCard';
 
 /* ─────────────────────────────────────────
    Shared Components (matching Admin style)
@@ -215,7 +216,9 @@ const Dashboard = () => {
           })()
         ]);
       } catch (error) {
-        toast.error('Failed to load dashboard data');
+        if (error.response?.status !== 401) {
+          toast.error('Failed to load dashboard data');
+        }
         console.error(error);
       } finally {
         setIsLoading(false);
@@ -593,10 +596,14 @@ const Dashboard = () => {
         {/* Bottom Sections: Grid Layout */}
         <div className="grid grid-cols-1 gap-6">
           
-          {/* Row 1: Rankings, Fines, Notification */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Row 1: Wallet, Rankings, Fines, Notification */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            
+            {/* My Wallet */}
+            <MyWalletCard />
+
             {/* Mini Leaderboard */}
-            <div className="bg-white rounded-3xl p-6 border border-slate-100/80 shadow-sm transition-all duration-300 hover:shadow-md hover:border-slate-200/80">
+            <div className="bg-white rounded-3xl p-6 border border-slate-100/80 shadow-sm transition-all duration-300 hover:shadow-md hover:border-slate-200/80 flex flex-col">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100/70 shadow-sm">
                   <Trophy size={14} />
@@ -607,7 +614,7 @@ const Dashboard = () => {
             </div>
 
             {/* My Fines */}
-            <div className="bg-white rounded-3xl p-6 border border-slate-100/80 shadow-sm transition-all duration-300 hover:shadow-md hover:border-slate-200/80">
+            <div className="bg-white rounded-3xl p-6 border border-slate-100/80 shadow-sm transition-all duration-300 hover:shadow-md hover:border-slate-200/80 flex flex-col">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-100/70 shadow-sm">
                   <AlertTriangle size={14} />
@@ -618,7 +625,7 @@ const Dashboard = () => {
             </div>
 
             {/* Latest Notification */}
-            <div className="bg-white rounded-3xl p-6 border border-slate-100/80 shadow-sm transition-all duration-300 hover:shadow-md hover:border-slate-200/80">
+            <div className="bg-white rounded-3xl p-6 border border-slate-100/80 shadow-sm transition-all duration-300 hover:shadow-md hover:border-slate-200/80 flex flex-col">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center border border-teal-100/70 shadow-sm">
                   <Bell size={14} />
@@ -626,12 +633,14 @@ const Dashboard = () => {
                 <h2 className="text-lg font-bold text-slate-900">Latest Notification</h2>
               </div>
               {notifications.length > 0 ? (
-                <div className="p-4 bg-teal-50/30 border border-teal-100/50 rounded-2xl">
+                <div className="p-4 bg-teal-50/30 border border-teal-100/50 rounded-2xl flex-1">
                   <p className="text-sm text-slate-700 mb-2 font-medium">{notifications[0]?.messageData}</p>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{new Date(notifications[0]?.createdAt).toLocaleString()}</p>
                 </div>
               ) : (
-                <p className="text-sm text-slate-400 text-center py-4">No notifications found</p>
+                <div className="flex-1 flex items-center justify-center">
+                  <p className="text-sm text-slate-400 text-center py-4">No notifications found</p>
+                </div>
               )}
             </div>
           </div>
