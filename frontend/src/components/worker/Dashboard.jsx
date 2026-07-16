@@ -89,12 +89,15 @@ const Dashboard = () => {
   const [salaryData, setSalaryData] = useState({
     baseSalary: 0,
     finalSalary: 0,
+    actualEarnedSalary: 0,
     totalDeductions: 0,
     totalUnauthorizedPenalty: 0,
     unauthorizedAbsencePenalties: [],
     delayedTasks: [],
     taskPenalty: 0,
-    report: null
+    report: null,
+    totalBonusAmount: 0,
+    projectAdjustment: 0
   });
   const [topTeams, setTopTeams] = useState([]);
 
@@ -104,12 +107,15 @@ const Dashboard = () => {
       setSalaryData({
         baseSalary: data.baseSalary ?? 0,
         finalSalary: data.finalSalary ?? 0,
+        actualEarnedSalary: data.actualEarnedSalary ?? 0,
         totalDeductions: data.totalDeductions ?? 0,
         totalUnauthorizedPenalty: data.totalUnauthorizedPenalty ?? 0,
         unauthorizedAbsencePenalties: data.unauthorizedAbsencePenalties ?? [],
         delayedTasks: data.delayedTasks ?? [],
         taskPenalty: data.taskPenalty,
-        report: data.report ?? null
+        report: data.report ?? null,
+        totalBonusAmount: data.totalBonusAmount ?? 0,
+        projectAdjustment: data.projectAdjustment ?? 0
       });
     } catch (error) {
       console.error('Failed to fetch salary report:', error);
@@ -358,8 +364,32 @@ const Dashboard = () => {
                 <div className="space-y-1.5 text-xs font-semibold">
                   <div className="flex justify-between items-center text-slate-500">
                     <span>Base Salary</span>
-                    <span className="text-slate-800 font-bold">₹{Math.round(salaryData.baseSalary).toLocaleString('en-IN')}</span>
+                    <span className="text-slate-800 font-bold">
+                      ₹{Math.round(Number(salaryData.baseSalary) || 0).toLocaleString('en-IN')}
+                    </span>
                   </div>
+                  {(() => {
+                    const base = Number(salaryData.baseSalary) || 0;
+                    const finalBackend = Number(salaryData.finalSalary) || 0;
+                    const totalDed = Number(salaryData.totalDeductions) || 0;
+                    const unauthorized = Number(salaryData.totalUnauthorizedPenalty) || 0;
+                    // Additional earnings is whatever makes Final = Base + Additional - Deductions
+                    const additional = Math.max(0, finalBackend + totalDed + unauthorized - base);
+                    
+                    if (additional > 0) {
+                      return (
+                        <div className="flex justify-between items-center text-slate-500">
+                          <span className="flex items-center gap-1">
+                            <span className="text-teal-500">+</span> Project / Other Earnings
+                          </span>
+                          <span className="text-teal-600 font-bold">
+                            +₹{Math.round(additional).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                   <div 
                     onClick={() => {
                       if (calculatedTaskPenalties.taskPenalties.length > 0) {
@@ -478,16 +508,26 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                {/* Hero Stat: Final Payout — always baseSalary - totalDeductions */}
+                {/* Hero Stat: Final Payout uses the backend's final calculation directly */}
                 {(() => {
-                  const displayFinalPayout = Math.max(0, salaryData.baseSalary - salaryData.totalDeductions - calculatedTaskPenalties.totalTaskPenalty - (salaryData.totalUnauthorizedPenalty || 0));
-                  const payoutRatio = salaryData.baseSalary > 0
-                    ? Math.max(0, Math.min(100, Math.round((displayFinalPayout / salaryData.baseSalary) * 100)))
+                  const finalBackend = Number(salaryData.finalSalary) || 0;
+                  const taskPen = Number(calculatedTaskPenalties.totalTaskPenalty) || 0;
+                  const displayFinalPayout = Math.max(0, finalBackend - taskPen);
+                  
+                  // Estimate a gross for payout ratio: base + additional
+                  const base = Number(salaryData.baseSalary) || 0;
+                  const totalDed = Number(salaryData.totalDeductions) || 0;
+                  const unauthorized = Number(salaryData.totalUnauthorizedPenalty) || 0;
+                  const additional = Math.max(0, finalBackend + totalDed + unauthorized - base);
+                  const grossEarnings = base + additional;
+
+                  const payoutRatio = grossEarnings > 0
+                    ? Math.max(0, Math.min(100, Math.round((displayFinalPayout / grossEarnings) * 100)))
                     : 0;
                   return (
                     <>
                       {/* Progress bar */}
-                      {salaryData.baseSalary > 0 && (
+                      {grossEarnings > 0 && (
                         <div className="space-y-1">
                           <div className="flex justify-between text-[9px] font-bold text-slate-400">
                             <span>Payout ratio</span>
