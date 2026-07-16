@@ -44,7 +44,7 @@ exports.getTickets = async (req, res) => {
     try {
         const subdomain = req.user?.subdomain || req.query.subdomain;
         let query = { isDeleted: { $ne: true } };
-        
+
         if (req.query.isDeleted === 'true') {
             query.isDeleted = true;
         }
@@ -61,12 +61,16 @@ exports.getTickets = async (req, res) => {
         const filterPriority = req.query.filterPriority || req.query.priority || '';
         const filterMonth = req.query.filterMonth || '';
 
+        const conditions = [];
+
         // Search Term Filter
         if (searchTerm) {
-            query.$or = [
-                { title: { $regex: searchTerm, $options: 'i' } },
-                { description: { $regex: searchTerm, $options: 'i' } }
-            ];
+            conditions.push({
+                $or: [
+                    { title: { $regex: searchTerm, $options: 'i' } },
+                    { description: { $regex: searchTerm, $options: 'i' } }
+                ]
+            });
         }
 
         // Assignee Filter
@@ -75,10 +79,12 @@ exports.getTickets = async (req, res) => {
                 query.assignee = { $exists: false };
                 query.assignees = { $size: 0 };
             } else {
-                query.$or = [
-                    { assignee: filterAssignee },
-                    { assignees: { $in: [filterAssignee] } }
-                ];
+                conditions.push({
+                    $or: [
+                        { assignee: filterAssignee },
+                        { assignees: { $in: [filterAssignee] } }
+                    ]
+                });
             }
         }
 
@@ -92,15 +98,29 @@ exports.getTickets = async (req, res) => {
             if (filterTeam === 'unassigned') {
                 query.team = { $exists: false };
             } else {
-                // Find all active/relieved workers in this department to match their tasks
-                const Worker = require('../models/Worker');
-                const workersInDept = await Worker.find({ department: filterTeam }).select('_id');
-                const workerIds = workersInDept.map(w => w._id);
-                query.$or = [
-                    { team: filterTeam },
-                    { assignee: { $in: workerIds } },
-                    { assignees: { $in: workerIds } }
-                ];
+                // Find the department by name to get its ObjectId
+                const Department = require('../models/Department');
+                const deptQueryForDept = { name: filterTeam };
+                if (subdomain) deptQueryForDept.subdomain = subdomain;
+                const foundDept = await Department.findOne(deptQueryForDept);
+
+                let workerIds = [];
+                if (foundDept) {
+                    const Worker = require('../models/Worker');
+                    const deptQuery = { department: foundDept._id };
+                    if (subdomain) deptQuery.subdomain = subdomain;
+
+                    const workersInDept = await Worker.find(deptQuery).select('_id');
+                    workerIds = workersInDept.map(w => w._id);
+                }
+
+                conditions.push({
+                    $or: [
+                        { team: filterTeam },
+                        { assignee: { $in: workerIds } },
+                        { assignees: { $in: workerIds } }
+                    ]
+                });
             }
         }
 
@@ -109,8 +129,7 @@ exports.getTickets = async (req, res) => {
             const [fy, fm] = filterMonth.split('-').map(Number);
             const startOfMonth = new Date(fy, fm - 1, 1);
             const endOfMonth = new Date(fy, fm, 0, 23, 59, 59, 999);
-            query.$and = query.$and || [];
-            query.$and.push({
+            conditions.push({
                 $or: [
                     { createdAt: { $gte: startOfMonth, $lte: endOfMonth } },
                     { startDate: { $gte: startOfMonth, $lte: endOfMonth } },
@@ -118,6 +137,11 @@ exports.getTickets = async (req, res) => {
                 ]
             });
         }
+
+        if (conditions.length > 0) {
+            query.$and = conditions;
+        }
+        console.log("FINAL TICKET QUERY:", JSON.stringify(query, null, 2));
 
         const total = await Ticket.countDocuments(query);
 
@@ -206,7 +230,7 @@ exports.createTicket = async (req, res) => {
         try {
             const { sendNotification } = require('../utils/sendNotification');
             const usersToNotify = assignees || (assignee ? [assignee] : []);
-            
+
             for (const userId of usersToNotify) {
                 await sendNotification({
                     userId,
@@ -260,7 +284,7 @@ exports.updateTicket = async (req, res) => {
         if (assignees !== undefined) ticket.assignees = assignees;
         if (team !== undefined) ticket.team = team;
         if (priority !== undefined) ticket.priority = priority;
-        
+
         // Status Update Logic with Validation
         if (status !== undefined) {
             if (status === 'Done' && req.user.role !== 'admin') {
@@ -280,7 +304,7 @@ exports.updateTicket = async (req, res) => {
         if (issueType !== undefined) ticket.issueType = issueType;
         if (storyPoints !== undefined) ticket.storyPoints = storyPoints;
         if (labels !== undefined) ticket.labels = labels;
-        
+
         // Handle empty strings for dates
         if (startDate !== undefined) {
             ticket.startDate = (startDate && startDate.trim() !== '') ? new Date(startDate) : undefined;
@@ -331,7 +355,7 @@ exports.updateTicket = async (req, res) => {
         try {
             const { sendNotification } = require('../utils/sendNotification');
             const usersToNotify = assignees || (assignee ? [assignee] : []);
-            
+
             for (const userId of usersToNotify) {
                 await sendNotification({
                     userId,
@@ -376,11 +400,11 @@ exports.deleteTicket = async (req, res) => {
         }
 
         const subdomainForSocket = ticket.subdomain;
-        
+
         ticket.isDeleted = true;
         ticket.deletedAt = new Date();
         ticket.deletedBy = req.user?._id;
-        
+
         await ticket.save();
 
         // Socket emission

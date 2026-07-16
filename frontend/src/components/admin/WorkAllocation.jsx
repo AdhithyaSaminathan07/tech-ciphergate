@@ -1594,7 +1594,7 @@ const WorkAllocation = () => {
                     {/* Dropdowns (Mobile filter panel below the row) */}
                     <div className={`md:hidden ${showFiltersMobile ? 'flex' : 'hidden'} flex-row flex-wrap items-center gap-2 w-full mt-2`}>
                         <div className="w-[calc(50%-4px)] shrink-0">
-                            <Select value={filterAssignee} onValueChange={(val) => setFilterAssignee(val === "all_assignees" ? "" : val)}>
+                                <Select value={filterAssignee || "all_assignees"} onValueChange={(val) => setFilterAssignee(val === "all_assignees" ? "" : val)}>
                                 <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 text-[10px] font-semibold text-slate-600 px-2.5">
                                     <SelectValue placeholder="All Employees" />
                                 </SelectTrigger>
@@ -1619,7 +1619,7 @@ const WorkAllocation = () => {
                         </div>
 
                         <div className="w-[calc(50%-4px)] shrink-0">
-                            <Select value={filterTeam} onValueChange={(val) => setFilterTeam(val === "all_teams" ? "" : val)}>
+                                <Select value={filterTeam || "all_teams"} onValueChange={(val) => setFilterTeam(val === "all_teams" ? "" : val)}>
                                 <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 text-[10px] font-semibold text-slate-600 px-2.5">
                                     <SelectValue placeholder="All Teams" />
                                 </SelectTrigger>
@@ -1633,7 +1633,7 @@ const WorkAllocation = () => {
                         </div>
 
                         <div className="w-[calc(50%-4px)] shrink-0">
-                            <Select value={filterPriority} onValueChange={(val) => setFilterPriority(val === "all_priorities" ? "" : val)}>
+                                <Select value={filterPriority || "all_priorities"} onValueChange={(val) => setFilterPriority(val === "all_priorities" ? "" : val)}>
                                 <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 text-[10px] font-semibold text-slate-600 px-2.5">
                                     <SelectValue placeholder="Priority" />
                                 </SelectTrigger>
@@ -1720,7 +1720,7 @@ const WorkAllocation = () => {
                                 {/* Dropdowns - Collapsed by default on mobile, always visible on desktop */}
                                 <div className={`${showFiltersMobile ? 'flex' : 'hidden md:flex'} flex-row flex-wrap items-center gap-2 w-full md:w-auto mt-2 md:mt-0`}>
                                     <div className="w-[calc(50%-4px)] sm:w-[190px] shrink-0">
-                                        <Select value={filterAssignee} onValueChange={(val) => setFilterAssignee(val === "all_assignees" ? "" : val)}>
+                                        <Select value={filterAssignee || "all_assignees"} onValueChange={(val) => setFilterAssignee(val === "all_assignees" ? "" : val)}>
                                             <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
                                                 <SelectValue placeholder="All Employees" />
                                             </SelectTrigger>
@@ -1746,7 +1746,7 @@ const WorkAllocation = () => {
 
 
                                     <div className="w-[calc(50%-4px)] sm:w-[140px] shrink-0">
-                                        <Select value={filterTeam} onValueChange={(val) => setFilterTeam(val === "all_teams" ? "" : val)}>
+                                        <Select value={filterTeam || "all_teams"} onValueChange={(val) => setFilterTeam(val === "all_teams" ? "" : val)}>
                                             <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
                                                 <SelectValue placeholder="All Teams" />
                                             </SelectTrigger>
@@ -1760,7 +1760,7 @@ const WorkAllocation = () => {
                                     </div>
 
                                     <div className="w-[calc(50%-4px)] sm:w-[120px] shrink-0">
-                                        <Select value={filterPriority} onValueChange={(val) => setFilterPriority(val === "all_priorities" ? "" : val)}>
+                                        <Select value={filterPriority || "all_priorities"} onValueChange={(val) => setFilterPriority(val === "all_priorities" ? "" : val)}>
                                             <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
                                                 <SelectValue placeholder="Priority" />
                                             </SelectTrigger>

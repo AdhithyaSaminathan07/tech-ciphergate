@@ -369,12 +369,10 @@ const Dashboard = () => {
                     </span>
                   </div>
                   {(() => {
-                    const base = Number(salaryData.baseSalary) || 0;
-                    const finalBackend = Number(salaryData.finalSalary) || 0;
-                    const totalDed = Number(salaryData.totalDeductions) || 0;
-                    const unauthorized = Number(salaryData.totalUnauthorizedPenalty) || 0;
-                    // Additional earnings is whatever makes Final = Base + Additional - Deductions
-                    const additional = Math.max(0, finalBackend + totalDed + unauthorized - base);
+                    const grossProject = Number(salaryData.report?.summary?.grossProjectSalary) || 0;
+                    const bonus = Number(salaryData.totalBonusAmount) || 0;
+                    const adjustment = Number(salaryData.projectAdjustment) || 0;
+                    const additional = grossProject + bonus + adjustment;
                     
                     if (additional > 0) {
                       return (
@@ -516,9 +514,10 @@ const Dashboard = () => {
                   
                   // Estimate a gross for payout ratio: base + additional
                   const base = Number(salaryData.baseSalary) || 0;
-                  const totalDed = Number(salaryData.totalDeductions) || 0;
-                  const unauthorized = Number(salaryData.totalUnauthorizedPenalty) || 0;
-                  const additional = Math.max(0, finalBackend + totalDed + unauthorized - base);
+                  const grossProject = Number(salaryData.report?.summary?.grossProjectSalary) || 0;
+                  const bonus = Number(salaryData.totalBonusAmount) || 0;
+                  const adjustment = Number(salaryData.projectAdjustment) || 0;
+                  const additional = grossProject + bonus + adjustment;
                   const grossEarnings = base + additional;
 
                   const payoutRatio = grossEarnings > 0

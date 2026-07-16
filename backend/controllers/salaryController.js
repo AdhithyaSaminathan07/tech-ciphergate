@@ -918,6 +918,10 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
 
     res.status(200).json({
       message: 'Salary report generated successfully',
+      baseSalary: worker.salary,
+      finalSalary: finalSalaryAfterUnauthorizedPenalty,
+      actualEarnedSalary: report.summary.finalSalary || 0,
+      totalDeductions: (report.summary.totalSalaryDeduction || 0) + totalFinesAmount,
       report,
       bonuses: bonusesForPeriod,
       totalBonusAmount: totalBonusAmount,
