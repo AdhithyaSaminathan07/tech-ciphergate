@@ -864,8 +864,8 @@ const SalaryManagement = () => {
             row.inTime,
             row.outTime,
             row.delayTime,
-            row.deductionAmount.replace('₹', 'Rs '), // Replace ₹ with Rs for Delay Deduction
-            row.totalSalary.replace('₹', 'Rs ') // Replace ₹ with Rs for Total Salary
+            String(row.deductionAmount || '').replace('₹', 'Rs '), // Replace ₹ with Rs for Delay Deduction
+            String(row.totalSalary || '').replace('₹', 'Rs ') // Replace ₹ with Rs for Total Salary
         ]);
 
         // Set font properties for daily breakdown table
@@ -1319,8 +1319,8 @@ const SalaryManagement = () => {
             row.inTime,
             row.outTime,
             row.delayTime,
-            row.deductionAmount.replace('₹', 'Rs '), // Replace ₹ with Rs for Delay Deduction
-            row.totalSalary.replace('₹', 'Rs ') // Replace ₹ with Rs for Total Salary
+            String(row.deductionAmount || '').replace('₹', 'Rs '), // Replace ₹ with Rs for Delay Deduction
+            String(row.totalSalary || '').replace('₹', 'Rs ') // Replace ₹ with Rs for Total Salary
         ]);
 
         // Set font properties for daily breakdown table
@@ -1794,8 +1794,8 @@ const SalaryManagement = () => {
                 head: [['Date', 'Status', 'In Time', 'Out Time', 'Delay Time', 'Delay Deduction', 'Total Salary']],
                 body: (reportObj.report.report || []).map(row => [
                     row.date, row.status, row.inTime, row.outTime, row.delayTime,
-                    row.deductionAmount.replace('₹', 'Rs '),
-                    row.totalSalary.replace('₹', 'Rs ')
+                    String(row.deductionAmount || '').replace('₹', 'Rs '),
+                    String(row.totalSalary || '').replace('₹', 'Rs ')
                 ]),
                 theme: 'striped',
                 headStyles: { fillColor: [52, 73, 94] },

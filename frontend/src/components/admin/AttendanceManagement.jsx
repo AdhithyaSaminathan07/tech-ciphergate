@@ -174,7 +174,7 @@ const AttendanceManagement = () => {
             } catch (fetchErr) {
                 // Fallback: use count parity from local data if live fetch fails
                 console.warn('[Attendance] Live fetch failed, falling back to local count:', fetchErr);
-                const recs = attendanceData.filter(r => r.rfid === worker.rfid);
+                const recs = attendanceData.filter(r => r.rfid === worker.rfid.trim());
                 const todayRecs = recs.filter(r => r.date === todayIST);
                 next = (todayRecs.length % 2 === 0) ? 'Punch In' : 'Punch Out';
             }
@@ -187,13 +187,13 @@ const AttendanceManagement = () => {
 
     const handleCancel = () => setConfirmAction(null);
 
-    // handleConfirm — send the punch and refresh table immediately
     const handleConfirm = () => {
         if (isPunching) return; // guard double-click
         setIsPunching(true);
-        console.log('[Attendance] Confirming:', confirmAction, 'RFID:', worker.rfid);
+        const trimmedRfid = worker.rfid.trim();
+        console.log('[Attendance] Confirming:', confirmAction, 'RFID:', trimmedRfid);
 
-        putAttendance({ rfid: worker.rfid, subdomain })
+        putAttendance({ rfid: trimmedRfid, subdomain })
             .then(res => {
                 console.log('[Attendance] Response:', res);
                 toast.success(res.message || 'Attendance marked successfully!');
@@ -513,11 +513,10 @@ const AttendanceManagement = () => {
                     {record.outTimes.map((outPunch, index) => (
                         <div key={index} className="inline-flex items-center justify-center">
                             {outPunch.time !== '-' ? (
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-                                    outPunch.isMissed 
-                                        ? 'bg-amber-50 text-amber-700 border-amber-100' 
-                                        : 'bg-rose-50 text-rose-700 border-rose-100'
-                                }`}>
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${outPunch.isMissed
+                                    ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                    : 'bg-rose-50 text-rose-700 border-rose-100'
+                                    }`}>
                                     {outPunch.time}
                                     {outPunch.isMissed && (
                                         <AlertTriangle size={12} className="ml-1 text-amber-500" title="Missed Out Punch or Incomplete Pair" />
@@ -670,7 +669,7 @@ const AttendanceManagement = () => {
                     </div>
                     <button
                         onClick={() => setIsFilterSheetOpen(true)}
-                        className={`px-4 h-12 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition-all ${ filterRfid || filterDepartment || filterDate ? 'bg-teal-50 text-teal-600 border border-teal-100' : 'bg-slate-50 text-slate-600 border border-slate-100' }`}
+                        className={`px-4 h-12 rounded-xl flex items-center justify-center gap-2 font-bold text-sm transition-all ${filterRfid || filterDepartment || filterDate ? 'bg-teal-50 text-teal-600 border border-teal-100' : 'bg-slate-50 text-slate-600 border border-slate-100'}`}
                     >
                         <Filter size={18} />
                         <span>Filter</span>
@@ -714,7 +713,7 @@ const AttendanceManagement = () => {
                             onChange={(e) => setFilterDate(e.target.value)}
                         />
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-3 pt-4">
                         <button
                             onClick={() => {
@@ -738,140 +737,140 @@ const AttendanceManagement = () => {
                 </div>
             </BottomSheet>
 
-                {isLoading ? (
-                    <div className="flex justify-center py-8">
-                        <Spinner size="md" variant="default" />
-                    </div>
-                ) : (
-                    <>
-                        <Table
-                            columns={columns}
-                            data={processedAttendance}
-                            noDataMessage="No attendance records found."
-                        />
+            {isLoading ? (
+                <div className="flex justify-center py-8">
+                    <Spinner size="md" variant="default" />
+                </div>
+            ) : (
+                <>
+                    <Table
+                        columns={columns}
+                        data={processedAttendance}
+                        noDataMessage="No attendance records found."
+                    />
 
-                        {/* Load More Button */}
-                        {hasMore && (
-                            <div className="flex justify-center mt-6">
-                                <button
-                                    onClick={loadMoreAttendance}
-                                    disabled={isFetchingMore}
-                                    className="flex items-center px-5 py-2 bg-[#0d9488] text-white rounded-xl shadow-md hover:bg-[#0f766e] transition-colors disabled:opacity-50"
-                                >
-                                    {isFetchingMore ? (
-                                        <>
-                                            <Spinner size="sm" variant="light" className="mr-2" />
-                                            Loading...
-                                        </>
-                                    ) : (
-                                        <>
-                                            Load More
-                                            <ChevronDown className="ml-2" size={16} />
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        )}
-                    </>
-                )}
-
-                <Modal
-                    isOpen={isModalOpen}
-                    title="RFID Input & QR Scanner"
-                    size="md"
-                    onClose={() => {
-                        setIsModalOpen(false);
-                        setWorker({ rfid: '' });
-                        setConfirmAction(null);
-                    }}
-                >
-                    {confirmAction ? (
-                        <div className="bg-white rounded-2xl shadow-lg p-6 text-center">
-                            <h2 className="text-xl font-semibold mb-4">
-                                Do you want to{' '}
-                                <span
-                                    className={
-                                        confirmAction === 'Punch In'
-                                            ? 'text-green-600'
-                                            : 'text-red-600'
-                                    }
-                                >
-                                    {confirmAction}
-                                </span>
-                                ?
-                            </h2>
-                            <div className="flex justify-center space-x-4">
-                                <Button variant="secondary" onClick={handleCancel} disabled={isPunching}>
-                                    cancel
-                                </Button>
-                                <Button
-                                    variant="primary"
-                                    onClick={handleConfirm}
-                                    disabled={isPunching}
-                                    className="flex items-center justify-center"
-                                >
-                                    {isPunching ? <Spinner size="sm" /> : confirmAction}
-                                </Button>
-                            </div>
-                        </div>
-
-                    ) : (
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div className="relative">
-                                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                <input
-                                    ref={inputRef}
-                                    type="text"
-                                    value={worker.rfid}
-                                    onChange={e => setWorker({ rfid: e.target.value })}
-                                    placeholder="Enter RFID number..."
-                                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none text-slate-700 transition-all placeholder:text-slate-450"
-                                    list="rfid-suggestions"
-                                />
-                            </div>
-                            <datalist id="rfid-suggestions">
-                                {uniqueRfids.map((rfid, index) => (
-                                    <option key={index} value={rfid} />
-                                ))}
-                            </datalist>
-                            <Button
-                                type="submit"
-                                variant="primary"
-                                className="w-full flex items-center justify-center bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white border-0 shadow-sm py-2.5 rounded-xl text-sm font-semibold transition-all duration-200"
-                                disabled={isDetectingAction}
+                    {/* Load More Button */}
+                    {hasMore && (
+                        <div className="flex justify-center mt-6">
+                            <button
+                                onClick={loadMoreAttendance}
+                                disabled={isFetchingMore}
+                                className="flex items-center px-5 py-2 bg-[#0d9488] text-white rounded-xl shadow-md hover:bg-[#0f766e] transition-colors disabled:opacity-50"
                             >
-                                {isDetectingAction ? (
-                                    <><Spinner size="sm" className="mr-2" /> Checking...</>
+                                {isFetchingMore ? (
+                                    <>
+                                        <Spinner size="sm" variant="light" className="mr-2" />
+                                        Loading...
+                                    </>
                                 ) : (
-                                    'Submit'
+                                    <>
+                                        Load More
+                                        <ChevronDown className="ml-2" size={16} />
+                                    </>
                                 )}
-                            </Button>
-                        </form>
-                    )}
-                    <div className="relative overflow-hidden rounded-2xl border border-slate-200 shadow-md max-w-[400px] mx-auto my-5 bg-slate-900">
-                        <Webcam
-                            ref={webcamRef}
-                            className="w-full h-auto object-cover aspect-video"
-                            videoConstraints={{ facingMode: 'environment' }}
-                        />
-                    </div>
-                    {qrText && (
-                        <div className="mt-4 p-3 bg-slate-50 border border-slate-100 rounded-xl text-center shadow-sm">
-                            <span className="text-xs font-semibold text-slate-450 uppercase tracking-wider block mb-1">Detected RFID</span>
-                            <span className="font-mono text-base font-bold text-slate-800">{qrText}</span>
+                            </button>
                         </div>
                     )}
-                </Modal>
+                </>
+            )}
 
-                {/* Face Attendance Modal */}
-                <FaceAttendance
-                    subdomain={subdomain}
-                    isOpen={isFaceAttendanceOpen}
-                    onClose={() => {
-                        setIsFaceAttendanceOpen(false);
-                    }}
-                    onAttendanceMarked={refreshLatestAttendance}
-                />
+            <Modal
+                isOpen={isModalOpen}
+                title="RFID Input & QR Scanner"
+                size="md"
+                onClose={() => {
+                    setIsModalOpen(false);
+                    setWorker({ rfid: '' });
+                    setConfirmAction(null);
+                }}
+            >
+                {confirmAction ? (
+                    <div className="bg-white rounded-2xl shadow-lg p-6 text-center">
+                        <h2 className="text-xl font-semibold mb-4">
+                            Do you want to{' '}
+                            <span
+                                className={
+                                    confirmAction === 'Punch In'
+                                        ? 'text-green-600'
+                                        : 'text-red-600'
+                                }
+                            >
+                                {confirmAction}
+                            </span>
+                            ?
+                        </h2>
+                        <div className="flex justify-center space-x-4">
+                            <Button variant="secondary" onClick={handleCancel} disabled={isPunching}>
+                                cancel
+                            </Button>
+                            <Button
+                                variant="primary"
+                                onClick={handleConfirm}
+                                disabled={isPunching}
+                                className="flex items-center justify-center"
+                            >
+                                {isPunching ? <Spinner size="sm" /> : confirmAction}
+                            </Button>
+                        </div>
+                    </div>
+
+                ) : (
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div className="relative">
+                            <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <input
+                                ref={inputRef}
+                                type="text"
+                                value={worker.rfid}
+                                onChange={e => setWorker({ rfid: e.target.value })}
+                                placeholder="Enter RFID number..."
+                                className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none text-slate-700 transition-all placeholder:text-slate-450"
+                                list="rfid-suggestions"
+                            />
+                        </div>
+                        <datalist id="rfid-suggestions">
+                            {uniqueRfids.map((rfid, index) => (
+                                <option key={index} value={rfid} />
+                            ))}
+                        </datalist>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                            className="w-full flex items-center justify-center bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white border-0 shadow-sm py-2.5 rounded-xl text-sm font-semibold transition-all duration-200"
+                            disabled={isDetectingAction}
+                        >
+                            {isDetectingAction ? (
+                                <><Spinner size="sm" className="mr-2" /> Checking...</>
+                            ) : (
+                                'Submit'
+                            )}
+                        </Button>
+                    </form>
+                )}
+                <div className="relative overflow-hidden rounded-2xl border border-slate-200 shadow-md max-w-[400px] mx-auto my-5 bg-slate-900">
+                    <Webcam
+                        ref={webcamRef}
+                        className="w-full h-auto object-cover aspect-video"
+                        videoConstraints={{ facingMode: 'environment' }}
+                    />
+                </div>
+                {qrText && (
+                    <div className="mt-4 p-3 bg-slate-50 border border-slate-100 rounded-xl text-center shadow-sm">
+                        <span className="text-xs font-semibold text-slate-450 uppercase tracking-wider block mb-1">Detected RFID</span>
+                        <span className="font-mono text-base font-bold text-slate-800">{qrText}</span>
+                    </div>
+                )}
+            </Modal>
+
+            {/* Face Attendance Modal */}
+            <FaceAttendance
+                subdomain={subdomain}
+                isOpen={isFaceAttendanceOpen}
+                onClose={() => {
+                    setIsFaceAttendanceOpen(false);
+                }}
+                onAttendanceMarked={refreshLatestAttendance}
+            />
         </Fragment>
     );
 };
