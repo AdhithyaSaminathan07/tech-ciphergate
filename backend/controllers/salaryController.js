@@ -1116,7 +1116,7 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
       totalFinesAmount = worker.fines
         .filter(fine => {
           const fineDate = new Date(fine.date);
-          return fineDate >= new Date(start) && fineDate <= new Date(end);
+          return fineDate >= new Date(start) && fineDate <= new Date(end);r
         })
         .reduce((total, fine) => total + (fine.amount || 0), 0);
     }

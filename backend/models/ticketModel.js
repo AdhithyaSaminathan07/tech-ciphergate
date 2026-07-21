@@ -158,6 +158,12 @@ const ticketSchema = new mongoose.Schema({
         enum: ['early', 'on_time', 'delayed', 'pending', 'no_dates'],
         default: 'pending'
     },
+    // Reference to RecurringTask rule if this ticket was auto-spawned
+    recurringTaskId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'RecurringTask',
+        default: null
+    },
     isDeleted: {
         type: Boolean,
         default: false

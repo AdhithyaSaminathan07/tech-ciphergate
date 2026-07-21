@@ -9,13 +9,14 @@ import {
   finalizePersonalBrainFolderSync
 } from '../../services/aiService';
 import appContext from '../../context/AppContext';
+import { AuthContext } from '../../context/AuthContext';
 
 // File type display config
 const FILE_TYPE_CONFIG = {
-  pdf:  { icon: '📕', label: 'PDF',      color: 'text-red-600 bg-red-50 border-red-200' },
-  txt:  { icon: '📄', label: 'TXT',      color: 'text-slate-600 bg-slate-50 border-slate-200' },
-  md:   { icon: '📝', label: 'Markdown', color: 'text-blue-600 bg-blue-50 border-blue-200' },
-  json: { icon: '🔧', label: 'JSON',     color: 'text-teal-600 bg-teal-50 border-teal-200' },
+  pdf: { icon: '📕', label: 'PDF', color: 'text-red-600 bg-red-50 border-red-200' },
+  txt: { icon: '📄', label: 'TXT', color: 'text-slate-600 bg-slate-50 border-slate-200' },
+  md: { icon: '📝', label: 'Markdown', color: 'text-blue-600 bg-blue-50 border-blue-200' },
+  json: { icon: '🔧', label: 'JSON', color: 'text-teal-600 bg-teal-50 border-teal-200' },
 };
 
 const formatBytes = (bytes) => {
@@ -82,7 +83,8 @@ const deleteFolderHandle = async (key) => {
 };
 
 // --- JWT Decoder for adminId ---
-const getAdminIdFromToken = () => {
+const getAdminIdFromToken = (user) => {
+  if (user && user._id) return user._id;
   const token = localStorage.getItem('token');
   if (!token) return '';
   try {
@@ -120,6 +122,7 @@ const getFilesRecursively = async (dirHandle, relativePath = '') => {
 
 const PersonalBrainManager = ({ onIndexChange }) => {
   const { subdomain } = useContext(appContext);
+  const { user } = useContext(AuthContext);
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [folderHandle, setFolderHandle] = useState(null);
@@ -168,7 +171,7 @@ const PersonalBrainManager = ({ onIndexChange }) => {
 
   const initFolderConnection = async () => {
     try {
-      const adminId = getAdminIdFromToken();
+      const adminId = getAdminIdFromToken(user);
       if (!adminId) return;
       const key = `${adminId}:${subdomain}`;
       const handle = await getFolderHandle(key);
@@ -211,7 +214,7 @@ const PersonalBrainManager = ({ onIndexChange }) => {
       const handle = await window.showDirectoryPicker({
         mode: 'readwrite'
       });
-      const adminId = getAdminIdFromToken();
+      const adminId = getAdminIdFromToken(user);
       const key = `${adminId}:${subdomain}`;
       await saveFolderHandle(key, handle);
       if (isMountedRef.current) {
@@ -249,7 +252,7 @@ const PersonalBrainManager = ({ onIndexChange }) => {
 
   const handleDisconnect = async () => {
     try {
-      const adminId = getAdminIdFromToken();
+      const adminId = getAdminIdFromToken(user);
       const key = `${adminId}:${subdomain}`;
       await deleteFolderHandle(key);
       if (isMountedRef.current) {
@@ -361,7 +364,7 @@ const PersonalBrainManager = ({ onIndexChange }) => {
       }
 
       const syncTimeStr = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
-      const adminId = getAdminIdFromToken();
+      const adminId = getAdminIdFromToken(user);
       localStorage.setItem(`lastSync:${adminId}:${subdomain}`, syncTimeStr);
 
       if (isMountedRef.current) {
@@ -452,15 +455,15 @@ const PersonalBrainManager = ({ onIndexChange }) => {
                   {connectionStatus === 'connected'
                     ? 'Connected Folder'
                     : connectionStatus === 'reconnect_required'
-                    ? 'Folder Action Required'
-                    : 'No Connected Folder'}
+                      ? 'Folder Action Required'
+                      : 'No Connected Folder'}
                 </p>
                 <p className="text-[10px] text-slate-500 mt-0.5">
                   {connectionStatus === 'connected'
                     ? `Active sync enabled. Last synced: ${lastSyncTime || 'Never'}`
                     : connectionStatus === 'reconnect_required'
-                    ? 'Access suspended. Click Reconnect Folder to restore access.'
-                    : 'Connect a local directory to auto-sync files into your Second Brain.'}
+                      ? 'Access suspended. Click Reconnect Folder to restore access.'
+                      : 'Connect a local directory to auto-sync files into your Second Brain.'}
                 </p>
               </div>
             </div>
@@ -529,7 +532,7 @@ const PersonalBrainManager = ({ onIndexChange }) => {
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-              
+
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center mb-3">
                 <div className="bg-white border border-slate-100 rounded-xl p-2">
                   <p className="text-[10px] text-slate-400 font-bold uppercase">New</p>

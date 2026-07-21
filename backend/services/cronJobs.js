@@ -51,6 +51,15 @@ const startCronJobs = () => {
     timezone: "Asia/Kolkata"
   });
 
+  // Recurring Task Scheduler — every 30 minutes
+  // Scans RecurringTask collection for due rules and spawns fresh tickets.
+  // Designed for 1000+ employees / rules (batch processing, compound indexes).
+  const { runRecurringTaskScheduler } = require('../schedulers/recurringTaskScheduler');
+  cron.schedule('*/30 * * * *', runRecurringTaskScheduler, {
+    scheduled: true,
+    timezone: "Asia/Kolkata"
+  });
+
   console.log('Cron jobs started successfully');
 };
 

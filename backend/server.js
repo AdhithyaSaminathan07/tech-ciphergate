@@ -104,6 +104,7 @@ const startServer = async () => {
     const invoiceRoutes = require('./routes/invoiceRoutes');
     const communityFundRoutes = require('./routes/communityFundRoutes'); // ADD THIS
     const ticketRoutes = require('./routes/ticketRoutes');
+    const recurringTaskRoutes = require('./routes/recurringTaskRoutes');
     const githubRoutes = require('./routes/githubRoutes');
     const repoChatRoutes = require('./routes/repoChatRoutes');
     const exitManagementRoutes = require('./routes/exitManagementRoutes');
@@ -151,6 +152,7 @@ const startServer = async () => {
     app.use('/api/renewals', require('./routes/renewalRoutes')); // ADD THIS
     app.use('/api/community-fund', communityFundRoutes);
     app.use('/api/tickets', ticketRoutes);
+    app.use('/api/recurring-tasks', recurringTaskRoutes);
     app.use('/api/certificates', require('./routes/certificateRoutes'));
     app.use('/api/github', githubRoutes);
     app.use('/api/github/repo-chat', repoChatRoutes);

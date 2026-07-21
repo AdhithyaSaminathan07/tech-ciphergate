@@ -473,13 +473,8 @@ const GenerateQuestions = () => {
   const handleGenerate = async () => {
     setError('');
     setMessage('');
-    const token = localStorage.getItem('token');
     if (!user || user.role !== 'admin') {
       setError('Access denied. This feature requires admin privileges. Please log in as admin.');
-      return;
-    }
-    if (!token) {
-      setError('Authentication required. Please log in again.');
       return;
     }
     if (!validateForm()) return;

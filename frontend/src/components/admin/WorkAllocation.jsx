@@ -8,7 +8,7 @@ import {
     Search, Plus, Trash2, CheckSquare,
     AlertCircle, Bookmark, Zap, ArrowUp, ArrowDown,
     Minus, X, User, AlignLeft, LayoutDashboard, Flag, List, ListOrdered,
-    Calendar, Clock, Check, Brain, ChevronDown, BarChart2, Users, Info, Eye, Paperclip, CheckCircle2, History, Tag, MessageSquare, Download, Maximize2, FileText, HelpCircle, ImagePlus, Filter,
+    Calendar, Clock, Check, Brain, ChevronDown, BarChart2, Users, Info, Eye, Paperclip, CheckCircle2, History, Tag, MessageSquare, Download, Maximize2, FileText, HelpCircle, ImagePlus, Filter, Repeat,
     Cpu, Sparkles
 } from 'lucide-react';
 import { getFullFileUrl } from '../../utils/fileUtils';
@@ -23,6 +23,9 @@ import {
 } from "@/components/ui/select";
 import Modal from '../common/Modal';
 import PersonalBrainManager from './PersonalBrainManager';
+import { createRecurringTask, getRecurringTaskById, updateRecurringTask } from '../../services/recurringTaskService';
+import RecurringTaskPanel, { defaultRecurringConfig } from './RecurringTaskPanel';
+import RecurringTaskManager from './RecurringTaskManager';
 
 // 🔹 Optimized Title Input to prevent lag/cursor jump
 const TitleInput = ({ initialValue, onUpdate }) => {
@@ -470,6 +473,8 @@ const WorkAllocation = () => {
         }
     }, [loading, initialLoading]);
     const [modalFilterTeam, setModalFilterTeam] = useState('');
+    const [recurringConfig, setRecurringConfig] = useState(defaultRecurringConfig);
+    const [isRecurringManagerOpen, setIsRecurringManagerOpen] = useState(false);
     const { subdomain } = useContext(appContext);
     const { socket } = useSocket();
     const [hasMore, setHasMore] = useState(false);
@@ -521,6 +526,8 @@ const WorkAllocation = () => {
 
     const columnsContainerRef = useRef(null);
     const isScrollingRef = useRef(false);
+    const saveTimeoutRef = useRef(null);
+    const saveRecurringTimeoutRef = useRef(null);
 
     useEffect(() => {
         if (isModalOpen) {
@@ -536,6 +543,7 @@ const WorkAllocation = () => {
     const [rejectConfirm, setRejectConfirm] = useState({ isOpen: false, ticket: null, reason: '' });
     const [isStatsModalOpen, setIsStatsModalOpen] = useState(false);
     const [isDeletedModalOpen, setIsDeletedModalOpen] = useState(false);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [deletedTickets, setDeletedTickets] = useState([]);
     const [loadingDeleted, setLoadingDeleted] = useState(false);
 
@@ -565,6 +573,17 @@ const WorkAllocation = () => {
         setExpandedSubTasks({});
         if (selectedTicket && selectedTicket._id !== 'new') {
             fetchCompletions(selectedTicket._id);
+            if (selectedTicket.recurringTaskId) {
+                getRecurringTaskById(selectedTicket.recurringTaskId)
+                    .then(res => {
+                        if (res && res.data) {
+                            setRecurringConfig({ ...res.data, enabled: true });
+                        }
+                    })
+                    .catch(err => console.error('Error fetching recurring config:', err));
+            } else {
+                setRecurringConfig(defaultRecurringConfig);
+            }
         } else {
             setTicketCompletions([]);
         }
@@ -991,7 +1010,7 @@ const WorkAllocation = () => {
                 status,
                 subdomain,
                 issueType: 'Task',
-                priority: 'Medium'
+                priority: 'Low'
             });
             setTickets([newTicket, ...tickets]);
         } catch (e) {
@@ -999,6 +1018,44 @@ const WorkAllocation = () => {
         }
         setInlineTitle('');
         setInlineCreateStatus(null);
+    };
+
+    const handleRecurringConfigChange = (newConfig) => {
+        setRecurringConfig(newConfig);
+
+        if (selectedTicket && selectedTicket._id !== 'new') {
+            if (saveRecurringTimeoutRef.current) clearTimeout(saveRecurringTimeoutRef.current);
+            saveRecurringTimeoutRef.current = setTimeout(async () => {
+                try {
+                    if (selectedTicket.recurringTaskId) {
+                        await updateRecurringTask(selectedTicket.recurringTaskId, newConfig);
+                        toast.success('Recurring settings updated');
+                    } else if (newConfig.enabled) {
+                        const res = await createRecurringTask({
+                            ...newConfig,
+                            title: selectedTicket.title,
+                            description: selectedTicket.description,
+                            priority: selectedTicket.priority,
+                            issueType: selectedTicket.issueType,
+                            checklist: selectedTicket.checklist,
+                            assignees: selectedTicket.assignees,
+                            team: selectedTicket.team,
+                            labels: selectedTicket.labels,
+                            spawnedTickets: [selectedTicket._id],
+                            totalSpawned: 1,
+                            lastRunAt: new Date()
+                        });
+                        await updateTicket(selectedTicket._id, { recurringTaskId: res.data._id, subdomain });
+                        setSelectedTicket(prev => ({ ...prev, recurringTaskId: res.data._id }));
+                        setTickets(prevTickets => prevTickets.map(t => t._id === selectedTicket._id ? { ...t, recurringTaskId: res.data._id } : t));
+                        toast.success('Recurring task rule created');
+                    }
+                } catch (err) {
+                    console.error('Failed to save recurring task config:', err);
+                    toast.error('Failed to save recurring settings');
+                }
+            }, 1000);
+        }
     };
 
     const updateSelectedTicket = async (updates, debounce = false) => {
@@ -1526,413 +1583,359 @@ const WorkAllocation = () => {
     return (
         <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col">
             {/* Sticky Header Area - Handles Page-level context */}
-            <div className="sticky top-0 z-[100] bg-white border-b border-slate-200/60 shadow-sm backdrop-blur-xl bg-white/95">
-                <div className="px-2.5 sm:px-6 md:px-10 py-1.5 sm:py-5">
-                    {/* 📱 MOBILE ONLY COMPACT CONTROLS ROW (md:hidden) */}
-                    <div className="md:hidden flex items-center gap-1.5 w-full">
-                        {/* Search Input */}
-                        <div className="relative flex-1 border border-slate-200 rounded-xl bg-white shadow-sm focus-within:border-teal-500 transition-all h-8 flex items-center min-w-0">
-                            <Search className="w-3.5 h-3.5 absolute left-2.5 text-slate-400" />
+            <div className="sticky top-0 z-[100] bg-slate-50/90 backdrop-blur-md pt-2 pb-2 px-2 sm:px-4 md:px-6">
+                
+                {/* Mobile (<768px) View */}
+                <div className="md:hidden flex flex-col gap-2">
+                    {/* Top bar: Search + Actions */}
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="relative flex-1">
+                            <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-slate-400" />
                             <input
                                 type="text"
-                                placeholder="Search tasks..."
+                                placeholder="Search..."
                                 value={searchVal}
                                 onChange={(e) => setSearchVal(e.target.value)}
-                                className="w-full pl-8 pr-2 py-1.5 bg-transparent text-[11px] font-semibold text-slate-700 outline-none placeholder:text-slate-300"
+                                className="w-full pl-8 pr-2 h-9 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-teal-500 shadow-xs"
                             />
                         </div>
-
-                        {/* Filter Toggle Icon */}
-                        <button
-                            onClick={() => setShowFiltersMobile(!showFiltersMobile)}
-                            className="flex items-center justify-center h-8 w-8 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl border border-slate-200 transition-all active:scale-95 shrink-0"
-                            title="Toggle Filters"
-                        >
-                            <Filter className={`w-3.5 h-3.5 transition-transform ${showFiltersMobile ? 'text-teal-650' : 'text-slate-400'}`} />
-                        </button>
-
-                        {/* Stats Dashboard Icon Button */}
-                        <button
-                            onClick={() => setIsStatsModalOpen(true)}
-                            className="bg-slate-50 hover:bg-slate-100 text-slate-600 h-8 w-8 rounded-xl flex items-center justify-center border border-slate-200 shrink-0 transition-all active:scale-95"
-                            title="Dashboard Overview"
-                        >
-                            <BarChart2 className="w-4 h-4 text-slate-500" />
-                        </button>
-
-                        {/* Deleted Tasks Icon Button */}
-                        <button
-                            onClick={() => {
-                                fetchDeletedTickets();
-                                setIsDeletedModalOpen(true);
-                            }}
-                            className="bg-slate-50 hover:bg-slate-100 text-slate-600 h-8 w-8 rounded-xl flex items-center justify-center border border-slate-200 shrink-0 transition-all active:scale-95"
-                            title="Deleted Tasks"
-                        >
-                            <History className="w-4 h-4 text-slate-500" />
-                        </button>
-
-                        {/* Plus (New Task) Icon Button */}
-                        <button
-                            onClick={() => {
-                                setInlineCreateStatus(null);
-                                setSelectedTicket({
-                                    _id: 'new', title: '', description: '', priority: 'Medium', status: 'To Do', issueType: 'Task', storyPoints: 0, labels: [], assignee: null, assignees: [], team: '', startDate: '', endDate: '', checklist: [{ text: '', completed: false }]
-                                });
-                                const tempId = Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-                                setTempTicketId(tempId);
-                                setModalFilterTeam('');
-                                setIsModalOpen(true);
-                            }}
-                            className="bg-blue-600 hover:bg-blue-700 text-white h-8 w-8 rounded-xl flex items-center justify-center shadow-md shadow-blue-100 shrink-0 transition-all active:scale-95"
-                            title="New Task"
-                        >
-                            <Plus className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                                onClick={() => {
+                                    setInlineCreateStatus(null); setRecurringConfig(defaultRecurringConfig);
+                                    setSelectedTicket({ _id: 'new', title: '', description: '', priority: 'Low', status: 'To Do', issueType: 'Task', storyPoints: 0, labels: [], assignee: null, assignees: [], team: '', startDate: '', endDate: '', checklist: [{ text: '', completed: false }] });
+                                    const tempId = Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+                                    setTempTicketId(tempId); setModalFilterTeam(''); setIsModalOpen(true);
+                                }}
+                                className="w-9 h-9 flex items-center justify-center bg-teal-600 hover:bg-teal-700 text-white rounded-lg shadow-xs active:scale-95 transition-all"
+                            >
+                                <Plus className="w-5 h-5" />
+                            </button>
+                            <button
+                                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                                className="w-9 h-9 flex items-center justify-center text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg shadow-xs active:scale-95 transition-all font-bold text-lg leading-none pb-1"
+                            >
+                                ⋮
+                            </button>
+                        </div>
                     </div>
 
-                    {/* Dropdowns (Mobile filter panel below the row) */}
-                    <div className={`md:hidden ${showFiltersMobile ? 'flex' : 'hidden'} flex-row flex-wrap items-center gap-2 w-full mt-2`}>
-                        <div className="w-[calc(50%-4px)] shrink-0">
-                                <Select value={filterAssignee || "all_assignees"} onValueChange={(val) => setFilterAssignee(val === "all_assignees" ? "" : val)}>
-                                <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 text-[10px] font-semibold text-slate-600 px-2.5">
-                                    <SelectValue placeholder="All Employees" />
+                    {/* Overflow Menu */}
+                    {isMobileMenuOpen && (
+                        <div className="bg-white border border-slate-200 rounded-xl p-1.5 flex flex-col gap-0.5 shadow-lg animate-in slide-in-from-top-2">
+                            <button onClick={() => { setIsStatsModalOpen(true); setIsMobileMenuOpen(false); }} className="text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg">Dashboard</button>
+                            <button onClick={() => { setIsRecurringManagerOpen(true); setIsMobileMenuOpen(false); }} className="text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg">Recurring Rules</button>
+                            <button onClick={() => { fetchDeletedTickets(); setIsDeletedModalOpen(true); setIsMobileMenuOpen(false); }} className="text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg">Deleted Tasks</button>
+                        </div>
+                    )}
+
+                    {/* Filter Chips Horizontal Scroll */}
+                    <div className="flex overflow-x-auto no-scrollbar gap-2 pb-1 items-center">
+                        <div className="shrink-0 w-[135px]">
+                            <Select value={filterAssignee || "all_assignees"} onValueChange={(val) => setFilterAssignee(val === "all_assignees" ? "" : val)}>
+                                <SelectTrigger className="w-full bg-slate-100 hover:bg-slate-200 border-transparent rounded-full h-8 text-xs text-slate-700 font-medium px-3 shadow-none transition-colors">
+                                    <SelectValue placeholder="Employee" />
                                 </SelectTrigger>
-                                <SelectContent className="z-[200]">
+                                <SelectContent>
                                     <SelectItem value="all_assignees">All Employees</SelectItem>
                                     <SelectItem value="unassigned">Unassigned</SelectItem>
-                                    {sortedByWorkload.map(w => {
-                                        const { activeTasks } = getWorkerLoad(w._id);
-                                        const { dot, text } = workloadColor(activeTasks);
-                                        return (
-                                            <SelectItem key={w._id} value={w._id}>
-                                                <span className="flex items-center gap-2 text-[10px]">
-                                                    <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`}></span>
-                                                    <span>{w.name}</span>
-                                                    <span className={`text-[10px] font-bold ml-auto ${text}`}>({activeTasks})</span>
-                                                </span>
-                                            </SelectItem>
-                                        );
-                                    })}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="w-[calc(50%-4px)] shrink-0">
-                                <Select value={filterTeam || "all_teams"} onValueChange={(val) => setFilterTeam(val === "all_teams" ? "" : val)}>
-                                <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 text-[10px] font-semibold text-slate-600 px-2.5">
-                                    <SelectValue placeholder="All Teams" />
-                                </SelectTrigger>
-                                <SelectContent className="z-[200]">
-                                    <SelectItem value="all_teams">All Teams</SelectItem>
-                                    {[...new Set(workers.filter(w => w.status !== 'Relieved').map(w => w.department).filter(Boolean))].map(team => (
-                                        <SelectItem key={team} value={team} className="text-[10px]">{team}</SelectItem>
+                                    {sortedByWorkload.map(w => (
+                                        <SelectItem key={w._id} value={w._id}>{w.name.split(' ')[0]}</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
                         </div>
-
-                        <div className="w-[calc(50%-4px)] shrink-0">
-                                <Select value={filterPriority || "all_priorities"} onValueChange={(val) => setFilterPriority(val === "all_priorities" ? "" : val)}>
-                                <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 text-[10px] font-semibold text-slate-600 px-2.5">
-                                    <SelectValue placeholder="Priority" />
+                        <div className="shrink-0 w-[120px]">
+                            <Select value={filterTeam || "all_teams"} onValueChange={(val) => setFilterTeam(val === "all_teams" ? "" : val)}>
+                                <SelectTrigger className="w-full bg-slate-100 hover:bg-slate-200 border-transparent rounded-full h-8 text-xs text-slate-700 font-medium px-3 shadow-none transition-colors">
+                                    <SelectValue placeholder="Team" />
                                 </SelectTrigger>
-                                <SelectContent className="z-[200]">
-                                    <SelectItem value="all_priorities" className="text-[10px]">Priority</SelectItem>
-                                    <SelectItem value="High" className="text-[10px]">High</SelectItem>
-                                    <SelectItem value="Medium" className="text-[10px]">Medium</SelectItem>
-                                    <SelectItem value="Low" className="text-[10px]">Low</SelectItem>
+                                <SelectContent>
+                                    <SelectItem value="all_teams">All Teams</SelectItem>
+                                    {[...new Set(workers.filter(w => w.status !== 'Relieved').map(w => w.department).filter(Boolean))].map(team => (
+                                        <SelectItem key={team} value={team}>{team}</SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                         </div>
-
-                        {/* Month Filter */}
-                        <div className="w-[calc(50%-4px)] shrink-0">
-                            <Select
-                                value={filterMonth || 'all_months'}
-                                onValueChange={(val) => setFilterMonth(val === 'all_months' ? '' : val)}
-                            >
-                                <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 text-[10px] font-semibold text-slate-600 px-2.5">
-                                    <SelectValue placeholder="This Month" />
+                        <div className="shrink-0 w-[110px]">
+                            <Select value={filterPriority || "all_priorities"} onValueChange={(val) => setFilterPriority(val === "all_priorities" ? "" : val)}>
+                                <SelectTrigger className="w-full bg-slate-100 hover:bg-slate-200 border-transparent rounded-full h-8 text-xs text-slate-700 font-medium px-3 shadow-none transition-colors">
+                                    <SelectValue placeholder="Priority" />
                                 </SelectTrigger>
-                                <SelectContent className="z-[200]">
-                                    <SelectItem value="all_months" className="text-[10px]">All Months</SelectItem>
+                                <SelectContent>
+                                    <SelectItem value="all_priorities">Priority</SelectItem>
+                                    <SelectItem value="High">High</SelectItem>
+                                    <SelectItem value="Medium">Medium</SelectItem>
+                                    <SelectItem value="Low">Low</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="shrink-0 w-[120px]">
+                            <Select value={filterMonth || 'all_months'} onValueChange={(val) => setFilterMonth(val === 'all_months' ? '' : val)}>
+                                <SelectTrigger className="w-full bg-slate-100 hover:bg-slate-200 border-transparent rounded-full h-8 text-xs text-slate-700 font-medium px-3 shadow-none transition-colors">
+                                    <SelectValue placeholder="Month" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all_months">All Months</SelectItem>
                                     {(() => {
                                         const months = [];
                                         const now = new Date();
                                         for (let i = 0; i < 12; i++) {
                                             const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
                                             const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                                            const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
-                                            months.push(<SelectItem key={val} value={val} className="text-[10px]">{label}</SelectItem>);
+                                            const label = d.toLocaleString('default', { month: 'short', year: 'numeric' });
+                                            months.push(<SelectItem key={val} value={val}>{label}</SelectItem>);
                                         }
                                         return months;
                                     })()}
                                 </SelectContent>
                             </Select>
                         </div>
-
-                        {(filterAssignee || filterTeam || filterPriority || searchTerm || filterMonth !== currentMonthValue) && (
+                        {(filterAssignee || filterTeam || filterPriority || filterMonth !== currentMonthValue) && (
                             <button
                                 onClick={() => {
-                                    setFilterAssignee('');
-                                    setFilterTeam('');
-                                    setFilterPriority('');
-                                    setSearchVal('');
-                                    setSearchTerm('');
-                                    setFilterMonth(currentMonthValue);
+                                    setFilterAssignee(''); setFilterTeam(''); setFilterPriority(''); setFilterMonth(currentMonthValue);
                                 }}
-                                className="w-full text-[10px] text-rose-500 hover:text-rose-600 font-bold uppercase tracking-wider px-2 py-2 rounded-xl bg-rose-50/50 hover:bg-rose-50 border border-rose-100/30 text-center h-8 flex items-center justify-center transition-all"
+                                className="shrink-0 px-3 h-8 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-full text-xs font-semibold transition-colors"
                             >
-                                Reset Filters
+                                Clear
                             </button>
                         )}
                     </div>
+                </div>
 
-                    {/* 💻 DESKTOP ONLY ORIGINAL CONTROLS LAYOUT (hidden md:block) */}
-                    <div className="hidden md:block">
-                        {/* Single Row Controls Container */}
-                        <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-2 lg:gap-4">
-
-                            {/* Left Group: Search input & Filter selects */}
-                            <div className="flex flex-col md:flex-row items-stretch md:items-center gap-1.5 md:gap-3 flex-1">
-                                {/* Search box and Mobile Filter Toggle */}
-                                <div className="flex items-center gap-1.5 w-full md:w-auto shrink-0">
-                                    <div className="relative flex-1 md:w-64 border border-slate-200 rounded-xl bg-white shadow-sm focus-within:border-teal-500 transition-all h-8 sm:h-10 flex items-center shrink-0">
-                                        <Search className="w-3 h-3 absolute left-3 text-slate-400" />
-                                        <input
-                                            type="text"
-                                            placeholder="Search tasks..."
-                                            value={searchVal}
-                                            onChange={(e) => setSearchVal(e.target.value)}
-                                            className="w-full pl-8 pr-3 py-1.5 bg-transparent text-[10px] sm:text-xs font-semibold text-slate-700 outline-none placeholder:text-slate-300"
-                                        />
-                                    </div>
-                                    <button
-                                        onClick={() => setShowFiltersMobile(!showFiltersMobile)}
-                                        className="md:hidden flex items-center justify-center h-8 w-8 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl border border-slate-200 transition-all active:scale-95 shrink-0"
-                                        title="Toggle Filters"
-                                    >
-                                        <Filter className={`w-4 h-4 transition-transform ${showFiltersMobile ? 'text-teal-650' : 'text-slate-400'}`} />
-                                    </button>
-                                </div>
-
-                                {/* Dropdowns - Collapsed by default on mobile, always visible on desktop */}
-                                <div className={`${showFiltersMobile ? 'flex' : 'hidden md:flex'} flex-row flex-wrap items-center gap-2 w-full md:w-auto mt-2 md:mt-0`}>
-                                    <div className="w-[calc(50%-4px)] sm:w-[190px] shrink-0">
-                                        <Select value={filterAssignee || "all_assignees"} onValueChange={(val) => setFilterAssignee(val === "all_assignees" ? "" : val)}>
-                                            <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
-                                                <SelectValue placeholder="All Employees" />
-                                            </SelectTrigger>
-                                            <SelectContent className="z-[200]">
-                                                <SelectItem value="all_assignees">All Employees</SelectItem>
-                                                <SelectItem value="unassigned">Unassigned</SelectItem>
-                                                {sortedByWorkload.map(w => {
-                                                    const { activeTasks } = getWorkerLoad(w._id);
-                                                    const { dot, text } = workloadColor(activeTasks);
-                                                    return (
-                                                        <SelectItem key={w._id} value={w._id}>
-                                                            <span className="flex items-center gap-2 text-[10px] sm:text-xs">
-                                                                <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`}></span>
-                                                                <span>{w.name}</span>
-                                                                <span className={`text-[10px] font-bold ml-auto ${text}`}>({activeTasks})</span>
-                                                            </span>
-                                                        </SelectItem>
-                                                    );
-                                                })}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-
-
-                                    <div className="w-[calc(50%-4px)] sm:w-[140px] shrink-0">
-                                        <Select value={filterTeam || "all_teams"} onValueChange={(val) => setFilterTeam(val === "all_teams" ? "" : val)}>
-                                            <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
-                                                <SelectValue placeholder="All Teams" />
-                                            </SelectTrigger>
-                                            <SelectContent className="z-[200]">
-                                                <SelectItem value="all_teams">All Teams</SelectItem>
-                                                {[...new Set(workers.filter(w => w.status !== 'Relieved').map(w => w.department).filter(Boolean))].map(team => (
-                                                    <SelectItem key={team} value={team} className="text-[10px] sm:text-xs">{team}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-
-                                    <div className="w-[calc(50%-4px)] sm:w-[120px] shrink-0">
-                                        <Select value={filterPriority || "all_priorities"} onValueChange={(val) => setFilterPriority(val === "all_priorities" ? "" : val)}>
-                                            <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
-                                                <SelectValue placeholder="Priority" />
-                                            </SelectTrigger>
-                                            <SelectContent className="z-[200]">
-                                                <SelectItem value="all_priorities" className="text-[10px] sm:text-xs">Priority</SelectItem>
-                                                <SelectItem value="High" className="text-[10px] sm:text-xs">High</SelectItem>
-                                                <SelectItem value="Medium" className="text-[10px] sm:text-xs">Medium</SelectItem>
-                                                <SelectItem value="Low" className="text-[10px] sm:text-xs">Low</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-
-                                    {/* Month Filter */}
-                                    <div className="w-[calc(50%-4px)] sm:w-[140px] shrink-0">
-                                        <Select
-                                            value={filterMonth || 'all_months'}
-                                            onValueChange={(val) => setFilterMonth(val === 'all_months' ? '' : val)}
-                                        >
-                                            <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl shadow-sm h-8 sm:h-10 text-[10px] sm:text-xs font-semibold text-slate-600 px-2.5">
-                                                <SelectValue placeholder="This Month" />
-                                            </SelectTrigger>
-                                            <SelectContent className="z-[200]">
-                                                <SelectItem value="all_months" className="text-[10px] sm:text-xs">All Months</SelectItem>
-                                                {(() => {
-                                                    const months = [];
-                                                    const now = new Date();
-                                                    for (let i = 0; i < 12; i++) {
-                                                        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-                                                        const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                                                        const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
-                                                        months.push(<SelectItem key={val} value={val} className="text-[10px] sm:text-xs">{label}</SelectItem>);
-                                                    }
-                                                    return months;
-                                                })()}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-
-                                    {(filterAssignee || filterTeam || filterPriority || searchTerm || filterMonth !== currentMonthValue) && (
-                                        <button
-                                            onClick={() => {
-                                                setFilterAssignee('');
-                                                setFilterTeam('');
-                                                setFilterPriority('');
-                                                setSearchVal('');
-                                                setSearchTerm('');
-                                                setFilterMonth(currentMonthValue);
-                                            }}
-                                            className="w-[calc(50%-4px)] sm:w-auto text-[10px] text-rose-500 hover:text-rose-600 font-bold uppercase tracking-wider px-2 py-2 rounded-xl bg-rose-50/50 hover:bg-rose-50 border border-rose-100/30 sm:border-none sm:bg-transparent text-center sm:text-left h-8 sm:h-auto flex items-center justify-center transition-all"
-                                        >
-                                            Reset
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Right Group: Action buttons */}
-                            <div className="grid grid-cols-2 sm:flex sm:flex-row items-center gap-1.5 sm:gap-3 shrink-0 w-full lg:w-auto mt-1 lg:mt-0">
-                                <button
-                                    onClick={() => setIsStatsModalOpen(true)}
-                                    className="order-2 sm:order-none bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold h-8 sm:h-10 px-2.5 sm:px-4 rounded-xl flex items-center justify-center text-[10px] sm:text-xs transition-all border border-slate-200 w-full sm:w-auto"
-                                >
-                                    <BarChart2 className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
-                                    <span>Dashboard</span>
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        setInlineCreateStatus(null);
-                                        setSelectedTicket({
-                                            _id: 'new', title: '', description: '', priority: 'Medium', status: 'To Do', issueType: 'Task', storyPoints: 0, labels: [], assignee: null, assignees: [], team: '', startDate: '', endDate: '', checklist: [{ text: '', completed: false }]
-                                        });
-                                        const tempId = Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-                                        setTempTicketId(tempId);
-                                        setModalFilterTeam('');
-                                        setIsModalOpen(true);
-                                    }}
-                                    className="col-span-2 order-1 sm:order-none bg-blue-600 hover:bg-blue-700 text-white font-bold h-8 sm:h-10 px-3 sm:px-6 rounded-xl flex items-center justify-center text-[10px] sm:text-xs transition-all shadow-lg shadow-blue-100 active:scale-95 w-full sm:w-auto"
-                                >
-                                    <Plus className="w-3.5 h-3.5 mr-1.5" /> New Task
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        fetchDeletedTickets();
-                                        setIsDeletedModalOpen(true);
-                                    }}
-                                    className="order-3 sm:order-none bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold h-8 sm:h-10 px-2.5 sm:px-4 rounded-xl flex items-center justify-center text-[10px] sm:text-xs transition-all border border-slate-200 w-full sm:w-auto"
-                                >
-                                    <History className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
-                                    <span>Deleted Tasks</span>
-                                </button>
-                            </div>
+                {/* Desktop (≥768px) View */}
+                <div className="hidden md:flex bg-white border border-slate-200/80 p-2 shadow-xs rounded-xl flex-row justify-between items-center gap-3">
+                    {/* Left Side: Search & Filters */}
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {/* Search Input */}
+                        <div className="relative w-64 border border-slate-200 rounded-lg bg-white focus-within:border-teal-500 transition-all h-9 flex items-center min-w-0">
+                            <Search className="w-4 h-4 absolute left-3 text-slate-400" />
+                            <input
+                                type="text"
+                                placeholder="Search tasks..."
+                                value={searchVal}
+                                onChange={(e) => setSearchVal(e.target.value)}
+                                className="w-full pl-9 pr-3 py-1.5 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                            />
                         </div>
+
+                        {/* Filter Dropdowns */}
+                        <div className="flex items-center gap-2">
+                            <div className="w-36">
+                                <Select value={filterAssignee || "all_assignees"} onValueChange={(val) => setFilterAssignee(val === "all_assignees" ? "" : val)}>
+                                    <SelectTrigger className="w-full bg-white border-slate-200 rounded-lg h-9 text-xs text-slate-700 font-semibold shadow-xs">
+                                        <SelectValue placeholder="Employee" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all_assignees">All Employees</SelectItem>
+                                        <SelectItem value="unassigned">Unassigned</SelectItem>
+                                        {sortedByWorkload.map(w => (
+                                            <SelectItem key={w._id} value={w._id}>{w.name.split(' ')[0]}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="w-32">
+                                <Select value={filterTeam || "all_teams"} onValueChange={(val) => setFilterTeam(val === "all_teams" ? "" : val)}>
+                                    <SelectTrigger className="w-full bg-white border-slate-200 rounded-lg h-9 text-xs text-slate-700 font-semibold shadow-xs">
+                                        <SelectValue placeholder="Team" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all_teams">All Teams</SelectItem>
+                                        {[...new Set(workers.filter(w => w.status !== 'Relieved').map(w => w.department).filter(Boolean))].map(team => (
+                                            <SelectItem key={team} value={team}>{team}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="w-28">
+                                <Select value={filterPriority || "all_priorities"} onValueChange={(val) => setFilterPriority(val === "all_priorities" ? "" : val)}>
+                                    <SelectTrigger className="w-full bg-white border-slate-200 rounded-lg h-9 text-xs text-slate-700 font-semibold shadow-xs">
+                                        <SelectValue placeholder="Priority" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all_priorities">Priority</SelectItem>
+                                        <SelectItem value="High">High</SelectItem>
+                                        <SelectItem value="Medium">Medium</SelectItem>
+                                        <SelectItem value="Low">Low</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="w-32">
+                                <Select value={filterMonth || 'all_months'} onValueChange={(val) => setFilterMonth(val === 'all_months' ? '' : val)}>
+                                    <SelectTrigger className="w-full bg-white border-slate-200 rounded-lg h-9 text-xs text-slate-700 font-semibold shadow-xs">
+                                        <SelectValue placeholder="Month" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all_months">All Months</SelectItem>
+                                        {(() => {
+                                            const months = [];
+                                            const now = new Date();
+                                            for (let i = 0; i < 12; i++) {
+                                                const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                                                const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                                                const label = d.toLocaleString('default', { month: 'short', year: 'numeric' });
+                                                months.push(<SelectItem key={val} value={val}>{label}</SelectItem>);
+                                            }
+                                            return months;
+                                        })()}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            {(filterAssignee || filterTeam || filterPriority || searchTerm || filterMonth !== currentMonthValue) && (
+                                <button
+                                    onClick={() => {
+                                        setFilterAssignee(''); setFilterTeam(''); setFilterPriority(''); setSearchVal(''); setSearchTerm(''); setFilterMonth(currentMonthValue);
+                                    }}
+                                    className="h-9 px-2 text-xs text-slate-500 hover:text-slate-800 font-semibold transition-colors"
+                                >
+                                    Clear
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Right Side: Action Buttons */}
+                    <div className="flex items-center gap-2 shrink-0 justify-end">
+                        <button
+                            onClick={() => setIsStatsModalOpen(true)}
+                            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 h-9 px-3 rounded-lg text-xs font-semibold shadow-xs transition-all"
+                        >
+                            Dashboard
+                        </button>
+                        <button
+                            onClick={() => setIsRecurringManagerOpen(true)}
+                            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 h-9 px-3 rounded-lg text-xs font-semibold shadow-xs transition-all"
+                        >
+                            Recurring Rules
+                        </button>
+                        <button
+                            onClick={() => { fetchDeletedTickets(); setIsDeletedModalOpen(true); }}
+                            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 h-9 px-3 rounded-lg text-xs font-semibold shadow-xs transition-all"
+                        >
+                            Deleted Tasks
+                        </button>
+                        <button
+                            onClick={() => {
+                                setInlineCreateStatus(null); setRecurringConfig(defaultRecurringConfig);
+                                setSelectedTicket({ _id: 'new', title: '', description: '', priority: 'Low', status: 'To Do', issueType: 'Task', storyPoints: 0, labels: [], assignee: null, assignees: [], team: '', startDate: '', endDate: '', checklist: [{ text: '', completed: false }] });
+                                const tempId = Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+                                setTempTicketId(tempId); setModalFilterTeam(''); setIsModalOpen(true);
+                            }}
+                            className="bg-teal-600 hover:bg-teal-700 text-white font-semibold h-9 px-3.5 rounded-lg text-xs shadow-xs flex items-center transition-all"
+                        >
+                            <Plus className="w-4 h-4 mr-1" /> New Task
+                        </button>
                     </div>
                 </div>
             </div>
 
-            {/* ── Workforce Overview Bar ──────────────────────────────────────── */}
-            <div className="px-2.5 lg:px-4 pt-1.5 pb-1">
-                <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:gap-3 w-full">
-                    <div className="grid grid-cols-4 gap-1 sm:flex sm:flex-row sm:gap-3 flex-1">
-                        {/* Stat: Total Employees */}
-                        <button onClick={() => setDrawerFilter('all')} className="flex items-center gap-1 sm:gap-3 bg-white rounded-lg sm:rounded-xl px-1.5 py-1 sm:px-4 sm:py-2.5 border border-slate-200/60 shadow-sm min-w-0 sm:min-w-[120px] hover:shadow-md hover:border-slate-300 transition-all cursor-pointer text-left">
-                            <div className="hidden sm:flex w-8 h-8 rounded-lg bg-slate-100 items-center justify-center shrink-0">
-                                <Users className="w-4 h-4 text-slate-500" />
-                            </div>
-                            <div className="min-w-0">
-                                <div className="text-[7px] sm:text-[11px] text-slate-400 font-semibold uppercase tracking-wide leading-none truncate">Total</div>
-                                <div className="text-xs sm:text-lg font-black text-slate-800 leading-tight mt-0.5 sm:mt-0">{activeWorkers.length}</div>
-                            </div>
-                        </button>
+            {/* ── Stats Summary Row ──────────────────────────────────────── */}
+            <div className="px-2 sm:px-4 md:px-6 pt-2 pb-2">
+                {/* Desktop (≥768px): 5-column grid */}
+                <div className="hidden md:grid grid-cols-5 gap-2.5 p-2 bg-white border border-slate-200/80 rounded-xl shadow-xs w-full mb-1">
+                    {/* Stat: Total Employees */}
+                    <button onClick={() => setDrawerFilter('all')} className="flex items-center gap-2 p-1 rounded hover:bg-slate-50 transition-colors text-left cursor-pointer">
+                        <div className="bg-slate-100/80 rounded-lg p-2.5 shrink-0">
+                            <Users className="w-4 h-4 text-slate-500" />
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-tight">Total</span>
+                            <span className="text-base font-black text-slate-900 leading-tight">{activeWorkers.length}</span>
+                        </div>
+                    </button>
 
-                        {/* Stat: Assigned */}
-                        <button onClick={() => setDrawerFilter('assigned')} className="flex items-center gap-1 sm:gap-3 bg-white rounded-lg sm:rounded-xl px-1.5 py-1 sm:px-4 sm:py-2.5 border border-blue-100 shadow-sm min-w-0 sm:min-w-[120px] hover:shadow-md hover:border-blue-300 transition-all cursor-pointer text-left">
-                            <div className="hidden sm:flex w-8 h-8 rounded-lg bg-blue-50 items-center justify-center shrink-0">
-                                <CheckSquare className="w-4 h-4 text-blue-500" />
-                            </div>
-                            <div className="min-w-0">
-                                <div className="text-[7px] sm:text-[11px] text-blue-400 font-semibold uppercase tracking-wide leading-none truncate">Assigned</div>
-                                <div className="text-xs sm:text-lg font-black text-blue-700 leading-tight mt-0.5 sm:mt-0">{assignedDevelopers.length}</div>
-                            </div>
-                        </button>
+                    {/* Stat: Assigned */}
+                    <button onClick={() => setDrawerFilter('assigned')} className="flex items-center gap-2 p-1 rounded hover:bg-slate-50 transition-colors text-left cursor-pointer border-l border-slate-100 pl-4">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-tight">Assigned</span>
+                            <span className="text-base font-black text-slate-900 leading-tight">{assignedDevelopers.length}</span>
+                        </div>
+                    </button>
 
-                        {/* Stat: Idle */}
-                        <button onClick={() => setDrawerFilter('idle')} className="flex items-center gap-1 sm:gap-3 bg-white rounded-lg sm:rounded-xl px-1.5 py-1 sm:px-4 sm:py-2.5 border border-emerald-100 shadow-sm min-w-0 sm:min-w-[120px] hover:shadow-md hover:border-emerald-300 transition-all cursor-pointer text-left">
-                            <div className="hidden sm:flex w-8 h-8 rounded-lg bg-emerald-50 items-center justify-center shrink-0">
-                                <User className="w-4 h-4 text-emerald-500" />
-                            </div>
-                            <div className="min-w-0">
-                                <div className="text-[7px] sm:text-[11px] text-emerald-500 font-semibold uppercase tracking-wide leading-none truncate">Idle</div>
-                                <div className="text-xs sm:text-lg font-black text-emerald-700 leading-tight mt-0.5 sm:mt-0">{idleDevelopers.length}</div>
-                            </div>
-                        </button>
+                    {/* Stat: Idle */}
+                    <button onClick={() => setDrawerFilter('idle')} className="flex items-center gap-2 p-1 rounded hover:bg-slate-50 transition-colors text-left cursor-pointer border-l border-slate-100 pl-4">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-tight">Idle</span>
+                            <span className="text-base font-black text-slate-900 leading-tight">{idleDevelopers.length}</span>
+                        </div>
+                    </button>
 
-                        {/* Stat: Overloaded */}
-                        <button onClick={() => setDrawerFilter('overloaded')} className="flex items-center gap-1 sm:gap-3 bg-white rounded-lg sm:rounded-xl px-1.5 py-1 sm:px-4 sm:py-2.5 border border-rose-100 shadow-sm min-w-0 sm:min-w-[120px] hover:shadow-md hover:border-rose-300 transition-all cursor-pointer text-left">
-                            <div className="hidden sm:flex w-8 h-8 rounded-lg bg-rose-50 items-center justify-center shrink-0">
-                                <AlertCircle className="w-4 h-4 text-rose-500" />
+                    {/* Stat: Overloaded */}
+                    <button onClick={() => setDrawerFilter('overloaded')} className={`flex items-center gap-2 p-1 rounded hover:bg-slate-50 transition-colors text-left cursor-pointer border-l border-slate-100 pl-4 ${overloadedDevelopers.length > 0 ? 'bg-rose-50/50' : ''}`}>
+                        <div className="flex flex-col w-full">
+                            <div className="flex justify-between items-center w-full">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-tight">Overload</span>
+                                {overloadedDevelopers.length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>}
                             </div>
-                            <div className="min-w-0">
-                                <div className="text-[7px] sm:text-[11px] text-rose-400 font-semibold uppercase tracking-wide leading-none truncate">Overload</div>
-                                <div className="text-xs sm:text-lg font-black text-rose-700 leading-tight mt-0.5 sm:mt-0">{overloadedDevelopers.length}</div>
-                            </div>
-                        </button>
-                    </div>
+                            <span className={`text-base font-black leading-tight ${overloadedDevelopers.length > 0 ? 'text-rose-700' : 'text-slate-900'}`}>{overloadedDevelopers.length}</span>
+                        </div>
+                    </button>
 
-                    {/* Available Developers Card */}
-                    {idleDevelopers.length > 0 && (
-                        <button
-                            onClick={() => setDrawerFilter('idle')}
-                            className="flex items-center justify-between sm:justify-start gap-2 sm:gap-3 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg sm:rounded-xl px-2.5 py-1 sm:px-4 sm:py-2.5 border border-emerald-200/60 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all duration-200 group cursor-pointer text-left w-full sm:w-auto"
-                        >
-                            <div className="flex items-center gap-1.5 sm:gap-3">
-                                <div className="w-5 h-5 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
-                                    <Zap className="w-3 h-3 sm:w-4 sm:h-4 text-emerald-600" />
-                                </div>
-                                <div>
-                                    <div className="text-[9px] sm:text-[11px] text-emerald-600 font-bold uppercase tracking-wide leading-none mb-0.5">Available Now</div>
-                                    <div className="flex items-center gap-1 flex-wrap">
-                                        {idleDevelopers.slice(0, 4).map(w => (
-                                            <span key={w._id} className="text-[8px] sm:text-[10px] font-semibold text-emerald-700 bg-white/70 px-1 py-0.5 rounded border border-emerald-200/50">
-                                                {w.name.split(' ')[0]}
-                                            </span>
+                    {/* Stat: Available Now */}
+                    {idleDevelopers.length > 0 ? (
+                        <button onClick={() => setDrawerFilter('idle')} className="flex items-center gap-2 p-1 rounded hover:bg-slate-50 transition-colors text-left cursor-pointer border-l border-slate-100 pl-4">
+                            <div className="flex flex-col justify-center h-full">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-tight mb-1">Available</div>
+                                <div className="flex items-center">
+                                    <div className="flex -space-x-1.5">
+                                        {idleDevelopers.slice(0, 3).map((w, i) => (
+                                            <div key={w._id} className="w-6 h-6 rounded-full border-[1.5px] border-white bg-slate-100 flex items-center justify-center text-[9px] font-black text-slate-700 z-[4]" style={{ zIndex: 4 - i }}>
+                                                {w.name.charAt(0).toUpperCase()}
+                                            </div>
                                         ))}
-                                        {idleDevelopers.length > 4 && (
-                                            <span className="text-[8px] sm:text-[10px] font-bold text-emerald-600">+{idleDevelopers.length - 4} more</span>
-                                        )}
                                     </div>
+                                    {idleDevelopers.length > 3 && (
+                                        <span className="ml-1.5 bg-teal-50 text-teal-700 text-[10px] font-black px-1.5 py-0.5 rounded-md">
+                                            +{idleDevelopers.length - 3} avail
+                                        </span>
+                                    )}
                                 </div>
                             </div>
-                            <ChevronDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-500 ml-1 -rotate-90 group-hover:translate-x-0.5 transition-transform shrink-0" />
                         </button>
+                    ) : (
+                        <div className="flex items-center gap-2 p-1 border-l border-slate-100 pl-4 opacity-50">
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-tight">Available</span>
+                                <span className="text-sm font-semibold text-slate-400">None</span>
+                            </div>
+                        </div>
                     )}
+                </div>
+
+                {/* Mobile (<768px): Horizontally scrollable strip */}
+                <div className="md:hidden flex overflow-x-auto gap-2 no-scrollbar py-1">
+                    <button onClick={() => setDrawerFilter('all')} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200/80 rounded-full shadow-xs shrink-0 active:scale-95 transition-transform">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total:</span>
+                        <span className="text-[11px] font-black text-slate-900">{activeWorkers.length}</span>
+                    </button>
+                    <button onClick={() => setDrawerFilter('assigned')} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200/80 rounded-full shadow-xs shrink-0 active:scale-95 transition-transform">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Assigned:</span>
+                        <span className="text-[11px] font-black text-slate-900">{assignedDevelopers.length}</span>
+                    </button>
+                    <button onClick={() => setDrawerFilter('idle')} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200/80 rounded-full shadow-xs shrink-0 active:scale-95 transition-transform">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Idle:</span>
+                        <span className="text-[11px] font-black text-slate-900">{idleDevelopers.length}</span>
+                    </button>
+                    <button onClick={() => setDrawerFilter('overloaded')} className={`flex items-center gap-1.5 px-3 py-1.5 bg-white border rounded-full shadow-xs shrink-0 active:scale-95 transition-transform ${overloadedDevelopers.length > 0 ? 'border-rose-200 bg-rose-50/50' : 'border-slate-200/80'}`}>
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Overload:</span>
+                        <span className={`text-[11px] font-black ${overloadedDevelopers.length > 0 ? 'text-rose-700' : 'text-slate-900'}`}>{overloadedDevelopers.length}</span>
+                    </button>
+                    <button onClick={() => setDrawerFilter('idle')} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200/80 rounded-full shadow-xs shrink-0 active:scale-95 transition-transform">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Available:</span>
+                        <div className="flex -space-x-1.5 items-center">
+                            {idleDevelopers.slice(0, 2).map((w, i) => (
+                                <div key={w._id} className="w-4 h-4 rounded-full border border-white bg-slate-200 flex items-center justify-center text-[7px] font-black text-slate-700 z-[4]" style={{ zIndex: 4 - i }}>
+                                    {w.name.charAt(0).toUpperCase()}
+                                </div>
+                            ))}
+                            {idleDevelopers.length > 2 && (
+                                <span className="ml-1 text-[9px] font-bold text-slate-600">+{idleDevelopers.length - 2}</span>
+                            )}
+                        </div>
+                    </button>
                 </div>
             </div>
 
@@ -1947,14 +1950,13 @@ const WorkAllocation = () => {
                             <button
                                 key={status}
                                 onClick={() => setActiveMobileTab(status)}
-                                className={`flex flex-col items-center justify-center gap-0 py-1 rounded-md text-[8px] font-bold transition-all duration-200 border ${isActive
+                                className={`flex flex-col items-center justify-center gap-0 py-1.5 rounded-md text-[9px] font-bold transition-all duration-200 border ${isActive
                                     ? 'bg-white text-slate-800 shadow-sm border-slate-200'
-                                    : 'bg-transparent text-slate-400 border-transparent'
+                                    : 'bg-transparent text-slate-500 border-transparent hover:bg-slate-200/50'
                                     }`}
                             >
-                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 mb-0.5 ${status === 'To Do' ? 'bg-slate-400' : status === 'In Progress' ? 'bg-blue-500' : status === 'Review' ? 'bg-purple-500' : 'bg-emerald-500'}`}></span>
                                 <span className="leading-tight truncate w-full text-center px-0.5">{status === 'In Progress' ? 'In Prog.' : status}</span>
-                                <span className={`text-[7px] mt-0.5 ${isActive ? 'text-slate-500' : 'text-slate-400'}`}>{count}</span>
+                                <span className={`text-[8px] mt-0.5 px-1.5 py-0.5 rounded-full ${isActive ? 'bg-slate-100 text-slate-600' : 'bg-slate-200 text-slate-500'}`}>{count}</span>
                             </button>
                         );
                     })}
@@ -1962,7 +1964,7 @@ const WorkAllocation = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 min-h-[calc(100vh-280px)] pb-6 w-full relative">
                     {loading && (
-                        <div className="absolute inset-0 bg-[#f8fafc]/60 backdrop-blur-[1px] flex items-center justify-center z-[50] rounded-2xl transition-all duration-200">
+                        <div className="absolute inset-0 bg-slate-50/60 backdrop-blur-[1px] flex items-center justify-center z-[50] rounded-2xl transition-all duration-200">
                             <Spinner size="lg" />
                         </div>
                     )}
@@ -1971,30 +1973,30 @@ const WorkAllocation = () => {
                         <div
                             key={status}
                             data-status={status}
-                            className={`flex flex-col min-w-0 bg-[#f1f5f9]/80 rounded-2xl border border-slate-200/50 transition-all duration-300 group/column ${activeMobileTab === status ? 'flex' : 'hidden md:flex'} ${dragOverCol === status ? 'bg-slate-200/50 ring-2 ring-teal-500/20' : ''}`}
+                            className={`flex flex-col min-w-0 bg-slate-100/80 rounded-2xl border border-slate-200/50 transition-all duration-300 group/column ${activeMobileTab === status ? 'flex' : 'hidden md:flex'} ${dragOverCol === status ? 'bg-slate-200/80 ring-2 ring-teal-500/30' : ''}`}
                             onDragOver={(e) => handleDragOver(e, status)}
                             onDragLeave={(e) => handleDragLeave(e, status)}
                             onDrop={(e) => handleDrop(e, status)}
                         >
                             {/* Column Header - Premium SaaS Style */}
-                            <div className="flex-shrink-0 px-4 py-5 flex justify-between items-center sticky top-0 z-30">
+                            <div className="flex-shrink-0 px-4 py-3 flex justify-between items-center sticky top-0 z-30 border-b border-slate-200/50">
                                 <div className="flex items-center gap-2.5">
-                                    <div className={`w-2 h-2 rounded-full ${status === 'To Do' ? 'bg-slate-400' : status === 'In Progress' ? 'bg-blue-500' : status === 'Review' ? 'bg-purple-500' : 'bg-emerald-500'}`}></div>
-                                    <h2 className="text-[13px] font-bold text-slate-700 tracking-tight">{status}</h2>
-                                    <span className="text-[10px] font-bold bg-slate-200 text-slate-500 px-2 py-0.5 rounded-md border border-slate-300/30">
+                                    <div className={`w-2 h-2 rounded-full ${status === 'Done' ? 'bg-emerald-400' : status === 'Review' ? 'bg-amber-400' : status === 'In Progress' ? 'bg-blue-400' : 'bg-slate-400'}`}></div>
+                                    <h2 className="text-xs font-bold text-slate-800 tracking-tight">{status}</h2>
+                                    <span className="text-[11px] font-bold bg-slate-200/70 text-slate-700 px-2 py-0.5 rounded-full">
                                         {filteredTickets.filter(t => t.status === status).length}
                                     </span>
                                 </div>
                                 <button
                                     onClick={() => setInlineCreateStatus(status)}
-                                    className="p-1 hover:bg-slate-200 rounded-md text-slate-400 transition-colors opacity-0 group-hover/column:opacity-100"
+                                    className="p-1.5 hover:bg-white hover:shadow-sm rounded-md text-slate-400 hover:text-slate-700 transition-all opacity-0 group-hover/column:opacity-100"
                                 >
                                     <Plus className="w-4 h-4" />
                                 </button>
                             </div>
 
                             {/* Column Content - Scrollable area for cards */}
-                            <div className="flex-1 overflow-y-auto p-2 space-y-3 custom-scrollbar min-h-0">
+                            <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5 custom-scrollbar min-h-0">
                                 {filteredTickets.filter(t => t.status === status).map(ticket => (
                                     <div
                                         key={ticket._id}
@@ -2026,27 +2028,43 @@ const WorkAllocation = () => {
                                             setModalFilterTeam(ticket.team || '');
                                             setIsModalOpen(true);
                                         }}
-                                        className={`p-2 sm:p-4 rounded-xl border border-slate-200/60 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group active:scale-[0.98] bg-white relative
-                                            ${isOverdue(ticket.endDate, ticket.status) ? 'border-rose-200 shadow-rose-50' : 'shadow-[0_2px_8px_rgba(0,0,0,0.04)]'} 
-                                            ${status === 'To Do' ? 'border-l-4 border-l-slate-400' : status === 'In Progress' ? 'border-l-4 border-l-blue-500' : status === 'Review' ? 'border-l-4 border-l-purple-500' : 'border-l-4 border-l-emerald-500'}`}
+                                        className={`p-3 rounded-xl border cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group active:scale-[0.98] bg-white relative flex flex-col gap-2.5
+                                            ${isOverdue(ticket.endDate, ticket.status) ? 'border-rose-200 shadow-sm' : 'border-slate-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.02)]'} 
+                                            `}
                                     >
-                                        <div className="flex justify-between items-start mb-1.5 sm:mb-3">
-                                            <div className="flex flex-wrap gap-1.5 items-center max-w-[85%]">
-                                                {(ticket.startDate || ticket.endDate) && (
-                                                    <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border shrink-0
-                                                        ${isOverdue(ticket.endDate, ticket.status) ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-slate-50 text-slate-500 border-slate-200/50'}`}>
-                                                        <Clock className="w-3 h-3" />
-                                                        {ticket.endDate ? new Date(ticket.endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'TBD'}
-                                                    </div>
-                                                )}
+                                        {/* Top Meta Row */}
+                                        <div className="flex justify-between items-center mb-1">
+                                            <div className="flex flex-wrap gap-1.5 items-center">
                                                 {ticket.endDate && (
-                                                    <span className={`px-2 py-1 text-[9px] font-extrabold uppercase rounded-md border tracking-wider transition-all duration-300 shrink-0 ${getProtectionState(ticket) === 'Submitted on time' ? 'bg-teal-50 text-teal-700 border-teal-200 shadow-sm shadow-teal-50/50 animate-pulse' :
-                                                        getProtectionState(ticket) === 'Awaiting review' ? 'bg-amber-50 text-amber-700 border-amber-200 shadow-sm shadow-amber-50/50' :
-                                                            getProtectionState(ticket) === 'Deduction active' ? 'bg-rose-50 text-rose-700 border-rose-200 shadow-sm shadow-rose-50/50' :
-                                                                getProtectionState(ticket) === 'Approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm shadow-emerald-50/50' :
-                                                                    'bg-slate-50 text-slate-500 border-slate-200'
-                                                        }`}>
-                                                        {getProtectionState(ticket) === 'None' ? 'On Track' : getProtectionState(ticket)}
+                                                    <span className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded tracking-wider shrink-0 uppercase">
+                                                        <Clock className="w-2.5 h-2.5 text-slate-400" />
+                                                        {new Date(ticket.endDate).getDate()} {new Date(ticket.endDate).toLocaleString('default', { month: 'short' })}
+                                                    </span>
+                                                )}
+                                                
+                                                <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded border tracking-wider shrink-0 ${
+                                                    status === 'Done' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                                                    status === 'Review' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                                                    isOverdue(ticket.endDate, ticket.status) ? 'bg-rose-50 text-rose-700 border-rose-100' :
+                                                    'bg-teal-50 text-teal-700 border-teal-100'
+                                                }`}>
+                                                    {status === 'Done' ? 'APPROVED' : 
+                                                     status === 'Review' ? 'SUBMITTED' : 
+                                                     isOverdue(ticket.endDate, ticket.status) ? 'OVERDUE' : 'ON TRACK'}
+                                                </span>
+
+                                                {ticket.recurringTaskId && (
+                                                    <span className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold uppercase bg-slate-100 text-slate-500 rounded tracking-wider shrink-0">
+                                                        <Repeat className="w-2.5 h-2.5" />
+                                                        <span>Recurring</span>
+                                                    </span>
+                                                )}
+                                                {ticket.priority && (
+                                                    <span className={`px-1.5 py-0.5 text-[9px] font-semibold uppercase rounded tracking-wider shrink-0
+                                                        ${ticket.priority === 'High' ? 'bg-rose-50 text-rose-700' : 
+                                                          ticket.priority === 'Medium' ? 'bg-amber-50 text-amber-700' : 
+                                                          'bg-slate-50 text-slate-500'}`}>
+                                                        {ticket.priority}
                                                     </span>
                                                 )}
                                             </div>
@@ -2055,144 +2073,112 @@ const WorkAllocation = () => {
                                                     e.stopPropagation();
                                                     handleDeleteTicket(ticket);
                                                 }}
-                                                className="p-1 hover:bg-rose-50 rounded-md text-rose-300 hover:text-rose-500 transition-all shrink-0 opacity-0 group-hover:opacity-100"
+                                                className="p-1 hover:bg-rose-50 rounded-md text-slate-300 hover:text-rose-500 transition-all shrink-0 opacity-0 group-hover:opacity-100"
                                             >
-                                                <Trash2 className="w-3.5 h-3.5" />
+                                                <Trash2 className="w-3 h-3" />
                                             </button>
                                         </div>
 
-                                        <div className="mb-2.5 sm:mb-4">
-                                            <div className="text-xs sm:text-[14px] font-bold text-slate-800 leading-snug group-hover:text-blue-600 transition-colors">
+                                        {/* Title */}
+                                        <div>
+                                            <div className="text-xs font-semibold text-slate-900 leading-tight line-clamp-2 my-1">
                                                 {ticket.title}
                                             </div>
                                         </div>
 
-                                        <div className="flex flex-col gap-1.5 sm:gap-4">
-                                            {/* Resolution Feedback (Match Image Orange Note Style) */}
-                                            {ticket.feedback && (
-                                                <div className="px-3 py-2.5 bg-[#fff7ed] border border-[#ffedd5] rounded-lg text-[10px] text-[#9a3412] font-semibold leading-relaxed shadow-sm">
-                                                    <span className="text-[#c2410c] block mb-0.5 uppercase tracking-wider text-[9px]">Review Feedback:</span>
-                                                    {ticket.feedback}
+                                        {/* Progress Section */}
+                                        {(ticket.checklist?.length > 0 || status !== 'To Do') && (
+                                            <div>
+                                                <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+                                                    <div
+                                                        className="bg-teal-500 h-1 rounded-full transition-all duration-700"
+                                                        style={{ width: `${status === 'Done' ? 100 : (status === 'Review' ? 90 : (status === 'In Progress' ? 50 : 0))}%` }}
+                                                    ></div>
                                                 </div>
-                                            )}
+                                            </div>
+                                        )}
 
-                                            {/* Progress Section - Match Image */}
-                                            {ticket.checklist && ticket.checklist.length > 0 && (
-                                                <div>
-                                                    <div className="flex justify-between items-center mb-1.5 text-[9px] text-slate-400 font-bold uppercase tracking-widest">
-                                                        <span>PROGRESS</span>
-                                                        <span className="text-slate-400">
-                                                            {ticket.status === 'Done' ? 100 : (ticket.status === 'Review' ? 90 : (ticket.status === 'In Progress' ? 25 : 0))}%
-                                                        </span>
-                                                    </div>
-                                                    <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
-                                                        <div
-                                                            className="bg-[#0d9488] h-1 rounded-full transition-all duration-700"
-                                                            style={{ width: `${ticket.status === 'Done' ? 100 : (ticket.status === 'Review' ? 90 : (ticket.status === 'In Progress' ? 25 : 0))}%` }}
-                                                        ></div>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            <div className="flex flex-col gap-1 pt-0.5 sm:pt-2">
-                                                <div className="flex gap-1">
-                                                    {status === 'Review' ? (
-                                                        <>
-                                                            <button
-                                                                onClick={async (e) => {
-                                                                    e.stopPropagation();
-                                                                    updateStatus(ticket._id, 'Done');
-                                                                }}
-                                                                className="flex-1 flex items-center justify-center h-5 bg-[#f0fdfa] text-[#0d9488] text-[7px] font-bold uppercase rounded-full border border-[#ccfbf1] hover:bg-[#0d9488] hover:text-white transition-all tracking-normal shadow-sm"
-                                                            >
-                                                                Approve
-                                                            </button>
-                                                            <button
-                                                                onClick={async (e) => {
-                                                                    e.stopPropagation();
-                                                                    setRejectConfirm({ isOpen: true, ticket, reason: '' });
-                                                                }}
-                                                                className="flex-1 flex items-center justify-center h-5 bg-rose-50 text-rose-600 text-[7px] font-bold uppercase rounded-full border border-rose-100 hover:bg-rose-500 hover:text-white transition-all tracking-normal shadow-sm"
-                                                            >
-                                                                Reject
-                                                            </button>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            {status !== 'To Do' && (
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        const prevStatus = columns[columns.indexOf(status) - 1];
-                                                                        updateStatus(ticket._id, prevStatus);
-                                                                    }}
-                                                                    className="flex-1 flex items-center justify-center h-5 bg-white text-slate-500 text-[7px] font-bold uppercase rounded-full border border-slate-200 hover:bg-slate-50 hover:text-slate-800 transition-all tracking-normal shadow-sm"
-                                                                >
-                                                                    Back
-                                                                </button>
-                                                            )}
-                                                            {status !== 'Done' && (
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        const nextStatus = columns[columns.indexOf(status) + 1];
-                                                                        updateStatus(ticket._id, nextStatus);
-                                                                    }}
-                                                                    className="flex-1 flex items-center justify-center h-5 bg-blue-600 text-white text-[7px] font-bold uppercase rounded-full border border-blue-700 hover:bg-blue-700 transition-all tracking-normal shadow-sm"
-                                                                >
-                                                                    Move Next
-                                                                </button>
-                                                            )}
-                                                        </>
-                                                    )}
-                                                </div>
-
-                                                <div className="flex items-center justify-between mt-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="flex items-center gap-1.5 text-slate-400">
-                                                            <div className="w-3.5 h-3.5 rounded border border-slate-300 flex items-center justify-center">
-                                                                <Check className="w-2 h-2" />
+                                        {/* Footer Row */}
+                                        <div className="flex items-center justify-between pt-1 mt-auto">
+                                            {/* Assignee on left */}
+                                            {(() => {
+                                                const primaryAssignee = ticket.assignees?.length > 0 ? ticket.assignees[0] : ticket.assignee;
+                                                const primaryId = primaryAssignee?._id || primaryAssignee;
+                                                const displayName = ticket.assignees?.length > 0
+                                                    ? `${ticket.assignees[0].name.split(' ')[0]}${ticket.assignees.length > 1 ? ` +${ticket.assignees.length - 1}` : ''}`
+                                                    : ticket.assignee?.name?.split(' ')[0] || 'Unassigned';
+                                                
+                                                return (
+                                                    <div className="flex items-center gap-1.5 cursor-default">
+                                                        {primaryId ? (
+                                                            <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-600 border border-white shadow-sm shrink-0">
+                                                                {displayName.charAt(0).toUpperCase()}
                                                             </div>
-                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Task</span>
-                                                        </div>
-                                                        <div className="w-3 h-[1px] bg-slate-200"></div>
-                                                        <span className="text-[10px] font-bold text-slate-400 tracking-tighter">#{getTicketKey(ticket._id).split('-')[1]}</span>
-                                                    </div>
-
-                                                    {/* Assignee badge with tooltip */}
-                                                    {(() => {
-                                                        const primaryAssignee = ticket.assignees?.length > 0 ? ticket.assignees[0] : ticket.assignee;
-                                                        const primaryId = primaryAssignee?._id || primaryAssignee;
-                                                        const { activeTasks } = getWorkerLoad(primaryId);
-                                                        const { dot, badge, label } = workloadColor(activeTasks);
-                                                        const displayName = ticket.assignees?.length > 0
-                                                            ? `${ticket.assignees[0].name}${ticket.assignees.length > 1 ? ` +${ticket.assignees.length - 1}` : ''}`
-                                                            : ticket.assignee?.name || 'Unassigned';
-                                                        const workerObj = workers.find(w => w._id === primaryId);
-                                                        return (
-                                                            <div className="relative group/tooltip">
-                                                                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${primaryId ? badge : 'bg-slate-50 border-slate-200 text-slate-500'} cursor-default`}>
-                                                                    {primaryId && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`}></span>}
-                                                                    {!primaryId && <Users className="w-2.5 h-2.5 text-slate-400" />}
-                                                                    <span className="text-[9px] font-bold whitespace-nowrap">{displayName}</span>
-                                                                </div>
-                                                                {/* Tooltip */}
-                                                                {primaryId && workerObj && (
-                                                                    <div className="absolute bottom-full right-0 mb-2 w-44 bg-slate-900 text-white rounded-xl p-2.5 text-[10px] shadow-xl opacity-0 group-hover/tooltip:opacity-100 transition-opacity duration-150 pointer-events-none z-50">
-                                                                        <div className="font-bold text-[11px] mb-1">{workerObj.name}</div>
-                                                                        <div className="text-slate-400">{workerObj.department || 'No Department'}</div>
-                                                                        <div className="flex justify-between mt-1.5 pt-1.5 border-t border-slate-700">
-                                                                            <span className="text-slate-400">Active Tasks</span>
-                                                                            <span className="font-bold">{activeTasks}</span>
-                                                                        </div>
-                                                                        <div className={`mt-1 text-center py-0.5 rounded-md font-bold text-[9px] uppercase tracking-wider ${badge}`}>{label}</div>
-                                                                        <div className="absolute -bottom-1 right-4 w-2 h-2 bg-slate-900 rotate-45"></div>
-                                                                    </div>
-                                                                )}
+                                                        ) : (
+                                                            <div className="w-5 h-5 rounded-full bg-slate-50 flex items-center justify-center border border-slate-200 shrink-0">
+                                                                <User className="w-3 h-3 text-slate-400" />
                                                             </div>
-                                                        );
-                                                    })()}
-                                                </div>
+                                                        )}
+                                                        <span className="text-[10px] font-medium text-slate-500 truncate max-w-[70px]">{displayName}</span>
+                                                    </div>
+                                                );
+                                            })()}
+
+                                            {/* Micro-actions on right */}
+                                            <div className="flex gap-1 shrink-0 items-center">
+                                                {status === 'Review' ? (
+                                                    <>
+                                                        <button
+                                                            onClick={async (e) => {
+                                                                e.stopPropagation();
+                                                                updateStatus(ticket._id, 'Done');
+                                                            }}
+                                                            className="bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200/80 px-2 sm:px-3 rounded-md text-[10px] sm:text-xs font-semibold transition-all inline-flex items-center gap-1 shadow-xs h-7 sm:h-8"
+                                                            title="Approve"
+                                                        >
+                                                            <Check className="w-3 sm:w-3.5 h-3 sm:h-3.5 stroke-[3]" /> Approve
+                                                        </button>
+                                                        <button
+                                                            onClick={async (e) => {
+                                                                e.stopPropagation();
+                                                                setRejectConfirm({ isOpen: true, ticket, reason: '' });
+                                                            }}
+                                                            className="bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200/80 px-2 sm:px-3 rounded-md text-[10px] sm:text-xs font-semibold transition-all inline-flex items-center gap-1 shadow-xs h-7 sm:h-8"
+                                                            title="Reject"
+                                                        >
+                                                            <X className="w-3 sm:w-3.5 h-3 sm:h-3.5 stroke-[3]" /> Reject
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        {status !== 'To Do' && (
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    const prevStatus = columns[columns.indexOf(status) - 1];
+                                                                    updateStatus(ticket._id, prevStatus);
+                                                                }}
+                                                                className="bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200/80 px-2 sm:px-3 rounded-md text-[10px] sm:text-xs font-semibold transition-all inline-flex items-center gap-1 shadow-xs h-7 sm:h-8"
+                                                                title="Move Back"
+                                                            >
+                                                                ← Back
+                                                            </button>
+                                                        )}
+                                                        {status !== 'Done' && (
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    const nextStatus = columns[columns.indexOf(status) + 1];
+                                                                    updateStatus(ticket._id, nextStatus);
+                                                                }}
+                                                                className="bg-teal-50 hover:bg-teal-600 text-teal-700 hover:text-white border border-teal-200/80 px-2 sm:px-3 rounded-md text-[10px] sm:text-xs font-semibold transition-all inline-flex items-center gap-1 shadow-xs h-7 sm:h-8"
+                                                                title="Move Next"
+                                                            >
+                                                                Next →
+                                                            </button>
+                                                        )}
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -2200,8 +2186,7 @@ const WorkAllocation = () => {
 
                                 {/* Inline Create UI */}
                                 {inlineCreateStatus === status ? (
-
-                                    <div className="bg-white p-3 rounded-xl shadow-xl border border-teal-400 animate-in zoom-in-95 duration-200">
+                                    <div className="bg-white p-3 rounded-xl shadow-md border border-teal-200 animate-in zoom-in-95 duration-200">
                                         <div className="relative">
                                             <textarea
                                                 autoFocus
@@ -2214,15 +2199,15 @@ const WorkAllocation = () => {
                                                         saveInlineTicket(status);
                                                     }
                                                 }}
-                                                className="w-full text-sm text-slate-800 focus:outline-none bg-transparent placeholder-slate-400 resize-none min-h-[60px] leading-tight font-medium"
+                                                className="w-full text-xs text-slate-800 focus:outline-none bg-transparent placeholder-slate-400 resize-none min-h-[50px] leading-tight font-medium"
                                                 rows={2}
                                             />
                                         </div>
                                         <div className="flex items-center justify-end gap-2 mt-2">
-                                            <button onClick={() => setInlineCreateStatus(null)} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors">
+                                            <button onClick={() => setInlineCreateStatus(null)} className="p-1 hover:bg-slate-100 rounded-md text-slate-400 transition-colors">
                                                 <X className="w-4 h-4" />
                                             </button>
-                                            <button onClick={() => saveInlineTicket(status)} className="bg-teal-600 text-white text-[10px] px-3 py-1.5 rounded-lg font-black uppercase tracking-wider hover:bg-teal-700 transition-colors shadow-lg shadow-teal-100">
+                                            <button onClick={() => saveInlineTicket(status)} className="bg-teal-600 text-white text-[10px] px-3 py-1.5 rounded-md font-bold hover:bg-teal-700 transition-colors shadow-sm">
                                                 Add Task
                                             </button>
                                         </div>
@@ -2230,10 +2215,10 @@ const WorkAllocation = () => {
                                 ) : (
                                     <button
                                         onClick={() => setInlineCreateStatus(status)}
-                                        className="w-full py-2.5 rounded-xl text-slate-400 hover:text-teal-600 hover:bg-teal-50/50 flex items-center justify-center gap-2 transition-all duration-300 group/btn mt-1"
+                                        className="w-full py-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 flex items-center justify-center gap-1.5 transition-all duration-200 group/btn mt-1 border border-transparent border-dashed hover:border-slate-300"
                                     >
-                                        <Plus className="w-3.5 h-3.5 group-hover/btn:scale-110 transition-transform" />
-                                        <span className="text-[10px] font-bold uppercase tracking-widest">Add Task</span>
+                                        <Plus className="w-3.5 h-3.5" />
+                                        <span className="text-[10px] font-semibold">Add Task</span>
                                     </button>
                                 )}
                             </div>
@@ -2327,6 +2312,30 @@ const WorkAllocation = () => {
                                                 if (taskToSave.endDate === '') taskToSave.endDate = undefined;
                                                 if (selectedTicket._id === 'new') { taskToSave.tempId = tempTicketId; }
                                                 const newT = await createTicket(taskToSave);
+
+                                                if (recurringConfig && recurringConfig.enabled) {
+                                                    try {
+                                                        const res = await createRecurringTask({
+                                                            ...recurringConfig,
+                                                            title: taskToSave.title,
+                                                            description: taskToSave.description,
+                                                            priority: taskToSave.priority,
+                                                            issueType: taskToSave.issueType,
+                                                            checklist: taskToSave.checklist,
+                                                            assignees: taskToSave.assignees,
+                                                            team: taskToSave.team,
+                                                            labels: taskToSave.labels,
+                                                            spawnedTickets: [newT._id],
+                                                            totalSpawned: 1,
+                                                            lastRunAt: new Date()
+                                                        });
+                                                        newT.recurringTaskId = res.data._id;
+                                                        toast.success('Recurring task rule created successfully!');
+                                                    } catch (err) {
+                                                        console.error('Failed to create recurring task:', err);
+                                                        toast.error('Failed to save recurring task config: ' + err.toString());
+                                                    }
+                                                }
                                                 setTickets([newT, ...tickets]);
                                                 setIsModalOpen(false);
                                             } catch (e) {
@@ -2871,6 +2880,12 @@ const WorkAllocation = () => {
                                                 )}
                                             </div>
 
+                                            {/* Recurring Task Selector */}
+                                            <RecurringTaskPanel
+                                                config={recurringConfig}
+                                                onChange={handleRecurringConfigChange}
+                                            />
+
                                             {/* Employee Query Display */}
                                             {selectedTicket.workerQuery && (
                                                 <div className="flex flex-col gap-2 pt-1 mb-2 bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
@@ -2994,25 +3009,34 @@ const WorkAllocation = () => {
                                                         {selectedTicket.referenceFiles && selectedTicket.referenceFiles.length > 0 && (
                                                             <div className="flex flex-wrap gap-2 mt-3 max-h-[80px] overflow-y-auto custom-scrollbar">
                                                                 {selectedTicket.referenceFiles.map(file => (
-                                                                    <div key={file._id} className="relative w-8 h-8 rounded-lg border border-gray-200 overflow-hidden group shadow-sm shrink-0">
+                                                                    <div key={file._id} className="relative w-14 h-14 rounded-lg border border-slate-200 overflow-hidden group shadow-sm shrink-0">
                                                                         <img
                                                                             src={getFullFileUrl(file.url)}
                                                                             alt={file.name}
-                                                                            className="w-full h-full object-cover cursor-pointer"
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                setZoomedImage(getFullFileUrl(file.url));
-                                                                            }}
+                                                                            className="w-full h-full object-cover"
                                                                         />
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                handleDeleteTaskReference(selectedTicket._id, file._id);
-                                                                            }}
-                                                                            className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                        >
-                                                                            <Trash2 className="w-3 h-3 text-red-400" />
-                                                                        </button>
+                                                                        <div className="absolute inset-0 bg-slate-900/60 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-[1px]">
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setZoomedImage({ url: getFullFileUrl(file.url), name: file.name });
+                                                                                }}
+                                                                                className="p-1 text-white hover:text-teal-400 transition-colors"
+                                                                                title="View Image"
+                                                                            >
+                                                                                <Eye className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleDeleteTaskReference(selectedTicket._id, file._id);
+                                                                                }}
+                                                                                className="p-1 text-white hover:text-rose-400 transition-colors"
+                                                                                title="Delete Image"
+                                                                            >
+                                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                        </div>
                                                                     </div>
                                                                 ))}
                                                             </div>
@@ -3071,25 +3095,34 @@ const WorkAllocation = () => {
                                                         {selectedTicket.referenceFiles && selectedTicket.referenceFiles.length > 0 && (
                                                             <div className="flex flex-wrap gap-2 mt-3 max-h-[80px] overflow-y-auto custom-scrollbar">
                                                                 {selectedTicket.referenceFiles.map(file => (
-                                                                    <div key={file._id} className="relative w-8 h-8 rounded-lg border border-gray-200 overflow-hidden group shadow-sm shrink-0">
+                                                                    <div key={file._id} className="relative w-14 h-14 rounded-lg border border-slate-200 overflow-hidden group shadow-sm shrink-0">
                                                                         <img
                                                                             src={getFullFileUrl(file.url)}
                                                                             alt={file.name}
-                                                                            className="w-full h-full object-cover cursor-pointer"
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                setZoomedImage(getFullFileUrl(file.url));
-                                                                            }}
+                                                                            className="w-full h-full object-cover"
                                                                         />
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                handleDeleteTaskReference(selectedTicket._id, file._id);
-                                                                            }}
-                                                                            className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                        >
-                                                                            <Trash2 className="w-3 h-3 text-red-400" />
-                                                                        </button>
+                                                                        <div className="absolute inset-0 bg-slate-900/60 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-[1px]">
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setZoomedImage({ url: getFullFileUrl(file.url), name: file.name });
+                                                                                }}
+                                                                                className="p-1 text-white hover:text-teal-400 transition-colors"
+                                                                                title="View Image"
+                                                                            >
+                                                                                <Eye className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleDeleteTaskReference(selectedTicket._id, file._id);
+                                                                                }}
+                                                                                className="p-1 text-white hover:text-rose-400 transition-colors"
+                                                                                title="Delete Image"
+                                                                            >
+                                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                        </div>
                                                                     </div>
                                                                 ))}
                                                             </div>
@@ -3247,30 +3280,34 @@ const WorkAllocation = () => {
             {/* Delete Confirmation Modal */}
             {
                 deleteConfirm.isOpen && (
-                    <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform animate-in zoom-in-95 duration-200">
-                            <div className="p-6 text-center">
-                                <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-100">
-                                    <AlertCircle className="w-8 h-8 text-red-500" />
+                    <div className="fixed inset-0 bg-slate-900/40 z-[9999] flex items-center justify-center p-4 backdrop-blur-[2px] animate-in fade-in duration-200">
+                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden transform animate-in zoom-in-95 duration-200 border border-slate-200">
+                            <div className="p-6">
+                                <div className="flex items-start gap-4">
+                                    <div className="w-10 h-10 bg-rose-50 rounded-full flex items-center justify-center shrink-0 border border-rose-100">
+                                        <AlertCircle className="w-5 h-5 text-rose-600" />
+                                    </div>
+                                    <div className="pt-0.5">
+                                        <h3 className="text-lg font-bold text-slate-900 leading-tight">Delete Task?</h3>
+                                        <p className="text-slate-500 text-[13px] leading-relaxed mt-1">
+                                            This action is permanent and cannot be undone. Are you sure you want to proceed?
+                                        </p>
+                                    </div>
                                 </div>
-                                <h3 className="text-xl font-bold text-gray-900 mb-2">Delete this task?</h3>
-                                <p className="text-gray-500 text-sm leading-relaxed mb-6">
-                                    Are you sure you want to delete this specific task? This action is permanent and cannot be undone.
-                                </p>
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={() => setDeleteConfirm({ isOpen: false, ticket: null })}
-                                        className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-semibold text-sm transition-all"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={executeDelete}
-                                        className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold text-sm transition-all shadow-md shadow-red-200 active:scale-95"
-                                    >
-                                        Delete Task
-                                    </button>
-                                </div>
+                            </div>
+                            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+                                <button
+                                    onClick={() => setDeleteConfirm({ isOpen: false, ticket: null })}
+                                    className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg font-semibold text-xs transition-colors shadow-xs"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={executeDelete}
+                                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold text-xs transition-colors shadow-xs"
+                                >
+                                    Delete Task
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -3280,44 +3317,45 @@ const WorkAllocation = () => {
             {/* Rejection Modal */}
             {
                 rejectConfirm.isOpen && (
-                    <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden transform animate-in zoom-in-95 duration-200 border border-white/20">
-                            <div className="p-8">
-                                <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mb-6 border border-red-100 rotate-3">
-                                    <MessageSquare className="w-8 h-8 text-red-500" />
-                                </div>
-
-                                <h3 className="text-2xl font-bold text-gray-900 mb-2">Reject Task</h3>
-                                <p className="text-gray-500 text-sm leading-relaxed mb-6 font-medium">
-                                    Please provide a reason for rejecting this task. This feedback will be shared with the team members.
-                                </p>
-
-                                <div className="space-y-4">
-                                    <div className="relative">
-                                        <textarea
-                                            autoFocus
-                                            placeholder="Type your feedback here..."
-                                            value={rejectConfirm.reason}
-                                            onChange={(e) => setRejectConfirm({ ...rejectConfirm, reason: e.target.value })}
-                                            className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-sm font-medium text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all outline-none min-h-[120px] resize-none"
-                                        />
+                    <div className="fixed inset-0 bg-slate-900/40 z-[9999] flex items-center justify-center p-4 backdrop-blur-[2px] animate-in fade-in duration-200">
+                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden transform animate-in zoom-in-95 duration-200 border border-slate-200">
+                            <div className="p-6 pb-5">
+                                <div className="flex items-start gap-4 mb-4">
+                                    <div className="w-10 h-10 bg-rose-50 rounded-full flex items-center justify-center shrink-0 border border-rose-100">
+                                        <MessageSquare className="w-5 h-5 text-rose-600" />
                                     </div>
-
-                                    <div className="flex gap-3 pt-2">
-                                        <button
-                                            onClick={() => setRejectConfirm({ isOpen: false, ticket: null, reason: '' })}
-                                            className="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all active:scale-95"
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            onClick={handleRejectSubmit}
-                                            className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-bold text-xs uppercase tracking-widest transition-all shadow-lg shadow-red-200 active:scale-95"
-                                        >
-                                            Confirm Reject
-                                        </button>
+                                    <div className="pt-0.5">
+                                        <h3 className="text-lg font-bold text-slate-900 leading-tight">Reject Task</h3>
+                                        <p className="text-slate-500 text-[13px] leading-relaxed mt-1">
+                                            Please provide a reason for rejecting this task. This feedback will be shared with the assignee.
+                                        </p>
                                     </div>
                                 </div>
+
+                                <div className="pl-14">
+                                    <textarea
+                                        autoFocus
+                                        placeholder="Type your feedback here..."
+                                        value={rejectConfirm.reason}
+                                        onChange={(e) => setRejectConfirm({ ...rejectConfirm, reason: e.target.value })}
+                                        className="w-full bg-white border border-slate-200 rounded-lg p-3 text-[13px] text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all outline-none min-h-[100px] resize-none shadow-xs"
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+                                <button
+                                    onClick={() => setRejectConfirm({ isOpen: false, ticket: null, reason: '' })}
+                                    className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg font-semibold text-xs transition-colors shadow-xs"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleRejectSubmit}
+                                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold text-xs transition-colors shadow-xs"
+                                >
+                                    Confirm Reject
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -3713,7 +3751,7 @@ const WorkAllocation = () => {
                                                             setDrawerFilter(false);
                                                             setInlineCreateStatus(null);
                                                             setSelectedTicket({
-                                                                _id: 'new', title: '', description: '', priority: 'Medium', status: 'To Do',
+                                                                _id: 'new', title: '', description: '', priority: 'Low', status: 'To Do',
                                                                 issueType: 'Task', storyPoints: 0, labels: [], assignee: w, assignees: [],
                                                                 team: w.department || '', startDate: '', endDate: '',
                                                                 checklist: [{ text: '', completed: false }]
@@ -3761,6 +3799,10 @@ const WorkAllocation = () => {
                 </div>
             )}
 
+            <RecurringTaskManager
+                isOpen={isRecurringManagerOpen}
+                onClose={() => setIsRecurringManagerOpen(false)}
+            />
         </div >
     );
 };
