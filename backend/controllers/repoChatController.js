@@ -1,7 +1,9 @@
 const { Octokit } = require("@octokit/rest");
 const OpenAI = require('openai');
+const { checkAndRecordAiUsage } = require('../services/claudeService');
 
 // Initialize DeepSeek client (same pattern as existing openai.js)
+
 const getDeepSeekClient = () => {
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
@@ -407,6 +409,10 @@ ${repoFocusText}
 
         console.log(`[RepoChat] Processing chat - Repos: [${reposToFetch.map(r => r.name).join(', ') || 'none'}], Message: "${message.substring(0, 50)}..."`);
 
+        // Check and enforce daily/monthly AI usage limits
+        const subdomainToUse = req.user?.subdomain || req.body.subdomain || 'default';
+        await checkAndRecordAiUsage(subdomainToUse);
+
         // Call DeepSeek
         const response = await deepseek.chat.completions.create({
             model: 'deepseek-chat',
@@ -414,6 +420,7 @@ ${repoFocusText}
             temperature: 0.7,
             max_tokens: 2048,
         });
+
 
         const aiResponse = response.choices[0].message.content.trim();
 

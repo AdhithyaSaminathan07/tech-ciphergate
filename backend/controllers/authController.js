@@ -94,7 +94,6 @@ const logout = asyncHandler(async (req, res) => {
 
   res.clearCookie('token');
   res.clearCookie('refreshToken');
-  res.setHeader('Clear-Site-Data', '"cookies", "storage"');
 
   if (req.user) {
     logAudit({ action: 'LOGOUT', actor: req.user, outcome: 'SUCCESS', ip: req.ip });

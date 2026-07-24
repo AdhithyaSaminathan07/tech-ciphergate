@@ -67,7 +67,7 @@ const validateQuestionGeneration = (req, res, next) => {
     if (workerIds.length * numQuestionsInt > 1500) {
         log.warn(`🏢 LARGE ENTERPRISE REQUEST: ${workerIds.length} workers × ${numQuestionsInt} questions = ${workerIds.length * numQuestionsInt} total questions`);
     }
-    
+
     // Validate topic based on mode
     if (topicMode === 'common') {
         // For common mode, either topic or commonTopics must be provided
@@ -77,14 +77,14 @@ const validateQuestionGeneration = (req, res, next) => {
                 message: 'Common topics are required when using common mode'
             });
         }
-        
+
         // Check each topic for XSS
         if (typeof topic === 'string' && /<script|javascript:|on\w+=/i.test(topic)) {
             return res.status(400).json({
                 message: 'Invalid characters in topic'
             });
         }
-        
+
         if (Array.isArray(commonTopics)) {
             for (const t of commonTopics) {
                 if (typeof t === 'string' && /<script|javascript:|on\w+=/i.test(t)) {
@@ -115,14 +115,14 @@ const validateQuestionGeneration = (req, res, next) => {
             }
         }
     }
-    
+
     // Validate question format
     if (questionFormat && !['mcq', 'upsc'].includes(questionFormat)) {
         return res.status(400).json({
             message: 'Invalid question format. Must be either "mcq" or "upsc".'
         });
     }
-    
+
     // Validate generation mode
     if (generationMode && !['standard', 'three-sets'].includes(generationMode)) {
         return res.status(400).json({
@@ -153,25 +153,30 @@ const generateAndStoreQuestions = [
         // Use the appropriate processor based on generation mode
         const { generationMode = 'standard' } = req.body;
         const processorFunction = generationMode === 'three-sets' ? processThreeSetQuestionGeneration : processQuestionGeneration;
-        
-        processorFunction(req.body, jobId).catch(err => {
+        const payload = {
+            ...req.body,
+            subdomain: req.body.subdomain || req.subdomain || req.headers['x-subdomain'] || 'default'
+        };
+
+        processorFunction(payload, jobId).catch(err => {
             console.error(`Job ${jobId} failed catastrophically:`, err);
             jobManager.failJob(jobId, err.message || 'An unexpected error occurred during processing.');
         });
     }
 ];
 
+
 // @desc    Get questions for a specific worker's test session
 // @route   GET /api/test/questions/:workerId
 // @access  Private/Worker
 const getQuestionsForTest = async (req, res) => {
     const { workerId } = req.params;
-    
+
     try {
         // Debug logging
         console.log('Request user:', req.user);
         console.log('Requested workerId:', workerId);
-        
+
         // Authorization check: Workers can only access their own questions
         if (req.user.role === 'worker') {
             console.log('User is worker, checking ID match...');
@@ -179,18 +184,18 @@ const getQuestionsForTest = async (req, res) => {
             console.log('req.user._id.toString():', req.user._id.toString());
             console.log('workerId:', workerId);
             console.log('IDs match:', req.user._id.toString() === workerId);
-            
+
             // Use a more robust comparison that handles different ID formats
             const userIdString = req.user._id.toString();
             const requestedIdString = workerId.toString();
-            
+
             if (userIdString !== requestedIdString) {
-                return res.status(403).json({ 
-                    message: 'Access denied. You can only access your own test questions.' 
+                return res.status(403).json({
+                    message: 'Access denied. You can only access your own test questions.'
                 });
             }
         }
-        
+
         // Find the worker
         const worker = await Worker.findById(workerId);
         if (!worker) {
@@ -212,7 +217,7 @@ const getQuestionsForTest = async (req, res) => {
         const isMixed = latestQuestionEntry.isMixed || false;
         const allTopics = latestQuestionEntry.allTopics || [latestQuestionEntry.topic];
         const questionSet = latestQuestionEntry.questionSet || null;
-        
+
         // For mixed topics, use a combined topic identifier for test attempt
         // For single topic, use the original topic
         const testTopicId = isMixed ? allTopics.sort().join(',') : latestQuestionEntry.topic;
@@ -224,11 +229,11 @@ const getQuestionsForTest = async (req, res) => {
         });
 
         if (existingCompletedAttempt) {
-            return res.status(403).json({ 
-                message: `You have already completed the test for these topics: "${allTopics.join(', ')}".` 
+            return res.status(403).json({
+                message: `You have already completed the test for these topics: "${allTopics.join(', ')}".`
             });
         }
-        
+
         let testAttempt = await TestAttempt.findOne({
             worker: workerId,
             topic: testTopicId,
@@ -243,7 +248,7 @@ const getQuestionsForTest = async (req, res) => {
             // For three-set mode: get questions from the same set
             if (questionSet) {
                 // For three-set mode, get questions from the same set
-                questions = await Question.find({ 
+                questions = await Question.find({
                     worker: workerId,
                     questionSet: questionSet
                 });
@@ -251,9 +256,9 @@ const getQuestionsForTest = async (req, res) => {
             } else if (isMixed) {
                 // For mixed topics, get all questions created around the same time (within 1 minute)
                 const timeThreshold = new Date(latestCreationTime.getTime() - 60000); // 1 minute before
-                questions = await Question.find({ 
-                    worker: workerId, 
-                    createdAt: { 
+                questions = await Question.find({
+                    worker: workerId,
+                    createdAt: {
                         $gte: timeThreshold,
                         $lte: new Date(latestCreationTime.getTime() + 60000) // 1 minute after
                     }
@@ -266,8 +271,8 @@ const getQuestionsForTest = async (req, res) => {
             }
 
             if (questions.length === 0) {
-                return res.status(404).json({ 
-                    message: `No questions found for the latest topics for this employee.` 
+                return res.status(404).json({
+                    message: `No questions found for the latest topics for this employee.`
                 });
             }
 
@@ -284,7 +289,7 @@ const getQuestionsForTest = async (req, res) => {
                 testStartTime: Date.now(),
                 questionStartTime: Date.now()
             });
-            
+
             log.info(`New test attempt created with ID: ${testAttempt._id}`);
 
         } else {
@@ -350,7 +355,7 @@ const getAllQuestions = async (req, res) => {
                 $lte: endOfDay
             };
         }
-        
+
         const questions = await Question.find(query)
             .populate({
                 path: 'worker',
@@ -367,14 +372,14 @@ const getAllQuestions = async (req, res) => {
         const transformedQuestions = questions.map(question => {
             if (question.worker) {
                 // Ensure we're properly handling the department data
-                const departmentName = question.worker.department && 
-                                     typeof question.worker.department === 'object' && 
-                                     question.worker.department.name ? 
-                                     question.worker.department.name : 
-                                     (typeof question.worker.department === 'string' ? 
-                                      question.worker.department : 
-                                      'N/A');
-                
+                const departmentName = question.worker.department &&
+                    typeof question.worker.department === 'object' &&
+                    question.worker.department.name ?
+                    question.worker.department.name :
+                    (typeof question.worker.department === 'string' ?
+                        question.worker.department :
+                        'N/A');
+
                 return {
                     ...question,
                     worker: {
@@ -405,17 +410,21 @@ const getAllQuestions = async (req, res) => {
 // @route   POST /api/test/quick-test
 // @access  Public
 const createQuickTest = async (req, res) => {
-    const { name, password, topic, numQuestions = 10, difficulty = 'Medium', timeDuration = 15, totalTestDuration = 600 } = req.body;
-    
+    const { name, password, topic, numQuestions = 10, difficulty = 'Medium', timeDuration = 15, totalTestDuration = 600, subdomain } = req.body;
+
     try {
         // Validate input
         if (!name || !password || !topic) {
             return res.status(400).json({ message: 'Name, password, and topic are required' });
         }
 
+        // Throttle question count to max 10 questions per quick test request
+        const sanitizedNumQuestions = Math.min(Math.max(parseInt(numQuestions) || 10, 1), 10);
+        const subdomainToUse = subdomain || req.subdomain || req.headers['x-subdomain'] || 'default';
+
         // Generate questions for the topic
-        const questions = await generateWithRetry(topic, parseInt(numQuestions), difficulty);
-        
+        const questions = await generateWithRetry(topic, sanitizedNumQuestions, difficulty, subdomainToUse);
+
         // Save questions to database
         const questionsToSave = questions.map(q => {
             // Clean options by removing internal letters like (a), (b), (c), (d)
@@ -423,21 +432,21 @@ const createQuickTest = async (req, res) => {
                 // Remove patterns like "(a) ", "(b) ", etc. from the beginning of options
                 return option.replace(/^\([a-d]\)\s*/i, '').trim();
             });
-            
+
             // Also clean the correctAnswer
             const cleanedCorrectAnswer = q.correctAnswer.replace(/^\([a-d]\)\s*/i, '').trim();
-            
+
             // Programmatically shuffle options to guarantee randomness
             const shuffledOptions = [...cleanedOptions];
             for (let i = shuffledOptions.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [shuffledOptions[i], shuffledOptions[j]] = [shuffledOptions[j], shuffledOptions[i]];
             }
-            
+
             const correctOptionIndex = shuffledOptions.findIndex(
                 opt => String(opt).trim().toLowerCase() === String(cleanedCorrectAnswer).trim().toLowerCase()
             );
-            
+
             return {
                 topic: topic,
                 questionText: q.questionText || q.question,
@@ -493,32 +502,44 @@ const createQuickTest = async (req, res) => {
 
     } catch (error) {
         log.error('Error in createQuickTest:', error);
-        res.status(500).json({ message: 'Server error creating quick test' });
+        res.status(500).json({ message: error.message || 'Server error creating quick test' });
     }
 };
 
 // Add the missing generateWithRetry function
-const generateWithRetry = async (topic, numQuestions, difficulty = 'Medium') => {
+const generateWithRetry = async (topic, numQuestions, difficulty = 'Medium', subdomain = '') => {
     const MAX_RETRIES = 3;
     const RETRY_DELAY = 2000;
-    
+
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
             // For quick tests, we'll use MCQ format by default
-            const result = await generateMCQQuestions([topic], numQuestions, difficulty);
+            const result = await generateMCQQuestions([topic], numQuestions, difficulty, subdomain);
             return result[topic] || [];
         } catch (error) {
             console.error(`[QuickTest] Generation attempt ${attempt} failed:`, error.message);
-            
+
+            // Do NOT retry if it's a usage limit error — retrying won't help and wastes quota
+            const isLimitError = error.message && (
+                error.message.includes('Daily AI') ||
+                error.message.includes('Monthly AI') ||
+                error.message.includes('usage limit reached') ||
+                error.message.includes('AI features are disabled')
+            );
+            if (isLimitError) {
+                throw error; // Propagate limit errors immediately without retrying
+            }
+
             if (attempt === MAX_RETRIES) {
                 throw new Error(`Failed to generate questions after ${MAX_RETRIES} attempts: ${error.message}`);
             }
-            
+
             // Wait before retrying
             await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * attempt));
         }
     }
 };
+
 
 module.exports = {
     generateAndStoreQuestions,

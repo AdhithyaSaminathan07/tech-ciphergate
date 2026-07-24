@@ -1,5 +1,6 @@
 // utils/openai.js
 const OpenAI = require('openai');
+const { checkAndRecordAiUsage } = require('../services/claudeService');
 
 // Configure for DeepSeek API
 // Security: API key must be provided via environment variable
@@ -16,8 +17,9 @@ const openai = new OpenAI({
 
 // Enterprise-scale constants
 const MAX_QUESTIONS_PER_BATCH = 30;
-const MAX_TOKENS = 4096;
+const MAX_TOKENS = 2048;
 const BATCH_DELAY = 500;
+
 const API_RETRY_DELAY = 2000;
 const MAX_API_RETRIES = 3;
 
@@ -44,8 +46,10 @@ class RateLimiter {
 
 const rateLimiter = new RateLimiter(20);
 
-const generateSingleBatch = async (topics, numQuestionsPerTopic, difficulty = 'Medium', attempt = 1) => {
+const generateSingleBatch = async (topics, numQuestionsPerTopic, difficulty = 'Medium', attempt = 1, subdomain = '') => {
     await rateLimiter.waitIfNeeded();
+    // NOTE: checkAndRecordAiUsage is called by the orchestrator (generateMCQQuestions) before retry loops.
+    // Do NOT call it here to avoid double-counting on retries.
 
     const selectedDifficulty = ['Easy', 'Medium', 'Hard'].includes(difficulty) ? difficulty : 'Medium';
 
@@ -89,7 +93,7 @@ const generateSingleBatch = async (topics, numQuestionsPerTopic, difficulty = 'M
         rawResponse = response.choices[0].message.content.trim();
         
         // --- FIXED & IMPROVED JSON PARSING ---
-        let jsonString = rawResponse;
+        let jsonString = rawResponse.replace(/```json\s*/gi, '').replace(/```\s*$/gi, '').trim();
         const startIndex = jsonString.indexOf('{');
         const endIndex = jsonString.lastIndexOf('}');
 
@@ -98,6 +102,7 @@ const generateSingleBatch = async (topics, numQuestionsPerTopic, difficulty = 'M
         } else {
              throw new Error("No valid JSON object found in the AI response.");
         }
+
 
         const parsedQuestions = JSON.parse(jsonString);
         
@@ -126,8 +131,10 @@ const generateSingleBatch = async (topics, numQuestionsPerTopic, difficulty = 'M
 };
 
 // New function for generating UPSC/GK style questions with multiple formats
-const generateUPSCSingleBatch = async (topics, numQuestionsPerTopic, difficulty = 'Medium', attempt = 1) => {
+const generateUPSCSingleBatch = async (topics, numQuestionsPerTopic, difficulty = 'Medium', attempt = 1, subdomain = '') => {
     await rateLimiter.waitIfNeeded();
+    // NOTE: checkAndRecordAiUsage is called by the orchestrator (generateUPSCQuestions) before retry loops.
+    // Do NOT call it here to avoid double-counting on retries.
 
     const selectedDifficulty = ['Easy', 'Medium', 'Hard'].includes(difficulty) ? difficulty : 'Medium';
 
@@ -262,7 +269,7 @@ Response format:
         rawResponse = response.choices[0].message.content.trim();
         
         // --- FIXED & IMPROVED JSON PARSING ---
-        let jsonString = rawResponse;
+        let jsonString = rawResponse.replace(/```json\s*/gi, '').replace(/```\s*$/gi, '').trim();
         const startIndex = jsonString.indexOf('{');
         const endIndex = jsonString.lastIndexOf('}');
         
@@ -302,8 +309,10 @@ Response format:
 };
 
 // New function for generating THREE SEPARATE QUESTION SETS for common mode
-const generateThreeUPSCSets = async (topics, numQuestionsPerSet, difficulty = 'Medium', attempt = 1) => {
+const generateThreeUPSCSets = async (topics, numQuestionsPerSet, difficulty = 'Medium', attempt = 1, subdomain = '') => {
     await rateLimiter.waitIfNeeded();
+    // Count usage only once per logical call, not per retry attempt.
+    await checkAndRecordAiUsage(subdomain);
 
     const selectedDifficulty = ['Easy', 'Medium', 'Hard'].includes(difficulty) ? difficulty : 'Medium';
 
@@ -405,7 +414,7 @@ CRITICAL REQUIREMENTS:
         rawResponse = response.choices[0].message.content.trim();
         
         // --- FIXED & IMPROVED JSON PARSING ---
-        let jsonString = rawResponse;
+        let jsonString = rawResponse.replace(/```json\s*/gi, '').replace(/```\s*$/gi, '').trim();
         const startIndex = jsonString.indexOf('{');
         const endIndex = jsonString.lastIndexOf('}');
         
@@ -455,7 +464,8 @@ CRITICAL REQUIREMENTS:
     }
 };
 
-const generateMCQQuestions = async (topics, numQuestionsPerTopic, difficulty = 'Medium') => {
+
+const generateMCQQuestions = async (topics, numQuestionsPerTopic, difficulty = 'Medium', subdomain = '') => {
     try {
         console.log(`\n[DeepSeek] 🚀 ENTERPRISE GENERATION STARTED`);
         console.log(`[DeepSeek] Topics: ${topics.length}, Questions per topic: ${numQuestionsPerTopic}`);
@@ -478,9 +488,12 @@ const generateMCQQuestions = async (topics, numQuestionsPerTopic, difficulty = '
                 let batchSuccess = false;
                 let batchAttempt = 1;
                 
+                // Count usage ONCE per batch (before retries), not inside the batch function.
+                await checkAndRecordAiUsage(subdomain);
+                
                 while (!batchSuccess && batchAttempt <= MAX_API_RETRIES) {
                     try {
-                        const batchResult = await generateSingleBatch([topic], batchSize, difficulty, batchAttempt);
+                        const batchResult = await generateSingleBatch([topic], batchSize, difficulty, batchAttempt, subdomain);
                         
                         if (batchResult[topic] && Array.isArray(batchResult[topic]) && batchResult[topic].length > 0) {
                             const generatedCount = Math.min(batchResult[topic].length, batchSize);
@@ -534,7 +547,7 @@ const generateMCQQuestions = async (topics, numQuestionsPerTopic, difficulty = '
 };
 
 // New function for generating UPSC/GK style questions
-const generateUPSCQuestions = async (topics, numQuestionsPerTopic, difficulty = 'Medium') => {
+const generateUPSCQuestions = async (topics, numQuestionsPerTopic, difficulty = 'Medium', subdomain = '') => {
     try {
         console.log(`\n[DeepSeek] 🚀 ENTERPRISE UPSC-STYLE GENERATION STARTED`);
         console.log(`[DeepSeek] Topics: ${topics.length}, Questions per topic: ${numQuestionsPerTopic}`);
@@ -557,9 +570,13 @@ const generateUPSCQuestions = async (topics, numQuestionsPerTopic, difficulty = 
                 let batchSuccess = false;
                 let batchAttempt = 1;
                 
+                // Count usage ONCE per batch (before retries), not inside the batch function.
+                await checkAndRecordAiUsage(subdomain);
+                
                 while (!batchSuccess && batchAttempt <= MAX_API_RETRIES) {
                     try {
-                        const batchResult = await generateUPSCSingleBatch([topic], batchSize, difficulty, batchAttempt);
+                        const batchResult = await generateUPSCSingleBatch([topic], batchSize, difficulty, batchAttempt, subdomain);
+
                         
                         if (batchResult[topic] && Array.isArray(batchResult[topic]) && batchResult[topic].length > 0) {
                             const generatedCount = Math.min(batchResult[topic].length, batchSize);

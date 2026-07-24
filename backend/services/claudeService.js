@@ -154,6 +154,68 @@ const generateCompletion = async (subdomain, systemPrompt, userPrompt, options =
   }
 };
 
-module.exports = {
-  generateCompletion
+/**
+ * Checks and records AI API usage against subdomain daily and monthly limits configured in Settings.
+ * @param {string} [subdomain] - Subdomain of the tenant, or fallback to first found Settings
+ */
+const checkAndRecordAiUsage = async (subdomain) => {
+  let settings;
+  if (subdomain && subdomain !== 'main') {
+    settings = await Settings.findOne({ subdomain });
+  }
+  if (!settings) {
+    settings = await Settings.findOne();
+  }
+  if (!settings) {
+    settings = new Settings({ subdomain: subdomain || 'default' });
+    await settings.save();
+  }
+
+  const aiConfig = settings.aiConfig || {};
+  if (aiConfig.aiFeaturesEnabled === false) {
+    throw new Error('AI features are disabled by the administrator in Settings.');
+  }
+
+  const counterUpdated = checkAndResetAiCounters(settings);
+
+  const maxDaily = aiConfig.aiMaxDailyRequests || 100;
+  const maxMonthly = aiConfig.aiMaxMonthlyRequests || 1000;
+  const currentDaily = settings.aiConfig.aiDailyRequestCount || 0;
+  const currentMonthly = settings.aiConfig.aiMonthlyRequestCount || 0;
+
+  if (currentDaily >= maxDaily) {
+    if (counterUpdated) {
+      await settings.save();
+    }
+    throw new Error(`Daily AI API usage limit reached (${maxDaily} requests). Please increase the limit in Settings page.`);
+  }
+
+  if (currentMonthly >= maxMonthly) {
+    if (counterUpdated) {
+      await settings.save();
+    }
+    throw new Error(`Monthly AI API usage limit reached (${maxMonthly} requests). Please increase the limit in Settings page.`);
+  }
+
+  const newDaily = currentDaily + 1;
+  const newMonthly = currentMonthly + 1;
+
+  if (newDaily >= maxDaily * 0.8) {
+    console.warn(`[AI QUOTA ALERT] Subdomain "${subdomain}" has reached ${Math.round((newDaily / maxDaily) * 100)}% of daily AI request quota (${newDaily}/${maxDaily}).`);
+  }
+
+  console.log(`[AI Usage Audit] Subdomain: "${subdomain}" | Daily Quota: ${newDaily}/${maxDaily} | Monthly Quota: ${newMonthly}/${maxMonthly}`);
+
+  settings.aiConfig.aiDailyRequestCount = newDaily;
+  settings.aiConfig.aiMonthlyRequestCount = newMonthly;
+  settings.markModified('aiConfig');
+  await settings.save();
 };
+
+
+module.exports = {
+
+  generateCompletion,
+  checkAndRecordAiUsage
+};
+

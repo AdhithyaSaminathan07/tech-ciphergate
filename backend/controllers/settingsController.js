@@ -24,8 +24,17 @@ const getSettings = async (req, res) => {
       console.log(`Created default settings for subdomain: ${req.params.subdomain}`);
     }
 
-    res.json(settings);
+    const settingsObj = settings.toObject ? settings.toObject() : { ...settings };
+    if (settingsObj.aiConfig && settingsObj.aiConfig.deepseekApiKey) {
+      const key = settingsObj.aiConfig.deepseekApiKey;
+      settingsObj.aiConfig.deepseekApiKey = key.length > 8 
+        ? `${key.substring(0, 4)}****${key.substring(key.length - 4)}` 
+        : '****';
+    }
+
+    res.json(settingsObj);
   } catch (error) {
+
     console.error('Error in getSettings:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }

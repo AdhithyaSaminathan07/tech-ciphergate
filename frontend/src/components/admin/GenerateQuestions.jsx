@@ -489,9 +489,11 @@ const GenerateQuestions = () => {
         topicMode,
         questionFormat, // Add question format to payload
         answerFeedback, // Add answer feedback to payload
+        subdomain, // Tenant subdomain for settings and AI rate limits
         totalWorkers: selectedWorkers.length,
         totalQuestions: selectedWorkers.length * parseInt(numQuestions)
       };
+
       if (topicMode === 'common') {
         // For common mode, use the topic as entered by the admin
         // Send both for backward compatibility

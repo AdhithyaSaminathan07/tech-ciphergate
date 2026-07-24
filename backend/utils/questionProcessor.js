@@ -136,38 +136,60 @@ const processQuestionGeneration = async (jobData, jobId) => {
                     if (questionsForThisTopic > 0) {
                         topicTasks.push(async () => {
                             try {
-                                // SUPER OPTIMIZATION: Check cache first for common topics
+                                const { subdomain } = jobData;
+                                // SUPER OPTIMIZATION: Check cache first for common topics and deduplicate parallel requests
                                 if (ENABLE_TOPIC_CACHING && topicMode === 'common') {
-                                    const cacheKey = `${currentTopic}-${difficulty}-${questionsForThisTopic}-${questionFormat}`; // Updated cache key
+                                    const cacheKey = `${currentTopic}-${difficulty}-${questionsForThisTopic}-${questionFormat}`;
                                     if (topicCache.has(cacheKey)) {
                                         const cached = topicCache.get(cacheKey);
-                                        if (Date.now() - cached.timestamp < CACHE_TTL) {
+                                        if (cached && typeof cached.then === 'function') {
+                                            log.info(`Awaiting in-flight question generation for topic: "${currentTopic}"`);
+                                            const questions = await cached;
+                                            return questions.slice(0, questionsForThisTopic);
+                                        } else if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
                                             log.info(`Using cached questions for topic: "${currentTopic}"`);
                                             return cached.questions.slice(0, questionsForThisTopic);
                                         } else {
-                                            // Remove expired cache entry
                                             topicCache.delete(cacheKey);
                                         }
                                     }
+
+                                    // Store pending promise in cache to avoid race conditions with parallel workers
+                                    const fetchPromise = (async () => {
+                                        let resQuestions = [];
+                                        if (questionFormat === 'upsc') {
+                                            const result = await generateUPSCQuestions([currentTopic], questionsForThisTopic, difficulty, subdomain);
+                                            resQuestions = result[currentTopic] || [];
+                                        } else {
+                                            const result = await generateMCQQuestions([currentTopic], questionsForThisTopic, difficulty, subdomain);
+                                            resQuestions = result[currentTopic] || [];
+                                        }
+                                        return resQuestions;
+                                    })();
+
+                                    topicCache.set(cacheKey, fetchPromise);
+
+                                    try {
+                                        const generatedQuestions = await fetchPromise;
+                                        topicCache.set(cacheKey, {
+                                            questions: generatedQuestions,
+                                            timestamp: Date.now()
+                                        });
+                                        return generatedQuestions.slice(0, questionsForThisTopic);
+                                    } catch (fetchErr) {
+                                        topicCache.delete(cacheKey);
+                                        throw fetchErr;
+                                    }
                                 }
                                 
-                                // Use the appropriate generator based on question format
+                                // Uncached / Individual topic generation
                                 let generatedQuestions = [];
                                 if (questionFormat === 'upsc') {
-                                    const result = await generateUPSCQuestions([currentTopic], questionsForThisTopic, difficulty);
+                                    const result = await generateUPSCQuestions([currentTopic], questionsForThisTopic, difficulty, subdomain);
                                     generatedQuestions = result[currentTopic] || [];
                                 } else {
-                                    const result = await generateMCQQuestions([currentTopic], questionsForThisTopic, difficulty);
+                                    const result = await generateMCQQuestions([currentTopic], questionsForThisTopic, difficulty, subdomain);
                                     generatedQuestions = result[currentTopic] || [];
-                                }
-                                
-                                // SUPER OPTIMIZATION: Cache results for common topics
-                                if (ENABLE_TOPIC_CACHING && topicMode === 'common') {
-                                    const cacheKey = `${currentTopic}-${difficulty}-${questionsForThisTopic}-${questionFormat}`; // Updated cache key
-                                    topicCache.set(cacheKey, {
-                                        questions: generatedQuestions,
-                                        timestamp: Date.now()
-                                    });
                                 }
                                 
                                 return generatedQuestions.slice(0, questionsForThisTopic);
@@ -178,6 +200,7 @@ const processQuestionGeneration = async (jobData, jobId) => {
                         });
                     }
                 }
+
 
                 // Execute topic generation in parallel
                 const topicResults = await runWithConcurrency(topicTasks, CONCURRENT_TOPICS_PER_WORKER);
@@ -301,7 +324,8 @@ const processThreeSetQuestionGeneration = async (jobData, jobId) => {
         commonTopics,
         individualTopics,
         questionFormat = 'upsc', // Default to UPSC format for three sets
-        answerFeedback
+        answerFeedback,
+        subdomain
     } = jobData;
 
     log.info('Starting three-set question generation job:', { numWorkers: workerIds.length, jobId, questionFormat });
@@ -312,7 +336,26 @@ const processThreeSetQuestionGeneration = async (jobData, jobId) => {
     let workersProcessed = 0;
     let totalQuestionsGenerated = 0;
 
-    // For three-set generation, we generate one set per worker
+    // SUPER OPTIMIZATION: Pre-generate 3-sets ONCE for common mode instead of N times for N workers!
+    let sharedThreeSets = null;
+    if (topicMode === 'common') {
+        const commonTopicsToUse = commonTopics || (commonTopic ? [commonTopic] : []);
+        const topicsToUse = commonTopicsToUse.length > 0 
+            ? commonTopicsToUse.flatMap(t => typeof t === 'string' ? t.split(',').map(t => t.trim()).filter(Boolean) : [])
+            : [];
+        if (topicsToUse.length > 0) {
+            try {
+                log.info('[Optimization] Generating 1 shared 3-set batch for common topics:', topicsToUse);
+                sharedThreeSets = await generateThreeUPSCSets(topicsToUse, parseInt(numQuestions), difficulty, 1, subdomain);
+            } catch (err) {
+                log.error('[Optimization] Shared 3-set pre-generation failed:', err.message);
+                jobManager.failJob(jobId, err.message || 'Failed to pre-generate question sets.');
+                throw err;
+            }
+        }
+    }
+
+    // For three-set generation, assign one set per worker
     // Worker 1 gets Set A, Worker 2 gets Set B, Worker 3 gets Set C, then repeat
     const tasks = workerIds.map((workerId, index) => async () => {
         const session = await mongoose.startSession();
@@ -329,7 +372,6 @@ const processThreeSetQuestionGeneration = async (jobData, jobId) => {
                 let rawTopics = [];
 
                 if (topicMode === 'common') {
-                    // For common mode, use commonTopics if available, otherwise fallback to topic
                     const commonTopicsToUse = commonTopics || (commonTopic ? [commonTopic] : []);
                     topicsToUse = commonTopicsToUse.length > 0 
                         ? commonTopicsToUse.flatMap(t => typeof t === 'string' ? t.split(',').map(t => t.trim()).filter(Boolean) : [])
@@ -368,15 +410,16 @@ const processThreeSetQuestionGeneration = async (jobData, jobId) => {
                 const setNames = ['setA', 'setB', 'setC'];
                 const setForWorker = setNames[index % 3];
                 
-                // Generate three sets of questions
-                let threeSets = null;
-                try {
-                    const result = await generateThreeUPSCSets(topicsToUse, targetQuestions, difficulty);
-                    threeSets = result;
-                } catch (error) {
-                    log.error(`Failed to generate three question sets:`, error.message);
-                    taskResult = { workerId, workerName: worker.name, success: false, reason: 'AI failed to generate question sets' };
-                    return;
+                // Use shared three sets for common mode, or generate for individual mode
+                let threeSets = sharedThreeSets;
+                if (!threeSets) {
+                    try {
+                        threeSets = await generateThreeUPSCSets(topicsToUse, targetQuestions, difficulty, 1, subdomain);
+                    } catch (error) {
+                        log.error(`Failed to generate three question sets:`, error.message);
+                        taskResult = { workerId, workerName: worker.name, success: false, reason: error.message || 'AI failed to generate question sets' };
+                        return;
+                    }
                 }
                 
                 // Select the appropriate set for this worker
@@ -386,6 +429,7 @@ const processThreeSetQuestionGeneration = async (jobData, jobId) => {
                     taskResult = { workerId, workerName: worker.name, success: false, reason: 'No questions generated for set' };
                     return;
                 }
+
 
                 const questionsToSave = selectedSet.map(q => {
                     // Clean options by removing internal letters like (a), (b), (c), (d)

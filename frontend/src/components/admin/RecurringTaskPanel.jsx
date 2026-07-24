@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { RefreshCw, Calendar, ChevronDown, ChevronUp, X, Clock, Repeat } from 'lucide-react';
 
 // ── Day labels ────────────────────────────────────────────────────────────────
@@ -71,6 +71,24 @@ export const defaultRecurringConfig = {
 // ─────────────────────────────────────────────────────────────────────────────
 const RecurringTaskPanel = ({ config = defaultRecurringConfig, onChange }) => {
     const [localCfg, setLocalCfg] = useState({ ...defaultRecurringConfig, ...config });
+    // Track the last config we synced FROM the parent so we can detect external changes
+    const lastExternalConfigRef = useRef(config);
+
+    // Sync localCfg when the parent config prop changes externally (e.g. after async DB fetch)
+    // Use a stable identity check to avoid re-syncing our own onChange-triggered updates
+    useEffect(() => {
+        const prev = lastExternalConfigRef.current;
+        // Only re-sync if the incoming config is meaningfully different (enabled, frequency, or startDate changed)
+        if (
+            config.enabled !== prev.enabled ||
+            config.frequency !== prev.frequency ||
+            config.startDate !== prev.startDate ||
+            config.interval !== prev.interval
+        ) {
+            lastExternalConfigRef.current = config;
+            setLocalCfg({ ...defaultRecurringConfig, ...config });
+        }
+    }, [config]); // eslint-disable-line
 
     // Keep parent in sync whenever localCfg changes
     useEffect(() => {

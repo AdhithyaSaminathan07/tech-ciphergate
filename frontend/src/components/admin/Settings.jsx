@@ -10,8 +10,8 @@ import {
     FiSave,
     FiRefreshCw,
     FiAlertTriangle,
-    FiDollarSign,
     FiUser,
+    FiPhone,
     FiToggleLeft,
     FiToggleRight,
     FiPlus,
@@ -24,25 +24,41 @@ import {
     FiShield,
     FiCopy,
     FiSliders,
-    FiMessageCircle
+    FiMessageCircle,
+    FiLogOut,
+    FiUpload,
+    FiCheckCircle
 } from 'react-icons/fi';
 import Modal from '../common/Modal';
 import HolidayManagement from './HolidayManagement';
-import Button from '../common/Button';
-import Card from '../common/Card';
 import Spinner from '../common/Spinner';
 import appContext from '../../context/AppContext';
+import { useAuth } from '../../hooks/useAuth';
 import api from '../../services/api';
 import { getAuthToken } from '../../utils/authUtils';
 import { getCurrentPosition } from '../../services/geolocationService';
+
 const Settings = () => {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [hasChanges, setHasChanges] = useState(false);
     const [currentLocation, setCurrentLocation] = useState(null);
+    const [activeTab, setActiveTab] = useState('profile');
 
     const { subdomain } = useContext(appContext);
+    const { user, logout } = useAuth();
     const [isHolidayModalOpen, setIsHolidayModalOpen] = useState(false);
+
+    // Profile tab local state
+    const [profileName, setProfileName] = useState('');
+    const [profilePhone, setProfilePhone] = useState('');
+
+    useEffect(() => {
+        if (user) {
+            setProfileName(user.name || user.username || 'User');
+            setProfilePhone(user.phone || user.phoneNumber || '');
+        }
+    }, [user]);
 
     const [originalSettings, setOriginalSettings] = useState({});
 
@@ -117,7 +133,8 @@ const Settings = () => {
             },
             monthlyLimit: 2,
             deductionMultiplier: 2,
-            enableUnauthorizedLeavePenalty: true
+            enableUnauthorizedLeavePenalty: true,
+            enableUnauthorizedPermissionPenalty: false
         },
         includePermission: false,
         paidLeaveConfig: {
@@ -509,7 +526,6 @@ const Settings = () => {
                 ...settings,
                 bugBountyConfig: updatedBountyConfig
             };
-            console.log('[Settings] Saving settings for subdomain:', subdomain, 'Payload:', payload);
             await api.put(`/settings/${subdomain}`, payload, {
                 headers: {
                     'Content-Type': 'application/json',
@@ -532,15 +548,32 @@ const Settings = () => {
         setHasChanges(false);
     };
 
+    // Sleek, bulletproof custom toggle button component with strict inline pixel dimensions
     const CustomToggle = ({ checked, onChange, disabled = false }) => (
         <button
             type="button"
             onClick={onChange}
             disabled={disabled}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${checked ? 'bg-blue-600' : 'bg-gray-200'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+            style={{
+                width: '44px',
+                height: '24px',
+                minWidth: '44px',
+                minHeight: '24px',
+                maxWidth: '44px',
+                maxHeight: '24px',
+                padding: 0,
+                boxSizing: 'border-box'
+            }}
+            className={`relative inline-flex flex-shrink-0 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#006666]/30 ${checked ? 'bg-[#006666]' : 'bg-slate-200'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         >
             <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-lg transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`}
+                style={{
+                    width: '16px',
+                    height: '16px',
+                    minWidth: '16px',
+                    minHeight: '16px'
+                }}
+                className={`inline-block transform rounded-full bg-white shadow-sm transition-transform duration-200 ${checked ? 'translate-x-6' : 'translate-x-1'}`}
             />
         </button>
     );
@@ -569,51 +602,66 @@ const Settings = () => {
         setTimeout(() => setIsCopied(false), 2000);
     };
 
-    const handleClearBugBounty = () => {
-        const updated = {
-            ...settings,
-            bugBountyConfig: {
-                enabled: false,
-                bugReportUrl: '',
-                disclosureMessage: '',
-                popupFrequency: 'disabled'
-            }
-        };
-        setSettings(updated);
-        checkForChanges(updated);
-    };
-
-    const handleSaveBugBounty = async () => {
-        setSaving(true);
-        try {
-            const token = getAuthToken();
-            const updatedConfig = {
-                ...settings.bugBountyConfig,
-                enabled: settings.bugBountyConfig?.popupFrequency !== 'disabled',
-                lastUpdated: new Date().toISOString()
-            };
-            await api.put(`/settings/${subdomain}`, {
-                bugBountyConfig: updatedConfig
-            }, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-            const updatedSettings = {
-                ...settings,
-                bugBountyConfig: updatedConfig
-            };
-            setSettings(updatedSettings);
-            setOriginalSettings(updatedSettings);
-            setHasChanges(false);
-            toast.success('Bug Bounty settings updated successfully');
-        } catch (error) {
-            toast.error('Failed to save Bug Bounty settings');
-        } finally {
-            setSaving(false);
+    // Helper function to scroll mobile category pill container HORIZONTALLY ONLY (without jumping vertical page scroll)
+    const scrollToMobilePill = (id) => {
+        const pill = document.getElementById(`mobile-pill-${id}`);
+        const container = document.getElementById('mobile-pill-container');
+        if (pill && container) {
+            const pillLeft = pill.offsetLeft;
+            const pillWidth = pill.offsetWidth;
+            const containerWidth = container.offsetWidth;
+            const targetScrollLeft = pillLeft - (containerWidth / 2) + (pillWidth / 2);
+            container.scrollTo({ left: targetScrollLeft, behavior: 'smooth' });
         }
     };
+
+    // Smooth scroll to target section when clicking navigation tab
+    const scrollToSection = (id) => {
+        if (id === 'holidays') {
+            setIsHolidayModalOpen(true);
+            return;
+        }
+        setActiveTab(id);
+
+        // Auto-scroll target section in document
+        const target = document.getElementById(`section-${id}`);
+        if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // Auto-scroll active pill horizontally ONLY
+        scrollToMobilePill(id);
+    };
+
+    // Observe active section on scroll
+    useEffect(() => {
+        if (loading) return;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        const sectionId = entry.target.id.replace('section-', '');
+                        setActiveTab(sectionId);
+                        scrollToMobilePill(sectionId);
+                    }
+                });
+            },
+            {
+                root: null,
+                rootMargin: '-20% 0px -60% 0px',
+                threshold: 0
+            }
+        );
+
+        const sectionIds = ['profile', 'meal', 'batches', 'intervals', 'location', 'face', 'access', 'whatsapp', 'advanced', 'ai', 'bounty'];
+        sectionIds.forEach((id) => {
+            const el = document.getElementById(`section-${id}`);
+            if (el) observer.observe(el);
+        });
+
+        return () => observer.disconnect();
+    }, [loading]);
 
     useEffect(() => {
         if (subdomain && subdomain !== 'main') {
@@ -626,18 +674,34 @@ const Settings = () => {
 
     if (loading) {
         return (
-            <div className="flex justify-center items-center min-h-64">
+            <div className="flex justify-center items-center min-h-[400px]">
                 <Spinner size="lg" />
             </div>
         );
     }
+
+    const navItems = [
+        { id: 'profile', label: 'Profile', icon: FiUser },
+        { id: 'meal', label: 'Meal Service', icon: FiSunrise },
+        { id: 'batches', label: 'Work Batches', icon: FiClock },
+        { id: 'intervals', label: 'Break Intervals', icon: FiSliders },
+        { id: 'location', label: 'Location & GPS', icon: FiMapPin },
+        { id: 'face', label: 'Biometrics & Face', icon: FiUserCheck },
+        { id: 'access', label: 'Access Control', icon: FiToggleLeft },
+        { id: 'whatsapp', label: 'WhatsApp SLA', icon: FiMessageCircle },
+        { id: 'advanced', label: 'Leave Multipliers', icon: FiActivity },
+        { id: 'ai', label: 'AI & Second Brain', icon: FiInfo },
+        { id: 'bounty', label: 'Bug Bounty', icon: FiShield },
+        { id: 'holidays', label: 'Holidays', icon: FiCalendar }
+    ];
 
     const mealConfigs = [
         {
             key: 'breakfast',
             title: 'Breakfast',
             icon: FiSunrise,
-            color: 'yellow',
+            color: 'from-amber-400 to-orange-400',
+            bgColor: 'bg-amber-50 text-amber-600',
             enabledKey: 'breakfastEnabled',
             openTimeKey: 'breakfastOpenTime',
             closeTimeKey: 'breakfastCloseTime',
@@ -647,7 +711,8 @@ const Settings = () => {
             key: 'lunch',
             title: 'Lunch',
             icon: FiSun,
-            color: 'blue',
+            color: 'from-cyan-400 to-teal-500',
+            bgColor: 'bg-cyan-50 text-cyan-600',
             enabledKey: 'foodRequestEnabled',
             openTimeKey: 'foodRequestOpenTime',
             closeTimeKey: 'foodRequestCloseTime',
@@ -657,7 +722,8 @@ const Settings = () => {
             key: 'dinner',
             title: 'Dinner',
             icon: FiMoon,
-            color: 'purple',
+            color: 'from-purple-400 to-indigo-500',
+            bgColor: 'bg-purple-50 text-purple-600',
             enabledKey: 'dinnerEnabled',
             openTimeKey: 'dinnerOpenTime',
             closeTimeKey: 'dinnerCloseTime',
@@ -665,432 +731,688 @@ const Settings = () => {
         }
     ];
 
+    const loggedInEmail = user?.email || 'admin1234@gmail.com';
+    const displayName = user?.name || user?.username || 'User';
+
     return (
-        <div className="min-h-screen bg-gray-50">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-                {/* Header */}
-                <div className="mb-8">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between md:justify-end">
-                        <div className="mb-4 sm:mb-0 md:hidden">
-                            <h1 className="text-3xl font-bold text-gray-900 flex items-center">
-                                <FiSettings className="mr-3 text-blue-600" />
-                                Application Settings
-                            </h1>
-                            <p className="mt-2 text-gray-600">
-                                Configure your application preferences and meal service settings
-                            </p>
+        <div className="w-full min-h-screen bg-[#f8fafc] text-slate-800 font-sans pb-12">
+            <div className="w-full max-w-[1750px] mx-auto px-2 sm:px-6 lg:px-8">
+
+                {/* DESKTOP & MOBILE RESPONSIVE STICKY HEADER CONTAINER */}
+                <div className="sticky top-0 z-30 bg-[#f8fafc] pt-2 pb-2 mb-2 sm:mb-3">
+                    <div className="bg-white rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-xs border border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3">
+                        <div className="flex items-center justify-between w-full md:w-auto">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <div className="p-1.5 sm:p-2 bg-[#006666]/10 text-[#006666] rounded-lg sm:rounded-xl">
+                                        <FiSettings className="h-4 w-4 sm:h-5 sm:w-5 stroke-[2.2]" />
+                                    </div>
+                                    <h1 className="text-lg sm:text-2xl font-bold tracking-tight text-slate-900">
+                                        Settings
+                                    </h1>
+                                </div>
+                                <p className="mt-0.5 text-xs text-slate-500 font-medium hidden sm:block">
+                                    Manage your account preferences and app behavior
+                                </p>
+                                <div className="mt-0.5 inline-flex items-center text-[11px] sm:text-xs font-semibold text-slate-600">
+                                    Logged in as:&nbsp;
+                                    <span className="font-bold text-[#006666] bg-[#006666]/10 px-1.5 sm:px-2 py-0.5 rounded-md truncate max-w-[160px] sm:max-w-none">{loggedInEmail}</span>
+                                </div>
+                            </div>
                         </div>
-                        <div className="flex space-x-3">
-                            <Button
+
+                        {/* Responsive Action Buttons: Ultra-Compact Grid on Mobile, Flex Row on Tablet/Desktop */}
+                        <div className="grid grid-cols-3 sm:flex items-center gap-1.5 sm:gap-2.5 w-full md:w-auto pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                            {logout && (
+                                <button
+                                    type="button"
+                                    onClick={logout}
+                                    className="flex items-center justify-center gap-1 px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-[11px] sm:text-xs font-bold transition-all shadow-2xs active:scale-95"
+                                >
+                                    <FiLogOut className="h-3.5 w-3.5 text-slate-500" />
+                                    <span className="truncate">Sign Out</span>
+                                </button>
+                            )}
+                            <button
+                                type="button"
                                 onClick={handleReset}
-                                variant="secondary"
                                 disabled={!hasChanges || saving}
-                                className="flex items-center"
+                                className="flex items-center justify-center gap-1 px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[11px] sm:text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-2xs active:scale-95"
                             >
-                                <FiRefreshCw className="mr-2 h-4 w-4" />
-                                Reset Changes
-                            </Button>
-                            <Button
+                                <FiRefreshCw className="h-3.5 w-3.5" />
+                                <span className="truncate">Reset</span>
+                            </button>
+                            <button
+                                type="button"
                                 onClick={handleSaveSettings}
-                                variant="primary"
                                 disabled={!hasChanges || saving}
-                                className="flex items-center"
+                                className="flex items-center justify-center gap-1 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold bg-[#006666] hover:bg-[#004d4d] text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md shadow-[#006666]/15 active:scale-95"
                             >
                                 {saving ? (
-                                    <Spinner size="sm" className="mr-2" />
+                                    <Spinner size="sm" color="white" />
                                 ) : (
-                                    <FiSave className="mr-2 h-4 w-4" />
+                                    <FiSave className="h-3.5 w-3.5" />
                                 )}
-                                Update Settings
-                            </Button>
+                                <span className="truncate">Update</span>
+                            </button>
                         </div>
                     </div>
 
                     {hasChanges && (
-                        <div className="mt-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
-                            <div className="flex">
-                                <div className="flex-shrink-0">
-                                    <FiAlertTriangle className="h-5 w-5 text-amber-400" />
-                                </div>
-                                <div className="ml-3">
-                                    <h3 className="text-sm font-medium text-amber-800">
-                                        Unsaved Changes Detected
-                                    </h3>
-                                    <div className="mt-2 text-sm text-amber-700">
-                                        <p>You have unsaved changes. Click "Update Settings" to save them or "Reset Changes" to discard them.</p>
-                                    </div>
+                        <div className="mt-2 bg-amber-50/95 border border-amber-200 rounded-xl p-2 sm:p-2.5 shadow-2xs flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <FiAlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                                <div>
+                                    <h3 className="text-xs font-bold text-amber-900">Unsaved Changes Detected</h3>
+                                    <p className="text-[10px] sm:text-[11px] text-amber-700 font-medium">Click "Update" to save your updates or "Reset" to revert.</p>
                                 </div>
                             </div>
                         </div>
                     )}
                 </div>
 
-                {/* Meal Settings Grid */}
-                <div className="mb-8">
-                    <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-                        <FiClock className="mr-2 text-gray-600" />
-                        Meal Service Configuration
-                    </h2>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {mealConfigs.map(({ key, title, icon: Icon, color, enabledKey, openTimeKey, closeTimeKey, autoSwitchKey }) => (
-                            <Card key={key} className="overflow-hidden hover:shadow-lg transition-shadow duration-200">
-                                <div className={`h-2 bg-gradient-to-r ${color === 'yellow' ? 'from-yellow-400 to-orange-400' : color === 'blue' ? 'from-blue-400 to-cyan-400' : 'from-purple-400 to-pink-400'}`} />
-                                <div className="p-6">
-                                    <div className="flex items-center justify-between mb-6">
-                                        <div className="flex items-center">
-                                            <div className={`p-3 rounded-lg ${color === 'yellow' ? 'bg-yellow-100' : color === 'blue' ? 'bg-blue-100' : 'bg-purple-100'}`}>
-                                                <Icon className={`h-6 w-6 ${color === 'yellow' ? 'text-yellow-600' : color === 'blue' ? 'text-blue-600' : 'text-purple-600'}`} />
-                                            </div>
-                                            <h3 className="ml-3 text-lg font-semibold text-gray-900">{title}</h3>
-                                        </div>
-                                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${settings[enabledKey] ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                            {settings[enabledKey] ? 'Active' : 'Inactive'}
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-5">
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <label className="text-sm font-medium text-gray-700">Enable {title}</label>
-                                                <p className="text-xs text-gray-500">Allow {title.toLowerCase()} requests</p>
-                                            </div>
-                                            <CustomToggle
-                                                checked={settings[enabledKey]}
-                                                onChange={() => handleInputChange({
-                                                    target: {
-                                                        name: enabledKey,
-                                                        type: 'checkbox',
-                                                        checked: !settings[enabledKey]
-                                                    }
-                                                })}
-                                            />
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Open Time
-                                                </label>
-                                                <input
-                                                    type="time"
-                                                    name={openTimeKey}
-                                                    value={settings[openTimeKey]}
-                                                    onChange={handleInputChange}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                                />
-                                                <p className="text-xs text-gray-500 mt-1">
-                                                    {formatTimeTo12Hour(settings[openTimeKey])}
-                                                </p>
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Close Time
-                                                </label>
-                                                <input
-                                                    type="time"
-                                                    name={closeTimeKey}
-                                                    value={settings[closeTimeKey]}
-                                                    onChange={handleInputChange}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                                />
-                                                <p className="text-xs text-gray-500 mt-1">
-                                                    {formatTimeTo12Hour(settings[closeTimeKey])}
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                            <div>
-                                                <label className="text-sm font-medium text-gray-700 flex items-center">
-                                                    <FiToggleRight className="mr-2 h-4 w-4" />
-                                                    Auto Switch
-                                                </label>
-                                                <p className="text-xs text-gray-500 mt-1">
-                                                    Automatically enable/disable based on time
-                                                </p>
-                                            </div>
-                                            <CustomToggle
-                                                checked={settings[autoSwitchKey]}
-                                                onChange={() => handleInputChange({
-                                                    target: {
-                                                        name: autoSwitchKey,
-                                                        type: 'checkbox',
-                                                        checked: !settings[autoSwitchKey]
-                                                    }
-                                                })}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </Card>
-                        ))}
+                {/* MOBILE HORIZONTAL PILL NAV CONTAINER (PINNED STICKY BELOW MAIN HEADER WITH PURE HORIZONTAL SCROLL) */}
+                <div className="lg:hidden sticky top-[4.2rem] z-20 bg-white/95 backdrop-blur-md border border-slate-200/80 rounded-xl p-1.5 mb-3.5 shadow-xs">
+                    <div id="mobile-pill-container" className="overflow-x-auto flex items-center gap-1.5 no-scrollbar">
+                        {navItems.map((item) => {
+                            const Icon = item.icon;
+                            const isActive = activeTab === item.id;
+                            return (
+                                <button
+                                    key={item.id}
+                                    id={`mobile-pill-${item.id}`}
+                                    type="button"
+                                    onClick={() => scrollToSection(item.id)}
+                                    className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${isActive
+                                            ? 'bg-[#006666] text-white shadow-xs font-bold'
+                                            : 'text-slate-600 bg-slate-50 hover:bg-slate-100'
+                                        }`}
+                                >
+                                    <Icon className="h-3.5 w-3.5" />
+                                    <span>{item.label}</span>
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
 
-                {/* Additional Settings Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-                    {/* Email Settings */}
-                    <Card className="hover:shadow-lg transition-shadow duration-200">
-                        <div className="h-2 bg-gradient-to-r from-green-400 to-blue-400" />
-                        <div className="p-6">
-                            <h3 className="text-lg font-semibold mb-6 flex items-center text-gray-900">
-                                <div className="p-2 bg-green-100 rounded-lg mr-3">
-                                    <FiMail className="h-5 w-5 text-green-600" />
-                                </div>
-                                Email Settings
-                            </h3>
+                {/* Two-Column Layout (Vertical Sticky Sidebar strictly for Desktop lg: screens >= 1024px) */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start">
 
-                            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    {/* DESKTOP VERTICAL STICKY SIDEBAR (Hidden on mobile, block on lg:) */}
+                    <div className="hidden lg:block lg:col-span-3 lg:sticky lg:top-[8rem] z-20 self-start bg-white rounded-2xl p-2.5 shadow-xs border border-slate-100/90 max-h-[calc(100vh-9rem)] overflow-y-auto custom-sidebar-scroll">
+                        <div className="flex flex-col gap-1">
+                            {navItems.map((item) => {
+                                const Icon = item.icon;
+                                const isActive = activeTab === item.id;
+                                return (
+                                    <button
+                                        key={item.id}
+                                        type="button"
+                                        onClick={() => scrollToSection(item.id)}
+                                        className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${isActive
+                                                ? 'bg-[#006666] text-white shadow-md shadow-[#006666]/20 font-bold'
+                                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                                            }`}
+                                    >
+                                        <Icon className={`h-4 w-4 stroke-[2] ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                                        <span>{item.label}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Right Column: All Settings Sections Rendered Continuously */}
+                    <div className="lg:col-span-9 bg-white rounded-xl sm:rounded-2xl p-3.5 sm:p-6 shadow-xs border border-slate-100/90 space-y-8 sm:space-y-12">
+
+                        {/* SECTION 1: PROFILE SETTINGS */}
+                        <section id="section-profile" className="scroll-mt-36 lg:scroll-mt-36">
+                            <div className="mb-4 sm:mb-5 pb-3 border-b border-slate-100 flex items-center justify-between">
                                 <div>
-                                    <label className="text-sm font-medium text-gray-700">Email Reports</label>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Send automatic email reports when meals close
+                                    <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                                        <FiUser className="text-[#006666] h-4.5 w-4.5 sm:h-5 sm:w-5" />
+                                        Profile Settings
+                                    </h2>
+                                    <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
+                                        Update your personal credentials and account info saved in database
                                     </p>
                                 </div>
-                                <CustomToggle
-                                    checked={settings.emailReportsEnabled}
-                                    onChange={() => handleInputChange({
-                                        target: {
-                                            name: 'emailReportsEnabled',
-                                            type: 'checkbox',
-                                            checked: !settings.emailReportsEnabled
-                                        }
-                                    })}
-                                />
                             </div>
-                        </div>
-                    </Card>
 
-                    {/* Attendance Settings */}
-                    <Card className="hover:shadow-lg transition-shadow duration-200">
-                        <div className="h-2 bg-gradient-to-r from-indigo-400 to-purple-400" />
-                        <div className="p-6">
-                            <h3 className="text-lg font-semibold mb-6 flex items-center text-gray-900">
-                                <div className="p-2 bg-indigo-100 rounded-lg mr-3">
-                                    <FiUser className="h-5 w-5 text-indigo-600" />
+                            {/* Premium Profile Banner Card */}
+                            <div className="bg-gradient-to-r from-slate-900 via-[#004d4d] to-[#006666] text-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-md mb-5 sm:mb-6 relative overflow-hidden">
+                                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none" />
+
+                                <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-5 relative z-10">
+                                    <div className="relative group flex-shrink-0">
+                                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl bg-white/10 backdrop-blur-md text-white flex items-center justify-center font-black text-2xl sm:text-3xl shadow-inner border-2 border-white/20">
+                                            {displayName.charAt(0).toUpperCase()}
+                                        </div>
+                                        <label
+                                            htmlFor="profile-photo-upload"
+                                            className="absolute -bottom-1 -right-1 p-1.5 sm:p-2 bg-white text-[#006666] hover:bg-slate-100 rounded-lg sm:rounded-xl shadow-lg border border-slate-200 cursor-pointer transition-transform hover:scale-110"
+                                            title="Upload Profile Picture"
+                                        >
+                                            <FiUpload className="h-3 w-3 sm:h-3.5 sm:w-3.5 stroke-[2.5]" />
+                                            <input id="profile-photo-upload" type="file" accept="image/*" className="hidden" />
+                                        </label>
+                                    </div>
+
+                                    <div className="text-center sm:text-left flex-grow">
+                                        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                                            <h3 className="text-lg sm:text-xl font-black tracking-wide text-white">{displayName}</h3>
+                                            <span className="bg-white/20 backdrop-blur-md text-white text-[9px] sm:text-[10px] font-extrabold uppercase tracking-wider px-2 sm:px-2.5 py-0.5 rounded-full border border-white/20">
+                                                Administrator
+                                            </span>
+                                            <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Active
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-teal-100 font-medium mt-1">{loggedInEmail}</p>
+                                        <p className="text-[10px] sm:text-[11px] text-teal-200/80 mt-1.5 font-normal">
+                                            Profile photo will be visible across the entire platform
+                                        </p>
+                                    </div>
                                 </div>
-                                Attendance Settings
-                            </h3>
+                            </div>
+
+                            {/* Profile Form Fields */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 max-w-4xl">
+                                <div>
+                                    <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                        Display Name
+                                    </label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                                            <FiUser className="h-4 w-4" />
+                                        </div>
+                                        <input
+                                            type="text"
+                                            value={profileName}
+                                            onChange={(e) => setProfileName(e.target.value)}
+                                            className="w-full pl-10 pr-4 py-2 sm:py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666] transition-all"
+                                            placeholder="Enter display name"
+                                        />
+                                    </div>
+                                    <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1">Saved automatically to database</p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                        Phone Number
+                                    </label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                                            <FiPhone className="h-4 w-4" />
+                                        </div>
+                                        <input
+                                            type="tel"
+                                            value={profilePhone}
+                                            onChange={(e) => setProfilePhone(e.target.value)}
+                                            className="w-full pl-10 pr-4 py-2 sm:py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666] transition-all"
+                                            placeholder="Enter phone number"
+                                        />
+                                    </div>
+                                    <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1">Used for notifications and SMS alerts</p>
+                                </div>
+
+                                <div className="md:col-span-2">
+                                    <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                        Email Address (Read Only)
+                                    </label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                                            <FiMail className="h-4 w-4" />
+                                        </div>
+                                        <input
+                                            type="email"
+                                            readOnly
+                                            value={loggedInEmail}
+                                            className="w-full pl-10 pr-4 py-2 sm:py-2.5 bg-slate-100/80 border border-slate-200 rounded-xl text-xs font-semibold text-slate-500 cursor-not-allowed"
+                                        />
+                                    </div>
+                                    <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1">Managed via authentication provider</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* SECTION 2: MEAL SERVICE CONFIGURATION */}
+                        <section id="section-meal" className="scroll-mt-36 lg:scroll-mt-36">
+                            <div className="mb-4 sm:mb-5 pb-3 border-b border-slate-100">
+                                <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                                    <FiSunrise className="text-[#006666] h-4.5 w-4.5 sm:h-5 sm:w-5" />
+                                    Meal Service Configuration
+                                </h2>
+                                <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
+                                    Manage timings, toggles, and auto-switch schedules for company meals
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
+                                {mealConfigs.map(({ key, title, icon: Icon, color, bgColor, enabledKey, openTimeKey, closeTimeKey, autoSwitchKey }) => (
+                                    <div key={key} className="bg-white rounded-xl sm:rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden hover:border-[#006666]/40 transition-all duration-200">
+                                        <div className={`h-1.5 bg-gradient-to-r ${color}`} />
+                                        <div className="p-3.5 sm:p-5">
+                                            <div className="flex items-center justify-between mb-3 sm:mb-4">
+                                                <div className="flex items-center gap-2 sm:gap-2.5">
+                                                    <div className={`p-1.5 sm:p-2 rounded-xl ${bgColor}`}>
+                                                        <Icon className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
+                                                    </div>
+                                                    <h3 className="text-xs sm:text-sm font-bold text-slate-900">{title}</h3>
+                                                </div>
+                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${settings[enabledKey] ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                                                    {settings[enabledKey] ? 'Active' : 'Inactive'}
+                                                </span>
+                                            </div>
+
+                                            <div className="space-y-3">
+                                                <div className="flex items-center justify-between gap-3 p-2.5 bg-slate-50/80 rounded-xl min-w-0">
+                                                    <div className="min-w-0 flex-1">
+                                                        <label className="text-xs font-bold text-slate-800 block">Enable {title}</label>
+                                                        <p className="text-[10px] text-slate-500">Allow {title.toLowerCase()} requests</p>
+                                                    </div>
+                                                    <div className="flex-shrink-0 shrink-0">
+                                                        <CustomToggle
+                                                            checked={settings[enabledKey]}
+                                                            onChange={() => handleInputChange({
+                                                                target: {
+                                                                    name: enabledKey,
+                                                                    type: 'checkbox',
+                                                                    checked: !settings[enabledKey]
+                                                                }
+                                                            })}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 mb-1">Open Time</label>
+                                                        <input
+                                                            type="time"
+                                                            name={openTimeKey}
+                                                            value={settings[openTimeKey]}
+                                                            onChange={handleInputChange}
+                                                            className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg sm:rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                        />
+                                                        <p className="text-[9px] sm:text-[10px] text-slate-400 mt-0.5 font-medium">
+                                                            {formatTimeTo12Hour(settings[openTimeKey])}
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 mb-1">Close Time</label>
+                                                        <input
+                                                            type="time"
+                                                            name={closeTimeKey}
+                                                            value={settings[closeTimeKey]}
+                                                            onChange={handleInputChange}
+                                                            className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg sm:rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                        />
+                                                        <p className="text-[9px] sm:text-[10px] text-slate-400 mt-0.5 font-medium">
+                                                            {formatTimeTo12Hour(settings[closeTimeKey])}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center justify-between gap-3 p-2.5 bg-slate-50/80 rounded-xl min-w-0">
+                                                    <div className="min-w-0 flex-1">
+                                                        <label className="text-xs font-bold text-slate-800 block">Auto Switch</label>
+                                                        <p className="text-[10px] text-slate-500">Toggle active state based on time</p>
+                                                    </div>
+                                                    <div className="flex-shrink-0 shrink-0">
+                                                        <CustomToggle
+                                                            checked={settings[autoSwitchKey]}
+                                                            onChange={() => handleInputChange({
+                                                                target: {
+                                                                    name: autoSwitchKey,
+                                                                    type: 'checkbox',
+                                                                    checked: !settings[autoSwitchKey]
+                                                                }
+                                                            })}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+
+                        {/* SECTION 3: WORK BATCHES & SHIFT SCHEDULES */}
+                        <section id="section-batches" className="scroll-mt-36 lg:scroll-mt-36">
+                            <div className="mb-4 sm:mb-5 pb-3 border-b border-slate-100 flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                                        <FiClock className="text-[#006666] h-4.5 w-4.5 sm:h-5 sm:w-5" />
+                                        Work Batches & Shift Schedules
+                                    </h2>
+                                    <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
+                                        Define employee shift timings, factory worker modes, and lunch hour rules
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleAddBatch}
+                                    className="inline-flex items-center gap-1 px-2.5 sm:px-3.5 py-1.5 sm:py-2 bg-[#006666] text-white rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold hover:bg-[#004d4d] transition-all shadow-2xs active:scale-95"
+                                >
+                                    <FiPlus className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Add New Batch</span><span className="sm:hidden">Add</span>
+                                </button>
+                            </div>
 
                             <div className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <label className="text-sm font-medium text-gray-700">Consider Overtime</label>
-                                        <p className="text-xs text-gray-500">Include overtime in calculations</p>
-                                    </div>
-                                    <CustomToggle
-                                        checked={settings.considerOvertime}
-                                        onChange={() => handleInputChange({
-                                            target: {
-                                                name: 'considerOvertime',
-                                                type: 'checkbox',
-                                                checked: !settings.considerOvertime
-                                            }
-                                        })}
-                                    />
-                                </div>
+                                {settings.batches && settings.batches.map((batch, index) => (
+                                    <div key={index} className="bg-slate-50/60 border border-slate-200/80 p-3.5 sm:p-5 rounded-xl sm:rounded-2xl relative">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <span className="text-xs font-bold text-[#006666] uppercase tracking-wider bg-[#006666]/10 px-2.5 py-0.5 rounded-md">
+                                                Batch #{index + 1}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemoveBatch(index)}
+                                                className="text-rose-500 hover:text-rose-700 text-xs font-bold flex items-center gap-1 hover:underline"
+                                            >
+                                                <FiTrash2 className="h-3.5 w-3.5" /> Remove
+                                            </button>
+                                        </div>
 
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <label className="text-sm font-medium text-gray-700">Salary Deduction</label>
-                                        <p className="text-xs text-gray-500">Enable salary deductions for breaks</p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                            <div>
+                                                <label className="block text-[11px] sm:text-xs font-bold text-slate-700 mb-1">Batch Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={batch.batchName}
+                                                    onChange={(e) => handleBatchChange(index, 'batchName', e.target.value)}
+                                                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                    placeholder="Enter batch name"
+                                                />
+                                            </div>
+
+                                            <div className="flex items-center justify-between gap-3 p-2.5 bg-white border border-slate-200 rounded-xl min-w-0">
+                                                <div className="min-w-0 flex-1">
+                                                    <label className="text-xs font-bold text-slate-800 block">Factory Worker Mode</label>
+                                                    <p className="text-[10px] text-slate-500 leading-tight">Flexible lunch tracking based on total required hours</p>
+                                                </div>
+                                                <div className="flex-shrink-0 shrink-0">
+                                                    <CustomToggle
+                                                        checked={batch.isFactoryWorkerToggle}
+                                                        onChange={() => handleBatchChange(index, 'isFactoryWorkerToggle', !batch.isFactoryWorkerToggle)}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {!batch.isFactoryWorkerToggle ? (
+                                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 bg-white p-3 rounded-xl border border-slate-200/60">
+                                                <div>
+                                                    <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 mb-1">Shift From</label>
+                                                    <input
+                                                        type="time"
+                                                        value={batch.from}
+                                                        onChange={(e) => handleBatchChange(index, 'from', e.target.value)}
+                                                        className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 mb-1">Shift To</label>
+                                                    <input
+                                                        type="time"
+                                                        value={batch.to}
+                                                        onChange={(e) => handleBatchChange(index, 'to', e.target.value)}
+                                                        className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 mb-1">Lunch From</label>
+                                                    <input
+                                                        type="time"
+                                                        value={batch.lunchFrom}
+                                                        onChange={(e) => handleBatchChange(index, 'lunchFrom', e.target.value)}
+                                                        className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 mb-1">Lunch To</label>
+                                                    <input
+                                                        type="time"
+                                                        value={batch.lunchTo}
+                                                        onChange={(e) => handleBatchChange(index, 'lunchTo', e.target.value)}
+                                                        className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold"
+                                                    />
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-3 rounded-xl border border-slate-200/60">
+                                                <div>
+                                                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Required Daily Hours</label>
+                                                    <select
+                                                        value={batch.requiredWorkingHours}
+                                                        onChange={(e) => handleBatchChange(index, 'requiredWorkingHours', Number(e.target.value))}
+                                                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold"
+                                                    >
+                                                        {[...Array(16).keys()].map(i => (
+                                                            <option key={i + 4} value={i + 4}>{i + 4} Hours</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Allowed Free Lunch Time</label>
+                                                    <select
+                                                        value={batch.allowedFreeLunchHours}
+                                                        onChange={(e) => handleBatchChange(index, 'allowedFreeLunchHours', Number(e.target.value))}
+                                                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold"
+                                                    >
+                                                        <option value="0.5">0.5 Hours (30 mins)</option>
+                                                        <option value="1">1 Hour</option>
+                                                        <option value="1.5">1.5 Hours</option>
+                                                        <option value="2">2 Hours</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                    <CustomToggle
-                                        checked={settings.deductSalary}
-                                        onChange={() => handleInputChange({
-                                            target: {
-                                                name: 'deductSalary',
-                                                type: 'checkbox',
-                                                checked: !settings.deductSalary
-                                            }
-                                        })}
-                                    />
-                                </div>
+                                ))}
                             </div>
-                        </div>
-                    </Card>
+                        </section>
 
-                    {/* Holiday Settings */}
-                    <Card className="hover:shadow-lg transition-shadow duration-200">
-                        <div className="h-2 bg-gradient-to-r from-emerald-400 to-teal-400" />
-                        <div className="p-6">
-                            <h3 className="text-lg font-semibold mb-6 flex items-center text-gray-900">
-                                <div className="p-2 bg-emerald-100 rounded-lg mr-3">
-                                    <FiCalendar className="h-5 w-5 text-emerald-600" />
-                                </div>
-                                Holidays
-                            </h3>
-
-                            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        {/* SECTION 4: BREAK INTERVALS */}
+                        <section id="section-intervals" className="scroll-mt-36 lg:scroll-mt-36">
+                            <div className="mb-4 sm:mb-5 pb-3 border-b border-slate-100 flex items-center justify-between">
                                 <div>
-                                    <label className="text-sm font-medium text-gray-700">Manage Holidays</label>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        View and manage company holidays
+                                    <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                                        <FiSliders className="text-[#006666] h-4.5 w-4.5 sm:h-5 sm:w-5" />
+                                        Break Intervals
+                                    </h2>
+                                    <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
+                                        Configure daily interval breaks and work-during-break rules
                                     </p>
                                 </div>
-                                <Button
-                                    onClick={() => setIsHolidayModalOpen(true)}
-                                    variant="primary"
-                                    size="sm"
+                                <button
+                                    type="button"
+                                    onClick={handleAddInterval}
+                                    className="inline-flex items-center gap-1 px-2.5 sm:px-3.5 py-1.5 sm:py-2 bg-[#006666] text-white rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold hover:bg-[#004d4d] transition-all shadow-2xs active:scale-95"
                                 >
-                                    Open
-                                </Button>
-                            </div>
-                        </div>
-                    </Card>
-                </div>
-
-                {/* Location Settings */}
-                <Card className="mb-8 hover:shadow-lg transition-shadow duration-200">
-                    <div className="h-2 bg-gradient-to-r from-teal-400 to-cyan-400" />
-                    <div className="p-6">
-                        <h3 className="text-lg font-semibold mb-6 flex items-center text-gray-900">
-                            <div className="p-2 bg-teal-100 rounded-lg mr-3">
-                                <FiMapPin className="h-5 w-5 text-teal-600" />
-                            </div>
-                            Location Settings
-                        </h3>
-
-                        <div className="space-y-6">
-                            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                                <div>
-                                    <label className="text-sm font-medium text-gray-700">Enable Location Restriction</label>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Restrict attendance to a specific location
-                                    </p>
-                                </div>
-                                <CustomToggle
-                                    checked={settings.attendanceLocation.enabled}
-                                    onChange={() => handleLocationChange('enabled', !settings.attendanceLocation.enabled)}
-                                />
+                                    <FiPlus className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Add New Interval</span><span className="sm:hidden">Add</span>
+                                </button>
                             </div>
 
-                            {settings.attendanceLocation.enabled && (
-                                <>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div className="space-y-2">
-                                            <label className="block text-sm font-medium text-gray-700">
-                                                Latitude
-                                            </label>
-                                            <input
-                                                type="number"
-                                                step="any"
-                                                value={settings.attendanceLocation.latitude}
-                                                onChange={(e) => handleLocationChange('latitude', parseFloat(e.target.value) || 0)}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                            />
+                            <div className="space-y-3.5">
+                                {settings.intervals && settings.intervals.map((interval, index) => (
+                                    <div key={index} className="bg-slate-50/60 border border-slate-200/80 p-3.5 sm:p-4 rounded-xl sm:rounded-2xl">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <span className="text-xs font-bold text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-md">
+                                                Interval #{index + 1}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemoveInterval(index)}
+                                                className="text-rose-500 hover:text-rose-700 text-xs font-bold flex items-center gap-1 hover:underline"
+                                            >
+                                                <FiTrash2 className="h-3.5 w-3.5" /> Remove
+                                            </button>
                                         </div>
 
-                                        <div className="space-y-2">
-                                            <label className="block text-sm font-medium text-gray-700">
-                                                Longitude
-                                            </label>
-                                            <input
-                                                type="number"
-                                                step="any"
-                                                value={settings.attendanceLocation.longitude}
-                                                onChange={(e) => handleLocationChange('longitude', parseFloat(e.target.value) || 0)}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                            />
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+                                            <div>
+                                                <label className="block text-[11px] font-bold text-slate-700 mb-1">Interval Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={interval.intervalName}
+                                                    onChange={(e) => handleIntervalChange(index, 'intervalName', e.target.value)}
+                                                    className="w-full px-3 py-1.5 sm:py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                                                    placeholder="Enter interval name"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[11px] font-bold text-slate-700 mb-1">From</label>
+                                                <input
+                                                    type="time"
+                                                    value={interval.from}
+                                                    onChange={(e) => handleIntervalChange(index, 'from', e.target.value)}
+                                                    className="w-full px-2.5 py-1.5 sm:py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[11px] font-bold text-slate-700 mb-1">To</label>
+                                                <input
+                                                    type="time"
+                                                    value={interval.to}
+                                                    onChange={(e) => handleIntervalChange(index, 'to', e.target.value)}
+                                                    className="w-full px-2.5 py-1.5 sm:py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
+                                ))}
+                            </div>
+                        </section>
 
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            Radius (meters)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            min="10"
-                                            max="1000"
-                                            value={settings.attendanceLocation.radius}
-                                            onChange={(e) => handleLocationChange('radius', parseInt(e.target.value) || 100)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        {/* SECTION 5: LOCATION & GPS GEOFENCING */}
+                        <section id="section-location" className="scroll-mt-36 lg:scroll-mt-36">
+                            <div className="mb-4 sm:mb-5 pb-3 border-b border-slate-100">
+                                <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                                    <FiMapPin className="text-[#006666] h-4.5 w-4.5 sm:h-5 sm:w-5" />
+                                    Location & GPS Geofencing
+                                </h2>
+                                <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
+                                    Restrict attendance punch-in to specific geographical coordinates
+                                </p>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between gap-3 p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl min-w-0">
+                                    <div className="min-w-0 flex-1">
+                                        <label className="text-xs font-bold text-slate-900 block">Enable Geofencing Restriction</label>
+                                        <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 leading-tight">Workers must be physically located within office radius to mark attendance</p>
+                                    </div>
+                                    <div className="flex-shrink-0 shrink-0">
+                                        <CustomToggle
+                                            checked={settings.attendanceLocation.enabled}
+                                            onChange={() => handleLocationChange('enabled', !settings.attendanceLocation.enabled)}
                                         />
-                                        <p className="text-xs text-gray-500">
-                                            Workers must be within this radius to mark attendance (10-1000 meters)
-                                        </p>
                                     </div>
+                                </div>
 
-                                    <div className="pt-4">
-                                        <Button
-                                            onClick={handleCaptureLocation}
-                                            variant="secondary"
-                                            className="flex items-center"
-                                        >
-                                            <FiMapPin className="mr-2 h-4 w-4" />
-                                            Capture Current Location
-                                        </Button>
-                                        <p className="text-xs text-gray-500 mt-2">
-                                            Your browser will ask for location permission.{' '}
-                                            {currentLocation ? (
-                                                <span>
-                                                    Current location: {currentLocation.latitude.toFixed(6)}, {currentLocation.longitude.toFixed(6)}
-                                                    {currentLocation.accuracy && ` (±${Math.round(currentLocation.accuracy)}m)`}
-                                                </span>
-                                            ) : (
-                                                <span>
-                                                    Location set to: {settings.attendanceLocation.latitude.toFixed(6)}, {settings.attendanceLocation.longitude.toFixed(6)}
+                                {settings.attendanceLocation.enabled && (
+                                    <div className="space-y-3.5 bg-white p-3.5 sm:p-5 rounded-xl border border-slate-200/80">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-[11px] font-bold text-slate-700 mb-1">Latitude</label>
+                                                <input
+                                                    type="number"
+                                                    step="any"
+                                                    value={settings.attendanceLocation.latitude}
+                                                    onChange={(e) => handleLocationChange('latitude', parseFloat(e.target.value) || 0)}
+                                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[11px] font-bold text-slate-700 mb-1">Longitude</label>
+                                                <input
+                                                    type="number"
+                                                    step="any"
+                                                    value={settings.attendanceLocation.longitude}
+                                                    onChange={(e) => handleLocationChange('longitude', parseFloat(e.target.value) || 0)}
+                                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[11px] font-bold text-slate-700 mb-1">Allowed Radius (meters)</label>
+                                            <input
+                                                type="number"
+                                                min="10"
+                                                max="1000"
+                                                value={settings.attendanceLocation.radius}
+                                                onChange={(e) => handleLocationChange('radius', parseInt(e.target.value) || 100)}
+                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold"
+                                            />
+                                            <p className="text-[10px] text-slate-400 mt-1">Allowed range: 10 to 1000 meters</p>
+                                        </div>
+
+                                        <div className="pt-1 flex flex-col sm:flex-row items-start sm:items-center gap-2.5">
+                                            <button
+                                                type="button"
+                                                onClick={handleCaptureLocation}
+                                                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all shadow-2xs active:scale-95"
+                                            >
+                                                <FiMapPin className="h-3.5 w-3.5" /> Capture Current Location
+                                            </button>
+                                            {currentLocation && (
+                                                <span className="text-xs text-emerald-600 font-bold">
+                                                    Captured: {currentLocation.latitude.toFixed(5)}, {currentLocation.longitude.toFixed(5)}
                                                 </span>
                                             )}
-                                        </p>
+                                        </div>
                                     </div>
-
-                                    <div className="pt-2 bg-blue-50 p-3 rounded-lg">
-                                        <p className="text-xs text-blue-700">
-                                            <strong>Tip:</strong> Enable location restriction to ensure workers can only mark attendance when they are physically present at the designated location.
-                                        </p>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    </div>
-                </Card>
-
-                {/* Face Recognition Settings */}
-                <Card className="mb-8 hover:shadow-lg transition-shadow duration-200">
-                    <div className="h-2 bg-gradient-to-r from-blue-500 to-indigo-500" />
-                    <div className="p-6">
-                        <h3 className="text-lg font-semibold mb-6 flex items-center text-gray-900">
-                            <div className="p-2 bg-blue-100 rounded-lg mr-3">
-                                <FiUserCheck className="h-5 w-5 text-blue-600" />
+                                )}
                             </div>
-                            Face Recognition Configuration
-                        </h3>
-                        <p className="text-sm text-gray-600 mb-6">
-                            Configure client-side biometrics, matching thresholds, and detector options to optimize recognition speed and accuracy.
-                        </p>
+                        </section>
 
-                        <div className="space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <label className="block text-sm font-medium text-gray-700">
-                                        Detector Model
-                                    </label>
-                                    <select
-                                        value={settings.faceRecognition?.detectorType || 'tinyFaceDetector'}
-                                        onChange={(e) => handleFaceRecognitionChange('detectorType', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                    >
-                                        <option value="tinyFaceDetector">High Speed (Tiny Face Detector)</option>
-                                        <option value="ssdMobilenetv1">High Accuracy (SSD MobileNet V1)</option>
-                                    </select>
-                                    <p className="text-xs text-gray-500">
-                                        {settings.faceRecognition?.detectorType === 'ssdMobilenetv1'
-                                            ? 'Highly precise deep-learning model. Slower on low-end hardware.'
-                                            : 'Ultralight model (~190KB) optimized for real-time browser speed and low latency.'}
-                                    </p>
-                                </div>
+                        {/* SECTION 6: BIOMETRICS & FACE RECOGNITION */}
+                        <section id="section-face" className="scroll-mt-36 lg:scroll-mt-36">
+                            <div className="mb-4 sm:mb-5 pb-3 border-b border-slate-100">
+                                <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                                    <FiUserCheck className="text-[#006666] h-4.5 w-4.5 sm:h-5 sm:w-5" />
+                                    Biometrics & Face Recognition
+                                </h2>
+                                <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
+                                    Tune face detection models, recognition speed, and match distance thresholds
+                                </p>
+                            </div>
 
-                                <div className="space-y-2">
-                                    <label className="block text-sm font-medium text-gray-700 flex justify-between">
-                                        <span>Similarity Threshold</span>
-                                        <span className="font-mono text-blue-650 font-bold bg-blue-50 px-2 py-0.5 rounded text-xs">
-                                            {(settings.faceRecognition?.matchingThreshold ?? 0.50).toFixed(2)}
-                                        </span>
-                                    </label>
-                                    <div className="flex items-center space-x-4">
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                                    <div>
+                                        <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                                            Detector Model
+                                        </label>
+                                        <select
+                                            value={settings.faceRecognition?.detectorType || 'tinyFaceDetector'}
+                                            onChange={(e) => handleFaceRecognitionChange('detectorType', e.target.value)}
+                                            className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                        >
+                                            <option value="tinyFaceDetector">High Speed (Tiny Face Detector)</option>
+                                            <option value="ssdMobilenetv1">High Accuracy (SSD MobileNet V1)</option>
+                                        </select>
+                                        <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 font-normal">
+                                            {settings.faceRecognition?.detectorType === 'ssdMobilenetv1'
+                                                ? 'High precision deep-learning model for high accuracy requirements.'
+                                                : 'Ultralight model (~190KB) optimized for fast browser performance.'}
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <div className="flex justify-between items-center mb-1.5">
+                                            <label className="text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                                Similarity Threshold
+                                            </label>
+                                            <span className="font-mono text-[#006666] font-bold bg-[#006666]/10 px-2 py-0.5 rounded text-xs">
+                                                {(settings.faceRecognition?.matchingThreshold ?? 0.50).toFixed(2)}
+                                            </span>
+                                        </div>
                                         <input
                                             type="range"
                                             min="0.10"
@@ -1098,322 +1420,224 @@ const Settings = () => {
                                             step="0.05"
                                             value={settings.faceRecognition?.matchingThreshold ?? 0.50}
                                             onChange={(e) => handleFaceRecognitionChange('matchingThreshold', parseFloat(e.target.value))}
-                                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#006666]"
                                         />
+                                        <div className="flex justify-between text-[9px] sm:text-[10px] font-bold text-slate-400 mt-1">
+                                            <span>STRICT (0.10)</span>
+                                            <span className="text-[#006666]">OPTIMAL (0.50)</span>
+                                            <span>RELAXED (0.80)</span>
+                                        </div>
                                     </div>
-                                    <div className="flex justify-between text-[10px] font-bold text-gray-400">
-                                        <span>STRICT (0.10 - 0.35)</span>
-                                        <span className="text-blue-500">OPTIMAL (0.40 - 0.55)</span>
-                                        <span>RELAXED (0.60 - 0.80)</span>
-                                    </div>
-                                    <p className="text-xs text-gray-500">
-                                        Lower distance means higher strictness (fewer false positives, but more rejections under varying light). Default: 0.50.
-                                    </p>
                                 </div>
                             </div>
+                        </section>
 
-                            <div className="pt-2 bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start space-x-3">
-                                <FiInfo className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                                <div className="text-xs text-blue-800 space-y-1">
-                                    <p className="font-bold">ZKTeco Biometric Recommendations:</p>
-                                    <ul className="list-disc list-inside pl-1 space-y-0.5">
-                                        <li>Use <strong>High Speed</strong> for real-time office kiosks or entry gates to ensure lightning-fast processing.</li>
-                                        <li>Configure the threshold to <strong>0.50</strong> for the optimal balance between recognition rate and false matching protection.</li>
-                                        <li>Ensure workers register their faces from slightly different angles (left, right, tilt) to maximize coverage.</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </Card>
-
-                {/* Attendance Access Control Settings */}
-                <Card className="mb-8 hover:shadow-lg transition-shadow duration-200">
-                    <div className="h-2 bg-gradient-to-r from-pink-400 to-red-400" />
-                    <div className="p-6">
-                        <h3 className="text-lg font-semibold mb-6 flex items-center text-gray-900">
-                            <div className="p-2 bg-pink-100 rounded-lg mr-3">
-                                <FiToggleLeft className="h-5 w-5 text-pink-600" />
-                            </div>
-                            Attendance Access Control
-                        </h3>
-                        <p className="text-sm text-gray-600 mb-6">
-                            Control which attendance buttons are visible to Admins and Employees.
-                        </p>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <div className="space-y-4">
-                                <h4 className="text-md font-medium text-gray-800 border-b pb-2">Admin Attendance Page</h4>
-
-                                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                    <div>
-                                        <label className="text-sm font-medium text-gray-700">Show "+ Attendance" Button</label>
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            Controls visibility of manual attendance button for admins
-                                        </p>
-                                    </div>
-                                    <CustomToggle
-                                        checked={settings.attendanceAccessControl?.admin?.addAttendance ?? true}
-                                        onChange={() => handleAccessControlChange('admin', 'addAttendance', !(settings.attendanceAccessControl?.admin?.addAttendance ?? true))}
-                                    />
-                                </div>
-
-                                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                    <div>
-                                        <label className="text-sm font-medium text-gray-700">Show "Face Attendance" Button</label>
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            Controls visibility of face attendance button for admins
-                                        </p>
-                                    </div>
-                                    <CustomToggle
-                                        checked={settings.attendanceAccessControl?.admin?.faceAttendance ?? true}
-                                        onChange={() => handleAccessControlChange('admin', 'faceAttendance', !(settings.attendanceAccessControl?.admin?.faceAttendance ?? true))}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="space-y-4">
-                                <h4 className="text-md font-medium text-gray-800 border-b pb-2">Employee Dashboard</h4>
-
-                                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                    <div>
-                                        <label className="text-sm font-medium text-gray-700">Show "RFID Attendance"</label>
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            Controls visibility of RFID attendance card for employees
-                                        </p>
-                                    </div>
-                                    <CustomToggle
-                                        checked={settings.attendanceAccessControl?.employee?.rfidAttendance ?? true}
-                                        onChange={() => handleAccessControlChange('employee', 'rfidAttendance', !(settings.attendanceAccessControl?.employee?.rfidAttendance ?? true))}
-                                    />
-                                </div>
-
-                                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                    <div>
-                                        <label className="text-sm font-medium text-gray-700">Show "Face Attendance"</label>
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            Controls visibility of face attendance card for employees
-                                        </p>
-                                    </div>
-                                    <CustomToggle
-                                        checked={settings.attendanceAccessControl?.employee?.faceAttendance ?? true}
-                                        onChange={() => handleAccessControlChange('employee', 'faceAttendance', !(settings.attendanceAccessControl?.employee?.faceAttendance ?? true))}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </Card>
-
-                {/* Financial Settings */}
-                <Card className="mb-8 hover:shadow-lg transition-shadow duration-200">
-                    <div className="h-2 bg-gradient-to-r from-emerald-400 to-teal-400" />
-                    <div className="p-6">
-                        <h3 className="text-lg font-semibold mb-6 flex items-center text-gray-900">
-                            <div className="p-2 bg-emerald-100 rounded-lg mr-3">
-                                <FiDollarSign className="h-5 w-5 text-emerald-600" />
-                            </div>
-                            Financial Configuration
-                        </h3>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="space-y-2">
-                                <label className="block text-sm font-medium text-gray-700">
-                                    Permission Time (Minutes)
-                                </label>
-                                <input
-                                    type="number"
-                                    name="permissionTimeMinutes"
-                                    value={settings.permissionTimeMinutes}
-                                    onChange={handleInputChange}
-                                    min="0"
-                                    max="60"
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                />
-                                <p className="text-xs text-gray-500">
-                                    Default break permission time allowed per employee
+                        {/* SECTION 7: ACCESS CONTROL */}
+                        <section id="section-access" className="scroll-mt-36 lg:scroll-mt-36">
+                            <div className="mb-4 sm:mb-5 pb-3 border-b border-slate-100">
+                                <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                                    <FiToggleLeft className="text-[#006666] h-4.5 w-4.5 sm:h-5 sm:w-5" />
+                                    Attendance Access Controls
+                                </h2>
+                                <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
+                                    Toggle visibility of specific attendance action buttons for Admin and Employee roles
                                 </p>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="block text-sm font-medium text-gray-700">
-                                    Salary Deduction per Break (₹)
-                                </label>
-                                <input
-                                    type="number"
-                                    name="salaryDeductionPerBreak"
-                                    value={settings.salaryDeductionPerBreak}
-                                    onChange={handleInputChange}
-                                    min="0"
-                                    step="0.01"
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                />
-                                <p className="text-xs text-gray-500">
-                                    Amount deducted for each unauthorized break
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                                <div className="bg-slate-50/80 p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200/80 space-y-3 font-sans">
+                                    <h3 className="text-xs font-bold text-slate-900 pb-2 border-b border-slate-200">Admin Attendance Dashboard</h3>
+                                    <div className="flex items-center justify-between gap-3 min-w-0">
+                                        <div className="min-w-0 flex-1">
+                                            <label className="text-xs font-bold text-slate-800 block">Show "+ Attendance" Button</label>
+                                            <p className="text-[10px] text-slate-500 leading-tight">Allow manual attendance entry by admins</p>
+                                        </div>
+                                        <div className="flex-shrink-0 shrink-0">
+                                            <CustomToggle
+                                                checked={settings.attendanceAccessControl?.admin?.addAttendance ?? true}
+                                                onChange={() => handleAccessControlChange('admin', 'addAttendance', !(settings.attendanceAccessControl?.admin?.addAttendance ?? true))}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-3 pt-1 min-w-0">
+                                        <div className="min-w-0 flex-1">
+                                            <label className="text-xs font-bold text-slate-800 block">Show "Face Attendance" Button</label>
+                                            <p className="text-[10px] text-slate-500 leading-tight">Allow admin biometric face scanner launch</p>
+                                        </div>
+                                        <div className="flex-shrink-0 shrink-0">
+                                            <CustomToggle
+                                                checked={settings.attendanceAccessControl?.admin?.faceAttendance ?? true}
+                                                onChange={() => handleAccessControlChange('admin', 'faceAttendance', !(settings.attendanceAccessControl?.admin?.faceAttendance ?? true))}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-slate-50/80 p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200/80 space-y-3 font-sans">
+                                    <h3 className="text-xs font-bold text-slate-900 pb-2 border-b border-slate-200">Employee Dashboard</h3>
+                                    <div className="flex items-center justify-between gap-3 min-w-0">
+                                        <div className="min-w-0 flex-1">
+                                            <label className="text-xs font-bold text-slate-800 block">Show "RFID Attendance"</label>
+                                            <p className="text-[10px] text-slate-500 leading-tight">Enable RFID tap card access for workers</p>
+                                        </div>
+                                        <div className="flex-shrink-0 shrink-0">
+                                            <CustomToggle
+                                                checked={settings.attendanceAccessControl?.employee?.rfidAttendance ?? true}
+                                                onChange={() => handleAccessControlChange('employee', 'rfidAttendance', !(settings.attendanceAccessControl?.employee?.rfidAttendance ?? true))}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-3 pt-1 min-w-0">
+                                        <div className="min-w-0 flex-1">
+                                            <label className="text-xs font-bold text-slate-800 block">Show "Face Attendance"</label>
+                                            <p className="text-[10px] text-slate-500 leading-tight">Enable self-serve face punch-in for workers</p>
+                                        </div>
+                                        <div className="flex-shrink-0 shrink-0">
+                                            <CustomToggle
+                                                checked={settings.attendanceAccessControl?.employee?.faceAttendance ?? true}
+                                                onChange={() => handleAccessControlChange('employee', 'faceAttendance', !(settings.attendanceAccessControl?.employee?.faceAttendance ?? true))}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* SECTION 8: WHATSAPP SLA FINE */}
+                        <section id="section-whatsapp" className="scroll-mt-36 lg:scroll-mt-36">
+                            <div className="mb-4 sm:mb-5 pb-3 border-b border-slate-100">
+                                <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                                    <FiMessageCircle className="text-[#006666] h-4.5 w-4.5 sm:h-5 sm:w-5" />
+                                    Unread WhatsApp Message Fine SLA
+                                </h2>
+                                <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
+                                    Automatically fine assigned staff when a customer WhatsApp message remains unread beyond the SLA window
                                 </p>
                             </div>
-                        </div>
-                    </div>
-                </Card>
 
-                {/* Unread WhatsApp Message Fine Configuration */}
-                <Card className="mb-8 hover:shadow-lg transition-shadow duration-200">
-                    <div className="h-2 bg-gradient-to-r from-rose-400 to-orange-400" />
-                    <div className="p-6">
-                        <h3 className="text-lg font-semibold mb-2 flex items-center text-gray-900">
-                            <div className="p-2 bg-rose-100 rounded-lg mr-3">
-                                <FiMessageCircle className="h-5 w-5 text-rose-600" />
-                            </div>
-                            Unread WhatsApp Message Fine
-                        </h3>
-                        <p className="text-sm text-gray-600 mb-6">
-                            Automatically fine a staff member's salary when a customer's WhatsApp message stays unread past the SLA window. Synced hourly from GoWhats.
-                        </p>
-
-                        <div className="space-y-6">
-                            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                                <div>
-                                    <label className="text-sm font-medium text-gray-700">Enable Unread Message Fine</label>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Turn this SLA penalty on or off for your company
-                                    </p>
-                                </div>
-                                <CustomToggle
-                                    checked={settings.unreadMessageFineConfig?.enabled ?? false}
-                                    onChange={() => handleUnreadFineChange('enabled', !(settings.unreadMessageFineConfig?.enabled ?? false))}
-                                />
-                            </div>
-
-                            {settings.unreadMessageFineConfig?.enabled && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            Fine Amount per Message (₹)
-                                        </label>
-                                        <input
-                                            type="text"
-                                            min="0"
-                                            step="1"
-                                            value={settings.unreadMessageFineConfig?.amountPerMessage ?? 0}
-                                            onChange={(e) => handleUnreadFineChange('amountPerMessage', parseFloat(e.target.value) || 0)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-rose-500 focus:border-rose-500"
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between gap-3 p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl min-w-0">
+                                    <div className="min-w-0 flex-1">
+                                        <label className="text-xs font-bold text-slate-900 block">Enable Unread Message Fine</label>
+                                        <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 leading-tight">Enforce SLA penalties for unreplied customer conversations</p>
+                                    </div>
+                                    <div className="flex-shrink-0 shrink-0">
+                                        <CustomToggle
+                                            checked={settings.unreadMessageFineConfig?.enabled ?? false}
+                                            onChange={() => handleUnreadFineChange('enabled', !(settings.unreadMessageFineConfig?.enabled ?? false))}
                                         />
-                                        <p className="text-xs text-gray-500">
-                                            Deducted from the assigned staff's salary for each overdue unread chat
+                                    </div>
+                                </div>
+
+                                {settings.unreadMessageFineConfig?.enabled && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200/80">
+                                        <div>
+                                            <label className="block text-[11px] sm:text-xs font-bold text-slate-700 tracking-wider mb-1.5 uppercase">
+                                                Fine Amount per Message (₹)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="1"
+                                                value={settings.unreadMessageFineConfig?.amountPerMessage ?? 0}
+                                                onChange={(e) => handleUnreadFineChange('amountPerMessage', parseFloat(e.target.value) || 0)}
+                                                className="w-full px-3.5 py-2 sm:py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                            />
+                                            <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1">Deducted per unread chat assigned to staff</p>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[11px] sm:text-xs font-bold text-slate-700 tracking-wider mb-1.5 uppercase">
+                                                SLA Threshold (Hours)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                value={settings.unreadMessageFineConfig?.thresholdHours ?? 24}
+                                                onChange={(e) => handleUnreadFineChange('thresholdHours', parseInt(e.target.value) || 1)}
+                                                className="w-full px-3.5 py-2 sm:py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                            />
+                                            <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1">Hours before unread chat triggers fine penalty</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+
+                        {/* SECTION 9: ADVANCED LEAVE DEDUCTION & PAID LEAVE SYSTEM */}
+                        <section id="section-advanced" className="scroll-mt-36 lg:scroll-mt-36">
+                            <div className="mb-4 sm:mb-5 pb-3 border-b border-slate-100">
+                                <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                                    <FiActivity className="text-rose-500 h-4.5 w-4.5 sm:h-5 sm:w-5" />
+                                    Advanced Leave Deduction System
+                                </h2>
+                                <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
+                                    Configure daily salary penalty multipliers for unapproved leave violations, permission penalties, and paid leave rules
+                                </p>
+                            </div>
+
+                            {/* Penalty Multiplier Banner */}
+                            <div className="bg-rose-50/50 border border-rose-100 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 mb-5 sm:mb-6">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div>
+                                        <h3 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                                            <FiActivity className="text-rose-500 h-4 w-4" />
+                                            Penalty Multiplier Configuration
+                                        </h3>
+                                        <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5">
+                                            Define how many times the daily salary should be deducted when an employee violates the leave policies below.
                                         </p>
                                     </div>
-
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            Unread Threshold (Hours)
-                                        </label>
+                                    <div className="flex items-center gap-2 bg-white px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-xl border border-rose-200 shadow-2xs self-start sm:self-center">
+                                        <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">Factor</span>
                                         <input
                                             type="number"
                                             min="1"
-                                            value={settings.unreadMessageFineConfig?.thresholdHours ?? 24}
-                                            onChange={(e) => handleUnreadFineChange('thresholdHours', parseInt(e.target.value) || 1)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-rose-500 focus:border-rose-500"
-                                        />
-                                        <p className="text-xs text-gray-500">
-                                            How long a chat can sit unread before the fine is applied
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-
-                            {settings.unreadMessageFineConfig?.enabled && (
-                                <div className="bg-rose-50 border border-rose-100 rounded-lg p-3">
-                                    <p className="text-xs text-rose-700">
-                                        Each unread customer chat assigned to a staff member, left unread for more than{' '}
-                                        <strong>{settings.unreadMessageFineConfig?.thresholdHours ?? 24} hours</strong>, results in a{' '}
-                                        <strong>₹{settings.unreadMessageFineConfig?.amountPerMessage ?? 0}</strong> fine on that staff member's salary. A chat is only fined once per overdue message.
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </Card>
-
-                {/* Advanced Leave Deduction Settings */}
-                <Card className="mb-8 hover:shadow-lg transition-shadow duration-200">
-                    <div className="h-2 bg-gradient-to-r from-red-400 to-orange-400" />
-                    <div className="p-6">
-                        <div className="flex items-center justify-between mb-8">
-                            <h3 className="text-lg font-semibold flex items-center text-gray-900">
-                                <div className="p-2 bg-red-100 rounded-lg mr-3">
-                                    <FiDollarSign className="h-5 w-5 text-red-600" />
-                                </div>
-                                Advanced Leave Deduction System
-                            </h3>
-                        </div>
-
-                        <div className="mb-8 p-6 bg-red-50/30 rounded-2xl border-2 border-dashed border-red-100">
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                <div>
-                                    <h4 className="text-lg font-bold text-gray-800 flex items-center">
-                                        <FiActivity className="mr-2 text-red-500" />
-                                        Penalty Multiplier Configuration
-                                    </h4>
-                                    <p className="text-sm text-gray-600 mt-1">
-                                        Define how many times the daily salary should be deducted when an employee violates the leave policies below.
-                                    </p>
-                                </div>
-                                <div className="flex items-center bg-white p-2 rounded-xl border border-red-200 shadow-sm self-start md:self-center">
-                                    <span className="px-3 text-sm font-bold text-gray-500 tracking-wider">Factor</span>
-                                    <div className="relative">
-                                        <input
-                                            type="text"
-                                            inputMode="numeric"
                                             value={settings.advancedLeaveDeduction.deductionMultiplier}
-                                            onChange={(e) => {
-                                                const val = e.target.value.replace(/\D/g, '');
-                                                handleAdvancedSettingsChange('deductionMultiplier', val === '' ? '' : parseInt(val));
-                                            }}
-                                            onBlur={(e) => {
-                                                if (e.target.value === '' || parseInt(e.target.value) < 1) {
-                                                    handleAdvancedSettingsChange('deductionMultiplier', 1);
-                                                }
-                                            }}
-                                            className="w-24 px-4 py-2 bg-red-50 border-none rounded-lg focus:ring-2 focus:ring-red-500 font-black text-2xl text-red-700 text-center"
+                                            onChange={(e) => handleAdvancedSettingsChange('deductionMultiplier', parseInt(e.target.value) || 1)}
+                                            className="w-12 sm:w-14 text-center font-black text-base sm:text-lg text-rose-600 border-none bg-transparent focus:ring-0"
                                         />
-                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xl font-black text-red-400 pointer-events-none">X</span>
+                                        <span className="font-black text-base sm:text-lg text-rose-500">X</span>
                                     </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <div className="space-y-6">
-                                <div className="bg-gray-50 p-6 rounded-xl border border-gray-100 h-full">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <h4 className="font-bold text-gray-800">Attendance Penalty Policy</h4>
-                                        <CustomToggle
-                                            checked={settings.advancedLeaveDeduction.attendanceRuleEnabled}
-                                            onChange={() => handleAdvancedSettingsChange('attendanceRuleEnabled', !settings.advancedLeaveDeduction.attendanceRuleEnabled)}
-                                        />
-                                    </div>
-                                    <p className="text-sm text-gray-500 mb-6">
-                                        Apply {settings.advancedLeaveDeduction.deductionMultiplier}X deduction ({settings.advancedLeaveDeduction.deductionMultiplier} days salary for 1 day leave) if attendance falls below thresholds.
-                                    </p>
+                            {/* 4 Policy Cards Grid */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5 sm:gap-4 mb-5 sm:mb-6">
 
-                                    {settings.advancedLeaveDeduction.attendanceRuleEnabled && (
-                                        <div className="space-y-6 pt-6 border-t border-gray-200">
-                                            {[
-                                                { label: 'Company (%)', key: 'company' },
-                                                { label: 'Dept (%)', key: 'department' },
-                                                { label: 'Employee (%)', key: 'employee' }
-                                            ].map((item) => (
-                                                <div key={item.key} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-lg shadow-sm">
-                                                    <div className="flex items-center">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={settings.advancedLeaveDeduction.thresholds[item.key].enabled}
-                                                            onChange={(e) => handleAdvancedSettingsChange(null, e.target.checked, item.key, 'enabled')}
-                                                            className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded mr-3"
-                                                        />
-                                                        <label className="text-sm font-bold text-gray-700">{item.label}</label>
-                                                    </div>
-                                                    <div className="w-24">
+                                {/* CARD 1: Attendance Penalty Policy */}
+                                <div className="bg-slate-50/60 border border-slate-200/80 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between hover:border-slate-300 transition-all min-w-0">
+                                    <div>
+                                        <div className="flex items-center justify-between gap-2 mb-2 sm:mb-2.5">
+                                            <h3 className="text-xs font-bold text-slate-900 truncate">Attendance Penalty Policy</h3>
+                                            <div className="flex-shrink-0 shrink-0">
+                                                <CustomToggle
+                                                    checked={settings.advancedLeaveDeduction.attendanceRuleEnabled}
+                                                    onChange={() => handleAdvancedSettingsChange('attendanceRuleEnabled', !settings.advancedLeaveDeduction.attendanceRuleEnabled)}
+                                                />
+                                            </div>
+                                        </div>
+                                        <p className="text-[10px] sm:text-[11px] text-slate-500 mb-2.5 sm:mb-3 leading-relaxed">
+                                            Apply {settings.advancedLeaveDeduction.deductionMultiplier}X deduction if attendance falls below thresholds.
+                                        </p>
+
+                                        {settings.advancedLeaveDeduction.attendanceRuleEnabled && (
+                                            <div className="space-y-2 pt-2.5 border-t border-slate-200/60">
+                                                {[
+                                                    { label: 'Company (%)', key: 'company' },
+                                                    { label: 'Dept (%)', key: 'department' },
+                                                    { label: 'Employee (%)', key: 'employee' }
+                                                ].map((item) => (
+                                                    <div key={item.key} className="flex items-center justify-between p-1.5 bg-white border border-slate-200/60 rounded-lg shadow-2xs">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={settings.advancedLeaveDeduction.thresholds[item.key].enabled}
+                                                                onChange={(e) => handleAdvancedSettingsChange(null, e.target.checked, item.key, 'enabled')}
+                                                                className="h-3.5 w-3.5 text-[#006666] focus:ring-[#006666] border-slate-300 rounded"
+                                                            />
+                                                            <label className="text-[10px] sm:text-[11px] font-bold text-slate-700">{item.label}</label>
+                                                        </div>
                                                         <input
                                                             type="number"
                                                             min="0"
@@ -1421,640 +1645,352 @@ const Settings = () => {
                                                             disabled={!settings.advancedLeaveDeduction.thresholds[item.key].enabled}
                                                             value={settings.advancedLeaveDeduction.thresholds[item.key].value}
                                                             onChange={(e) => handleAdvancedSettingsChange(null, parseInt(e.target.value) || 0, item.key, 'value')}
-                                                            className={`w-full px-3 py-1.5 border rounded-lg focus:ring-red-500 focus:border-red-500 transition-all font-medium text-gray-700 text-center ${!settings.advancedLeaveDeduction.thresholds[item.key].enabled ? 'bg-gray-100 text-gray-400' : 'bg-white'}`}
+                                                            className="w-12 sm:w-14 px-1.5 sm:px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-md text-xs font-bold text-center focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
                                                         />
                                                     </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="space-y-6">
-                                <div className="bg-gray-50 p-6 rounded-xl border border-gray-100 h-full">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <h4 className="font-bold text-gray-800">Monthly Limit Policy</h4>
-                                        <CustomToggle
-                                            checked={settings.advancedLeaveDeduction.monthlyLimitRuleEnabled}
-                                            onChange={() => handleAdvancedSettingsChange('monthlyLimitRuleEnabled', !settings.advancedLeaveDeduction.monthlyLimitRuleEnabled)}
-                                        />
-                                    </div>
-                                    <p className="text-sm text-gray-500 mb-6">
-                                        Penalty of {settings.advancedLeaveDeduction.deductionMultiplier}X deduction applies once an employee exceeds their monthly leave limit.
-                                    </p>
-
-                                    {settings.advancedLeaveDeduction.monthlyLimitRuleEnabled && (
-                                        <div className="pt-4 border-t border-gray-200 space-y-6">
-                                            <div className="flex items-center">
-                                                <div className="flex-grow">
-                                                    <label className="block text-xs font-bold text-gray-600 mb-2">Monthly Limit (Days)</label>
-                                                    <div className="flex items-center">
-                                                        <input
-                                                            type="number"
-                                                            min="1"
-                                                            value={settings.advancedLeaveDeduction.monthlyLimit}
-                                                            onChange={(e) => handleAdvancedSettingsChange('monthlyLimit', parseInt(e.target.value))}
-                                                            className="w-32 px-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 transition-all font-medium text-gray-700"
-                                                        />
-                                                        <span className="ml-3 text-sm text-gray-600 font-medium">days / month</span>
-                                                    </div>
-                                                </div>
-                                                <div className="flex-shrink-0 bg-red-100 p-3 rounded-full">
-                                                    <FiClock className="text-red-600 h-6 w-6" />
-                                                </div>
+                                                ))}
                                             </div>
+                                        )}
+                                    </div>
+                                </div>
 
-                                            <div className="flex items-center justify-between p-3 bg-white border border-red-100 rounded-lg shadow-sm">
-                                                <div>
-                                                    <label className="text-sm font-bold text-gray-700">Include Permission in Penalty</label>
-                                                    <p className="text-xs text-gray-500 mt-1">
-                                                        Apply {settings.advancedLeaveDeduction.deductionMultiplier}X penalty to permission/late time if limit is exceeded.
-                                                    </p>
-                                                </div>
+                                {/* CARD 2: Monthly Limit Policy */}
+                                <div className="bg-slate-50/60 border border-slate-200/80 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between hover:border-slate-300 transition-all min-w-0">
+                                    <div>
+                                        <div className="flex items-center justify-between gap-2 mb-2 sm:mb-2.5">
+                                            <h3 className="text-xs font-bold text-slate-900 truncate">Monthly Limit Policy</h3>
+                                            <div className="flex-shrink-0 shrink-0">
                                                 <CustomToggle
-                                                    checked={settings.includePermission}
-                                                    onChange={() => handleInputChange({
-                                                        target: {
-                                                            name: 'includePermission',
-                                                            type: 'checkbox',
-                                                            checked: !settings.includePermission
-                                                        }
-                                                    })}
+                                                    checked={settings.advancedLeaveDeduction.monthlyLimitRuleEnabled}
+                                                    onChange={() => handleAdvancedSettingsChange('monthlyLimitRuleEnabled', !settings.advancedLeaveDeduction.monthlyLimitRuleEnabled)}
                                                 />
                                             </div>
                                         </div>
-                                    )}
-                                </div>
-                            </div>
+                                        <p className="text-[10px] sm:text-[11px] text-slate-500 mb-2.5 sm:mb-3 leading-relaxed">
+                                            Penalty of {settings.advancedLeaveDeduction.deductionMultiplier}X deduction applies once employee exceeds monthly limit.
+                                        </p>
 
-                            <div className="space-y-6">
-                                <div className="bg-gray-50 p-6 rounded-xl border border-gray-100 h-full flex flex-col justify-between animate-fadeIn">
+                                        {settings.advancedLeaveDeduction.monthlyLimitRuleEnabled && (
+                                            <div className="space-y-2.5 pt-2.5 border-t border-slate-200/60">
+                                                <div>
+                                                    <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 mb-1">Monthly Limit (Days)</label>
+                                                    <div className="relative flex items-center">
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            value={settings.advancedLeaveDeduction.monthlyLimit}
+                                                            onChange={(e) => handleAdvancedSettingsChange('monthlyLimit', parseInt(e.target.value) || 0)}
+                                                            className="w-full pl-3 pr-16 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                        />
+                                                        <span className="absolute right-2.5 text-[10px] text-slate-400 font-semibold pointer-events-none">
+                                                            days/mo
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="p-2 bg-white border border-slate-200/60 rounded-lg space-y-0.5">
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <label className="text-[10px] font-bold text-slate-800">Include Permission</label>
+                                                        <div className="flex-shrink-0 shrink-0">
+                                                            <CustomToggle
+                                                                checked={settings.advancedLeaveDeduction.enableUnauthorizedPermissionPenalty ?? settings.includePermission ?? false}
+                                                                onChange={() => {
+                                                                    const newVal = !(settings.advancedLeaveDeduction.enableUnauthorizedPermissionPenalty ?? settings.includePermission ?? false);
+                                                                    handleAdvancedSettingsChange('enableUnauthorizedPermissionPenalty', newVal);
+                                                                    handleInputChange({ target: { name: 'includePermission', type: 'checkbox', checked: newVal } });
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <p className="text-[9px] text-slate-500">Apply {settings.advancedLeaveDeduction.deductionMultiplier}X penalty to permission/late time.</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* CARD 3: 5X Unauthorized Absence Policy */}
+                                <div className="bg-slate-50/60 border border-slate-200/80 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between hover:border-slate-300 transition-all min-w-0">
                                     <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <h4 className="font-bold text-gray-800">5X Unauthorized Absence Policy</h4>
-                                            <CustomToggle
-                                                checked={settings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty}
-                                                onChange={() => handleAdvancedSettingsChange('enableUnauthorizedLeavePenalty', !settings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty)}
-                                            />
+                                        <div className="flex items-center justify-between gap-2 mb-2 sm:mb-2.5">
+                                            <h3 className="text-xs font-bold text-slate-900 truncate">5X Absence Policy</h3>
+                                            <div className="flex-shrink-0 shrink-0">
+                                                <CustomToggle
+                                                    checked={settings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty}
+                                                    onChange={() => handleAdvancedSettingsChange('enableUnauthorizedLeavePenalty', !settings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty)}
+                                                />
+                                            </div>
                                         </div>
-                                        <p className="text-sm text-gray-500 mb-4">
-                                            Apply 5X daily basic pay deduction for past absent days with rejected leave requests or no leave requests submitted.
+                                        <p className="text-[10px] sm:text-[11px] text-slate-500 mb-2.5 sm:mb-3 leading-relaxed">
+                                            Apply 5X daily basic pay deduction for past absent days with rejected or missing leave requests.
                                         </p>
                                     </div>
-                                    <div className="pt-4 border-t border-gray-200 mt-auto flex items-center gap-2">
-                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black tracking-wider transition-colors duration-300 ${settings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
+
+                                    <div className="pt-2.5 border-t border-slate-200/60 flex items-center justify-between">
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${settings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-600'}`}>
                                             {settings.advancedLeaveDeduction.enableUnauthorizedLeavePenalty ? 'Enabled (5X)' : 'Disabled'}
                                         </span>
-                                        <span className="text-[10px] text-gray-400 font-bold tracking-wider">
-                                            Pending leaves are safe
-                                        </span>
+                                        <span className="text-[10px] text-slate-400 font-medium">Pending safe</span>
                                     </div>
                                 </div>
 
-                                <div className="bg-gray-50 p-6 rounded-xl border border-gray-100 h-full flex flex-col justify-between animate-fadeIn">
+                                {/* CARD 4: 5X Unauthorized Permission Policy */}
+                                <div className="bg-slate-50/60 border border-slate-200/80 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between hover:border-slate-300 transition-all min-w-0">
                                     <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <h4 className="font-bold text-gray-800">5X Unauthorized Permission Policy</h4>
-                                            <CustomToggle
-                                                checked={settings.advancedLeaveDeduction.enableUnauthorizedPermissionPenalty}
-                                                onChange={() => handleAdvancedSettingsChange('enableUnauthorizedPermissionPenalty', !settings.advancedLeaveDeduction.enableUnauthorizedPermissionPenalty)}
-                                            />
+                                        <div className="flex items-center justify-between gap-2 mb-2 sm:mb-2.5">
+                                            <h3 className="text-xs font-bold text-slate-900 truncate">5X Permission Policy</h3>
+                                            <div className="flex-shrink-0 shrink-0">
+                                                <CustomToggle
+                                                    checked={settings.advancedLeaveDeduction.enableUnauthorizedPermissionPenalty}
+                                                    onChange={() => handleAdvancedSettingsChange('enableUnauthorizedPermissionPenalty', !settings.advancedLeaveDeduction.enableUnauthorizedPermissionPenalty)}
+                                                />
+                                            </div>
                                         </div>
-                                        <p className="text-sm text-gray-500 mb-4">
+                                        <p className="text-[10px] sm:text-[11px] text-slate-500 mb-2.5 sm:mb-3 leading-relaxed">
                                             Apply 5X daily basic pay deduction for past days with unapproved (pending or rejected) leave permissions.
                                         </p>
                                     </div>
-                                    <div className="pt-4 border-t border-gray-200 mt-auto flex items-center gap-2">
-                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black tracking-wider transition-colors duration-300 ${settings.advancedLeaveDeduction.enableUnauthorizedPermissionPenalty ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
+
+                                    <div className="pt-2.5 border-t border-slate-200/60 flex items-center justify-between">
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${settings.advancedLeaveDeduction.enableUnauthorizedPermissionPenalty ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-600'}`}>
                                             {settings.advancedLeaveDeduction.enableUnauthorizedPermissionPenalty ? 'Enabled (5X)' : 'Disabled'}
                                         </span>
-                                        <span className="text-[10px] text-gray-400 font-bold tracking-wider">
-                                            Applied to unapproved permission hours
-                                        </span>
+                                        <span className="text-[10px] text-slate-400 font-medium">Permission hours</span>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
 
-                        <div className="mt-8 p-4 bg-blue-50 border border-blue-100 rounded-lg flex items-start">
-                            <FiAlertTriangle className="text-blue-500 h-5 w-5 mr-3 mt-0.5" />
-                            <div className="text-xs text-blue-700 font-medium leading-relaxed">
-                                <p className="font-bold mb-1">How Deduction Factor Works:</p>
-                                <ul className="list-disc ml-4 space-y-1">
-                                    <li>When enabled, system evaluates BOTH attendance and limits.</li>
-                                    <li>If ANY condition fails (e.g. low dept attendance OR limit exceeded), <strong>{settings.advancedLeaveDeduction.deductionMultiplier}X deduction factor</strong> is recorded for that specific leave request.</li>
-                                    <li>If <strong>Include Permission in Penalty</strong> is on, the multiplier applies to late arrival/early departure time as well.</li>
-                                    <li>If <strong>5X Unauthorized Absence Policy</strong> is enabled, unapproved or rejected leave/absence results in a 5X daily basic pay penalty.</li>
-                                    <li>If <strong>5X Unauthorized Permission Policy</strong> is enabled, unapproved or rejected permission hours result in a 5X daily basic pay penalty for that duration.</li>
-                                </ul>
                             </div>
-                        </div>
-                    </div>
-                </Card>
 
-                {/* Paid Leave Configuration */}
-                <Card className="mb-8 hover:shadow-lg transition-shadow duration-200">
-                    <div className="h-2 bg-gradient-to-r from-emerald-400 to-teal-400" />
-                    <div className="p-6">
-                        <h3 className="text-lg font-semibold mb-6 flex items-center text-gray-900">
-                            <div className="p-2 bg-emerald-100 rounded-lg mr-3">
-                                <FiUserCheck className="h-5 w-5 text-emerald-600" />
-                            </div>
-                            Paid Leave Configuration
-                        </h3>
-
-                        <div className="space-y-6">
-                            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                                <div>
-                                    <label className="text-sm font-medium text-gray-700">Enable Paid Leave</label>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Allow employees to apply for paid leaves
-                                    </p>
+                            {/* How Deduction Factor Works Info Box */}
+                            <div className="bg-sky-50/80 border border-sky-100 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 mb-5 sm:mb-6 flex items-start gap-2.5">
+                                <FiInfo className="text-sky-600 h-4 w-4 mt-0.5 flex-shrink-0" />
+                                <div className="text-[10px] sm:text-[11px] text-sky-800 space-y-1">
+                                    <h4 className="font-bold text-sky-900">How Deduction Factor Works:</h4>
+                                    <ul className="list-disc list-inside space-y-0.5 text-sky-700 font-medium">
+                                        <li>When enabled, system evaluates BOTH attendance and limits.</li>
+                                        <li>If ANY condition fails (e.g. low dept attendance OR limit exceeded), <strong>{settings.advancedLeaveDeduction.deductionMultiplier}X deduction factor</strong> is recorded for that specific leave request.</li>
+                                        <li>If <strong>Include Permission in Penalty</strong> is on, the multiplier applies to late arrival/early departure time as well.</li>
+                                        <li>If <strong>5X Unauthorized Absence Policy</strong> is enabled, unapproved or rejected leave/absence results in a 5X daily basic pay penalty.</li>
+                                        <li>If <strong>5X Unauthorized Permission Policy</strong> is enabled, unapproved or rejected permission hours result in a 5X daily basic pay penalty for that duration.</li>
+                                    </ul>
                                 </div>
-                                <CustomToggle
-                                    checked={settings.paidLeaveConfig?.enabled}
-                                    onChange={() => handlePaidLeaveConfigChange('enabled', !settings.paidLeaveConfig?.enabled)}
-                                />
                             </div>
 
-                            {settings.paidLeaveConfig?.enabled && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm transition-all hover:border-emerald-200">
-                                        <label className="block text-xs font-black text-gray-500 mb-2 tracking-widest">
-                                            Monthly Limit
-                                        </label>
-                                        <div className="flex items-center">
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                max="31"
-                                                value={settings.paidLeaveConfig?.leavesPerMonth}
-                                                onChange={(e) => handlePaidLeaveConfigChange('leavesPerMonth', parseInt(e.target.value) || 0)}
-                                                className="block w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm font-bold text-gray-900"
-                                            />
-                                            <span className="ml-3 text-sm text-gray-500 font-black tracking-wider">Days</span>
-                                        </div>
-                                        <p className="mt-3 text-[10px] text-gray-400 font-medium leading-tight">
-                                            Max paid leaves per employee / month
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </Card>
-
-                {/* Work Schedule Configuration */}
-                <div className="mb-8">
-                    <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-                        <FiClock className="mr-2 text-gray-600" />
-                        Work Schedule Configuration
-                    </h2>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Batches Configuration */}
-                        <Card className="hover:shadow-lg transition-shadow duration-200">
-                            <div className="h-2 bg-gradient-to-r from-blue-400 to-indigo-400" />
-                            <div className="p-6">
-                                <div className="flex items-center justify-between mb-6">
-                                    <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                                        <div className="p-2 bg-blue-100 rounded-lg mr-3">
-                                            <FiUser className="h-5 w-5 text-blue-600" />
-                                        </div>
-                                        Work Batches
+                            {/* Paid Leave Configuration Section */}
+                            <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden pt-0.5">
+                                <div className="h-1.5 bg-gradient-to-r from-[#006666] to-teal-400" />
+                                <div className="p-4 sm:p-5">
+                                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-2 mb-3">
+                                        <FiCalendar className="text-[#006666] h-4 w-4" />
+                                        Paid Leave Configuration
                                     </h3>
-                                </div>
-                                {settings.batches && settings.batches.map((batch, index) => (
-                                    <div key={index} className="batch-item border p-4 mb-4 rounded">
-                                        <div className="flex justify-between items-center mb-3">
-                                            <h4 className="font-semibold">Batch {index + 1}</h4>
-                                            <button
-                                                onClick={() => handleRemoveBatch(index)}
-                                                className="text-red-500 hover:text-red-700"
-                                            >
-                                                Remove
-                                            </button>
-                                        </div>
-                                        <div className="mb-3">
-                                            <label className="block text-sm font-medium mb-1">Batch Name</label>
-                                            <input
-                                                type="text"
-                                                value={batch.batchName}
-                                                onChange={(e) => handleBatchChange(index, 'batchName', e.target.value)}
-                                                className="w-full p-2 border rounded"
-                                                placeholder="Enter batch name"
-                                            />
-                                        </div>
-                                        <div className="flex items-center justify-between mb-4 border-b pb-4">
-                                            <div>
-                                                <label className="block text-sm font-medium">Factory Worker</label>
-                                                <p className="text-xs text-gray-500">Enable flexible lunch tracking based on required hours</p>
+                                    <div className="space-y-3.5">
+                                        <div className="flex items-center justify-between gap-3 p-3 bg-slate-50 border border-slate-200/80 rounded-xl min-w-0">
+                                            <div className="min-w-0 flex-1">
+                                                <label className="text-xs font-bold text-slate-900 block">Enable Paid Leave</label>
+                                                <p className="text-[10px] text-slate-500 leading-tight">Allow employees to apply for paid leave allocation</p>
                                             </div>
-                                            <label className="switch">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={batch.isFactoryWorkerToggle}
-                                                    onChange={(e) => handleBatchChange(index, 'isFactoryWorkerToggle', e.target.checked)}
+                                            <div className="flex-shrink-0 shrink-0">
+                                                <CustomToggle
+                                                    checked={settings.paidLeaveConfig?.enabled ?? false}
+                                                    onChange={() => handlePaidLeaveConfigChange('enabled', !(settings.paidLeaveConfig?.enabled ?? false))}
                                                 />
-                                                <span className="slider round"></span>
-                                            </label>
+                                            </div>
                                         </div>
 
-                                        {!batch.isFactoryWorkerToggle ? (
-                                            <>
-                                                <div className="grid grid-cols-2 gap-4 mb-3">
-                                                    <div>
-                                                        <label className="block text-sm font-medium mb-1">From</label>
-                                                        <input
-                                                            type="time"
-                                                            value={batch.from}
-                                                            onChange={(e) => handleBatchChange(index, 'from', e.target.value)}
-                                                            className="w-full p-2 border rounded"
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-sm font-medium mb-1">To</label>
-                                                        <input
-                                                            type="time"
-                                                            value={batch.to}
-                                                            onChange={(e) => handleBatchChange(index, 'to', e.target.value)}
-                                                            className="w-full p-2 border rounded"
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-4 mb-3">
-                                                    <div>
-                                                        <label className="block text-sm font-medium mb-1">Lunch From</label>
-                                                        <input
-                                                            type="time"
-                                                            value={batch.lunchFrom}
-                                                            onChange={(e) => handleBatchChange(index, 'lunchFrom', e.target.value)}
-                                                            className="w-full p-2 border rounded"
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-sm font-medium mb-1">Lunch To</label>
-                                                        <input
-                                                            type="time"
-                                                            value={batch.lunchTo}
-                                                            onChange={(e) => handleBatchChange(index, 'lunchTo', e.target.value)}
-                                                            className="w-full p-2 border rounded"
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center justify-between">
-                                                    <div>
-                                                        <label className="block text-sm font-medium">Consider Work at Lunch</label>
-                                                        <p className="text-xs text-gray-500">Allow employees to work during lunch hours</p>
-                                                    </div>
-                                                    <label className="switch">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={batch.isLunchConsider}
-                                                            onChange={(e) => handleBatchChange(index, 'isLunchConsider', e.target.checked)}
-                                                        />
-                                                        <span className="slider round"></span>
-                                                    </label>
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <div className="grid grid-cols-2 gap-4 mb-3">
-                                                    <div>
-                                                        <label className="block text-sm font-medium mb-1">Required Hrs Per Day</label>
-                                                        <select
-                                                            value={batch.requiredWorkingHours}
-                                                            onChange={(e) => handleBatchChange(index, 'requiredWorkingHours', Number(e.target.value))}
-                                                            className="w-full p-2 border rounded"
-                                                        >
-                                                            {[...Array(16).keys()].map(i => (
-                                                                <option key={i + 4} value={i + 4}>{i + 4} Hours</option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-sm font-medium mb-1">Allowed Free Lunch Hrs</label>
-                                                        <select
-                                                            value={batch.allowedFreeLunchHours}
-                                                            onChange={(e) => handleBatchChange(index, 'allowedFreeLunchHours', Number(e.target.value))}
-                                                            className="w-full p-2 border rounded"
-                                                        >
-                                                            <option value="0.5">0.5 Hours (30 mins)</option>
-                                                            <option value="1">1 Hour</option>
-                                                            <option value="1.5">1.5 Hours</option>
-                                                            <option value="2">2 Hours</option>
-                                                        </select>
-                                                    </div>
-                                                </div>
-                                                <div className="pt-2">
-                                                    <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded">
-                                                        Note: Lunch From/To times will be ignored. Workers must complete required hours. Break time exceeding allowed free lunch will be deducted.
-                                                    </p>
-                                                </div>
-                                            </>
+                                        {settings.paidLeaveConfig?.enabled && (
+                                            <div>
+                                                <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                                                    Paid Leaves Per Month
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    max="10"
+                                                    value={settings.paidLeaveConfig?.leavesPerMonth || 1}
+                                                    onChange={(e) => handlePaidLeaveConfigChange('leavesPerMonth', parseInt(e.target.value) || 0)}
+                                                    className="w-full max-w-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                />
+                                                <p className="text-[10px] text-slate-400 mt-0.5 font-normal">
+                                                    Number of paid leave days credited to each employee per month
+                                                </p>
+                                            </div>
                                         )}
                                     </div>
-                                ))}
-                                <button
-                                    onClick={handleAddBatch}
-                                    className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-                                >
-                                    Add New Batch
-                                </button>
-                            </div>
-                        </Card>
-
-                        {/* Intervals Configuration */}
-                        <Card className="hover:shadow-lg transition-shadow duration-200">
-                            <div className="h-2 bg-gradient-to-r from-purple-400 to-pink-400" />
-                            <div className="p-6">
-                                <div className="flex items-center justify-between mb-6">
-                                    <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                                        <div className="p-2 bg-purple-100 rounded-lg mr-3">
-                                            <FiClock className="h-5 w-5 text-purple-600" />
-                                        </div>
-                                        Break Intervals
-                                    </h3>
                                 </div>
-                                {settings.intervals && settings.intervals.map((interval, index) => (
-                                    <div key={index} className="interval-item border p-4 mb-4 rounded">
-                                        <div className="flex justify-between items-center mb-3">
-                                            <h4 className="font-semibold">Interval {index + 1}</h4>
-                                            <button
-                                                onClick={() => handleRemoveInterval(index)}
-                                                className="text-red-500 hover:text-red-700"
-                                            >
-                                                Remove
-                                            </button>
-                                        </div>
-                                        <div className="mb-3">
-                                            <label className="block text-sm font-medium mb-1">Interval Name</label>
-                                            <input
-                                                type="text"
-                                                value={interval.intervalName}
-                                                onChange={(e) => handleIntervalChange(index, 'intervalName', e.target.value)}
-                                                className="w-full p-2 border rounded"
-                                                placeholder="Enter interval name"
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4 mb-3">
-                                            <div>
-                                                <label className="block text-sm font-medium mb-1">From</label>
-                                                <input
-                                                    type="time"
-                                                    value={interval.from}
-                                                    onChange={(e) => handleIntervalChange(index, 'from', e.target.value)}
-                                                    className="w-full p-2 border rounded"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium mb-1">To</label>
-                                                <input
-                                                    type="time"
-                                                    value={interval.to}
-                                                    onChange={(e) => handleIntervalChange(index, 'to', e.target.value)}
-                                                    className="w-full p-2 border rounded"
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <label className="block text-sm font-medium">Consider Work at Breaks</label>
-                                                <p className="text-xs text-gray-500">Allow employees to work during break time</p>
-                                            </div>
-                                            <label className="switch">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={interval.isBreakConsider}
-                                                    onChange={(e) => handleIntervalChange(index, 'isBreakConsider', e.target.checked)}
-                                                />
-                                                <span className="slider round"></span>
-                                            </label>
-                                        </div>
+                            </div>
+                        </section>
+
+                        {/* SECTION 10: AI & SECOND BRAIN SETTINGS */}
+                        <section id="section-ai" className="scroll-mt-36 lg:scroll-mt-36">
+                            <div className="mb-4 sm:mb-5 pb-3 border-b border-slate-100">
+                                <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                                    <FiInfo className="text-[#006666] h-4.5 w-4.5 sm:h-5 sm:w-5" />
+                                    AI & Second Brain Settings
+                                </h2>
+                                <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
+                                    Configure DeepSeek AI integration keys and rate limits
+                                </p>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between gap-3 p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl min-w-0">
+                                    <div className="min-w-0 flex-1">
+                                        <label className="text-xs font-bold text-slate-900 block">Enable AI Features</label>
+                                        <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 leading-tight">Enable DeepSeek AI developer allocation & search features</p>
                                     </div>
-                                ))}
-                                <button
-                                    onClick={handleAddInterval}
-                                    className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
-                                >
-                                    Add New Interval
-                                </button>
-                            </div>
-                        </Card>
-                    </div>
-                </div>
-
-                {/* AI Second Brain Configuration */}
-                <Card className="mb-8 hover:shadow-lg transition-shadow duration-200">
-                    <div className="h-2 bg-gradient-to-r from-blue-500 to-indigo-600" />
-                    <div className="p-6">
-                        <h3 className="text-lg font-semibold mb-6 flex items-center text-gray-900">
-                            <div className="p-2 bg-indigo-100 rounded-lg mr-3">
-                                <FiActivity className="h-5 w-5 text-indigo-600" />
-                            </div>
-                            AI & Second Brain Settings
-                        </h3>
-
-                        <div className="space-y-6">
-                            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                                <div>
-                                    <label className="text-sm font-medium text-gray-700">Enable AI Features</label>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Enable or disable DeepSeek AI developer allocation & search features
-                                    </p>
-                                </div>
-                                <CustomToggle
-                                    checked={settings.aiConfig?.aiFeaturesEnabled ?? true}
-                                    onChange={() => {
-                                        const updated = {
-                                            ...settings,
-                                            aiConfig: {
-                                                ...(settings.aiConfig || {}),
-                                                aiFeaturesEnabled: !(settings.aiConfig?.aiFeaturesEnabled ?? true)
-                                            }
-                                        };
-                                        setSettings(updated);
-                                        checkForChanges(updated);
-                                    }}
-                                />
-                            </div>
-
-                            {(settings.aiConfig?.aiFeaturesEnabled !== false) && (
-                                <div className="space-y-4">
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            DeepSeek API Key
-                                        </label>
-                                        <input
-                                            type="password"
-                                            value={settings.aiConfig?.deepseekApiKey || ''}
-                                            onChange={(e) => {
+                                    <div className="flex-shrink-0 shrink-0">
+                                        <CustomToggle
+                                            checked={settings.aiConfig?.aiFeaturesEnabled ?? true}
+                                            onChange={() => {
                                                 const updated = {
                                                     ...settings,
                                                     aiConfig: {
                                                         ...(settings.aiConfig || {}),
-                                                        deepseekApiKey: e.target.value
+                                                        aiFeaturesEnabled: !(settings.aiConfig?.aiFeaturesEnabled ?? true)
                                                     }
                                                 };
                                                 setSettings(updated);
                                                 checkForChanges(updated);
                                             }}
-                                            placeholder="sk-..."
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
                                         />
-                                        <p className="text-xs text-gray-500">
-                                            DeepSeek API key used for task matching and Second Brain answers. If empty, the backend uses DEEPSEEK_API_KEY from .env.
-                                        </p>
                                     </div>
+                                </div>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div className="space-y-2">
-                                            <label className="block text-sm font-medium text-gray-700">
-                                                Max Daily AI Requests
+                                {(settings.aiConfig?.aiFeaturesEnabled !== false) && (
+                                    <div className="space-y-3.5">
+                                        <div>
+                                            <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 tracking-wider mb-1 uppercase">
+                                                DeepSeek API Key
                                             </label>
                                             <input
-                                                type="number"
-                                                min="1"
-                                                value={settings.aiConfig?.aiMaxDailyRequests ?? 100}
+                                                type="password"
+                                                value={settings.aiConfig?.deepseekApiKey || ''}
                                                 onChange={(e) => {
                                                     const updated = {
                                                         ...settings,
                                                         aiConfig: {
                                                             ...(settings.aiConfig || {}),
-                                                            aiMaxDailyRequests: parseInt(e.target.value) || 0
+                                                            deepseekApiKey: e.target.value
                                                         }
                                                     };
                                                     setSettings(updated);
                                                     checkForChanges(updated);
                                                 }}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                                placeholder="sk-..."
+                                                className="w-full px-3.5 py-2 sm:py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
                                             />
+                                            <p className="text-[10px] text-slate-400 mt-0.5 font-normal">
+                                                API key used for developer task matching and Second Brain queries
+                                            </p>
                                         </div>
 
-                                        <div className="space-y-2">
-                                            <label className="block text-sm font-medium text-gray-700">
-                                                Max Monthly AI Requests
-                                            </label>
-                                            <input
-                                                type="number"
-                                                min="1"
-                                                value={settings.aiConfig?.aiMaxMonthlyRequests ?? 1000}
-                                                onChange={(e) => {
-                                                    const updated = {
-                                                        ...settings,
-                                                        aiConfig: {
-                                                            ...(settings.aiConfig || {}),
-                                                            aiMaxMonthlyRequests: parseInt(e.target.value) || 0
-                                                        }
-                                                    };
-                                                    setSettings(updated);
-                                                    checkForChanges(updated);
-                                                }}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4 grid grid-cols-2 gap-4 text-center">
-                                        <div>
-                                            <div className="text-xl font-bold text-indigo-700">
-                                                {settings.aiConfig?.aiDailyRequestCount || 0} / {settings.aiConfig?.aiMaxDailyRequests ?? 100}
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                            <div>
+                                                <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 tracking-wider mb-1 uppercase">
+                                                    Max Daily AI Requests
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    value={settings.aiConfig?.aiMaxDailyRequests ?? 100}
+                                                    onChange={(e) => {
+                                                        const updated = {
+                                                            ...settings,
+                                                            aiConfig: {
+                                                                ...(settings.aiConfig || {}),
+                                                                aiMaxDailyRequests: parseInt(e.target.value) || 0
+                                                            }
+                                                        };
+                                                        setSettings(updated);
+                                                        checkForChanges(updated);
+                                                    }}
+                                                    className="w-full px-3.5 py-2 sm:py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                                                />
                                             </div>
-                                            <div className="text-xs text-indigo-500 font-semibold">Daily Usage</div>
-                                        </div>
-                                        <div>
-                                            <div className="text-xl font-bold text-indigo-700">
-                                                {settings.aiConfig?.aiMonthlyRequestCount || 0} / {settings.aiConfig?.aiMaxMonthlyRequests ?? 1000}
+                                            <div>
+                                                <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 tracking-wider mb-1 uppercase">
+                                                    Max Monthly AI Requests
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    value={settings.aiConfig?.aiMaxMonthlyRequests ?? 1000}
+                                                    onChange={(e) => {
+                                                        const updated = {
+                                                            ...settings,
+                                                            aiConfig: {
+                                                                ...(settings.aiConfig || {}),
+                                                                aiMaxMonthlyRequests: parseInt(e.target.value) || 0
+                                                            }
+                                                        };
+                                                        setSettings(updated);
+                                                        checkForChanges(updated);
+                                                    }}
+                                                    className="w-full px-3.5 py-2 sm:py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                                                />
                                             </div>
-                                            <div className="text-xs text-indigo-500 font-semibold">Monthly Usage</div>
                                         </div>
                                     </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </Card>
-
-                {/* Bug Bounty Program Configuration */}
-                <Card className="mb-8 hover:shadow-lg transition-shadow duration-200 overflow-hidden">
-                    <div className="h-2 bg-gradient-to-r from-violet-500 to-indigo-500" />
-                    <div className="p-6">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-gray-100">
-                            <div className="flex items-start gap-4">
-                                <div className="p-3 bg-indigo-50 rounded-2xl border border-indigo-100 text-indigo-600 flex-shrink-0">
-                                    <FiShield className="h-6 w-6 stroke-[2]" />
-                                </div>
-                                <div>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <h3 className="text-lg font-bold text-gray-900 leading-tight">
-                                            Bug Bounty Program
-                                        </h3>
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${(settings.bugBountyConfig?.enabled && settings.bugBountyConfig?.popupFrequency !== 'disabled' && settings.bugBountyConfig?.bugReportUrl) ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
-                                            {(settings.bugBountyConfig?.enabled && settings.bugBountyConfig?.popupFrequency !== 'disabled' && settings.bugBountyConfig?.bugReportUrl) ? 'Configured' : 'Not Configured'}
-                                        </span>
-                                    </div>
-                                    <p className="text-sm text-gray-500 mt-1">
-                                        Manage your responsible disclosure URL and dashboard popup frequency.
-                                    </p>
-                                </div>
+                                )}
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => setIsBugBountyExpanded(!isBugBountyExpanded)}
-                                className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-xl hover:bg-gray-50 text-sm font-semibold text-gray-705 shadow-sm transition-all self-start sm:self-center"
-                            >
-                                <FiSliders className="h-4 w-4 text-gray-500" />
-                                {isBugBountyExpanded ? 'Hide Settings' : 'Show Settings'}
-                            </button>
-                        </div>
+                        </section>
 
-                        {isBugBountyExpanded && (
-                            <div className="space-y-6 pt-6">
-                                <div className="space-y-2">
-                                    <label className="block text-sm font-bold text-gray-700">
+                        {/* SECTION 11: BUG BOUNTY PROGRAM */}
+                        <section id="section-bounty" className="scroll-mt-36 lg:scroll-mt-36">
+                            <div className="mb-4 sm:mb-5 pb-3 border-b border-slate-100">
+                                <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                                    <FiShield className="text-[#006666] h-4.5 w-4.5 sm:h-5 sm:w-5" />
+                                    Bug Bounty Program Configuration
+                                </h2>
+                                <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
+                                    Manage public bug bounty URL, disclosure summary messages, and popup frequencies
+                                </p>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 tracking-wider mb-1 uppercase">
                                         Bug Report URL
                                     </label>
-                                    <div className="flex gap-3">
+                                    <div className="flex flex-col sm:flex-row gap-2">
                                         <input
                                             type="text"
                                             value={settings.bugBountyConfig?.bugReportUrl || ''}
                                             onChange={(e) => handleBugBountyChange('bugReportUrl', e.target.value)}
                                             placeholder="https://techvaseegrah.com/bug-bounty"
-                                            className="flex-grow px-4 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all"
+                                            className="w-full px-3 py-2 sm:py-2.5 bg-[#ffffff] border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666] min-w-0"
                                         />
                                         <button
                                             type="button"
                                             onClick={handleCopyUrl}
-                                            className="px-4 py-2.5 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 rounded-xl shadow-sm text-sm font-bold flex items-center gap-2 transition-all active:scale-95"
+                                            className="w-full sm:w-auto px-4 py-2 sm:py-2.5 border border-slate-200 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-95 flex-shrink-0"
                                         >
-                                            <FiCopy className="h-4 w-4" />
-                                            {isCopied ? 'Copied' : 'Copy'}
+                                            <FiCopy className="h-3.5 w-3.5" />
+                                            {isCopied ? 'Copied' : 'Copy URL'}
                                         </button>
                                     </div>
                                 </div>
 
-                                <div className="space-y-2">
-                                    <label className="block text-sm font-bold text-gray-700">
+                                <div>
+                                    <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 tracking-wider mb-1 uppercase">
                                         Disclosure Summary Message
                                     </label>
                                     <textarea
                                         rows={3}
                                         value={settings.bugBountyConfig?.disclosureMessage || ''}
                                         onChange={(e) => handleBugBountyChange('disclosureMessage', e.target.value)}
-                                        placeholder="Visit to check the bug bounty to earn for each bug 1000"
-                                        className="w-full px-4 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all"
+                                        className="w-full px-3 py-2 sm:py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                        placeholder="Visit to check the bug bounty to earn rewards"
                                     />
                                 </div>
 
-                                <div className="space-y-2">
-                                    <label className="block text-sm font-bold text-gray-700">
+                                <div>
+                                    <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 tracking-wider mb-1 uppercase">
                                         Dashboard Popup Frequency
                                     </label>
                                     <select
                                         value={settings.bugBountyConfig?.popupFrequency || 'every_day'}
                                         onChange={(e) => handleBugBountyChange('popupFrequency', e.target.value)}
-                                        className="w-full px-4 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all bg-white"
+                                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
                                     >
                                         <option value="always">Always Show</option>
                                         <option value="every_day">Every Day (Today)</option>
@@ -2064,28 +2000,11 @@ const Settings = () => {
                                         <option value="disabled">Disable Popup</option>
                                     </select>
                                 </div>
-
-                                <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                                    <button
-                                        type="button"
-                                        onClick={handleClearBugBounty}
-                                        className="text-red-500 hover:text-red-700 text-sm font-bold hover:underline transition-colors active:scale-95"
-                                    >
-                                        Clear all
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={handleSaveBugBounty}
-                                        className="px-5 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md shadow-indigo-600/10 hover:shadow-lg hover:shadow-indigo-600/15 transition-all duration-200 flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98]"
-                                    >
-                                        <FiSave className="h-4 w-4" />
-                                        Save Settings
-                                    </button>
-                                </div>
                             </div>
-                        )}
+                        </section>
+
                     </div>
-                </Card>
+                </div>
 
                 {/* Holiday Management Modal */}
                 <Modal
@@ -2098,7 +2017,28 @@ const Settings = () => {
                         <HolidayManagement />
                     </div>
                 </Modal>
+
             </div>
+
+            <style>{`
+                .custom-sidebar-scroll::-webkit-scrollbar {
+                    width: 4px;
+                }
+                .custom-sidebar-scroll::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+                .custom-sidebar-scroll::-webkit-scrollbar-thumb {
+                    background-color: #cbd5e1;
+                    border-radius: 10px;
+                }
+                .no-scrollbar::-webkit-scrollbar {
+                    display: none;
+                }
+                .no-scrollbar {
+                    -ms-overflow-style: none;
+                    scrollbar-width: none;
+                }
+            `}</style>
         </div>
     );
 };

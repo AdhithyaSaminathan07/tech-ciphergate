@@ -35,44 +35,59 @@ const Communication = () => {
     fetchActiveAccount();
   }, []);
 
+  const storedSSOUser = useMemo(() => {
+    try {
+      const saved = localStorage.getItem('ciphergate_user_sso');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const effectiveUsername = user?.username || user?.email || user?.name || storedSSOUser?.username;
+  const effectiveRole = user?.role || storedSSOUser?.role || 'staff';
+
   const gowhatsUrl = useMemo(() => {
-    if (!user?.username) return null;
-    return `https://tech.gowhats.in/login?sso_username=${encodeURIComponent(user.username)}&sso_key=${SSO_KEY}&embed=true&role=staff`;
-  }, [user?.username]);
+    if (!effectiveUsername) return null;
+    const roleParam = effectiveRole === 'admin' ? 'admin' : 'staff';
+    return `https://tech.gowhats.in/login?sso_username=${encodeURIComponent(effectiveUsername)}&sso_key=${SSO_KEY}&embed=true&role=${roleParam}`;
+  }, [effectiveUsername, effectiveRole]);
 
   const instaxbotUrl = useMemo(() => {
-    const ssoUser = activeInstagramAccount?.username;
+    const ssoUser = activeInstagramAccount?.username || effectiveUsername;
     if (!ssoUser) return null;
 
-    // For local testing, change 3001 to the port your local Instaxbot is running on (e.g. 3001, 5173, etc.)
     const baseUrl = window.location.hostname === 'localhost'
       ? 'http://localhost:3001'
       : 'https://tech.instaxbot.com';
 
-    return `${baseUrl}/login?sso_username=${encodeURIComponent(ssoUser)}&sso_key=${SSO_KEY}&embed=true&role=staff`;
-  }, [activeInstagramAccount?.username]);
+    const roleParam = effectiveRole === 'admin' ? 'admin' : 'staff';
+    return `${baseUrl}/login?sso_username=${encodeURIComponent(ssoUser)}&sso_key=${SSO_KEY}&embed=true&role=${roleParam}`;
+  }, [activeInstagramAccount?.username, effectiveUsername, effectiveRole]);
 
   const instaxbotCommentsUrl = useMemo(() => {
-    const ssoUser = activeInstagramAccount?.username;
+    const ssoUser = activeInstagramAccount?.username || effectiveUsername;
     if (!ssoUser) return null;
 
     const baseUrl = window.location.hostname === 'localhost'
       ? 'http://localhost:3001'
       : 'https://tech.instaxbot.com';
 
-    return `${baseUrl}/login?sso_username=${encodeURIComponent(ssoUser)}&sso_key=${SSO_KEY}&embed=true&role=staff&redirect=comments`;
-  }, [activeInstagramAccount?.username]);
+    const roleParam = effectiveRole === 'admin' ? 'admin' : 'staff';
+    return `${baseUrl}/login?sso_username=${encodeURIComponent(ssoUser)}&sso_key=${SSO_KEY}&embed=true&role=${roleParam}&redirect=comments`;
+  }, [activeInstagramAccount?.username, effectiveUsername, effectiveRole]);
 
   const youtubeCommentsUrl = useMemo(() => {
-    const ssoUser = user?.email || user?.username;
+    const ssoUser = effectiveUsername;
     if (!ssoUser) return null;
 
     const baseUrl = window.location.hostname === 'localhost'
       ? 'http://localhost:5173'
       : 'https://youtubeai-client.vercel.app';
 
-    return `${baseUrl}/?sso_username=${encodeURIComponent(ssoUser)}&sso_key=${SSO_KEY}&embed=true&role=staff&redirect=comments`;
-  }, [user?.email, user?.username]);
+    const roleParam = effectiveRole === 'admin' ? 'admin' : 'staff';
+    return `${baseUrl}/?sso_username=${encodeURIComponent(ssoUser)}&sso_key=${SSO_KEY}&embed=true&role=${roleParam}&redirect=comments`;
+  }, [effectiveUsername, effectiveRole]);
 
   if (loadingActiveAccount || !gowhatsUrl || !youtubeCommentsUrl) {
     return (
@@ -96,6 +111,7 @@ const Communication = () => {
     {
       key: 'gowhats',
       label: 'GoWhats',
+      shortLabel: 'GoWhats',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
           <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
@@ -105,6 +121,7 @@ const Communication = () => {
     {
       key: 'instaxbot',
       label: 'Instaxbot Messages',
+      shortLabel: 'Instaxbot',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
@@ -119,6 +136,7 @@ const Communication = () => {
     {
       key: 'insta_comments',
       label: 'Insta Comments',
+      shortLabel: 'Instagram',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
@@ -128,6 +146,7 @@ const Communication = () => {
     {
       key: 'youtube_comments',
       label: 'YouTube Comments',
+      shortLabel: 'YouTube',
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z" />
@@ -233,17 +252,17 @@ const Communication = () => {
   };
 
   return (
-    <div style={{ height: 'calc(100vh - 65px)', display: 'flex', flexDirection: 'column', background: '#fff' }}>
+    <div style={{ height: '100%', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: '8px', overflow: 'hidden' }}>
 
-      {/* UK Style Modern Header */}
+      {/* Ultra Compact Single-Row Header */}
       <div className="comm-header-uk">
-        {/* Top: Mode Switcher (Segmented Control) */}
+        {/* Mode Switcher (Segmented Control) */}
         <div className="comm-mode-switcher">
             <button
               onClick={() => handleModeChange('chat')}
               className={`comm-mode-btn ${viewMode === 'chat' ? 'active' : ''}`}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
               Chats
@@ -252,14 +271,14 @@ const Communication = () => {
               onClick={() => handleModeChange('comments')}
               className={`comm-mode-btn ${viewMode === 'comments' ? 'active' : ''}`}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
               </svg>
               Comments
             </button>
         </div>
 
-        {/* Bottom: Sub-tabs & Actions */}
+        {/* Sub-tabs & Actions */}
         <div className="comm-sub-header">
           <div className="comm-tabs-pills">
             {tabs.map(tab => {
@@ -271,15 +290,16 @@ const Communication = () => {
                   className={`comm-pill-btn ${active ? 'active' : ''}`}
                 >
                   <span className="comm-pill-icon">{tab.icon}</span>
-                  {tab.label}
+                  <span className="comm-label-full">{tab.label}</span>
+                  <span className="comm-label-short">{tab.shortLabel || tab.label}</span>
                 </button>
               );
             })}
           </div>
           
           {showRefreshButton && activeInstagramAccount && (
-             <button onClick={handleRefresh} className="comm-refresh-btn">
-               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 4s linear infinite paused' }}>
+             <button onClick={handleRefresh} className="comm-refresh-btn" title={refreshButtonLabel}>
+               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 4s linear infinite paused' }}>
                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
                </svg>
                <span className="comm-refresh-text">{refreshButtonLabel}</span>
@@ -289,21 +309,21 @@ const Communication = () => {
       </div>
 
       {/* panels */}
-      <div style={{ flex: 1, overflow: 'hidden', display: activeTab === 'gowhats' ? 'flex' : 'none', flexDirection: 'column' }}>
+      <div style={{ flex: 1, height: '100%', minHeight: 0, overflow: 'hidden', display: activeTab === 'gowhats' ? 'flex' : 'none', flexDirection: 'column' }}>
         <iframe
           src={gowhatsUrl}
-          style={{ width: '100%', height: '100%', border: 'none' }}
+          style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
           title="GoWhats"
           allow="microphone; camera; clipboard-read; clipboard-write; notifications"
         />
       </div>
 
-      <div style={{ flex: 1, overflow: 'hidden', display: activeTab === 'instaxbot' ? 'flex' : 'none', flexDirection: 'column' }}>
+      <div style={{ flex: 1, height: '100%', minHeight: 0, overflow: 'hidden', display: activeTab === 'instaxbot' ? 'flex' : 'none', flexDirection: 'column' }}>
         {activeInstagramAccount ? (
           <iframe
             key={`instaxbot-messages-${messagesRefreshKey}`}
             src={instaxbotUrl}
-            style={{ width: '100%', height: '100%', border: 'none' }}
+            style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
             title="Instaxbot"
             allow="microphone; camera; clipboard-read; clipboard-write; notifications"
           />
@@ -312,12 +332,12 @@ const Communication = () => {
         )}
       </div>
 
-      <div style={{ flex: 1, overflow: 'hidden', display: activeTab === 'insta_comments' ? 'flex' : 'none', flexDirection: 'column' }}>
+      <div style={{ flex: 1, height: '100%', minHeight: 0, overflow: 'hidden', display: activeTab === 'insta_comments' ? 'flex' : 'none', flexDirection: 'column' }}>
         {activeInstagramAccount ? (
           <iframe
             key={`instaxbot-comments-${commentsRefreshKey}`}
             src={instaxbotCommentsUrl}
-            style={{ width: '100%', height: '100%', border: 'none' }}
+            style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
             title="Instagram Comments"
             allow="microphone; camera; clipboard-read; clipboard-write; notifications"
           />
@@ -326,10 +346,10 @@ const Communication = () => {
         )}
       </div>
 
-      <div style={{ flex: 1, overflow: 'hidden', display: activeTab === 'youtube_comments' ? 'flex' : 'none', flexDirection: 'column' }}>
+      <div style={{ flex: 1, height: '100%', minHeight: 0, overflow: 'hidden', display: activeTab === 'youtube_comments' ? 'flex' : 'none', flexDirection: 'column' }}>
         <iframe
           src={youtubeCommentsUrl}
-          style={{ width: '100%', height: '100%', border: 'none' }}
+          style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
           title="YouTube Comments"
           allow="microphone; camera; clipboard-read; clipboard-write; notifications"
         />
@@ -340,38 +360,47 @@ const Communication = () => {
         
         .comm-header-uk {
           display: flex;
-          flex-direction: column;
+          align-items: center;
+          justify-content: space-between;
           background: #ffffff;
-          border-bottom: 1px solid #f1f5f9;
-          padding: 16px 20px;
-          gap: 20px;
+          border-bottom: 1px solid #e2e8f0;
+          padding: 4px 8px;
+          gap: 6px;
+          flex-shrink: 0;
+          height: 36px;
+          box-sizing: border-box;
         }
 
         /* Segmented Control - Sleek Pill */
         .comm-mode-switcher {
           display: flex;
+          align-items: center;
           background: #f1f5f9;
           border-radius: 9999px;
-          padding: 4px;
-          width: 100%;
-          box-shadow: inset 0 2px 4px rgba(0,0,0,0.03);
+          padding: 2px;
+          box-shadow: inset 0 1px 2px rgba(0,0,0,0.03);
+          flex-shrink: 0;
+          height: 28px;
+          box-sizing: border-box;
         }
         .comm-mode-btn {
-          flex: 1;
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 8px;
-          padding: 10px 16px;
+          gap: 4px;
+          padding: 2px 8px;
+          height: 24px;
           border-radius: 9999px;
           border: none;
           background: transparent;
           color: #64748b;
-          font-size: 14px;
+          font-size: 11px;
           font-weight: 600;
           cursor: pointer;
           outline: none;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          transition: all 0.15s ease;
+          white-space: nowrap;
+          box-sizing: border-box;
         }
         .comm-mode-btn:hover {
           color: #334155;
@@ -379,58 +408,63 @@ const Communication = () => {
         .comm-mode-btn.active {
           background: #ffffff;
           color: #0d9488;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-          transform: scale(1.02);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
         }
 
         /* Sub-Header */
         .comm-sub-header {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          gap: 16px;
-          width: 100%;
-          flex-wrap: wrap;
+          justify-content: flex-end;
+          gap: 6px;
+          flex: 1;
+          min-width: 0;
+          height: 28px;
         }
 
         /* Tabs as Sleek Cards */
         .comm-tabs-pills {
           display: flex;
-          flex-wrap: wrap;
-          gap: 12px;
+          align-items: center;
+          gap: 4px;
           flex: 1;
+          overflow-x: auto;
           scrollbar-width: none;
+          -ms-overflow-style: none;
+          height: 28px;
         }
         .comm-tabs-pills::-webkit-scrollbar { display: none; }
         
         .comm-pill-btn {
-          display: flex;
+          display: inline-flex;
           align-items: center;
           justify-content: center;
-          gap: 8px;
-          padding: 10px 20px;
-          border-radius: 16px;
+          gap: 4px;
+          padding: 2px 8px;
+          height: 26px;
+          border-radius: 6px;
           border: 1px solid #e2e8f0;
           background: #ffffff;
           color: #64748b;
-          font-size: 13.5px;
+          font-size: 11px;
           font-weight: 600;
           cursor: pointer;
           outline: none;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+          transition: all 0.15s ease;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+          white-space: nowrap;
+          flex-shrink: 0;
+          box-sizing: border-box;
         }
         .comm-pill-btn:hover {
           border-color: #cbd5e1;
           background: #f8fafc;
-          transform: translateY(-1px);
         }
         .comm-pill-btn.active {
           background: linear-gradient(135deg, #10b981 0%, #059669 100%);
           border-color: transparent;
           color: #ffffff;
-          box-shadow: 0 8px 16px -4px rgba(16, 185, 129, 0.4);
-          transform: translateY(-2px);
+          box-shadow: 0 2px 6px -1px rgba(16, 185, 129, 0.3);
         }
         .comm-pill-btn.active .comm-pill-icon {
           color: #ffffff;
@@ -439,79 +473,92 @@ const Communication = () => {
           display: flex;
           color: inherit;
         }
+        .comm-pill-icon svg {
+          width: 12px;
+          height: 12px;
+        }
 
-        /* Refresh Button - Modern */
+        .comm-label-full {
+          display: inline;
+        }
+        .comm-label-short {
+          display: none;
+        }
+
+        /* Refresh Button - Modern Icon/Compact */
         .comm-refresh-btn {
-          display: flex;
+          display: inline-flex;
           align-items: center;
           justify-content: center;
-          gap: 8px;
-          padding: 10px 20px;
-          border-radius: 16px;
+          gap: 4px;
+          padding: 2px 8px;
+          height: 26px;
+          border-radius: 6px;
           border: 1px solid #e2e8f0;
           background: #ffffff;
           color: #475569;
-          font-size: 13.5px;
+          font-size: 11px;
           font-weight: 600;
           cursor: pointer;
           outline: none;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+          transition: all 0.15s ease;
+          white-space: nowrap;
+          flex-shrink: 0;
+          box-sizing: border-box;
         }
         .comm-refresh-btn:hover {
           background: #f8fafc;
           border-color: #cbd5e1;
-          transform: translateY(-1px);
-          box-shadow: 0 6px 12px -2px rgba(0,0,0,0.05);
         }
 
         /* Mobile specific adjustments */
         @media (max-width: 650px) {
-          .comm-header-uk {
-            padding: 16px;
-            gap: 16px;
+          .comm-label-full {
+            display: none;
           }
-          .comm-sub-header {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 16px;
-          }
-          .comm-tabs-pills {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            width: 100%;
-          }
-          .comm-pill-btn {
-            flex-direction: column;
-            gap: 8px;
-            padding: 14px 8px;
-            font-size: 12px;
-            border-radius: 16px;
-            text-align: center;
-            height: 100%;
-          }
-          .comm-pill-icon svg {
-            width: 22px;
-            height: 22px;
-          }
-          .comm-refresh-btn {
-            width: 100%;
-            padding: 14px;
-            border-radius: 16px;
-            font-size: 13px;
-          }
-          .comm-refresh-text {
+          .comm-label-short {
             display: inline;
           }
+          .comm-header-uk {
+            padding: 3px 6px;
+            gap: 4px;
+            height: 34px;
+          }
           .comm-mode-switcher {
-            padding: 6px;
-            border-radius: 9999px;
+            height: 26px;
+            padding: 1px;
           }
           .comm-mode-btn {
-            padding: 10px 12px;
-            font-size: 13px;
-            border-radius: 9999px;
+            height: 22px;
+            padding: 2px 6px;
+            font-size: 10.5px;
+          }
+          .comm-sub-header {
+            height: 26px;
+            gap: 4px;
+          }
+          .comm-tabs-pills {
+            height: 26px;
+            gap: 3px;
+          }
+          .comm-pill-btn {
+            height: 24px;
+            padding: 2px 6px;
+            font-size: 10.5px;
+            border-radius: 5px;
+          }
+          .comm-pill-icon svg {
+            width: 11px;
+            height: 11px;
+          }
+          .comm-refresh-btn {
+            height: 24px;
+            width: 24px;
+            padding: 0;
+            border-radius: 5px;
+          }
+          .comm-refresh-text {
+            display: none;
           }
         }
       `}</style>
@@ -520,3 +567,5 @@ const Communication = () => {
 };
 
 export default Communication;
+
+

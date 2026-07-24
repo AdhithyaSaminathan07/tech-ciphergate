@@ -435,31 +435,33 @@ const WorkerManagement = () => {
       return;
     }
 
-    if (!formData.accountNumber) {
-      toast.error('Account number is required');
-      return;
-    }
+    if (formData.accountNumber || formData.ifscCode) {
+      if (!formData.accountNumber) {
+        toast.error('Account number is required if IFSC code is provided');
+        return;
+      }
 
-    if (!formData.ifscCode) {
-      toast.error('IFSC code is required');
-      return;
-    }
+      if (!formData.ifscCode) {
+        toast.error('IFSC code is required if Account number is provided');
+        return;
+      }
 
-    if (formData.accountNumber !== formData.confirmAccountNumber) {
-      toast.error('Account numbers do not match');
-      return;
-    }
+      if (formData.accountNumber !== formData.confirmAccountNumber) {
+        toast.error('Account numbers do not match');
+        return;
+      }
 
-    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
-    if (!ifscRegex.test(formData.ifscCode)) {
-      toast.error('Invalid IFSC code format');
-      return;
-    }
+      const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+      if (!ifscRegex.test(formData.ifscCode)) {
+        toast.error('Invalid IFSC code format');
+        return;
+      }
 
-    const duplicateAccount = workers.find(w => w.bankDetails?.accountNumber === formData.accountNumber);
-    if (duplicateAccount) {
-      toast.error('Account number already exists');
-      return;
+      const duplicateAccount = workers.find(w => w.bankDetails?.accountNumber === formData.accountNumber);
+      if (duplicateAccount) {
+        toast.error('Account number already exists');
+        return;
+      }
     }
 
     try {
@@ -516,31 +518,33 @@ const WorkerManagement = () => {
       }
     }
 
-    if (!formData.accountNumber) {
-      toast.error('Account number is required');
-      return;
-    }
+    if (formData.accountNumber || formData.ifscCode) {
+      if (!formData.accountNumber) {
+        toast.error('Account number is required if IFSC code is provided');
+        return;
+      }
 
-    if (!formData.ifscCode) {
-      toast.error('IFSC code is required');
-      return;
-    }
+      if (!formData.ifscCode) {
+        toast.error('IFSC code is required if Account number is provided');
+        return;
+      }
 
-    if (formData.accountNumber !== formData.confirmAccountNumber) {
-      toast.error('Account numbers do not match');
-      return;
-    }
+      if (formData.accountNumber !== formData.confirmAccountNumber) {
+        toast.error('Account numbers do not match');
+        return;
+      }
 
-    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
-    if (!ifscRegex.test(formData.ifscCode)) {
-      toast.error('Invalid IFSC code format');
-      return;
-    }
+      const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+      if (!ifscRegex.test(formData.ifscCode)) {
+        toast.error('Invalid IFSC code format');
+        return;
+      }
 
-    const duplicateAccount = workers.find(w => w._id !== selectedWorker._id && w.bankDetails?.accountNumber === formData.accountNumber);
-    if (duplicateAccount) {
-      toast.error('Account number already exists');
-      return;
+      const duplicateAccount = workers.find(w => w._id !== selectedWorker._id && w.bankDetails?.accountNumber === formData.accountNumber);
+      if (duplicateAccount) {
+        toast.error('Account number already exists');
+        return;
+      }
     }
 
     try {
@@ -799,69 +803,78 @@ const WorkerManagement = () => {
         layout
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`bg-white p-3.5 rounded-[12px] border ${isMuted ? 'border-slate-200 bg-slate-50/50' : 'border-slate-200/60 shadow-sm'} mb-3`}
+        className={`relative overflow-hidden bg-white p-4 rounded-2xl border ${isMuted ? 'border-slate-200 bg-slate-50/50' : 'border-slate-100 shadow-sm'} mb-4`}
       >
-        <div className="flex justify-between items-start mb-3">
-          <div className="flex items-center space-x-2.5">
+        {/* Top Section: Avatar, Name, Status */}
+        <div className="flex justify-between items-start mb-4">
+          <div className="flex items-center gap-3">
             <div className="relative">
-              <img
-                src={getFullFileUrl(worker.photo) || `https://ui-avatars.com/api/?name=${encodeURIComponent(worker.name)}&background=0d9488&color=fff`}
-                alt={worker.name}
-                className={`w-10 h-10 rounded-full object-cover border border-slate-100 ${isMuted ? 'grayscale opacity-60' : ''}`}
-                onError={(e) => { e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(worker.name)}&background=0d9488&color=fff`; }}
-              />
-              <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${worker.status === 'Active' || !worker.status ? 'bg-green-500' : 'bg-slate-400'}`}></div>
+              <div className="w-12 h-12 rounded-full overflow-hidden border border-slate-100 ring-2 ring-white shadow-sm">
+                <img
+                  src={getFullFileUrl(worker.photo) || `https://ui-avatars.com/api/?name=${encodeURIComponent(worker.name)}&background=0d9488&color=fff`}
+                  alt={worker.name}
+                  className={`w-full h-full object-cover ${isMuted ? 'grayscale opacity-60' : ''}`}
+                  onError={(e) => { e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(worker.name)}&background=0d9488&color=fff`; }}
+                />
+              </div>
+              <div className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-white ${worker.status === 'Active' || !worker.status ? 'bg-emerald-500' : 'bg-slate-400'}`}></div>
             </div>
-            <div>
-              <h3 className={`text-sm font-bold ${isMuted ? 'text-slate-500' : 'text-slate-900'} leading-none`}>{worker.name}</h3>
-              <p className="text-[11px] text-slate-500 mt-0.5">@{worker.username}</p>
+            <div className="flex flex-col">
+              <h3 className={`text-[15px] font-bold ${isMuted ? 'text-slate-500' : 'text-slate-900'} tracking-tight leading-snug`}>
+                {worker.name}
+              </h3>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">@{worker.username}</p>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex-shrink-0">
             {getStatusBadge(worker.status)}
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 mb-3">
-          <div className="bg-slate-50/70 px-2.5 py-1.5 rounded-lg border border-slate-100">
-            <p className="text-[9px] text-slate-400 font-bold tracking-widest mb-0.5">Department</p>
-            <p className="text-xs font-semibold text-slate-700 truncate">{deptName}</p>
+        {/* Info Grid */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Department</span>
+            <span className="text-sm font-medium text-slate-700 truncate">{deptName}</span>
           </div>
-          <div className="bg-slate-50/70 px-2.5 py-1.5 rounded-lg border border-slate-100">
-            <p className="text-[9px] text-slate-400 font-bold tracking-widest mb-0.5">ID / RFID</p>
-            <p className="text-xs font-mono font-semibold text-slate-700">{worker.rfid}</p>
-          </div>
-          <div className="col-span-2 bg-slate-50/70 px-2.5 py-1.5 rounded-lg border border-slate-100 flex justify-between items-center">
-            <p className="text-[9px] text-slate-400 font-bold tracking-widest">Face Enroll</p>
-            {getFaceEnrollBadge(worker.faceEnrolled || (Array.isArray(worker.faceEmbeddings) && worker.faceEmbeddings.length > 0))}
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">ID / RFID</span>
+            <span className="text-sm font-mono font-medium text-slate-700">{worker.rfid}</span>
           </div>
         </div>
 
-        <div className="flex justify-between items-center pt-2.5 border-t border-slate-100">
-          <div className="flex space-x-1">
+        {/* Face Enroll Status */}
+        <div className="flex items-center justify-between py-3 border-y border-slate-100/80 mb-3">
+          <span className="text-[11px] font-semibold text-slate-500">Face Enrollment</span>
+          {getFaceEnrollBadge(worker.faceEnrolled || (Array.isArray(worker.faceEmbeddings) && worker.faceEmbeddings.length > 0))}
+        </div>
+
+        {/* Actions Footer */}
+        <div className="flex items-center justify-between pt-1">
+          <div className="flex items-center gap-2">
             <button 
               onClick={() => openEditModal(worker)}
-              className="px-2 py-1.5 text-xs font-bold bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"
               disabled={isMuted}
+              className={`p-2 rounded-xl transition-all flex items-center justify-center ${isMuted ? 'text-slate-300 bg-slate-50' : 'text-blue-600 bg-blue-50/50 hover:bg-blue-100/50'}`}
               title="Edit Employee"
             >
-              <FaEdit />
+              <FaEdit size={14} />
             </button>
             <button 
               onClick={() => openFaceCaptureModal(worker)}
-              className="px-2 py-1.5 text-xs font-bold bg-green-50 text-green-600 rounded-lg hover:bg-green-100"
               disabled={isMuted}
+              className={`p-2 rounded-xl transition-all flex items-center justify-center ${isMuted ? 'text-slate-300 bg-slate-50' : 'text-teal-600 bg-teal-50/50 hover:bg-teal-100/50'}`}
               title="Capture / Update Face"
             >
-              <FaCamera />
+              <FaCamera size={14} />
             </button>
           </div>
-          <div className="flex space-x-2">
+          
+          <div className="flex items-center gap-2">
             {worker.status === 'Active' || !worker.status ? (
               <button 
                 onClick={() => openRelieveModal(worker)}
-                className="p-1 px-3 text-xs font-bold text-orange-600 hover:bg-orange-50 rounded-lg"
-                title="Relieve Employee"
+                className="px-3 py-1.5 text-xs font-semibold text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors"
               >
                 Relieve
               </button>
@@ -869,13 +882,13 @@ const WorkerManagement = () => {
               <>
                 <button 
                   disabled
-                  className="p-1 px-3 text-xs font-bold text-gray-400 opacity-50 cursor-not-allowed"
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-400 opacity-50 cursor-not-allowed"
                 >
                   Relieved
                 </button>
                 <button 
                   onClick={() => handleStatusChange(worker._id, 'Active')}
-                  className="p-1 px-3 text-xs font-bold text-green-600 hover:bg-green-50 rounded-lg"
+                  className="px-3 py-1.5 text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
                 >
                   Restore
                 </button>
@@ -883,14 +896,15 @@ const WorkerManagement = () => {
             ) : (
               <button 
                 onClick={() => handleStatusChange(worker._id, 'Active')}
-                className="p-1 px-3 text-xs font-bold text-green-600 hover:bg-green-50 rounded-lg"
+                className="px-3 py-1.5 text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
               >
                 Restore
               </button>
             )}
+            <div className="w-[1px] h-4 bg-slate-200 mx-0.5"></div>
             <button 
                onClick={() => openDeleteModal(worker)}
-               className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
+               className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-colors"
                title="Delete Employee"
             >
               <FaTrash size={14} />
@@ -905,13 +919,44 @@ const WorkerManagement = () => {
 
   return (
     <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-      {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between md:justify-end mb-6 gap-4">
-        <div className="md:hidden mb-1">
+      {/* Header & Tabs Section */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
+        {/* Mobile Title */}
+        <div className="md:hidden">
           <h1 className="text-2xl font-display font-bold text-slate-900 tracking-tight">Employee Management</h1>
           <p className="text-sm text-slate-500 mt-1 leading-snug">Manage, filter and track your workforce efficiently.</p>
         </div>
-        <div className="flex items-center gap-2 w-full md:w-auto mt-2 md:mt-0">
+
+        {/* Tabs Switcher (Left on Desktop) */}
+        <div className="grid grid-cols-2 md:flex md:items-center gap-1 p-1 bg-slate-100/80 backdrop-blur-sm rounded-[12px] w-full md:w-fit shadow-sm border border-slate-200/60 order-2 md:order-1">
+          <button
+            onClick={() => setActiveTab('active')}
+            className={`flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-3 md:px-5 py-2 md:py-2.5 rounded-[10px] text-xs md:text-sm font-semibold transition-all ${activeTab === 'active' ? 'bg-white text-teal-700 shadow-sm ring-1 ring-slate-900/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50/50'}`}
+          >
+            <div className="flex items-center gap-1.5">
+              <UserCheck size={15} className={`flex-shrink-0 ${activeTab === 'active' ? 'text-teal-600' : 'text-slate-400'}`} />
+              <span className="truncate tracking-wide">Active</span>
+            </div>
+            <span className={`px-1.5 md:px-2 py-0.5 rounded-full text-[10px] font-bold ${activeTab === 'active' ? 'bg-teal-50 text-teal-700' : 'bg-slate-200/70 text-slate-500'}`}>
+              {activeCount}
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveTab('archived')}
+            className={`flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-3 md:px-5 py-2 md:py-2.5 rounded-[10px] text-xs md:text-sm font-semibold transition-all ${activeTab === 'archived' ? 'bg-white text-orange-700 shadow-sm ring-1 ring-slate-900/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50/50'}`}
+          >
+            <div className="flex items-center gap-1.5">
+              <UserX size={15} className={`flex-shrink-0 ${activeTab === 'archived' ? 'text-orange-500' : 'text-slate-400'}`} />
+              <span className="truncate tracking-wide">Relieved</span>
+            </div>
+            <span className={`px-1.5 md:px-2 py-0.5 rounded-full text-[10px] font-bold ${activeTab === 'archived' ? 'bg-orange-50 text-orange-700' : 'bg-slate-200/70 text-slate-500'}`}>
+              {relievedCount}
+            </span>
+          </button>
+        </div>
+
+        {/* Action Buttons (Right on Desktop) */}
+        <div className="flex items-center gap-2 w-full md:w-auto order-1 md:order-2">
           <button 
             type="button"
             onClick={() => setIsHistoryModalOpen(true)} 
@@ -930,40 +975,11 @@ const WorkerManagement = () => {
           </Button>
         </div>
       </div>
-      
-      {/* Tabs Switcher */}
-      <div className="grid grid-cols-2 md:flex md:items-center gap-1 p-1 bg-slate-100/80 backdrop-blur-sm rounded-[12px] mb-6 w-full md:w-fit shadow-sm border border-slate-200/60">
-        <button
-          onClick={() => setActiveTab('active')}
-          className={`flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-3 md:px-5 py-2 md:py-2.5 rounded-[10px] text-xs md:text-sm font-semibold transition-all ${activeTab === 'active' ? 'bg-white text-teal-700 shadow-sm ring-1 ring-slate-900/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50/50'}`}
-        >
-          <div className="flex items-center gap-1.5">
-            <UserCheck size={15} className={`flex-shrink-0 ${activeTab === 'active' ? 'text-teal-600' : 'text-slate-400'}`} />
-            <span className="truncate tracking-wide">Active</span>
-          </div>
-          <span className={`px-1.5 md:px-2 py-0.5 rounded-full text-[10px] font-bold ${activeTab === 'active' ? 'bg-teal-50 text-teal-700' : 'bg-slate-200/70 text-slate-500'}`}>
-            {activeCount}
-          </span>
-        </button>
-        <button
-          onClick={() => setActiveTab('archived')}
-          className={`flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-3 md:px-5 py-2 md:py-2.5 rounded-[10px] text-xs md:text-sm font-semibold transition-all ${activeTab === 'archived' ? 'bg-white text-orange-700 shadow-sm ring-1 ring-slate-900/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50/50'}`}
-        >
-          <div className="flex items-center gap-1.5">
-            <UserX size={15} className={`flex-shrink-0 ${activeTab === 'archived' ? 'text-orange-500' : 'text-slate-400'}`} />
-            <span className="truncate tracking-wide">Relieved</span>
-          </div>
-          <span className={`px-1.5 md:px-2 py-0.5 rounded-full text-[10px] font-bold ${activeTab === 'archived' ? 'bg-orange-50 text-orange-700' : 'bg-slate-200/70 text-slate-500'}`}>
-            {relievedCount}
-          </span>
-        </button>
-      </div>
 
-      {/* Advanced Control Bar */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200/80 p-3 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="flex flex-col lg:flex-row gap-3">
           {/* Search Box */}
-          <div className="relative lg:col-span-1">
+          <div className="relative w-full lg:w-2/5 flex-shrink-0">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-4 w-4 text-slate-400" />
             </div>
@@ -984,55 +1000,58 @@ const WorkerManagement = () => {
             )}
           </div>
 
-          {/* Department Filter */}
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <FaBuilding className="h-3.5 w-3.5 text-slate-400" />
+          {/* Filters Container (Scrollable on Mobile) */}
+          <div className="flex overflow-x-auto gap-3 w-full lg:w-3/5 pb-1 lg:pb-0 scrollbar-hide">
+            {/* Department Filter */}
+            <div className="relative min-w-[140px] flex-1">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <FaBuilding className="h-3.5 w-3.5 text-slate-400" />
+              </div>
+              <select
+                className="block w-full pl-9 pr-3 py-2 bg-slate-50/50 border border-slate-200 rounded-[10px] text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0d9488]/20 focus:border-[#0d9488] focus:bg-white transition-all appearance-none shadow-sm cursor-pointer whitespace-nowrap text-ellipsis"
+                value={departmentFilter}
+                onChange={(e) => setDepartmentFilter(e.target.value)}
+              >
+                <option value="All">All Departments</option>
+                {departments.map(dept => (
+                  <option key={dept._id} value={dept._id}>{dept.name}</option>
+                ))}
+              </select>
             </div>
-            <select
-              className="block w-full pl-9 pr-3 py-2 bg-slate-50/50 border border-slate-200 rounded-[10px] text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0d9488]/20 focus:border-[#0d9488] focus:bg-white transition-all appearance-none shadow-sm cursor-pointer"
-              value={departmentFilter}
-              onChange={(e) => setDepartmentFilter(e.target.value)}
-            >
-              <option value="All">All Departments</option>
-              {departments.map(dept => (
-                <option key={dept._id} value={dept._id}>{dept.name}</option>
-              ))}
-            </select>
-          </div>
 
-          {/* Batch Filter */}
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <FaLayerGroup className="h-3.5 w-3.5 text-slate-400" />
+            {/* Batch Filter */}
+            <div className="relative min-w-[140px] flex-1">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <FaLayerGroup className="h-3.5 w-3.5 text-slate-400" />
+              </div>
+              <select
+                className="block w-full pl-9 pr-3 py-2 bg-slate-50/50 border border-slate-200 rounded-[10px] text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0d9488]/20 focus:border-[#0d9488] focus:bg-white transition-all appearance-none shadow-sm cursor-pointer whitespace-nowrap text-ellipsis"
+                value={batchFilter}
+                onChange={(e) => setBatchFilter(e.target.value)}
+              >
+                <option value="All">All Batches</option>
+                {batches.map(batch => (
+                  <option key={batch._id} value={batch.batchName}>{batch.batchName}</option>
+                ))}
+              </select>
             </div>
-            <select
-              className="block w-full pl-9 pr-3 py-2 bg-slate-50/50 border border-slate-200 rounded-[10px] text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0d9488]/20 focus:border-[#0d9488] focus:bg-white transition-all appearance-none shadow-sm cursor-pointer"
-              value={batchFilter}
-              onChange={(e) => setBatchFilter(e.target.value)}
-            >
-              <option value="All">All Batches</option>
-              {batches.map(batch => (
-                <option key={batch._id} value={batch.batchName}>{batch.batchName}</option>
-              ))}
-            </select>
-          </div>
 
-          {/* Sorting */}
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" />
+            {/* Sorting */}
+            <div className="relative min-w-[140px] flex-1">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" />
+              </div>
+              <select
+                className="block w-full pl-9 pr-3 py-2 bg-slate-50/50 border border-slate-200 rounded-[10px] text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0d9488]/20 focus:border-[#0d9488] focus:bg-white transition-all appearance-none shadow-sm cursor-pointer whitespace-nowrap text-ellipsis"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+              >
+                <option value="newest">Recently Added</option>
+                <option value="name-az">Name (A-Z)</option>
+                <option value="name-za">Name (Z-A)</option>
+                <option value="oldest">Oldest First</option>
+              </select>
             </div>
-            <select
-              className="block w-full pl-9 pr-3 py-2 bg-slate-50/50 border border-slate-200 rounded-[10px] text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0d9488]/20 focus:border-[#0d9488] focus:bg-white transition-all appearance-none shadow-sm cursor-pointer"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-            >
-              <option value="newest">Recently Added</option>
-              <option value="name-az">Name (A-Z)</option>
-              <option value="name-za">Name (Z-A)</option>
-              <option value="oldest">Oldest First</option>
-            </select>
           </div>
         </div>
 
@@ -1373,7 +1392,7 @@ const WorkerManagement = () => {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Account Holder Name *</label>
+              <label className="form-label">Account Holder Name</label>
               <input
                 type="text"
                 name="accountHolderName"
@@ -1381,12 +1400,11 @@ const WorkerManagement = () => {
                 value={formData.accountHolderName}
                 onChange={handleChange}
                 placeholder="Enter account holder name"
-                required
               />
             </div>
 
             <div className="form-group">
-              <label className="form-label">Bank Name *</label>
+              <label className="form-label">Bank Name</label>
               <input
                 type="text"
                 name="bankName"
@@ -1394,12 +1412,11 @@ const WorkerManagement = () => {
                 value={formData.bankName}
                 onChange={handleChange}
                 placeholder="Enter bank name"
-                required
               />
             </div>
 
             <div className="form-group">
-              <label className="form-label">Account Number *</label>
+              <label className="form-label">Account Number</label>
               <input
                 type="text"
                 name="accountNumber"
@@ -1407,12 +1424,11 @@ const WorkerManagement = () => {
                 value={formData.accountNumber}
                 onChange={handleChange}
                 placeholder="Enter account number"
-                required
               />
             </div>
 
             <div className="form-group">
-              <label className="form-label">Confirm Account Number *</label>
+              <label className="form-label">Confirm Account Number</label>
               <input
                 type="text"
                 name="confirmAccountNumber"
@@ -1420,12 +1436,11 @@ const WorkerManagement = () => {
                 value={formData.confirmAccountNumber}
                 onChange={handleChange}
                 placeholder="Confirm account number"
-                required
               />
             </div>
 
             <div className="form-group">
-              <label className="form-label">IFSC Code *</label>
+              <label className="form-label">IFSC Code</label>
               <input
                 type="text"
                 name="ifscCode"
@@ -1433,12 +1448,11 @@ const WorkerManagement = () => {
                 value={formData.ifscCode}
                 onChange={handleChange}
                 placeholder="Enter IFSC code"
-                required
               />
             </div>
 
             <div className="form-group">
-              <label className="form-label">Branch Name *</label>
+              <label className="form-label">Branch Name</label>
               <input
                 type="text"
                 name="branchName"
@@ -1446,7 +1460,6 @@ const WorkerManagement = () => {
                 value={formData.branchName}
                 onChange={handleChange}
                 placeholder="Enter branch name"
-                required
               />
             </div>
 
@@ -1677,7 +1690,7 @@ const WorkerManagement = () => {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Account Holder Name *</label>
+              <label className="form-label">Account Holder Name</label>
               <input
                 type="text"
                 name="accountHolderName"
@@ -1685,12 +1698,11 @@ const WorkerManagement = () => {
                 value={formData.accountHolderName}
                 onChange={handleChange}
                 placeholder="Enter account holder name"
-                required
               />
             </div>
 
             <div className="form-group">
-              <label className="form-label">Bank Name *</label>
+              <label className="form-label">Bank Name</label>
               <input
                 type="text"
                 name="bankName"
@@ -1698,12 +1710,11 @@ const WorkerManagement = () => {
                 value={formData.bankName}
                 onChange={handleChange}
                 placeholder="Enter bank name"
-                required
               />
             </div>
 
             <div className="form-group">
-              <label className="form-label">Account Number *</label>
+              <label className="form-label">Account Number</label>
               <input
                 type="text"
                 name="accountNumber"
@@ -1711,12 +1722,11 @@ const WorkerManagement = () => {
                 value={formData.accountNumber}
                 onChange={handleChange}
                 placeholder="Enter account number"
-                required
               />
             </div>
 
             <div className="form-group">
-              <label className="form-label">Confirm Account Number *</label>
+              <label className="form-label">Confirm Account Number</label>
               <input
                 type="text"
                 name="confirmAccountNumber"
@@ -1724,12 +1734,11 @@ const WorkerManagement = () => {
                 value={formData.confirmAccountNumber}
                 onChange={handleChange}
                 placeholder="Confirm account number"
-                required
               />
             </div>
 
             <div className="form-group">
-              <label className="form-label">IFSC Code *</label>
+              <label className="form-label">IFSC Code</label>
               <input
                 type="text"
                 name="ifscCode"
@@ -1737,12 +1746,11 @@ const WorkerManagement = () => {
                 value={formData.ifscCode}
                 onChange={handleChange}
                 placeholder="Enter IFSC code"
-                required
               />
             </div>
 
             <div className="form-group">
-              <label className="form-label">Branch Name *</label>
+              <label className="form-label">Branch Name</label>
               <input
                 type="text"
                 name="branchName"
@@ -1750,7 +1758,6 @@ const WorkerManagement = () => {
                 value={formData.branchName}
                 onChange={handleChange}
                 placeholder="Enter branch name"
-                required
               />
             </div>
 

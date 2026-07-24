@@ -367,6 +367,8 @@ const AdminLayout = () => {
   
   const pageTitle = getPageTitle();
 
+  const isCommPage = location.pathname === '/admin/communication';
+
   return (
     <div className="flex h-screen bg-[#F8FAFC] overflow-hidden font-sans">
       
@@ -393,12 +395,12 @@ const AdminLayout = () => {
           title={pageTitle}
         />
 
-        <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto pb-6 md:pb-10 custom-main-scroll">
+        <main className={`flex-1 min-w-0 ${isCommPage ? 'overflow-hidden flex flex-col p-1 sm:p-2 md:p-3' : 'overflow-x-hidden overflow-y-auto pb-6 md:pb-10 custom-main-scroll'}`}>
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
-            className="h-full w-full max-w-full mx-auto px-2 sm:px-6 md:px-8 pt-4 md:pt-6 pb-6 md:pb-8"
+            className={isCommPage ? "h-full w-full flex flex-col flex-1 min-h-0" : "h-full w-full max-w-full mx-auto px-2 sm:px-6 md:px-8 pt-4 md:pt-6 pb-6 md:pb-8"}
           >
             <Suspense fallback={<PageLoader />}>
             <Routes>
@@ -486,8 +488,6 @@ const AdminLayout = () => {
         generationData={null}
         isGenerating={false}
       />
-
-      <FloatingChatButton isAdmin={true} />
 
       {/* BottomNavigation removed for Admin as per strict separation rules */}
 

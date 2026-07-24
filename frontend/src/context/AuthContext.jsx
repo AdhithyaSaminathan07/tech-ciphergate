@@ -15,6 +15,11 @@ export const AuthProvider = ({ children }) => {
         const userData = await getCurrentUser();
         if (userData) {
           setUser(userData);
+          localStorage.setItem('ciphergate_user_sso', JSON.stringify({
+            username: userData.username || userData.email || userData.name,
+            email: userData.email,
+            role: userData.role
+          }));
         }
       } catch (error) {
         console.error('Failed to load user', error);
@@ -30,6 +35,13 @@ export const AuthProvider = ({ children }) => {
     try {
       const userData = await loginService(credentials, userType);
       setUser(userData);
+      if (userData) {
+        localStorage.setItem('ciphergate_user_sso', JSON.stringify({
+          username: userData.username || userData.email || userData.name,
+          email: userData.email,
+          role: userData.role || userType
+        }));
+      }
       return userData;
     } catch (error) {
       throw error;
