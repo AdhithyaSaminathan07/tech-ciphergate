@@ -1693,7 +1693,7 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Search by Name</label>
                                 <input
                                     type="text"
-                                    placeholder="Enter employee name..."
+                                    placeholder="Enter developer name..."
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -1731,7 +1731,7 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                                                 Rank
                                             </th>
                                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
-                                                Employee
+                                                Developer
                                             </th>
                                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 tracking-wider">
                                                 Score
@@ -1802,7 +1802,7 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                                         ) : (
                                             <tr>
                                                 <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
-                                                    No employees found matching your search criteria.
+                                                    No developers found matching your search criteria.
                                                 </td>
                                             </tr>
                                         )}

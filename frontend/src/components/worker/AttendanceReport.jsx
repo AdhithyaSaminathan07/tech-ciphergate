@@ -192,7 +192,7 @@ function processAttendanceByDay(attendanceData) {
     
         const headers = [
             'Name',
-            'Employee ID',
+            'Developer ID',
             'Date',
             'In Times',
             'Out Times',
@@ -228,7 +228,7 @@ function processAttendanceByDay(attendanceData) {
     
         const today = new Date();
         const formattedDate = today.toISOString().split('T')[0];
-        const employeeName = user?.name ? user.name.replace(/\s+/g, '_') : 'Employee';
+        const employeeName = user?.name ? user.name.replace(/\s+/g, '_') : 'Developer';
         const dateInfo = filterDate ? `_${filterDate}` : `_${formattedDate}`;
         link.setAttribute('download', `${employeeName}_Attendance_Report${dateInfo}.csv`);
     
@@ -250,7 +250,7 @@ function processAttendanceByDay(attendanceData) {
                     {record?.photo && (
                         <img
                             src={record.photo ? record.photo : `https://ui-avatars.com/api/?name=${encodeURIComponent(record.name)}`}
-                            alt="Employee"
+                            alt="Developer"
                             className="w-8 h-8 rounded-full mr-2 flex-shrink-0"
                         />
                     )}
@@ -259,7 +259,7 @@ function processAttendanceByDay(attendanceData) {
             )
         },
         {
-            header: 'Employee ID',
+            header: 'Developer ID',
             accessor: 'rfid',
             render: (record) => <span className="truncate">{record.rfid || 'Unknown'}</span>
         },

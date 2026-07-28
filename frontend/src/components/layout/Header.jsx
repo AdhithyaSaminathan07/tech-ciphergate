@@ -614,7 +614,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                 <Search size={20} className="text-teal-600" />
                                 <input
                                     type="text"
-                                    placeholder="Search employees, tasks, reports..."
+                                    placeholder="Search developers, tasks, reports..."
                                     className="text-base flex-1 outline-none text-[#111827]"
                                     autoFocus
                                     value={searchQuery}
@@ -750,7 +750,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                                             <div key={worker._id} className={`p-2 ${isSelected ? 'bg-[#F5F7FA]' : 'hover:bg-[#F5F7FA]'} rounded-lg flex justify-between items-center cursor-pointer`} onClick={() => handleItemClick({ ...worker, searchType: 'worker' })}>
                                                                 <div>
                                                                     <p className="text-sm font-bold text-[#111827]">{worker.name}</p>
-                                                                    <p className="text-[10px] text-[#6B7280]">Employee</p>
+                                                                    <p className="text-[10px] text-[#6B7280]">Developer</p>
                                                                 </div>
                                                                 <button className="text-xs text-[#0D9488] font-bold hover:underline">View Profile</button>
                                                             </div>

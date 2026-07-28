@@ -1,4 +1,4 @@
-// Test Management - Employee Scores Component
+// Test Management - Developer Scores Component
 import React, { useState, useEffect, useContext } from 'react';
 import api from '../../services/api';
 import { getWorkers } from '../../services/workerService';
@@ -106,7 +106,7 @@ const EmployeeScores = () => {
     const columns = [
         {
             key: 'worker.name',
-            title: 'Employee',
+            title: 'Developer',
             render: (score) => (
                 <div className="flex items-center">
                     <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center mr-3">
@@ -114,7 +114,7 @@ const EmployeeScores = () => {
                     </div>
                     <div>
                         <div className="font-medium text-gray-800">
-                            {score.worker?.name || 'Unknown Employee'}
+                            {score.worker?.name || 'Unknown Developer'}
                         </div>
                         <div className="text-sm text-gray-500 flex items-center">
                             <FaBuilding className="mr-1 text-gray-400" size={12} />
@@ -194,7 +194,7 @@ const EmployeeScores = () => {
         <div className="space-y-6">
             <div className="bg-white p-6 rounded-lg shadow">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-gray-800">Employee Scores</h2>
+                    <h2 className="text-2xl font-bold text-gray-800">Developer Scores</h2>
                     <Button
                         onClick={exportScores}
                         disabled={!scores.length}
@@ -270,7 +270,7 @@ const EmployeeScores = () => {
                                     <FaUser className="text-green-600" />
                                 </div>
                             </div>
-                            <div className="text-sm text-gray-600 mt-1">Unique Employees</div>
+                            <div className="text-sm text-gray-600 mt-1">Unique Developers</div>
                         </div>
                         <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
                             <div className="flex items-center justify-between">
@@ -311,14 +311,14 @@ const EmployeeScores = () => {
                     <Table
                         columns={columns}
                         data={scores}
-                        emptyMessage="No scores found. Employees need to complete tests first."
+                        emptyMessage="No scores found. Developers need to complete tests first."
                     />
                 ) : (
                     <div className="text-center py-10 bg-gray-50 rounded-lg border border-gray-200">
                         <FaTimesCircle size={48} className="mx-auto text-gray-400 mb-4" />
                         <h3 className="text-xl font-semibold text-gray-700 mb-2">No Test Scores Found</h3>
                         <p className="text-gray-500 max-w-md mx-auto">
-                            Employees need to complete tests first. Once tests are completed, their scores will appear here.
+                            Developers need to complete tests first. Once tests are completed, their scores will appear here.
                         </p>
                     </div>
                 )}

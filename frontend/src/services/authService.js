@@ -43,7 +43,7 @@ export const login = async (credentials, userType) => {
         throw new Error(backendMessage);
       }
       if (userType === 'worker') {
-        throw new Error('Invalid employee credentials. Please check your username and password.');
+        throw new Error('Invalid developer credentials. Please check your username and password.');
       } else {
         throw new Error('Invalid admin credentials. Please check your username and password.');
       }

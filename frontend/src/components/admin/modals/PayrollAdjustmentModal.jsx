@@ -216,7 +216,7 @@ const PayrollAdjustmentModal = ({ isOpen, onClose, bulkReportData, month, year, 
                             <Search className="w-4 h-4 text-slate-400" />
                             <input 
                                 type="text" 
-                                placeholder="Search employee..." 
+                                placeholder="Search developer..." 
                                 className="w-full bg-transparent border-none focus:outline-none text-sm font-semibold"
                                 value={searchTerm}
                                 onChange={e => setSearchTerm(e.target.value)}
@@ -252,7 +252,7 @@ const PayrollAdjustmentModal = ({ isOpen, onClose, bulkReportData, month, year, 
                             <table className="w-full text-left text-xs border-collapse">
                                 <thead className="bg-slate-50/80 sticky top-0 backdrop-blur-sm z-10 text-slate-400 font-black tracking-widest uppercase">
                                     <tr className="border-b">
-                                        <th className="p-4">Employee</th>
+                                        <th className="p-4">Developer</th>
                                         <th className="p-4">Attendance Salary</th>
                                         <th className="p-4">Adjustments</th>
                                         <th className="p-4">Payable Salary</th>
@@ -302,7 +302,7 @@ const PayrollAdjustmentModal = ({ isOpen, onClose, bulkReportData, month, year, 
                                     })}
                                     {filteredWorkers?.length === 0 && (
                                         <tr>
-                                            <td colSpan="5" className="p-8 text-center text-slate-400 font-bold">No employees found.</td>
+                                            <td colSpan="5" className="p-8 text-center text-slate-400 font-bold">No developers found.</td>
                                         </tr>
                                     )}
                                 </tbody>

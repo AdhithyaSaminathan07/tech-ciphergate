@@ -157,7 +157,7 @@ const FaceAttendance = ({ subdomain, isOpen, onClose, workerMode = false, curren
         setWorkers(workersWithFaces);
       } catch (err) {
         console.error('Error loading workers:', err);
-        setError('Failed to load employee data. Please try again.');
+        setError('Failed to load developer data. Please try again.');
       } finally {
         setIsLoading(false);
       }
@@ -572,7 +572,7 @@ const FaceAttendance = ({ subdomain, isOpen, onClose, workerMode = false, curren
             <div className="flex flex-col items-center justify-center py-10 text-center">
               <Spinner size="lg" className="text-teal-600" />
               <p className="mt-4 text-base font-semibold text-slate-800">Loading Database</p>
-              <p className="mt-1 text-sm text-slate-400">Syncing registered employee face descriptors...</p>
+              <p className="mt-1 text-sm text-slate-400">Syncing registered developer face descriptors...</p>
             </div>
           ) : showConfirmation && matchedWorker ? (
             <div className="text-center py-6 px-4 bg-slate-50/50 rounded-2xl border border-slate-100/50">
@@ -699,7 +699,7 @@ const FaceAttendance = ({ subdomain, isOpen, onClose, workerMode = false, curren
               <div className="mt-4 text-center">
                 <p className="text-xs font-semibold text-slate-400 flex items-center justify-center gap-1">
                   <Smile size={13} className="text-slate-400" />
-                  <span>Enrolled employees face models: {workers.length}</span>
+                  <span>Enrolled developers face models: {workers.length}</span>
                 </p>
               </div>
             </div>

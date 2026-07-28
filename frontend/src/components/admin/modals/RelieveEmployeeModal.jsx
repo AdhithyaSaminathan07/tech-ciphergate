@@ -26,7 +26,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
     relievingDate: new Date().toISOString().split('T')[0],
     lastWorkingDay: new Date().toISOString().split('T')[0],
     reason: 'Personal Reasons',
-    designation: worker?.designation || 'Employee',
+    designation: worker?.designation || 'Developer',
     salary: worker?.salary || 0
   });
 
@@ -70,7 +70,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
         relievingDate: rDate,
         lastWorkingDay: rDate,
         reason: 'Personal Reasons',
-        designation: worker.designation || 'Employee',
+        designation: worker.designation || 'Developer',
         salary: worker.salary || 0,
         email: worker.email || '',
         phoneNumber: worker.phoneNumber || ''
@@ -101,8 +101,8 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
           para2: `We hereby acknowledge that you have completed all required handover and clearance formalities.`
         },
         'Experience Certificate': {
-          para1: `This is to certify that **${worker.name}** was employed at Tech Vaseegrah as a **${worker.designation || 'Employee'}** from ${formatDate(jDate)} to ${formatDate(rDate)}.`,
-          para2: `During the tenure of employment, they provided effective ${worker.designation || 'Employee'} support across projects, contributing positively to both development workflows and client deliverables. Their performance and conduct were consistently satisfactory throughout the employment period.`,
+          para1: `This is to certify that **${worker.name}** was employed at Tech Vaseegrah as a **${worker.designation || 'Developer'}** from ${formatDate(jDate)} to ${formatDate(rDate)}.`,
+          para2: `During the tenure of employment, they provided effective ${worker.designation || 'Developer'} support across projects, contributing positively to both development workflows and client deliverables. Their performance and conduct were consistently satisfactory throughout the employment period.`,
           para3: `We wish them continued success in all their future professional endeavors.`
         },
         'Monthly Payslip': [
@@ -270,9 +270,9 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
       const response = await processRelieve(payload);
 
       if (response.deliveryStatus?.email?.sent || !deliveryOptions.email) {
-        toast.success(response.message || 'Employee relieved and documents sent successfully!');
+        toast.success(response.message || 'Developer relieved and documents sent successfully!');
       } else {
-        toast.warning(response.message || 'Employee relieved, but document delivery failed. Please check mail settings.');
+        toast.warning(response.message || 'Developer relieved, but document delivery failed. Please check mail settings.');
       }
 
       onComplete();
@@ -289,7 +289,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Relieve Employee: ${worker?.name}`}
+      title={`Relieve Developer: ${worker?.name}`}
       size="xl"
     >
       <div className="relieve-modal-container">
@@ -644,7 +644,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="form-group">
-                      <label className="block text-sm font-bold text-gray-700 mb-2">Employee Email Address</label>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">Developer Email Address</label>
                       <div className="relative">
                         <FaEnvelope className="absolute left-3 top-3 text-gray-400" />
                         <input
@@ -861,9 +861,9 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
 
               <div className="grid grid-cols-2 gap-y-2 text-[11px] mb-8 border-b border-gray-100 pb-4">
                 <div className="flex gap-2"><span className="font-bold min-w-[100px]">Date of Joining</span>: {formatDate(exitDetails.joiningDate)}</div>
-                <div className="flex gap-2"><span className="font-bold min-w-[100px]">Employee Name</span>: <span className="font-black">{worker?.name}</span></div>
+                <div className="flex gap-2"><span className="font-bold min-w-[100px]">Developer Name</span>: <span className="font-black">{worker?.name}</span></div>
                 <div className="flex gap-2"><span className="font-bold min-w-[100px]">Pay Period</span>: {payslip.period}</div>
-                <div className="flex gap-2"><span className="font-bold min-w-[100px]">Employee ID</span>: {worker?.rfid || worker?.username}</div>
+                <div className="flex gap-2"><span className="font-bold min-w-[100px]">Developer ID</span>: {worker?.rfid || worker?.username}</div>
                 <div className="flex gap-2"><span className="font-bold min-w-[100px]">Designation</span>: {exitDetails.designation}</div>
               </div>
 
@@ -915,7 +915,7 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
                   <div className="w-32 border-t-2 border-gray-800 pt-1 font-black text-[10px]">EMPLOYER SIGNATURE</div>
                 </div>
                 <div className="text-center">
-                  <div className="w-32 border-t-2 border-gray-800 pt-1 font-black text-[10px]">EMPLOYEE SIGNATURE</div>
+                  <div className="w-32 border-t-2 border-gray-800 pt-1 font-black text-[10px]">DEVELOPER SIGNATURE</div>
                 </div>
               </div>
             </div>

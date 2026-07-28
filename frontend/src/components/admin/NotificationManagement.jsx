@@ -94,7 +94,7 @@ const NotificationManagement = () => {
   const handleAdd = async (e) => {
     e.preventDefault();
     if (targetType === 'specific' && selectedWorkers.length === 0) {
-      return toast.error('Please select at least one employee');
+      return toast.error('Please select at least one developer');
     }
     try {
       const newNotification = await createNotification({
@@ -218,7 +218,7 @@ const NotificationManagement = () => {
                   onChange={() => setTargetType('all')}
                   className="form-radio text-teal-600 focus:ring-teal-500"
                 />
-                <span className="text-sm text-gray-700">All Employees</span>
+                <span className="text-sm text-gray-700">All Developers</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -229,19 +229,19 @@ const NotificationManagement = () => {
                   onChange={() => setTargetType('specific')}
                   className="form-radio text-teal-600 focus:ring-teal-500"
                 />
-                <span className="text-sm text-gray-700">Specific Employees</span>
+                <span className="text-sm text-gray-700">Specific Developers</span>
               </label>
             </div>
           </div>
 
           {targetType === 'specific' && (
             <div className="form-group mb-4">
-              <label className="form-label font-bold text-gray-700">Select Employees</label>
+              <label className="form-label font-bold text-gray-700">Select Developers</label>
               {/* Search Bar */}
               <div className="relative mt-1 mb-2">
                 <input
                   type="text"
-                  placeholder="Search employees..."
+                  placeholder="Search developers..."
                   className="form-input focus:border-teal-500 focus:ring-teal-500 text-sm pl-10"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -280,7 +280,7 @@ const NotificationManagement = () => {
                   worker.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                   worker.username.toLowerCase().includes(searchTerm.toLowerCase())
                 ).length === 0 && (
-                  <div className="text-center text-gray-500 text-sm py-2">No employees found</div>
+                  <div className="text-center text-gray-500 text-sm py-2">No developers found</div>
                 )}
               </div>
             </div>

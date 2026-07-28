@@ -81,15 +81,11 @@ const Communication = () => {
     const ssoUser = effectiveUsername;
     if (!ssoUser) return null;
 
-    const baseUrl = window.location.hostname === 'localhost'
-      ? 'http://localhost:5173'
-      : 'https://youtubeai-client.vercel.app';
-
     const roleParam = effectiveRole === 'admin' ? 'admin' : 'staff';
-    return `${baseUrl}/?sso_username=${encodeURIComponent(ssoUser)}&sso_key=${SSO_KEY}&embed=true&role=${roleParam}&redirect=comments`;
+    return `https://channelbot.in/login?sso_username=${encodeURIComponent(ssoUser)}&sso_key=${SSO_KEY}&embed=true&hide_shell=true&role=${roleParam}&redirect=videos`;
   }, [effectiveUsername, effectiveRole]);
 
-  if (loadingActiveAccount || !gowhatsUrl || !youtubeCommentsUrl) {
+  if (loadingActiveAccount || !gowhatsUrl) {
     return (
       <div style={{
         height: 'calc(100vh - 65px)', display: 'flex',

@@ -132,7 +132,7 @@ const AddFineModal = ({ isOpen, onClose, onFineAdded, preloadedWorkers = null })
                         <input
                             type="text"
                             className="form-input"
-                            placeholder="Search employees..."
+                            placeholder="Search developers..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -155,7 +155,7 @@ const AddFineModal = ({ isOpen, onClose, onFineAdded, preloadedWorkers = null })
                                                 src={worker.photo
                                                     ? worker.photo
                                                     : `https://ui-avatars.com/api/?name=${encodeURIComponent(worker.name)}`}
-                                                alt="Employee"
+                                                alt="Developer"
                                                 className="w-8 h-8 rounded-full mr-2"
                                             />
                                         )}
@@ -170,7 +170,7 @@ const AddFineModal = ({ isOpen, onClose, onFineAdded, preloadedWorkers = null })
                             ))
                         ) : (
                             <div className="text-center py-4 text-gray-500">
-                                No employees found
+                                No developers found
                             </div>
                         )}
                     </div>

@@ -89,7 +89,7 @@ const WorkerManagement = () => {
     email: '',
     phoneNumber: '',
     joiningDate: new Date().toISOString().split('T')[0],
-    designation: 'Employee',
+    designation: 'Developer',
     accountHolderName: '',
     bankName: '',
     accountNumber: '',
@@ -173,7 +173,7 @@ const WorkerManagement = () => {
       }
     } catch (error) {
       console.error('Failed to load workers:', error);
-      toast.error('Failed to load employee records');
+      toast.error('Failed to load developer records');
     } finally {
       setIsLoading(false);
       setIsFetchingNextPage(false);
@@ -274,7 +274,7 @@ const WorkerManagement = () => {
       email: '',
       phoneNumber: '',
       joiningDate: new Date().toISOString().split('T')[0],
-      designation: 'Employee',
+      designation: 'Developer',
       accountHolderName: '',
       bankName: '',
       accountNumber: '',
@@ -488,11 +488,11 @@ const WorkerManagement = () => {
 
       generateQRCode(trimmedUsername, formData.rfid);
       setIsAddModalOpen(false);
-      toast.success('Employee added successfully');
+      toast.success('Developer added successfully');
       loadWorkers(1, false);
     } catch (error) {
       console.error('Add Employee Error:', error);
-      toast.error(error.message || 'Failed to add employee');
+      toast.error(error.message || 'Failed to add developer');
     }
   };
 
@@ -599,12 +599,12 @@ const WorkerManagement = () => {
       );
 
       setIsEditModalOpen(false);
-      toast.success('Employee updated successfully');
+      toast.success('Developer updated successfully');
       loadData();
       loadWorkers(1, false);
     } catch (error) {
       console.error('Update Error:', error);
-      toast.error(error.message || 'Failed to update employee');
+      toast.error(error.message || 'Failed to update developer');
     }
   };
   // Helper for status colors
@@ -629,7 +629,7 @@ const WorkerManagement = () => {
   const handleStatusChange = async (workerId, newStatus) => {
     try {
       await updateWorker(workerId, { status: newStatus });
-      toast.success(`Employee marked as ${newStatus}`);
+      toast.success(`Developer marked as ${newStatus}`);
       loadData();
       loadWorkers(1, false);
     } catch (error) {
@@ -642,11 +642,11 @@ const WorkerManagement = () => {
       await deleteWorker(selectedWorker._id);
       setWorkers(prev => prev.filter(worker => worker._id !== selectedWorker._id));
       setIsDeleteModalOpen(false);
-      toast.success('Employee deleted successfully');
+      toast.success('Developer deleted successfully');
       loadData();
       loadWorkers(1, false);
     } catch (error) {
-      toast.error(error.message || 'Failed to delete employee');
+      toast.error(error.message || 'Failed to delete developer');
     }
   };
 
@@ -751,7 +751,7 @@ const WorkerManagement = () => {
                 <button
                   onClick={() => openEditModal(record)}
                   className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                  title="Edit Employee"
+                  title="Edit Developer"
                 >
                   <FaEdit size={14} />
                 </button>
@@ -765,7 +765,7 @@ const WorkerManagement = () => {
                 <button
                   onClick={() => openRelieveModal(record)}
                   className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
-                  title="Relieve Employee"
+                  title="Relieve Developer"
                 >
                   <UserMinus size={14} />
                 </button>
@@ -783,7 +783,7 @@ const WorkerManagement = () => {
             <button
               onClick={() => openDeleteModal(record)}
               className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-              title="Delete Employee"
+              title="Delete Developer"
             >
               <FaTrash size={14} />
             </button>
@@ -856,7 +856,7 @@ const WorkerManagement = () => {
               onClick={() => openEditModal(worker)}
               disabled={isMuted}
               className={`p-2 rounded-xl transition-all flex items-center justify-center ${isMuted ? 'text-slate-300 bg-slate-50' : 'text-blue-600 bg-blue-50/50 hover:bg-blue-100/50'}`}
-              title="Edit Employee"
+              title="Edit Developer"
             >
               <FaEdit size={14} />
             </button>
@@ -905,7 +905,7 @@ const WorkerManagement = () => {
             <button 
                onClick={() => openDeleteModal(worker)}
                className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-colors"
-               title="Delete Employee"
+               title="Delete Developer"
             >
               <FaTrash size={14} />
             </button>
@@ -923,7 +923,7 @@ const WorkerManagement = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
         {/* Mobile Title */}
         <div className="md:hidden">
-          <h1 className="text-2xl font-display font-bold text-slate-900 tracking-tight">Employee Management</h1>
+          <h1 className="text-2xl font-display font-bold text-slate-900 tracking-tight">Developer Management</h1>
           <p className="text-sm text-slate-500 mt-1 leading-snug">Manage, filter and track your workforce efficiently.</p>
         </div>
 
@@ -971,7 +971,7 @@ const WorkerManagement = () => {
             onClick={openAddModal} 
             className="flex-1 md:flex-none flex items-center justify-center bg-[#0d9488] hover:bg-[#0f766e] text-white shadow-sm text-sm px-4 h-[38px] rounded-[10px] whitespace-nowrap transition-all !py-0"
           >
-            <FaPlus size={14} className="mr-1.5" /> Add Employee
+            <FaPlus size={14} className="mr-1.5" /> Add Developer
           </Button>
         </div>
       </div>
@@ -1085,7 +1085,7 @@ const WorkerManagement = () => {
               className="flex flex-col items-center justify-center py-24 bg-white rounded-2xl border border-gray-100 shadow-sm"
             >
               <Spinner size="xl" />
-              <p className="mt-4 text-gray-500 animate-pulse font-medium">Fetching employee records...</p>
+              <p className="mt-4 text-gray-500 animate-pulse font-medium">Fetching developer records...</p>
             </motion.div>
           ) : (
             <motion.div
@@ -1099,7 +1099,7 @@ const WorkerManagement = () => {
                 <div>
                   <div className="flex items-center space-x-2 mb-4 px-2">
                     <UserCheck className="h-5 w-5 text-green-500" />
-                    <h2 className="text-lg font-bold text-gray-900">Active Employees</h2>
+                    <h2 className="text-lg font-bold text-gray-900">Active Developers</h2>
                     <span className="bg-green-100 text-green-700 text-xs px-2.5 py-0.5 rounded-full font-bold">
                       {totalCount}
                     </span>
@@ -1128,7 +1128,7 @@ const WorkerManagement = () => {
                       <div className="bg-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
                         <Users className="h-8 w-8 text-gray-300" />
                       </div>
-                      <h3 className="text-gray-900 font-bold text-lg">No active employees found</h3>
+                      <h3 className="text-gray-900 font-bold text-lg">No active developers found</h3>
                       <p className="text-gray-500 font-medium max-w-xs mx-auto mt-1">Try adjusting your filters or search terms to find what you're looking for.</p>
                       {(searchTerm || departmentFilter !== 'All' || batchFilter !== 'All') && (
                         <button
@@ -1178,7 +1178,7 @@ const WorkerManagement = () => {
                       <div className="bg-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
                         <UserX className="h-8 w-8 text-gray-300" />
                       </div>
-                      <h3 className="text-gray-900 font-bold text-lg">No archived employees found</h3>
+                      <h3 className="text-gray-900 font-bold text-lg">No archived developers found</h3>
                       <p className="text-gray-500 font-medium max-w-xs mx-auto mt-1">Try adjusting your filters or search terms to find what you're looking for.</p>
                       {(searchTerm || departmentFilter !== 'All' || batchFilter !== 'All') && (
                         <button
@@ -1211,7 +1211,7 @@ const WorkerManagement = () => {
       <Modal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        title="Add Employee"
+        title="Add Developer"
       >
         <form onSubmit={handleAddWorker}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1224,7 +1224,7 @@ const WorkerManagement = () => {
                 className="form-input"
                 value={formData.name}
                 onChange={handleChange}
-                placeholder="Enter employee name"
+                placeholder="Enter developer name"
                 required
               />
             </div>
@@ -1491,7 +1491,7 @@ const WorkerManagement = () => {
               Cancel
             </Button>
             <Button type="submit" variant="primary">
-              Add Employee
+              Add Developer
             </Button>
           </div>
         </form>
@@ -1501,7 +1501,7 @@ const WorkerManagement = () => {
       <Modal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
-        title="Edit Employee"
+        title="Edit Developer"
       >
         <form onSubmit={handleEditWorker}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1513,7 +1513,7 @@ const WorkerManagement = () => {
                 className="form-input"
                 value={formData.name}
                 onChange={handleChange}
-                placeholder="Enter employee name"
+                placeholder="Enter developer name"
                 required
               />
             </div>
@@ -1632,7 +1632,7 @@ const WorkerManagement = () => {
               >
                 <option value="not_submitted">Not Submitted</option>
                 <option value="submitted">Submitted </option>
-                <option value="returned">Returned to Employee</option>
+                <option value="returned">Returned to Developer</option>
               </select>
             </div>
 
@@ -1789,7 +1789,7 @@ const WorkerManagement = () => {
               Cancel
             </Button>
             <Button type="submit" variant="primary">
-              Update Employee
+              Update Developer
             </Button>
           </div>
         </form>
@@ -1809,7 +1809,7 @@ const WorkerManagement = () => {
       <Modal
         isOpen={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}
-        title="Delete Employee"
+        title="Delete Developer"
       >
         <p className="mb-4">
           Are you sure you want to delete <strong>{selectedWorker?.name}</strong>?

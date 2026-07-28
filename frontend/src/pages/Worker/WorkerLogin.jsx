@@ -145,7 +145,7 @@ const WorkerLogin = () => {
     e.preventDefault();
 
     if (!selectedWorker || !password) {
-      toast.error('Please select a employee and enter password');
+      toast.error('Please select a developer and enter password');
       return;
     }
 
@@ -391,7 +391,7 @@ const WorkerLogin = () => {
       <div className="absolute top-0 right-0 w-96 h-96 bg-gray-200/10 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
       <div className="absolute bottom-0 left-0 w-96 h-96 bg-gray-200/10 rounded-full blur-3xl transform -translate-x-1/2 translate-y-1/2 pointer-events-none"></div>
 
-      {/* Back Button and Side Switch for Employee Selection View */}
+      {/* Back Button and Side Switch for Developer Selection View */}
       <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-50">
           <button
               onClick={() => navigate(-1)}
@@ -418,7 +418,7 @@ const WorkerLogin = () => {
           className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4"
         >
           <h1 className="text-2xl sm:text-3xl font-bold text-[#0d9488] text-center w-full md:w-auto">
-            Employee Login
+            Developer Login
           </h1>
 
           <button
@@ -446,7 +446,7 @@ const WorkerLogin = () => {
             <div className="relative flex-grow">
               <input
                 type="text"
-                placeholder="Search employees..."
+                placeholder="Search developers..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0d9488] focus:border-transparent text-black"
@@ -477,7 +477,7 @@ const WorkerLogin = () => {
             transition={{ duration: 0.5 }}
             className="text-center py-16 text-black"
           >
-            No employees found for {subdomain}. Try adjusting your search or filter.
+            No developers found for {subdomain}. Try adjusting your search or filter.
             <motion.button
               whileHover={{ scale: 1.1, rotate: 180 }}
               transition={{ duration: 0.5 }}
@@ -514,7 +514,7 @@ const WorkerLogin = () => {
                           ? getFullFileUrl(worker.photo)
                           : `https://ui-avatars.com/api/?name=${encodeURIComponent(worker.name)}&background=0d9488&color=fff`
                       }
-                      alt="Employee"
+                      alt="Developer"
                       className="w-full h-full object-cover"
                       onError={(e) => {
                         e.target.onerror = null;
@@ -563,7 +563,7 @@ const WorkerLogin = () => {
                           ? getFullFileUrl(selectedWorker.photo)
                           : `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedWorker.name)}&background=0d9488&color=fff`
                       }
-                      alt="Employee"
+                      alt="Developer"
                       className="w-full h-full object-cover"
                       onError={(e) => {
                         e.target.onerror = null;

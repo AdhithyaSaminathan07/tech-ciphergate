@@ -234,7 +234,7 @@ const FoodRequestManagement = () => {
           {record?.photo && (
             <img
               src={record.photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(record.name)}`}
-              alt="employee"
+              alt="developer"
               className="w-8 h-8 rounded-full mr-2"
             />
           )}
@@ -243,7 +243,7 @@ const FoodRequestManagement = () => {
       )
     },
     {
-      header: 'Employee ID',
+      header: 'Developer ID',
       accessor: 'rfid',
     },
     {

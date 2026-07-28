@@ -367,7 +367,7 @@ const WorkerWorkAllocation = () => {
         }
 
         if (selectedTicket.status === 'Done') {
-            toast.error('Approved/Done tasks cannot be moved back by employees.');
+            toast.error('Approved/Done tasks cannot be moved back by developers.');
             return;
         }
 
@@ -392,7 +392,7 @@ const WorkerWorkAllocation = () => {
         }
 
         if (ticket.status === 'Done') {
-            toast.error('Approved/Done tasks cannot be moved back by employees.');
+            toast.error('Approved/Done tasks cannot be moved back by developers.');
             return;
         }
 

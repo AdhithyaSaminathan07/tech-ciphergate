@@ -154,7 +154,7 @@ const WorkerLayout = ({ children, isTestInProgress }) => {
         <div className="hidden md:block">
           <Sidebar
             links={sidebarLinks}
-            logoText="Employee Dashboard"
+            logoText="Developer Dashboard"
             user={{
               ...user,
               displayName: `${user.name} (${user.department})`

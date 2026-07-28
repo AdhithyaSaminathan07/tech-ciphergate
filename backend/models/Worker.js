@@ -157,7 +157,7 @@ const workerSchema = mongoose.Schema({
   designation: {
     type: String,
     trim: true,
-    default: 'Employee'
+    default: 'Developer'
   },
   certificate_notes: {
     type: String,

@@ -145,7 +145,7 @@ const GlobalScoreboard = () => {
     };
 
     const getTypeLabel = (type) => {
-        return type === 'worker' ? 'Employee' : 'Guest';
+        return type === 'worker' ? 'Developer' : 'Guest';
     };
 
     const columns = [
@@ -164,7 +164,7 @@ const GlobalScoreboard = () => {
         {
             key: 'name',
             header: 'Name',
-            description: 'Employee',
+            description: 'Developer',
             align: 'text-left',
             headerAlign: 'text-left',
             render: (score) => (

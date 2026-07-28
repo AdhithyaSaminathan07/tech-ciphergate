@@ -105,19 +105,19 @@ const WalletManagementModal = ({ isOpen, onClose }) => {
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i);
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Employee Wallet Management" size="4xl">
+    <Modal isOpen={isOpen} onClose={onClose} title="Developer Wallet Management" size="4xl">
       <div className="flex flex-col md:flex-row gap-6 min-h-[500px]">
         
         {/* Left Side: Employee List */}
         <div className="w-full md:w-1/3 border-r border-gray-100 pr-0 md:pr-4">
           <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
-            <FaUsers className="text-gray-400" /> Employees
+            <FaUsers className="text-gray-400" /> Developers
           </h3>
           <div className="bg-gray-50 rounded-lg p-2 max-h-[500px] overflow-y-auto">
             {isLoading ? (
               <div className="flex justify-center p-8"><Spinner size="md" /></div>
             ) : workers.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center p-4">No employees found.</p>
+              <p className="text-sm text-gray-500 text-center p-4">No developers found.</p>
             ) : (
               <div className="space-y-2">
                 {workers.map(w => (
@@ -150,7 +150,7 @@ const WalletManagementModal = ({ isOpen, onClose }) => {
           {!selectedWorker ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-400 opacity-60">
               <FaWallet className="text-6xl mb-4" />
-              <p>Select an employee to manage their wallet</p>
+              <p>Select a developer to manage their wallet</p>
             </div>
           ) : (
             <div className="flex flex-col h-full">

@@ -95,7 +95,7 @@ const Scoreboard = ({ department, noCard = false }) => {
                 {worker.name}
               </div>
               <div className="text-[10px] font-bold text-slate-400 tracking-widest mt-0.5">
-                {worker.department || 'Employee'}
+                {worker.department || 'Developer'}
               </div>
             </div>
             <div className="flex flex-col items-end">
@@ -117,7 +117,7 @@ const Scoreboard = ({ department, noCard = false }) => {
                 Rank
               </th>
               <th scope="col" className="px-6 py-3 text-left text-[11px] font-black text-slate-500 tracking-widest">
-                Employee
+                Developer
               </th>
               <th scope="col" className="px-6 py-3 text-left text-[11px] font-black text-slate-500 tracking-widest">
                 Total Points

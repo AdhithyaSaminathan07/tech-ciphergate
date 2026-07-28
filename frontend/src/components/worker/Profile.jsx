@@ -124,7 +124,7 @@ const Profile = () => {
             </div>
             
             <h2 className="text-lg font-bold text-slate-800 text-center">{user?.name}</h2>
-            <p className="text-xs font-black text-teal-600 tracking-widest mt-1">{user?.designation || 'Employee'}</p>
+            <p className="text-xs font-black text-teal-600 tracking-widest mt-1">{user?.designation || 'Developer'}</p>
             <p className="text-xs text-slate-400 mt-1">{user?.department}</p>
           </Card>
         </div>

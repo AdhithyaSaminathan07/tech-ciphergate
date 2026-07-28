@@ -246,12 +246,12 @@ const HolidayManagement = () => {
 
   const getWorkerCount = (holiday) => {
     if (holiday.appliesTo === 'all') {
-      return 'All Employees';
+      return 'All Developers';
     }
     if (holiday.workers && holiday.workers.length > 0) {
-      return `${holiday.workers.length} Employee${holiday.workers.length > 1 ? 's' : ''}`;
+      return `${holiday.workers.length} Developer${holiday.workers.length > 1 ? 's' : ''}`;
     }
-    return 'No Employees';
+    return 'No Developers';
   };
   
   const filteredWorkers = workers.filter(worker => 
@@ -269,7 +269,7 @@ const HolidayManagement = () => {
             Holiday Management
           </h1>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Configure company holidays, date ranges, and employee-specific leave allocations
+            Configure company holidays, date ranges, and developer-specific leave allocations
           </p>
         </div>
         <button
@@ -402,7 +402,7 @@ const HolidayManagement = () => {
                           <span className="text-slate-800 font-semibold flex items-center gap-1">
                             {holiday.appliesTo === 'all' ? (
                               <>
-                                <FaUsers className="text-emerald-600" /> All Employees
+                                <FaUsers className="text-emerald-600" /> All Developers
                               </>
                             ) : (
                               <>
@@ -537,7 +537,7 @@ const HolidayManagement = () => {
                       onChange={handleChange}
                       className="sr-only"
                     />
-                    <span>All Employees</span>
+                    <span>All Developers</span>
                   </label>
 
                   <label className={`flex items-center justify-center p-2.5 rounded-xl border cursor-pointer text-xs font-bold transition-all ${
@@ -553,7 +553,7 @@ const HolidayManagement = () => {
                       onChange={handleChange}
                       className="sr-only"
                     />
-                    <span>Specific Employees</span>
+                    <span>Specific Developers</span>
                   </label>
                 </div>
               </div>
@@ -585,7 +585,7 @@ const HolidayManagement = () => {
                     <input
                       type="text"
                       className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white"
-                      placeholder="Search employees..."
+                      placeholder="Search developers..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
@@ -706,7 +706,7 @@ const HolidayManagement = () => {
                       onChange={handleChange}
                       className="sr-only"
                     />
-                    <span>All Employees</span>
+                    <span>All Developers</span>
                   </label>
 
                   <label className={`flex items-center justify-center p-2.5 rounded-xl border cursor-pointer text-xs font-bold transition-all ${
@@ -722,7 +722,7 @@ const HolidayManagement = () => {
                       onChange={handleChange}
                       className="sr-only"
                     />
-                    <span>Specific Employees</span>
+                    <span>Specific Developers</span>
                   </label>
                 </div>
               </div>
@@ -754,7 +754,7 @@ const HolidayManagement = () => {
                     <input
                       type="text"
                       className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:bg-white"
-                      placeholder="Search employees..."
+                      placeholder="Search developers..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />

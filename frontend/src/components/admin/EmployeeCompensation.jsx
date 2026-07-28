@@ -332,7 +332,7 @@ const EmployeeCompensation = () => {
               src={record.photo
                 ? record.photo
                 : `https://ui-avatars.com/api/?name=${encodeURIComponent(record.name)}`}
-              alt="Employee"
+              alt="Developer"
               className="w-8 h-8 rounded-full mr-2"
             />
           )}
@@ -341,7 +341,7 @@ const EmployeeCompensation = () => {
       )
     },
     {
-      header: 'Employee Type',
+      header: 'Developer Type',
       accessor: 'employeeType',
       render: (record) => {
         const type = employeeTypes.find(t => t.value === record.employeeType);
@@ -391,7 +391,7 @@ const EmployeeCompensation = () => {
   return (
     <div>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-        <h1 className="text-2xl font-bold">Employee Compensation</h1>
+        <h1 className="text-2xl font-bold">Developer Compensation</h1>
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
           <Button
             variant="secondary"
@@ -482,7 +482,7 @@ const EmployeeCompensation = () => {
           <Table
             columns={columns}
             data={filteredWorkers}
-            noDataMessage="No employees found."
+            noDataMessage="No developers found."
           />
         )}
       </Card>
@@ -509,7 +509,7 @@ const EmployeeCompensation = () => {
             </div>
             
             <div>
-              <label htmlFor="employeeType" className="form-label">Employee Type</label>
+              <label htmlFor="employeeType" className="form-label">Developer Type</label>
               <select
                 id="employeeType"
                 name="employeeType"
@@ -605,7 +605,7 @@ const EmployeeCompensation = () => {
             </div>
             
             <div>
-              <label htmlFor="employeeType" className="form-label">Employee Type</label>
+              <label htmlFor="employeeType" className="form-label">Developer Type</label>
               <select
                 id="employeeType"
                 name="employeeType"
@@ -688,7 +688,7 @@ const EmployeeCompensation = () => {
       >
         <div>
           <div className="mb-4">
-            <label className="form-label">Select Employee Type</label>
+            <label className="form-label">Select Developer Type</label>
             <select
               className="form-input w-full"
               value={selectedConfigType}
