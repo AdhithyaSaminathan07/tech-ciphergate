@@ -130,11 +130,14 @@ function computeInitialNextRunAt(rule) {
  * Mirrors what ticketController.createTicket does, but called internally.
  */
 async function spawnTicket(rule) {
-    const now = new Date();
+    const spawnDate = rule.nextRunAt ? new Date(rule.nextRunAt) : new Date();
+    spawnDate.setHours(0, 0, 0, 0);
+
     let ticketEndDate;
     if (rule.taskDurationDays != null && rule.taskDurationDays > 0) {
-        ticketEndDate = new Date(now);
-        ticketEndDate.setDate(ticketEndDate.getDate() + rule.taskDurationDays);
+        ticketEndDate = new Date(spawnDate);
+        ticketEndDate.setDate(ticketEndDate.getDate() + Math.max(0, rule.taskDurationDays - 1));
+        ticketEndDate.setHours(23, 59, 59, 999);
     }
 
     const ticket = new Ticket({
@@ -152,7 +155,7 @@ async function spawnTicket(rule) {
             text: item.text,
             completed: false
         })),
-        startDate: now,
+        startDate: spawnDate,
         endDate: ticketEndDate || undefined,
         // Mark as spawned by a recurring rule
         recurringTaskId: rule._id

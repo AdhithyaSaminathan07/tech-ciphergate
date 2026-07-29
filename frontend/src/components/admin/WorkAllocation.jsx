@@ -212,6 +212,16 @@ const getDateStr = (date) => {
     }).format(d);
 };
 
+const formatDateToYYYYMMDD = (date) => {
+    if (!date) return '';
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return '';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 const getProtectionState = (ticket) => {
     if (ticket.status === 'Done') {
         return 'Approved';
@@ -353,7 +363,7 @@ const MultiSelect = ({ options, selected, onChange, placeholder }) => {
     );
 };
 
-const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers }) => {
+const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers, assignmentMode = 'group', setAssignmentMode }) => {
     const [assignmentType, setAssignmentType] = useState('Individual'); // Team, Individual, Both
 
     useEffect(() => {
@@ -403,7 +413,6 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers }) =>
 
     const currentAssigneeIds = (selectedTicket.assignees || []).map(a => typeof a === 'object' ? a._id : a);
     const teamMembersCount = selectedTicket.team ? workers.filter(w => w.status !== 'Relieved' && w.department === selectedTicket.team).length : 0;
-    const finalCount = currentAssigneeIds.length;
 
     return (
         <div className="space-y-3">
@@ -468,6 +477,55 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers }) =>
                     />
                 </div>
             )}
+
+            {/* Multi-Assignee Mode Selector: Group Task vs Assign Separately */}
+            {currentAssigneeIds.length > 1 && selectedTicket._id === 'new' && setAssignmentMode && (
+                <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-100 animate-in slide-in-from-top-2 duration-300">
+                    <span className="text-slate-400 font-extrabold text-[9.5px] uppercase tracking-wider flex items-center justify-between">
+                        <span>Assignment Mode</span>
+                        <span className="text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded text-[8.5px] font-black">{currentAssigneeIds.length} Employees</span>
+                    </span>
+                    <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-xl">
+                        <button
+                            type="button"
+                            onClick={() => setAssignmentMode('group')}
+                            className={`py-1.5 px-2 rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 transition-all ${
+                                assignmentMode === 'group'
+                                    ? 'bg-white text-teal-700 shadow-2xs border border-slate-200/80'
+                                    : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                        >
+                            <Users className="w-3 h-3 text-teal-600" />
+                            <span>Group Task</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setAssignmentMode('separate')}
+                            className={`py-1.5 px-2 rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 transition-all ${
+                                assignmentMode === 'separate'
+                                    ? 'bg-teal-600 text-white shadow-xs'
+                                    : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                        >
+                            <User className="w-3 h-3" />
+                            <span>Assign Separately</span>
+                        </button>
+                    </div>
+                    <div className="text-[9.5px] font-bold mt-0.5 transition-all">
+                        {assignmentMode === 'separate' ? (
+                            <div className="bg-teal-50 border border-teal-200/80 text-teal-700 p-2 rounded-xl flex items-start gap-1.5 shadow-2xs">
+                                <Sparkles className="w-3.5 h-3.5 text-teal-600 shrink-0 mt-0.5" />
+                                <span className="leading-tight">Creates <strong>{currentAssigneeIds.length} separate tasks</strong> (1 dedicated task copy for each employee).</span>
+                            </div>
+                        ) : (
+                            <div className="bg-slate-50 border border-slate-200/80 text-slate-600 p-2 rounded-xl flex items-start gap-1.5 shadow-2xs">
+                                <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                                <span className="leading-tight">Creates <strong>1 shared task</strong> assigned to all {currentAssigneeIds.length} employees together.</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -506,6 +564,7 @@ const WorkAllocation = () => {
     const [modalFilterTeam, setModalFilterTeam] = useState('');
     const [recurringConfig, setRecurringConfig] = useState(defaultRecurringConfig);
     const [isRecurringManagerOpen, setIsRecurringManagerOpen] = useState(false);
+    const [assignmentMode, setAssignmentMode] = useState('group'); // 'group' (shared) vs 'separate' (individual copy per developer)
     const { subdomain } = useContext(appContext);
     const { socket } = useSocket();
     const [hasMore, setHasMore] = useState(false);
@@ -640,8 +699,8 @@ const WorkAllocation = () => {
                 if (prev && prev._id === updatedTicket._id) {
                     return {
                         ...updatedTicket,
-                        startDate: updatedTicket.startDate ? new Date(updatedTicket.startDate).toISOString().split('T')[0] : '',
-                        endDate: updatedTicket.endDate ? new Date(updatedTicket.endDate).toISOString().split('T')[0] : ''
+                        startDate: formatDateToYYYYMMDD(updatedTicket.startDate),
+                        endDate: formatDateToYYYYMMDD(updatedTicket.endDate)
                     };
                 }
                 return prev;
@@ -710,7 +769,20 @@ const WorkAllocation = () => {
             });
 
             const ticketsData = Array.isArray(response) ? response : (response?.tickets || []);
-            setTickets(ticketsData);
+            const uniqueTickets = [];
+            const seenIds = new Set();
+            for (const t of ticketsData) {
+                if (t && t._id && !seenIds.has(t._id.toString())) {
+                    seenIds.add(t._id.toString());
+                    uniqueTickets.push(t);
+                }
+            }
+            uniqueTickets.sort((a, b) => {
+                const timeA = a.createdAt ? new Date(a.createdAt).getTime() : (a._id ? parseInt(a._id.toString().substring(0, 8), 16) * 1000 : 0);
+                const timeB = b.createdAt ? new Date(b.createdAt).getTime() : (b._id ? parseInt(b._id.toString().substring(0, 8), 16) * 1000 : 0);
+                return timeB - timeA;
+            });
+            setTickets(uniqueTickets);
             setHasMore(false);
         } catch (error) {
             console.error('Error fetching tickets:', error);
@@ -1055,6 +1127,21 @@ const WorkAllocation = () => {
 
     const handleRecurringConfigChange = (newConfig) => {
         setRecurringConfig(newConfig);
+
+        // Auto-calculate ticket end date when recurring task duration is set and start date exists
+        if (newConfig.enabled && newConfig.taskDurationDays != null && newConfig.taskDurationDays > 0 && selectedTicket?.startDate) {
+            const startParts = selectedTicket.startDate.split('-');
+            if (startParts.length === 3) {
+                const start = new Date(parseInt(startParts[0], 10), parseInt(startParts[1], 10) - 1, parseInt(startParts[2], 10));
+                if (!isNaN(start.getTime())) {
+                    start.setDate(start.getDate() + Math.max(0, newConfig.taskDurationDays - 1));
+                    const endStr = formatDateToYYYYMMDD(start);
+                    if (selectedTicket.endDate !== endStr) {
+                        updateSelectedTicket({ endDate: endStr }, false);
+                    }
+                }
+            }
+        }
 
         if (selectedTicket && selectedTicket._id !== 'new') {
             if (saveRecurringTimeoutRef.current) clearTimeout(saveRecurringTimeoutRef.current);
@@ -1465,7 +1552,13 @@ const WorkAllocation = () => {
         }
     };
 
-    const filteredTickets = tickets;
+    const filteredTickets = useMemo(() => {
+        return [...tickets].sort((a, b) => {
+            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : (a._id ? parseInt(a._id.toString().substring(0, 8), 16) * 1000 : 0);
+            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : (b._id ? parseInt(b._id.toString().substring(0, 8), 16) * 1000 : 0);
+            return timeB - timeA;
+        });
+    }, [tickets]);
 
     // ─── Workload Engine (memoized for performance with large teams) ───────────
     const activeStatuses = new Set(['To Do', 'In Progress', 'Review']);
@@ -1852,7 +1945,7 @@ const WorkAllocation = () => {
                         </button>
                         <button
                             onClick={() => {
-                                setInlineCreateStatus(null); setRecurringConfig(defaultRecurringConfig);
+                                setInlineCreateStatus(null); setRecurringConfig(defaultRecurringConfig); setAssignmentMode('group');
                                 setSelectedTicket({ _id: 'new', title: '', description: '', priority: 'Low', status: 'To Do', issueType: 'Task', storyPoints: 0, labels: [], assignee: null, assignees: [], team: '', startDate: '', endDate: '', checklist: [{ text: '', completed: false }] });
                                 const tempId = Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
                                 setTempTicketId(tempId); setModalFilterTeam(''); setIsModalOpen(true);
@@ -2055,8 +2148,8 @@ const WorkAllocation = () => {
                                         onClick={() => {
                                             setSelectedTicket({
                                                 ...ticket,
-                                                startDate: ticket.startDate ? new Date(ticket.startDate).toISOString().split('T')[0] : '',
-                                                endDate: ticket.endDate ? new Date(ticket.endDate).toISOString().split('T')[0] : ''
+                                                startDate: formatDateToYYYYMMDD(ticket.startDate),
+                                                endDate: formatDateToYYYYMMDD(ticket.endDate)
                                             });
                                             setModalFilterTeam(ticket.team || '');
                                             setIsModalOpen(true);
@@ -2343,35 +2436,87 @@ const WorkAllocation = () => {
                                                 if (taskToSave.startDate === '') taskToSave.startDate = undefined;
                                                 if (taskToSave.endDate === '') taskToSave.endDate = undefined;
                                                 if (selectedTicket._id === 'new') { taskToSave.tempId = tempTicketId; }
-                                                const newT = await createTicket(taskToSave);
 
-                                                if (recurringConfig && recurringConfig.enabled) {
-                                                    try {
-                                                        const res = await createRecurringTask({
-                                                            ...recurringConfig,
-                                                            title: taskToSave.title,
-                                                            description: taskToSave.description,
-                                                            priority: taskToSave.priority,
-                                                            issueType: taskToSave.issueType,
-                                                            checklist: taskToSave.checklist,
-                                                            assignees: taskToSave.assignees,
-                                                            team: taskToSave.team,
-                                                            labels: taskToSave.labels,
-                                                            spawnedTickets: [newT._id],
-                                                            totalSpawned: 1,
-                                                            lastRunAt: new Date()
-                                                        });
-                                                        newT.recurringTaskId = res.data._id;
-                                                        toast.success('Recurring task rule created successfully!');
-                                                    } catch (err) {
-                                                        console.error('Failed to create recurring task:', err);
-                                                        toast.error('Failed to save recurring task config: ' + err.toString());
+                                                const targetAssignees = taskToSave.assignees || [];
+
+                                                if (assignmentMode === 'separate' && targetAssignees.length > 1) {
+                                                    const createdList = await Promise.all(
+                                                        targetAssignees.map(async (devId) => {
+                                                            const singleTaskData = {
+                                                                ...taskToSave,
+                                                                assignee: devId,
+                                                                assignees: [devId]
+                                                            };
+                                                            const newT = await createTicket(singleTaskData);
+
+                                                            if (recurringConfig && recurringConfig.enabled) {
+                                                                try {
+                                                                    const res = await createRecurringTask({
+                                                                        ...recurringConfig,
+                                                                        title: singleTaskData.title,
+                                                                        description: singleTaskData.description,
+                                                                        priority: singleTaskData.priority,
+                                                                        issueType: singleTaskData.issueType,
+                                                                        checklist: singleTaskData.checklist,
+                                                                        assignees: [devId],
+                                                                        team: singleTaskData.team,
+                                                                        labels: singleTaskData.labels,
+                                                                        spawnedTickets: [newT._id],
+                                                                        totalSpawned: 1,
+                                                                        lastRunAt: new Date()
+                                                                    });
+                                                                    newT.recurringTaskId = res.data._id;
+                                                                } catch (err) {
+                                                                    console.error('Failed to create recurring task for dev:', devId, err);
+                                                                }
+                                                            }
+                                                            return newT;
+                                                        })
+                                                    );
+
+                                                    setTickets(prev => {
+                                                        const existingIds = new Set(prev.map(t => t._id?.toString()));
+                                                        const newItems = createdList.filter(t => t && t._id && !existingIds.has(t._id.toString()));
+                                                        return [...newItems, ...prev];
+                                                    });
+                                                    toast.success(`Created ${createdList.length} separate individual tasks successfully!`);
+                                                } else {
+                                                    const newT = await createTicket(taskToSave);
+
+                                                    if (recurringConfig && recurringConfig.enabled) {
+                                                        try {
+                                                            const res = await createRecurringTask({
+                                                                ...recurringConfig,
+                                                                title: taskToSave.title,
+                                                                description: taskToSave.description,
+                                                                priority: taskToSave.priority,
+                                                                issueType: taskToSave.issueType,
+                                                                checklist: taskToSave.checklist,
+                                                                assignees: taskToSave.assignees,
+                                                                team: taskToSave.team,
+                                                                labels: taskToSave.labels,
+                                                                spawnedTickets: [newT._id],
+                                                                totalSpawned: 1,
+                                                                lastRunAt: new Date()
+                                                            });
+                                                            newT.recurringTaskId = res.data._id;
+                                                            toast.success('Recurring task rule created successfully!');
+                                                        } catch (err) {
+                                                            console.error('Failed to create recurring task:', err);
+                                                            toast.error('Failed to save recurring task config: ' + err.toString());
+                                                        }
                                                     }
+                                                    setTickets(prev => {
+                                                        if (prev.some(t => t._id?.toString() === newT._id?.toString())) return prev;
+                                                        return [newT, ...prev];
+                                                    });
+                                                    toast.success('Task created successfully!');
                                                 }
-                                                setTickets([newT, ...tickets]);
                                                 setIsModalOpen(false);
+                                                loadTicketsData();
                                             } catch (e) {
                                                 console.error('Save failed', e);
+                                                toast.error('Failed to create task: ' + (e.message || e.toString()));
                                             } finally {
                                                 setLoading(false);
                                             }
@@ -2648,6 +2793,8 @@ const WorkAllocation = () => {
                                                         selectedTicket={selectedTicket}
                                                         updateSelectedTicket={updateSelectedTicket}
                                                         workers={workers}
+                                                        assignmentMode={assignmentMode}
+                                                        setAssignmentMode={setAssignmentMode}
                                                     />
                                                 </div>
 

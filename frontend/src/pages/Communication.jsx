@@ -77,13 +77,11 @@ const Communication = () => {
     return `${baseUrl}/login?sso_username=${encodeURIComponent(ssoUser)}&sso_key=${SSO_KEY}&embed=true&role=${roleParam}&redirect=comments`;
   }, [activeInstagramAccount?.username, effectiveUsername, effectiveRole]);
 
-  const youtubeCommentsUrl = useMemo(() => {
-    const ssoUser = effectiveUsername;
-    if (!ssoUser) return null;
+  const [youtubeRefreshKey, setYoutubeRefreshKey] = useState(0);
 
-    const roleParam = effectiveRole === 'admin' ? 'admin' : 'staff';
-    return `https://channelbot.in/login?sso_username=${encodeURIComponent(ssoUser)}&sso_key=${SSO_KEY}&embed=true&hide_shell=true&role=${roleParam}&redirect=videos`;
-  }, [effectiveUsername, effectiveRole]);
+  const youtubeCommentsUrl = useMemo(() => {
+    return `https://channelbot.in/login?embed=true&hide_shell=true&redirect=videos`;
+  }, []);
 
   if (loadingActiveAccount || !gowhatsUrl) {
     return (
@@ -301,6 +299,22 @@ const Communication = () => {
                <span className="comm-refresh-text">{refreshButtonLabel}</span>
              </button>
           )}
+
+          {activeTab === 'youtube_comments' && (
+             <button
+               onClick={() => setYoutubeRefreshKey(prev => prev + 1)}
+               className="comm-refresh-btn"
+               title="Sign Out / Back to Login Screen"
+               style={{ color: '#ef4444', borderColor: '#fca5a5', backgroundColor: '#fef2f2' }}
+             >
+               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                 <polyline points="16 17 21 12 16 7" />
+                 <line x1="21" y1="12" x2="9" y2="12" />
+               </svg>
+               <span className="comm-refresh-text">Sign Out / Login Screen</span>
+             </button>
+          )}
         </div>
       </div>
 
@@ -344,6 +358,7 @@ const Communication = () => {
 
       <div style={{ flex: 1, height: '100%', minHeight: 0, overflow: 'hidden', display: activeTab === 'youtube_comments' ? 'flex' : 'none', flexDirection: 'column' }}>
         <iframe
+          key={`youtube-comments-${youtubeRefreshKey}`}
           src={youtubeCommentsUrl}
           style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
           title="YouTube Comments"
