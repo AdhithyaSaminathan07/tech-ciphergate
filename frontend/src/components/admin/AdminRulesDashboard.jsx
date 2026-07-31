@@ -290,7 +290,7 @@ const AdminRulesDashboard = () => {
 
     // CSV Exporter
     const handleExportCSV = () => {
-        const headers = ['Employee Name', 'Username', 'Email', 'Department', 'Status', 'Accepted Version', 'Accepted At', 'IP Address', 'Device Info'];
+        const headers = ['Developer Name', 'Username', 'Email', 'Department', 'Status', 'Accepted Version', 'Accepted At', 'IP Address', 'Device Info'];
         const rows = filteredAcceptances.map(a => [
             a.name,
             a.username,
@@ -396,7 +396,7 @@ const AdminRulesDashboard = () => {
                     <div className="space-y-1">
                         <span className="text-xs font-semibold text-slate-500 tracking-wider">Acceptance Rate</span>
                         <div className="text-2xl font-bold text-slate-800">{stats.acceptanceRate}%</div>
-                        <p className="text-[10px] text-emerald-600 font-semibold">{stats.acceptedWorkersCount} of {stats.totalWorkers} employees</p>
+                        <p className="text-[10px] text-emerald-600 font-semibold">{stats.acceptedWorkersCount} of {stats.totalWorkers} developers</p>
                     </div>
                     <div className="bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/15 text-emerald-600">
                         <FiCheckCircle size={24} />
@@ -565,7 +565,7 @@ const AdminRulesDashboard = () => {
                                     <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                                     <input
                                         type="text"
-                                        placeholder="Search employees by name or username..."
+                                        placeholder="Search developers by name or username..."
                                         value={monitorSearch}
                                         onChange={(e) => setMonitorSearch(e.target.value)}
                                         className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 shadow-inner"
@@ -595,7 +595,7 @@ const AdminRulesDashboard = () => {
                                     <button
                                         onClick={handleExportCSV}
                                         className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-650 hover:text-slate-800 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 shadow-sm"
-                                        title="Export listed employees to CSV"
+                                        title="Export listed developers to CSV"
                                     >
                                         <FiDownload size={16} />
                                         <span>Export CSV</span>
@@ -617,7 +617,7 @@ const AdminRulesDashboard = () => {
                                 <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr className="bg-slate-50 text-slate-500 text-xs font-bold tracking-wider border-b border-slate-150">
-                                            <th className="px-6 py-4">Employee</th>
+                                            <th className="px-6 py-4">Developer</th>
                                             <th className="px-6 py-4">Department</th>
                                             <th className="px-6 py-4">Status</th>
                                             <th className="px-6 py-4">Version</th>
@@ -677,7 +677,7 @@ const AdminRulesDashboard = () => {
                                         ) : (
                                             <tr>
                                                 <td colSpan="7" className="text-center py-10 text-slate-400">
-                                                    No employees match selected filters.
+                                                    No developers match selected filters.
                                                 </td>
                                             </tr>
                                         )}
@@ -709,7 +709,7 @@ const AdminRulesDashboard = () => {
                                 <div className="space-y-0.5">
                                     <label htmlFor="forceAcceptance" className="font-bold text-slate-800 text-sm cursor-pointer">Enforce Rules Acceptance Gate</label>
                                     <p className="text-xs text-slate-450 leading-relaxed">
-                                        If active, employees with outdated rule versions are locked out of dashboard modules and redirected to rules acceptance onboarding screen.
+                                        If active, developers with outdated rule versions are locked out of dashboard modules and redirected to rules acceptance onboarding screen.
                                     </p>
                                 </div>
                             </div>
@@ -728,7 +728,7 @@ const AdminRulesDashboard = () => {
                                 <div className="space-y-0.5">
                                     <label htmlFor="scrollValidation" className="font-bold text-slate-800 text-sm cursor-pointer">Require Scroll-to-End Validation</label>
                                     <p className="text-xs text-slate-450 leading-relaxed">
-                                        Detects employee scroll height. Acceptance agreement check box will remain locked until they scroll completely to the bottom of policy outlines.
+                                        Detects developer scroll height. Acceptance agreement check box will remain locked until they scroll completely to the bottom of policy outlines.
                                     </p>
                                 </div>
                             </div>
@@ -747,7 +747,7 @@ const AdminRulesDashboard = () => {
                                 <div className="space-y-0.5">
                                     <label htmlFor="requireCheckbox" className="font-bold text-slate-800 text-sm cursor-pointer">Require Terms Agreement Checkbox</label>
                                     <p className="text-xs text-slate-450 leading-relaxed">
-                                        Forces employees to explicitly select the agreement checkbox before clicking "Accept & Continue".
+                                        Forces developers to explicitly select the agreement checkbox before clicking "Accept & Continue".
                                     </p>
                                 </div>
                             </div>

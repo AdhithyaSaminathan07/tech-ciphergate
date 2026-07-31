@@ -25,7 +25,7 @@ const WorkerHistoryModal = ({ isOpen, onClose, onRestore }) => {
       const res = await api.get(url);
       setHistory(res.data);
     } catch (error) {
-      toast.error('Failed to load employee history');
+      toast.error('Failed to load developer history');
     } finally {
       setIsLoading(false);
     }
@@ -41,12 +41,12 @@ const WorkerHistoryModal = ({ isOpen, onClose, onRestore }) => {
     try {
       await api.put(`/workers/${historyRecord.employee._id}`, { status: 'Active' });
       const actionText = historyRecord.employee.status === 'Deleted' ? 'restored' : 'retrieved';
-      toast.success(`Employee ${actionText} successfully`);
+      toast.success(`Developer ${actionText} successfully`);
       fetchHistory();
       if (onRestore) onRestore();
     } catch (error) {
       const actionText = historyRecord.employee?.status === 'Deleted' ? 'restore' : 'retrieve';
-      toast.error(`Failed to ${actionText} employee`);
+      toast.error(`Failed to ${actionText} developer`);
     }
   };
 
@@ -101,7 +101,7 @@ const WorkerHistoryModal = ({ isOpen, onClose, onRestore }) => {
     <Modal 
       isOpen={isOpen} 
       onClose={onClose} 
-      title="Audit Trail & Employee History" 
+      title="Audit Trail & Developer History" 
       size="2xl"
       className="!p-0 overflow-hidden"
     >
@@ -113,7 +113,7 @@ const WorkerHistoryModal = ({ isOpen, onClose, onRestore }) => {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <input 
                 type="text" 
-                placeholder="Search by employee name or administrator..."
+                placeholder="Search by developer name or administrator..."
                 className="w-full pl-11 pr-4 py-3 bg-slate-100/50 border border-transparent focus:border-teal-500/30 focus:bg-white rounded-2xl text-sm font-medium transition-all outline-none"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -178,7 +178,7 @@ const WorkerHistoryModal = ({ isOpen, onClose, onRestore }) => {
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 mb-2">
                           <div className="flex items-center gap-2 overflow-hidden w-full sm:w-auto">
                             <span className="font-bold text-sm text-slate-900 truncate">
-                              {item.employee ? item.employee.name : 'Unknown Employee'}
+                              {item.employee ? item.employee.name : 'Unknown Developer'}
                             </span>
                             {item.employee?.status === 'Deleted' && (
                               <span className="px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-600 text-[9px] font-black tracking-wider border border-rose-100 shrink-0">Deleted</span>

@@ -301,7 +301,7 @@ const Dashboard = () => {
         ══════════════════════════════════════════ */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-4">
           <div className="col-span-2 md:col-span-1">
-            <StatCard title="Total Employees" value={stats.workers} icon={FaUsers} link="/admin/workers" />
+            <StatCard title="Total Developers" value={stats.workers} icon={FaUsers} link="/admin/workers" />
           </div>
           <StatCard title="Active Tasks" value={stats.tasks} icon={FaTasks} link="/admin/work-allocation" />
           <StatCard title="Topics" value={stats.topics} icon={FaTasks} link="/admin/topics" />

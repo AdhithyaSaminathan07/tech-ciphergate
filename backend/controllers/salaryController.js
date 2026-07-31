@@ -539,10 +539,14 @@ const calculateDailyAttendancePenalties = async (subdomain, fromDate, toDate, wo
     }
 
     if (deptEnabled) {
-      const otherDeptWorkers = Math.max(1, totalDeptWorkers - 1);
-      const presentOtherDeptWorkers = dayData.dept.filter(id => id !== workerIdStr).length;
-      const deptRate = (presentOtherDeptWorkers / otherDeptWorkers) * 100;
-      deptPenaltyMap[dateStr] = deptRate < deptVal;
+      if (totalDeptWorkers < 2) {
+        deptPenaltyMap[dateStr] = false;
+      } else {
+        const otherDeptWorkers = Math.max(1, totalDeptWorkers - 1);
+        const presentOtherDeptWorkers = dayData.dept.filter(id => id !== workerIdStr).length;
+        const deptRate = (presentOtherDeptWorkers / otherDeptWorkers) * 100;
+        deptPenaltyMap[dateStr] = deptRate < deptVal;
+      }
     }
   });
 
@@ -1928,10 +1932,14 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
              cMap[dateStr] = ((pW / oW) * 100) < cVal;
            }
            if (dEnabled) {
-             const deptList = dayData.dept[wDeptId] || [];
-             const oDW = Math.max(1, tDeptW - 1);
-             const pDW = deptList.filter(id => id !== wIdStr).length;
-             dMap[dateStr] = ((pDW / oDW) * 100) < dVal;
+             if (tDeptW < 2) {
+               dMap[dateStr] = false;
+             } else {
+               const deptList = dayData.dept[wDeptId] || [];
+               const oDW = Math.max(1, tDeptW - 1);
+               const pDW = deptList.filter(id => id !== wIdStr).length;
+               dMap[dateStr] = ((pDW / oDW) * 100) < dVal;
+             }
            }
         });
         return { companyPenaltyMap: cMap, deptPenaltyMap: dMap };
@@ -3089,6 +3097,20 @@ const debitWallet = asyncHandler(async (req, res) => {
   res.status(200).json({ message: 'Wallet debited successfully', balance: worker.walletBalance, transaction: txn });
 });
 
+const triggerWhatsappSalaryDispatch = asyncHandler(async (req, res) => {
+  const { subdomain, phoneNumbers } = req.body;
+  const targetSubdomain = subdomain || req.user.subdomain;
+  const { executeSalaryWhatsappDispatch } = require('../services/autoSalaryWhatsappService');
+
+  const result = await executeSalaryWhatsappDispatch(targetSubdomain, phoneNumbers);
+  if (!result.success) {
+    res.status(400);
+    throw new Error(result.error || 'WhatsApp salary dispatch failed');
+  }
+
+  res.status(200).json(result);
+});
+
 module.exports = {
   giveBonus,
   removeBonus,
@@ -3119,5 +3141,6 @@ module.exports = {
   getDashboardSalaryStats,
   getWalletBalances,
   getWalletHistory,
-  debitWallet
+  debitWallet,
+  triggerWhatsappSalaryDispatch
 };

@@ -111,7 +111,7 @@ const AdminFoodRequest = () => {
     const workersToSubmit = workers.filter(worker => selectedWorkers[worker._id]);
 
     if (workersToSubmit.length === 0) {
-      toast.info('Please select at least one employee.');
+      toast.info('Please select at least one developer.');
       setIsSubmitting(false);
       return;
     }
@@ -181,7 +181,7 @@ const AdminFoodRequest = () => {
     <>
       <div className="bg-white p-6 rounded-lg shadow-md mb-4">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-gray-800">Food Request Employees</h2>
+          <h2 className="text-xl font-semibold text-gray-800">Food Request Developers</h2>
           <Button onClick={() => setIsModalOpen(true)} disabled={isSubmitting || selectedWorkerCount === 0 || allMealsDisabled} variant="primary">
             {isSubmitting ? <Spinner size="sm" /> : `Submit (${selectedWorkerCount})`}
           </Button>
@@ -192,7 +192,7 @@ const AdminFoodRequest = () => {
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
           >
             <span className="text-gray-700">
-              {selectedWorkerCount > 0 ? `${selectedWorkerCount} employee(s) selected` : 'Select employee(s)...'}
+              {selectedWorkerCount > 0 ? `${selectedWorkerCount} developer(s) selected` : 'Select developer(s)...'}
             </span>
             <svg className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
@@ -205,7 +205,7 @@ const AdminFoodRequest = () => {
                 <input
                   type="text"
                   className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Search employees..."
+                  placeholder="Search developers..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -232,7 +232,7 @@ const AdminFoodRequest = () => {
                   </div>
                 ))
               ) : (
-                <p className="p-4 text-center text-gray-500">No employees found.</p>
+                <p className="p-4 text-center text-gray-500">No developers found.</p>
               )}
             </div>
           )}
@@ -243,11 +243,11 @@ const AdminFoodRequest = () => {
         isOpen={isModalOpen}
         onRequestClose={() => setIsModalOpen(false)}
         style={customStyles}
-        contentLabel="Select Meal for Employees"
+        contentLabel="Select Meal for Developers"
       >
         <div className="p-6 bg-white rounded-lg shadow-xl">
           <h3 className="text-xl font-semibold text-center text-gray-800 mb-4">
-            Select Meal for {selectedWorkerCount} Employee(s)
+            Select Meal for {selectedWorkerCount} Developer(s)
           </h3>
           
           <div className="flex flex-col sm:flex-row justify-around space-y-2 sm:space-y-0 sm:space-x-2">

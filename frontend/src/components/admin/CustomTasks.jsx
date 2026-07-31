@@ -152,7 +152,7 @@ const CustomTasks = () => {
       <div className="border rounded-md p-4 mb-4 bg-white">
         <div className="flex justify-between">
           <div>
-            <p className="font-medium">{task.worker?.name || 'Unknown Employee'}</p>
+            <p className="font-medium">{task.worker?.name || 'Unknown Developer'}</p>
             <p className="text-sm text-gray-500">
               {task.worker?.department?.name && `${task.worker.department.name} • `}
               {new Date(task.createdAt).toLocaleString()}
@@ -245,7 +245,7 @@ const CustomTasks = () => {
                   </div>
                   <input
                     type="text"
-                    placeholder="Search by description or employee name"
+                    placeholder="Search by description or developer name"
                     className="pl-10 pr-4 py-2 w-full border rounded-md"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}

@@ -86,7 +86,7 @@ const AdminDeleteHistory = () => {
             <FaHistory className="text-red-600" /> Deleted Invoice History
           </h1>
           <p className="text-gray-500 text-sm mt-1">
-            View logs of all deleted invoices from Admin and Employees
+            View logs of all deleted invoices from Admin and Developers
           </p>
         </div>
       </div>
@@ -151,7 +151,7 @@ const AdminDeleteHistory = () => {
           <div className="p-12 text-center text-gray-400 flex flex-col items-center">
             <FaHistory size={48} className="mb-4 opacity-20" />
             <p className="text-lg font-medium">No deleted invoices found</p>
-            <p className="text-sm">Invoices deleted by you or your employees will appear here.</p>
+            <p className="text-sm">Invoices deleted by you or your developers will appear here.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">

@@ -257,7 +257,21 @@ const WorkerManagement = () => {
   // Handle form input change
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => {
+      const updated = { ...prev, [name]: value };
+      if (name === 'role') {
+        if (value === 'manager' && (!prev.designation || prev.designation === 'Developer')) {
+          updated.designation = 'Manager';
+        } else if (value === 'developer' && prev.designation === 'Manager') {
+          updated.designation = 'Developer';
+        }
+      } else if (name === 'designation') {
+        if (value.toLowerCase().includes('manager')) {
+          updated.role = 'manager';
+        }
+      }
+      return updated;
+    });
   };
 
   // Open add worker modal
@@ -268,6 +282,7 @@ const WorkerManagement = () => {
       username: '',
       password: '',
       department: departments.length > 0 ? departments[0]._id : '', // Ensure first department is selected
+      role: 'developer',
       photo: '',
       batch: batches.length > 0 ? batches[0].batchName : '', // ADDED: Set the first batch as default
       faceEmbeddings: [], // Reset face embeddings
@@ -294,11 +309,14 @@ const WorkerManagement = () => {
       ? worker.department._id
       : (departments.find(dept => dept.name === worker.department)?._id || worker.department);
 
+    const isManagerRole = worker.role === 'manager' || (worker.designation && worker.designation.toLowerCase().includes('manager'));
+
     setSelectedWorker(worker);
     setFormData({
       name: worker.name,
       username: worker.username,
       department: departmentId, // Use the department ID
+      role: isManagerRole ? 'manager' : (worker.role || 'developer'),
       photo: worker.photo || '',
       salary: worker.salary,
       password: '',
@@ -470,6 +488,7 @@ const WorkerManagement = () => {
         name: trimmedName,
         username: trimmedUsername,
         rfid: formData.rfid,
+        role: formData.role || 'developer',
         salary: Number(trimmedSalary), // Ensure salary is a number
         subdomain,
         password: trimmedPassword,
@@ -552,6 +571,7 @@ const WorkerManagement = () => {
         name: formData.name,
         username: formData.username,
         department: formData.department, // Always include department
+        role: formData.role || 'developer',
         original_certificate_status: formData.original_certificate_status, // ADDED
         faceEmbeddings: workerFaceEmbeddings, // Include face embeddings
         email: formData.email,
@@ -708,6 +728,18 @@ const WorkerManagement = () => {
           </div>
         );
       }
+    },
+    {
+      header: 'Role (Tier)',
+      accessor: 'role',
+      width: '120px',
+      headerAlign: 'text-left',
+      align: 'text-left',
+      render: (record) => (
+        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${record.role === 'manager' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+          {record.role === 'manager' ? 'Manager (Tier 2)' : 'Developer (Tier 3)'}
+        </span>
+      )
     },
     {
       header: 'RFID',
@@ -1283,6 +1315,20 @@ const WorkerManagement = () => {
             </div>
 
             <div className="form-group">
+              <label className="form-label">Hierarchy Role *</label>
+              <select
+                name="role"
+                className="form-input"
+                value={formData.role || 'developer'}
+                onChange={handleChange}
+                required
+              >
+                <option value="developer">Developer (Tier 3)</option>
+                <option value="manager">Manager (Tier 2)</option>
+              </select>
+            </div>
+
+            <div className="form-group">
               <label className="form-label">Batch *</label>
               <select
                 name="batch"
@@ -1588,6 +1634,20 @@ const WorkerManagement = () => {
                     {dept.name}
                   </option>
                 ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Hierarchy Role *</label>
+              <select
+                name="role"
+                className="form-input"
+                value={formData.role || 'developer'}
+                onChange={handleChange}
+                required
+              >
+                <option value="developer">Developer (Tier 3)</option>
+                <option value="manager">Manager (Tier 2)</option>
               </select>
             </div>
 

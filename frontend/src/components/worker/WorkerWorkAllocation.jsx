@@ -359,14 +359,15 @@ const WorkerWorkAllocation = () => {
         fetchData();
     };
 
+    const isManagerOrOwner = user?.role === 'manager' || user?.role === 'owner' || user?.role === 'admin';
+
     const updateSelectedTicketStatus = async (status) => {
-        // Prevent worker from marking as Done manually
-        if (status === 'Done') {
-            toast.warning('Only Admin can mark tasks as Done. Please move to Review.');
+        if (status === 'Done' && !isManagerOrOwner) {
+            toast.warning('Only Managers or Owners can mark tasks as Done. Please move to Review.');
             return;
         }
 
-        if (selectedTicket.status === 'Done') {
+        if (selectedTicket.status === 'Done' && status !== 'Done' && !isManagerOrOwner) {
             toast.error('Approved/Done tasks cannot be moved back by developers.');
             return;
         }
@@ -377,6 +378,9 @@ const WorkerWorkAllocation = () => {
 
         try {
             await updateTicket(updatedTicket._id, { status, subdomain });
+            if (status === 'Done') {
+                toast.success('Task approved and marked as Done!');
+            }
         } catch (error) {
             console.error('Update failed', error);
         }
@@ -386,12 +390,12 @@ const WorkerWorkAllocation = () => {
         const ticket = tickets.find(t => t._id === ticketId);
         if (!ticket || ticket.status === targetStatus) return;
 
-        // Prevent worker from dragging to Done
-        if (targetStatus === 'Done') {
+        if (targetStatus === 'Done' && !isManagerOrOwner) {
+            toast.warning('Only Managers or Owners can mark tasks as Done.');
             return;
         }
 
-        if (ticket.status === 'Done') {
+        if (ticket.status === 'Done' && !isManagerOrOwner) {
             toast.error('Approved/Done tasks cannot be moved back by developers.');
             return;
         }
@@ -403,6 +407,9 @@ const WorkerWorkAllocation = () => {
 
         try {
             await updateTicket(ticketId, { status: targetStatus, subdomain });
+            if (targetStatus === 'Done') {
+                toast.success('Task approved and marked as Done!');
+            }
         } catch (error) {
             console.error('Error upgrading ticket:', error);
             fetchData();
@@ -433,8 +440,19 @@ const WorkerWorkAllocation = () => {
             <div className="p-3 md:p-6 pb-2 md:pb-4 border-b border-gray-100">
                 <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 mb-2 md:mb-3">
                     <div>
-                        <h1 className="text-base sm:text-xl md:text-2xl font-bold text-gray-800">My Tasks</h1>
-                        <p className="hidden md:block text-gray-500 text-sm mt-1">Manage and update status of your assigned tasks.</p>
+                        <h1 className="text-base sm:text-xl md:text-2xl font-bold text-gray-800 flex items-center gap-2">
+                            <span>My Tasks</span>
+                            {user?.role === 'manager' && (
+                                <span className="bg-teal-100 text-teal-800 text-xs px-2.5 py-0.5 rounded-full font-bold border border-teal-200">
+                                    Manager Tier
+                                </span>
+                            )}
+                        </h1>
+                        <p className="hidden md:block text-gray-500 text-sm mt-1">
+                            {user?.role === 'manager'
+                                ? 'Manage owner-assigned tasks, team tasks, and review & approve developer submissions.'
+                                : 'Manage and update status of your assigned tasks.'}
+                        </p>
                     </div>
                     <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
                         {/* Month filter dropdown */}

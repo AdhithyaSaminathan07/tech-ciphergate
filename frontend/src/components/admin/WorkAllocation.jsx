@@ -299,8 +299,9 @@ const MultiSelect = ({ options, selected, onChange, placeholder }) => {
                 {selectedOptions.length > 0 ? (
                     <div className="flex flex-wrap gap-1 w-[calc(100%-24px)]">
                         {selectedOptions.map(opt => (
-                            <span key={opt.id} className="flex items-center gap-1 px-2 py-0.5 bg-teal-50 text-teal-700 text-[9.5px] font-bold rounded-md border border-teal-100 shadow-2xs animate-in zoom-in-90">
-                                {opt.name}
+                            <span key={opt.id} className={`flex items-center gap-1 px-2 py-0.5 text-[9.5px] font-bold rounded-md border shadow-2xs animate-in zoom-in-90 ${opt.role === 'manager' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-teal-50 text-teal-700 border-teal-100'}`}>
+                                <span>{opt.name}</span>
+                                {opt.role === 'manager' && <span className="text-[8px] font-black text-purple-700 bg-purple-100 px-1 rounded">MGR</span>}
                                 <X className="w-2.5 h-2.5 hover:text-red-500 transition-colors" onClick={(e) => { e.stopPropagation(); toggleOption(opt.id); }} />
                             </span>
                         ))}
@@ -349,10 +350,19 @@ const MultiSelect = ({ options, selected, onChange, placeholder }) => {
                                     className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${selected.includes(opt.id) ? 'bg-teal-50 text-teal-700' : 'hover:bg-gray-50 text-gray-700'}`}
                                     onClick={(e) => { e.stopPropagation(); toggleOption(opt.id); }}
                                 >
-                                    <div className="flex flex-col">
+                                    <div className="flex items-center gap-2">
                                         <span className="text-xs font-medium">{opt.name}</span>
+                                        {opt.role === 'manager' ? (
+                                            <span className="px-1.5 py-0.5 text-[8.5px] font-extrabold uppercase tracking-wider bg-purple-100 text-purple-700 rounded border border-purple-200">
+                                                Manager
+                                            </span>
+                                        ) : (
+                                            <span className="px-1.5 py-0.5 text-[8.5px] font-extrabold uppercase tracking-wider bg-slate-100 text-slate-600 rounded border border-slate-200">
+                                                Developer
+                                            </span>
+                                        )}
                                     </div>
-                                    {selected.includes(opt.id) && <Check className="w-3.5 h-3.5" />}
+                                    {selected.includes(opt.id) && <Check className="w-3.5 h-3.5 text-teal-600" />}
                                 </div>
                             ))
                         )}
@@ -468,22 +478,25 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers, assi
 
             {(assignmentType === 'Individual' || assignmentType === 'Both') && (
                 <div className="flex flex-col gap-1.5 animate-in slide-in-from-top-2 duration-300">
-                    <span className="text-gray-400 font-bold text-[9.5px] uppercase tracking-wider">Select Employees</span>
+                    <span className="text-gray-400 font-bold text-[9.5px] uppercase tracking-wider">Select Assignees (Managers / Developers)</span>
                     <MultiSelect
-                        options={workers.map(w => ({ id: w._id, name: w.name, status: w.status }))}
+                        options={workers.map(w => {
+                            const isMgr = w.role === 'manager' || (w.designation && w.designation.toLowerCase().includes('manager'));
+                            return { id: w._id, name: w.name, role: isMgr ? 'manager' : 'developer', status: w.status };
+                        })}
                         selected={currentAssigneeIds}
                         onChange={handleEmployeeChange}
-                        placeholder="Add employees..."
+                        placeholder="Add assignees..."
                     />
                 </div>
             )}
 
             {/* Multi-Assignee Mode Selector: Group Task vs Assign Separately */}
-            {currentAssigneeIds.length > 1 && selectedTicket._id === 'new' && setAssignmentMode && (
+            {selectedTicket._id === 'new' && setAssignmentMode && (
                 <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-100 animate-in slide-in-from-top-2 duration-300">
                     <span className="text-slate-400 font-extrabold text-[9.5px] uppercase tracking-wider flex items-center justify-between">
                         <span>Assignment Mode</span>
-                        <span className="text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded text-[8.5px] font-black">{currentAssigneeIds.length} Employees</span>
+                        <span className="text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded text-[8.5px] font-black">{currentAssigneeIds.length} Assignees Selected</span>
                     </span>
                     <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-xl">
                         <button
@@ -515,12 +528,12 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers, assi
                         {assignmentMode === 'separate' ? (
                             <div className="bg-teal-50 border border-teal-200/80 text-teal-700 p-2 rounded-xl flex items-start gap-1.5 shadow-2xs">
                                 <Sparkles className="w-3.5 h-3.5 text-teal-600 shrink-0 mt-0.5" />
-                                <span className="leading-tight">Creates <strong>{currentAssigneeIds.length} separate tasks</strong> (1 dedicated task copy for each employee).</span>
+                                <span className="leading-tight">Creates <strong>{currentAssigneeIds.length > 0 ? currentAssigneeIds.length : 'individual'} separate tasks</strong> (1 dedicated task copy for each assignee).</span>
                             </div>
                         ) : (
                             <div className="bg-slate-50 border border-slate-200/80 text-slate-600 p-2 rounded-xl flex items-start gap-1.5 shadow-2xs">
                                 <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                                <span className="leading-tight">Creates <strong>1 shared task</strong> assigned to all {currentAssigneeIds.length} employees together.</span>
+                                <span className="leading-tight">Creates <strong>1 shared task</strong> assigned to all selected assignees together.</span>
                             </div>
                         )}
                     </div>
@@ -1760,10 +1773,10 @@ const WorkAllocation = () => {
                         <div className="shrink-0 w-[135px]">
                             <Select value={filterAssignee || "all_assignees"} onValueChange={(val) => setFilterAssignee(val === "all_assignees" ? "" : val)}>
                                 <SelectTrigger className="w-full bg-slate-100 hover:bg-slate-200 border-transparent rounded-full h-8 text-xs text-slate-700 font-medium px-3 shadow-none transition-colors">
-                                    <SelectValue placeholder="Employee" />
+                                    <SelectValue placeholder="Developer" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="all_assignees">All Employees</SelectItem>
+                                    <SelectItem value="all_assignees">All Developers</SelectItem>
                                     <SelectItem value="unassigned">Unassigned</SelectItem>
                                     {sortedByWorkload.map(w => (
                                         <SelectItem key={w._id} value={w._id}>{w.name.split(' ')[0]}</SelectItem>
@@ -1852,10 +1865,10 @@ const WorkAllocation = () => {
                             <div className="w-36">
                                 <Select value={filterAssignee || "all_assignees"} onValueChange={(val) => setFilterAssignee(val === "all_assignees" ? "" : val)}>
                                     <SelectTrigger className="w-full bg-white border-slate-200 rounded-lg h-9 text-xs text-slate-700 font-semibold shadow-xs">
-                                        <SelectValue placeholder="Employee" />
+                                        <SelectValue placeholder="Developer" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="all_assignees">All Employees</SelectItem>
+                                        <SelectItem value="all_assignees">All Developers</SelectItem>
                                         <SelectItem value="unassigned">Unassigned</SelectItem>
                                         {sortedByWorkload.map(w => (
                                             <SelectItem key={w._id} value={w._id}>{w.name.split(' ')[0]}</SelectItem>
@@ -3069,7 +3082,7 @@ const WorkAllocation = () => {
                                                 <div className="flex flex-col gap-2 pt-1 mb-2 bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
                                                     <div className="flex items-center gap-2">
                                                         <HelpCircle className="w-3 h-3 text-teal-600" />
-                                                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Employee Query</span>
+                                                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Developer Query</span>
                                                     </div>
                                                     <div className="w-full bg-teal-50 border border-teal-100 rounded-xl p-3 text-xs font-medium text-teal-800">
                                                         {selectedTicket.workerQuery}
@@ -4082,13 +4095,13 @@ const StatsBreakdownModal = ({ isOpen, onClose, tickets, workers, columns }) => 
                     {/* Individual Summary Section */}
                     <section>
                         <div className="flex items-center gap-2 mb-4 border-l-4 border-blue-500 pl-3">
-                            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Employee Task Breakdown</h3>
+                            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Developer Task Breakdown</h3>
                         </div>
                         <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
                             <table className="w-full text-left border-collapse">
                                 <thead className="bg-gray-50/80">
                                     <tr>
-                                        <th className="py-3.5 px-4 text-[11px] font-extrabold text-gray-400 uppercase tracking-widest border-b border-gray-100">Employee Name</th>
+                                        <th className="py-3.5 px-4 text-[11px] font-extrabold text-gray-400 uppercase tracking-widest border-b border-gray-100">Developer Name</th>
                                         <th className="py-3.5 px-4 text-[11px] font-extrabold text-gray-400 uppercase tracking-widest border-b border-gray-100">Team</th>
                                         {columns.map(col => (
                                             <th key={col} className="py-3.5 px-4 text-[11px] font-extrabold text-gray-400 uppercase tracking-widest text-center border-b border-gray-100">{col}</th>
@@ -4123,7 +4136,7 @@ const StatsBreakdownModal = ({ isOpen, onClose, tickets, workers, columns }) => 
                                     ))}
                                     {personStats.length === 0 && (
                                         <tr>
-                                            <td colSpan={columns.length + 3} className="py-10 text-center text-gray-400 text-sm italic">No employee data available</td>
+                                            <td colSpan={columns.length + 3} className="py-10 text-center text-gray-400 text-sm italic">No developer data available</td>
                                         </tr>
                                     )}
                                 </tbody>

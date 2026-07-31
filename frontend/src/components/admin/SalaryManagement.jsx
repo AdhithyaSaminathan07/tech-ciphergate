@@ -682,213 +682,178 @@ const SalaryManagement = () => {
         }
     };
 
-    const generatePDFReport = (worker, data, fromDate) => {
-        const doc = new jsPDF();
-        const startY = 20;
-        doc.setFontSize(18);
-        doc.text(`Salary Report for ${worker.name}`, 14, startY);
-        doc.setFontSize(12);
-        doc.text('Summary', 14, startY + 15);
+    const renderEmployeeSinglePagePDF = (doc, worker, reportObj, monthName, selectedYear, empIndex = 1) => {
+        const summary = reportObj?.report?.summary || reportObj?.summary || {};
+        const reportList = reportObj?.report?.report || reportObj?.report || [];
+        const deptName = reportObj?.department || (typeof worker?.department === 'object' ? worker.department?.name : worker?.department) || 'N/A';
+        const rfid = worker?.rfid || 'N/A';
+        const name = worker?.name || reportObj?.name || 'Developer';
 
-        // Prepare summary data including bonus and fine information
-        // Fix currency formatting to ensure clean, professional appearance
-        // Updated to use "Rs." instead of "₹" symbol as per requirements
-        const formatCurrencyForPDF = (amount) => {
-            // Handle different input types
-            if (typeof amount === 'string') {
-                // Remove currency symbols, commas, and spaces, but KEEP the dot
-                const numericValue = parseFloat(amount.replace(/[₹Rs,\s]/g, ''));
-                if (isNaN(numericValue)) {
-                    return 'Rs. 0.00';
-                }
-                return `Rs. ${numericValue.toFixed(2)}`;
+        const formatCurr = (val) => {
+            if (typeof val === 'string') {
+                const num = parseFloat(val.replace(/[₹Rs,\s]/g, ''));
+                return isNaN(num) ? 'Rs. 0.00' : `Rs. ${num.toFixed(2)}`;
             }
-            // If it's a number, format it properly
-            return `Rs. ${Number(amount).toFixed(2)}`;
+            return `Rs. ${Number(val || 0).toFixed(2)}`;
         };
 
-        const summaryData = [
-            ['Employee Name', worker?.name], // Added Employee Name to match UI
-            ['Employee ID', worker?.rfid],
-            ['Monthly Base Salary', formatCurrencyForPDF(data.report.summary?.originalSalary || 0)],
-            ['Base Salary (SaaS Only)', formatCurrencyForPDF(data.report.summary?.expectedSaaSSalary || data.report.summary?.originalSalary || 0)],
-            ['Total Deductions', formatCurrencyForPDF(data.report.totalSalaryDeduction || 0)],
-            ['Net Base Salary', formatCurrencyForPDF(data.report.summary?.netBaseSalary || 0)],
-            ['Project Earnings', formatCurrencyForPDF(data.report.summary?.totalProjectSalary || 0)],
-            ...(data.projectAdjustment && data.projectAdjustment !== 0 ? [
-                ['Project Adjustment', `${data.projectAdjustment > 0 ? '+' : ''}${formatCurrencyForPDF(data.projectAdjustment)}`],
-                ['Final Project Pay', formatCurrencyForPDF(Math.max(0, (data.report.summary?.totalProjectSalary || 0) + (data.projectAdjustment || 0)))]
-            ] : []),
-            // ADD FINE INFORMATION TO THE SUMMARY
-            ...(data.totalFinesAmount > 0 ? [
-                ['Total Fines', formatCurrencyForPDF(data.totalFinesAmount)]
-            ] : []),
-            ...(deductionView && data.delayedTasks?.length > 0 ? (() => {
-                const reportYear = fromDate ? new Date(fromDate).getFullYear() : new Date().getFullYear();
-                const totalDeducted = calculateTaskDelayPenalty(data, reportYear);
+        const grossSalary = summary.originalSalary || worker?.salary || 0;
+        const workingDaysCount = summary.totalWorkingDaysInPeriod || summary.totalDaysInPeriod || 30;
+        const perDaySalary = summary.perDaySalary || (workingDaysCount ? grossSalary / workingDaysCount : 0);
+        const actualWorked = summary.actualWorkingDays || 0;
+        const earnedAttendanceSalary = summary.earnedAttendanceSalary || (actualWorked * perDaySalary);
+        const netPayout = reportObj.finalSalaryWithFines ?? reportObj.totalFinalSalary ?? summary.finalSalary ?? 0;
 
-                return [
-                    ['Task Delay Deduction Applied', 'YES'],
-                    ['Permanent Delay Penalty', formatCurrencyForPDF(totalDeducted)],
-                    ['Total Final Salary', formatCurrencyForPDF((data.finalSalaryWithFines || 0) - totalDeducted)]
-                ];
-            })() : [
-                ['Total Final Salary', formatCurrencyForPDF(data.finalSalaryWithFines || 0)]
-            ]),
-            ['Total Days in Period', data.report.summary?.totalDaysInPeriod || 0],
-            ['Total Working Days', data.report.summary?.totalWorkingDaysInPeriod || 0],
-            ['Total Absent Days', data.report.summary?.totalAbsentDays || 0],
-            ['Total Leave Days', data.report.summary?.totalLeaveDays || 0],
-            ['Total Holidays', data.report.summary?.totalHolidaysInPeriod || 0],
-            ['Total Sundays', data.report.summary?.totalSundaysInPeriod || 0],
-            ['Actual Working Days', data.report.summary?.actualWorkingDays || 0],
-            ['Total Working Hours', `${Number(data.report.totalWorkingHours || 0).toFixed(2)} hrs`],
-            ['Total Permission Time', `${data.report.totalPermissionTime || 0} mins`],
-            ['Absent Deduction', formatCurrencyForPDF(data.report.summary?.absentDeduction || 0)],
-            ['Leave Deduction', formatCurrencyForPDF(data.report.summary?.leaveDeduction || 0)],
-            ['Permission Deduction', formatCurrencyForPDF(data.report.summary?.permissionDeduction || 0)],
-            ['Attendance Rate', `${Number(data.report.summary?.attendanceRate || 0).toFixed(2)}%`],
-            ['Per Minute Salary', `Rs. ${Number(data.report.summary?.perMinuteSalary || 0).toFixed(4)}`],
-        ];
+        const pageWidth = doc.internal.pageSize.getWidth();
 
-        // Add bonus information if available
-        if (data.totalBonusAmount > 0) {
-            summaryData.push(['Bonus Amount Applied', formatCurrencyForPDF(data.totalBonusAmount)]);
-
-            // Add details of each bonus
-            data.bonuses.forEach((bonus, index) => {
-                summaryData.push([`Bonus Period ${index + 1}`, `${new Date(bonus.fromDate).toLocaleDateString()} to ${new Date(bonus.toDate).toLocaleDateString()}`]);
-            });
-        }
-
-        // Set font properties to prevent spacing issues
-        doc.setFont('helvetica');
-        doc.setFontSize(9);
-
-        autoTable(doc, {
-            startY: startY + 20,
-            head: [['Metric', 'Value']],
-            body: summaryData,
-            theme: 'striped',
-            headStyles: { fillColor: [52, 73, 94] },
-            styles: {
-                fontSize: 9,
-                font: 'helvetica',
-                cellPadding: 2
-            },
-            columnStyles: {
-                1: { cellWidth: 50 } // Fixed width for value column
-            }
-        });
-
-        // Add bonus period details if there are bonuses
-        if (data.totalBonusAmount > 0 && data.bonuses && data.bonuses.length > 0) {
-            doc.addPage();
-            doc.setFontSize(18);
-            doc.text('Bonus Details', 14, 20);
-
-            const bonusColumns = ['Period', 'From Date', 'To Date', 'Amount'];
-            const bonusRows = data.bonuses.map((bonus, index) => [
-                `Bonus Period ${index + 1}`,
-                new Date(bonus.fromDate).toLocaleDateString(),
-                new Date(bonus.toDate).toLocaleDateString(),
-                formatCurrencyForPDF(bonus.amount)
-            ]);
-
-            doc.setFontSize(12);
-            autoTable(doc, {
-                startY: 30,
-                head: [bonusColumns],
-                body: bonusRows,
-                theme: 'striped',
-                headStyles: { fillColor: [52, 73, 94] },
-                styles: {
-                    fontSize: 9,
-                    font: 'helvetica',
-                    cellPadding: 2
-                }
-            });
-        }
-
-        // Add detailed fines table if there are fines
-        if (data.worker?.fines && data.worker.fines.length > 0) {
-            const filteredFines = data.worker.fines.filter(fine => {
-                const fineDate = new Date(fine.date);
-                const fromDate = new Date(reportDateRange.fromDate);
-                const toDate = new Date(reportDateRange.toDate);
-                return fineDate >= fromDate && fineDate <= toDate;
-            });
-
-            if (filteredFines.length > 0) {
-                doc.addPage();
-                doc.setFontSize(18);
-                doc.text('Fines', 14, 20);
-
-                const finesColumns = ['Date', 'Amount', 'Reason'];
-                const finesRows = filteredFines.map(fine => [
-                    new Date(fine.date).toLocaleDateString(),
-                    formatCurrencyForPDF(fine.amount),
-                    fine.reason
-                ]);
-
-                doc.setFontSize(12);
-                autoTable(doc, {
-                    startY: 30,
-                    head: [finesColumns],
-                    body: finesRows,
-                    theme: 'striped',
-                    headStyles: { fillColor: [52, 73, 94] },
-                    styles: {
-                        fontSize: 9,
-                        font: 'helvetica',
-                        cellPadding: 2
-                    }
-                });
-            }
-        }
-
-        doc.addPage();
-        doc.setFontSize(18);
-        doc.text('Daily Breakdown', 14, 20);
-        // Updated table columns to match UI - added Total Salary column
-        const tableColumn = [
-            'Date', 'Status', 'In Time', 'Out Time',
-            'Delay Time', 'Delay Deduction', 'Total Salary'
-        ];
-
-        // Fix formatting for daily breakdown table
-        // Format Delay Deduction and Total Salary with "Rs" instead of "₹" for PDF
-        const tableRows = data.report.report.map(row => [
-            row.date,
-            row.status,
-            row.inTime,
-            row.outTime,
-            row.delayTime,
-            String(row.deductionAmount || '').replace('₹', 'Rs '), // Replace ₹ with Rs for Delay Deduction
-            String(row.totalSalary || '').replace('₹', 'Rs ') // Replace ₹ with Rs for Total Salary
-        ]);
-
-        // Set font properties for daily breakdown table
-        doc.setFont('helvetica');
+        // 1. TOP HEADER BANNER (Dark Navy Blue)
+        doc.setFillColor(24, 43, 73);
+        doc.rect(0, 0, pageWidth, 15, 'F');
+        
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(10.5);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${empIndex}. SALARY & ATTENDANCE SLIP — ${name}`, 10, 10.5);
+        
         doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        const headerRightText = `Period: ${monthName} ${selectedYear}  |  Dept: ${deptName}  |  ID: ${rfid}`;
+        doc.text(headerRightText, pageWidth - 10, 10.5, { align: 'right' });
+        doc.setTextColor(0, 0, 0);
+
+        // 2. TOP SUMMARY GRID TABLE (2 Columns x 9 Rows side-by-side)
+        const summaryGridHead = [
+            [
+                { content: 'Payroll & Earnings Details', styles: { fillColor: [44, 62, 80], textColor: [255, 255, 255], fontStyle: 'bold' } },
+                { content: 'Amount', styles: { fillColor: [44, 62, 80], textColor: [255, 255, 255], fontStyle: 'bold' } },
+                { content: 'Attendance Statistics', styles: { fillColor: [44, 62, 80], textColor: [255, 255, 255], fontStyle: 'bold' } },
+                { content: 'Count / Info', styles: { fillColor: [44, 62, 80], textColor: [255, 255, 255], fontStyle: 'bold' } }
+            ]
+        ];
+
+        const summaryGridBody = [
+            ['Employee Name', name, 'Total Days in Month', String(summary.totalDaysInPeriod || 30)],
+            ['Employee ID', rfid, 'Working Days', String(workingDaysCount)],
+            ['Department', deptName, 'Present Days', String(actualWorked)],
+            ['Gross Base Salary', formatCurr(grossSalary), 'Absent / Leave Days', `${summary.totalAbsentDays || 0} Abs / ${summary.totalLeaveDays || 0} Lve`],
+            ['Per Day Salary Rate', formatCurr(perDaySalary), 'Holidays & Sundays', `${summary.totalHolidaysInPeriod || 0} Hol / ${summary.totalSundaysInPeriod || 0} Sun`],
+            ['Earned Attendance Salary', formatCurr(earnedAttendanceSalary), 'Total Working Hours', `${Number(reportObj.report?.totalWorkingHours || summary.totalWorkingHours || 0).toFixed(2)} hrs`],
+            ['PF / ESI Deductions', 'Rs. 0.00', 'Permission Time Used', `${reportObj.report?.totalPermissionTime || summary.totalPermissionTime || 0} mins`],
+            ['Advance Loan Deduction', 'Rs. 0.00', 'Advance Pending', 'Rs. 0.00'],
+            [
+                { content: 'NET PAYOUT AMOUNT', styles: { fontStyle: 'bold', textColor: [217, 119, 6] } },
+                { content: formatCurr(netPayout), styles: { fontStyle: 'bold', textColor: [217, 119, 6] } },
+                'Attendance Rate',
+                `${Number(summary.attendanceRate || 0).toFixed(1)}%`
+            ]
+        ];
 
         autoTable(doc, {
-            startY: 30,
-            head: [tableColumn],
-            body: tableRows,
-            theme: 'striped',
-            headStyles: { fillColor: [52, 73, 94] },
+            startY: 18,
+            head: summaryGridHead,
+            body: summaryGridBody,
+            theme: 'grid',
+            margin: { left: 8, right: 8 },
             styles: {
-                fontSize: 8,
+                fontSize: 7.2,
                 font: 'helvetica',
-                cellPadding: 1.5
+                cellPadding: 1.1,
+                lineColor: [220, 224, 230],
+                lineWidth: 0.15
             },
             columnStyles: {
-                5: { cellWidth: 30 }, // Fixed width for delay deduction column
-                6: { cellWidth: 30 }  // Fixed width for total salary column
+                0: { cellWidth: 46, fontStyle: 'bold', textColor: [60, 64, 67] },
+                1: { cellWidth: 46, textColor: [30, 30, 30] },
+                2: { cellWidth: 48, fontStyle: 'bold', textColor: [60, 64, 67] },
+                3: { cellWidth: 54, textColor: [30, 30, 30] }
             }
         });
-        doc.save(`salary_report_${worker.name}.pdf`);
+
+        const summaryEndY = doc.lastAutoTable.finalY || 68;
+
+        // 3. DAILY BREAKDOWN SECTION TITLE
+        doc.setFontSize(8.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(217, 119, 6);
+        doc.text(`Daily Attendance & Salary Breakdown (${monthName} ${selectedYear})`, 8, summaryEndY + 4);
+        doc.setTextColor(0, 0, 0);
+
+        // 4. DAILY BREAKDOWN TABLE (7 Columns)
+        const breakdownHead = [
+            ['Date', 'Status', 'In Time', 'Out Time', 'Delay', 'Deduction', 'Earned Salary']
+        ];
+
+        const breakdownBody = (Array.isArray(reportList) ? reportList : []).map(row => {
+            let formattedDate = row.date || '';
+            try {
+                const d = new Date(row.date);
+                if (!isNaN(d.getTime())) {
+                    const day = String(d.getDate()).padStart(2, '0');
+                    const mName = d.toLocaleString('en-US', { month: 'short' });
+                    formattedDate = `${day} ${mName}`;
+                }
+            } catch (e) {
+                formattedDate = row.date;
+            }
+
+            return [
+                formattedDate,
+                row.status || '-',
+                row.inTime || '-',
+                row.outTime || '-',
+                row.delayTime || '-',
+                String(row.deductionAmount || 'Rs. 0.00').replace('₹', 'Rs. '),
+                String(row.totalSalary || 'Rs. 0.00').replace('₹', 'Rs. ')
+            ];
+        });
+
+        autoTable(doc, {
+            startY: summaryEndY + 6,
+            head: breakdownHead,
+            body: breakdownBody,
+            theme: 'grid',
+            margin: { left: 8, right: 8 },
+            headStyles: {
+                fillColor: [44, 62, 80],
+                textColor: [255, 255, 255],
+                fontStyle: 'bold',
+                fontSize: 7.2,
+                cellPadding: 1.1
+            },
+            styles: {
+                fontSize: 6.5,
+                font: 'helvetica',
+                cellPadding: 0.9,
+                lineColor: [235, 238, 242],
+                lineWidth: 0.15
+            },
+            columnStyles: {
+                0: { cellWidth: 20 },
+                1: { cellWidth: 26, fontStyle: 'bold' },
+                2: { cellWidth: 28 },
+                3: { cellWidth: 32 },
+                4: { cellWidth: 28 },
+                5: { cellWidth: 30, textColor: [185, 28, 28] },
+                6: { cellWidth: 30, fontStyle: 'bold', textColor: [15, 118, 110] }
+            },
+            didParseCell: function (data) {
+                if (data.section === 'body' && data.row.index % 2 === 1) {
+                    data.cell.styles.fillColor = [248, 250, 252];
+                }
+            }
+        });
+    };
+
+    const generatePDFReport = (worker, data, fromDate) => {
+        const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May',
+            'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const monthIndex = fromDate ? new Date(fromDate).getMonth() : (selectedMonth - 1);
+        const yearVal = fromDate ? new Date(fromDate).getFullYear() : selectedYear;
+        const monthName = MONTH_NAMES[monthIndex];
+
+        const doc = new jsPDF('portrait', 'mm', 'a4');
+        renderEmployeeSinglePagePDF(doc, worker, data, monthName, yearVal, 1);
+        doc.save(`salary_report_${worker.name || 'employee'}.pdf`);
     };
 
     const downloadPDF = () => {
@@ -1140,209 +1105,12 @@ const SalaryManagement = () => {
             return;
         }
 
-        const doc = new jsPDF();
-        const startY = 20;
-        doc.setFontSize(18);
-        doc.text(`Salary Report for ${selectedIndividualWorker.name}`, 14, startY);
-        doc.setFontSize(12);
-        doc.text('Summary', 14, startY + 15);
+        const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May',
+            'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const monthName = MONTH_NAMES[selectedMonth - 1];
 
-        // Prepare summary data including bonus and fine information
-        const formatCurrencyForPDF = (amount) => {
-            // Handle different input types
-            if (typeof amount === 'string') {
-                // Remove currency symbols, commas, and spaces, but KEEP the dot
-                const numericValue = parseFloat(amount.replace(/[₹Rs,\s]/g, ''));
-                if (isNaN(numericValue)) {
-                    return 'Rs. 0.00';
-                }
-                return `Rs. ${numericValue.toFixed(2)}`;
-            }
-            // If it's a number, format it properly
-            return `Rs. ${Number(amount).toFixed(2)}`;
-        };
-
-        const summaryData = [
-            ['Employee Name', selectedIndividualWorker?.name], // Added Employee Name to match UI
-            ['Employee ID', workers.find(w => w._id === selectedIndividualWorker.workerId)?.rfid || 'N/A'],
-            ['Monthly Base Salary', formatCurrencyForPDF(individualReportData.report.summary?.originalSalary || 0)],
-            ['Base Salary (SaaS Only)', formatCurrencyForPDF(individualReportData.report.summary?.expectedSaaSSalary || individualReportData.report.summary?.originalSalary || 0)],
-            ['Total Deductions', formatCurrencyForPDF(individualReportData.report.totalSalaryDeduction || 0)],
-            ['Net Base Salary', formatCurrencyForPDF(individualReportData.report.summary?.netBaseSalary || 0)],
-            ['Project Earnings', formatCurrencyForPDF(individualReportData.report.summary?.totalProjectSalary || 0)],
-            ...(individualReportData.projectAdjustment && individualReportData.projectAdjustment !== 0 ? [
-                ['Project Adjustment', `${individualReportData.projectAdjustment > 0 ? '+' : ''}${formatCurrencyForPDF(individualReportData.projectAdjustment)}`],
-                ['Final Project Pay', formatCurrencyForPDF(Math.max(0, (individualReportData.report.summary?.totalProjectSalary || 0) + (individualReportData.projectAdjustment || 0)))]
-            ] : []),
-            // ADD FINE INFORMATION TO THE SUMMARY
-            ...(individualReportData.totalFinesAmount > 0 ? [
-                ['Total Fines', formatCurrencyForPDF(individualReportData.totalFinesAmount)]
-            ] : []),
-            ...(deductionView && individualReportData.delayedTasks?.length > 0 ? (() => {
-                const reportYear = selectedYear || new Date().getFullYear();
-                const totalDeducted = calculateTaskDelayPenalty(individualReportData, reportYear);
-
-                return [
-                    ['Task Delay Deduction Applied', 'YES'],
-                    ['Permanent Delay Penalty', formatCurrencyForPDF(totalDeducted)],
-                    ['Total Final Salary', formatCurrencyForPDF((individualReportData.finalSalaryWithFines || 0) - totalDeducted)]
-                ];
-            })() : [
-                ['Total Final Salary', formatCurrencyForPDF(individualReportData.finalSalaryWithFines || 0)]
-            ]),
-            ['Total Days in Period', individualReportData.report.summary?.totalDaysInPeriod || 0],
-            ['Total Working Days', individualReportData.report.summary?.totalWorkingDaysInPeriod || 0],
-            ['Total Absent Days', individualReportData.report.summary?.totalAbsentDays || 0],
-            ['Total Leave Days', individualReportData.report.summary?.totalLeaveDays || 0],
-            ['Total Holidays', individualReportData.report.summary?.totalHolidaysInPeriod || 0],
-            ['Total Sundays', individualReportData.report.summary?.totalSundaysInPeriod || 0],
-            ['Actual Working Days', individualReportData.report.summary?.actualWorkingDays || 0],
-            ['Total Working Hours', `${Number(individualReportData.report.totalWorkingHours || 0).toFixed(2)} hrs`],
-            ['Total Permission Time', `${individualReportData.report.totalPermissionTime || 0} mins`],
-            ['Absent Deduction', formatCurrencyForPDF(individualReportData.report.summary?.absentDeduction || 0)],
-            ['Leave Deduction', formatCurrencyForPDF(individualReportData.report.summary?.leaveDeduction || 0)],
-            ['Permission Deduction', formatCurrencyForPDF(individualReportData.report.summary?.permissionDeduction || 0)],
-            ['Attendance Rate', `${Number(individualReportData.report.summary?.attendanceRate || 0).toFixed(2)}%`],
-            ['Per Minute Salary', `Rs. ${Number(individualReportData.report.summary?.perMinuteSalary || 0).toFixed(4)}`],
-        ];
-
-        // Add bonus information if available
-        if (individualReportData.totalBonusAmount > 0) {
-            summaryData.push(['Bonus Amount Applied', formatCurrencyForPDF(individualReportData.totalBonusAmount)]);
-
-            // Add details of each bonus
-            individualReportData.bonuses.forEach((bonus, index) => {
-                summaryData.push([`Bonus Period ${index + 1}`, `${new Date(bonus.fromDate).toLocaleDateString()} to ${new Date(bonus.toDate).toLocaleDateString()}`]);
-            });
-        }
-
-        // Set font properties to prevent spacing issues
-        doc.setFont('helvetica');
-        doc.setFontSize(9);
-
-        autoTable(doc, {
-            startY: startY + 20,
-            head: [['Metric', 'Value']],
-            body: summaryData,
-            theme: 'striped',
-            headStyles: { fillColor: [52, 73, 94] },
-            styles: {
-                fontSize: 9,
-                font: 'helvetica',
-                cellPadding: 2
-            },
-            columnStyles: {
-                1: { cellWidth: 50 } // Fixed width for value column
-            }
-        });
-
-        // Add bonus period details if there are bonuses
-        if (individualReportData.totalBonusAmount > 0 && individualReportData.bonuses && individualReportData.bonuses.length > 0) {
-            doc.addPage();
-            doc.setFontSize(18);
-            doc.text('Bonus Details', 14, 20);
-
-            const bonusColumns = ['Period', 'From Date', 'To Date', 'Amount'];
-            const bonusRows = individualReportData.bonuses.map((bonus, index) => [
-                `Bonus Period ${index + 1}`,
-                new Date(bonus.fromDate).toLocaleDateString(),
-                new Date(bonus.toDate).toLocaleDateString(),
-                formatCurrencyForPDF(bonus.amount)
-            ]);
-
-            doc.setFontSize(12);
-            autoTable(doc, {
-                startY: 30,
-                head: [bonusColumns],
-                body: bonusRows,
-                theme: 'striped',
-                headStyles: { fillColor: [52, 73, 94] },
-                styles: {
-                    fontSize: 9,
-                    font: 'helvetica',
-                    cellPadding: 2
-                }
-            });
-        }
-
-        // Add detailed fines table if there are fines
-        if (individualReportData.worker?.fines && individualReportData.worker.fines.length > 0) {
-            const filteredFines = individualReportData.worker.fines.filter(fine => {
-                const fineDate = new Date(fine.date);
-                const fromDate = new Date(reportDateRange.fromDate);
-                const toDate = new Date(reportDateRange.toDate);
-                return fineDate >= fromDate && fineDate <= toDate;
-            });
-
-            if (filteredFines.length > 0) {
-                doc.addPage();
-                doc.setFontSize(18);
-                doc.text('Fines', 14, 20);
-
-                const finesColumns = ['Date', 'Amount', 'Reason'];
-                const finesRows = filteredFines.map(fine => [
-                    new Date(fine.date).toLocaleDateString(),
-                    formatCurrencyForPDF(fine.amount),
-                    fine.reason
-                ]);
-
-                doc.setFontSize(12);
-                autoTable(doc, {
-                    startY: 30,
-                    head: [finesColumns],
-                    body: finesRows,
-                    theme: 'striped',
-                    headStyles: { fillColor: [52, 73, 94] },
-                    styles: {
-                        fontSize: 9,
-                        font: 'helvetica',
-                        cellPadding: 2
-                    }
-                });
-            }
-        }
-
-        doc.addPage();
-        doc.setFontSize(18);
-        doc.text('Daily Breakdown', 14, 20);
-        // Updated table columns to match UI - added Total Salary column
-        const tableColumn = [
-            'Date', 'Status', 'In Time', 'Out Time',
-            'Delay Time', 'Delay Deduction', 'Total Salary'
-        ];
-
-        // Fix formatting for daily breakdown table
-        // Format Delay Deduction and Total Salary with "Rs" instead of "₹" for PDF
-        const tableRows = individualReportData.report.report.map(row => [
-            row.date,
-            row.status,
-            row.inTime,
-            row.outTime,
-            row.delayTime,
-            String(row.deductionAmount || '').replace('₹', 'Rs '), // Replace ₹ with Rs for Delay Deduction
-            String(row.totalSalary || '').replace('₹', 'Rs ') // Replace ₹ with Rs for Total Salary
-        ]);
-
-        // Set font properties for daily breakdown table
-        doc.setFont('helvetica');
-        doc.setFontSize(8);
-
-        autoTable(doc, {
-            startY: 30,
-            head: [tableColumn],
-            body: tableRows,
-            theme: 'striped',
-            headStyles: { fillColor: [52, 73, 94] },
-            styles: {
-                fontSize: 8,
-                font: 'helvetica',
-                cellPadding: 1.5
-            },
-            columnStyles: {
-                5: { cellWidth: 30 }, // Fixed width for delay deduction column
-                6: { cellWidth: 30 }  // Fixed width for total salary column
-            }
-        });
+        const doc = new jsPDF('portrait', 'mm', 'a4');
+        renderEmployeeSinglePagePDF(doc, selectedIndividualWorker, individualReportData, monthName, selectedYear, 1);
         doc.save(`salary_report_${selectedIndividualWorker.name}.pdf`);
     };
 
@@ -1628,20 +1396,33 @@ const SalaryManagement = () => {
             return;
         }
 
+        const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May',
+            'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const monthName = MONTH_NAMES[selectedMonth - 1];
+
         toast.info(`Downloading separate PDFs for ${bulkReportData.length} employees...`);
         bulkReportData.forEach((data, index) => {
-            const worker = workers.find(w => w._id === data.workerId);
-            if (worker && data.fullReport) {
-                // Delay each download slightly to prevent browser queue blocking
+            const worker = workers.find(w => w._id === data.workerId) || {
+                _id: data.workerId,
+                name: data.name,
+                rfid: data.rfid,
+                department: data.department,
+                salary: data.salary
+            };
+            const reportObj = data.fullReport || data;
+
+            if (worker) {
                 setTimeout(() => {
-                    generatePDFReport(worker, data.fullReport, reportDateRange.fromDate);
+                    const doc = new jsPDF('portrait', 'mm', 'a4');
+                    renderEmployeeSinglePagePDF(doc, worker, reportObj, monthName, selectedYear, 1);
+                    doc.save(`salary_report_${worker.name || 'employee'}.pdf`);
                 }, index * 300);
             }
         });
         toast.success("Separate PDF downloads triggered!");
     };
 
-    // ── NEW: Merge all employees into a SINGLE PDF ──────────────────────────
+    // ── NEW: Merge all employees into a SINGLE PDF (1 Page Per Employee) ──────
     const downloadAllAsSinglePDF = () => {
         if (bulkReportData.length === 0) {
             toast.error("No report data available to download.");
@@ -1652,20 +1433,8 @@ const SalaryManagement = () => {
             'June', 'July', 'August', 'September', 'October', 'November', 'December'];
         const monthName = MONTH_NAMES[selectedMonth - 1];
 
-        const formatCurrencyForPDF = (amount) => {
-            if (typeof amount === 'string') {
-                const numericValue = parseFloat(amount.replace(/[₹Rs,\s]/g, ''));
-                return isNaN(numericValue) ? 'Rs. 0.00' : `Rs. ${numericValue.toFixed(2)}`;
-            }
-            return `Rs. ${Number(amount).toFixed(2)}`;
-        };
-
-        const doc = new jsPDF();
-        let isFirstEmployee = true;
-
         const validReports = bulkReportData.filter(data => {
-            const worker = workers.find(w => w._id === data.workerId);
-            return worker && data.fullReport;
+            return data && (data.fullReport || data.report || data.workerId);
         });
 
         if (validReports.length === 0) {
@@ -1675,133 +1444,23 @@ const SalaryManagement = () => {
 
         toast.info(`Building single PDF for ${validReports.length} employees...`);
 
-        validReports.forEach((data, empIndex) => {
-            const worker = workers.find(w => w._id === data.workerId);
-            const reportObj = data.fullReport;
+        const doc = new jsPDF('portrait', 'mm', 'a4');
 
-            // ── Page separator (except first employee) ──
-            if (!isFirstEmployee) {
+        validReports.forEach((data, empIndex) => {
+            const worker = workers.find(w => w._id === data.workerId) || {
+                _id: data.workerId,
+                name: data.name,
+                rfid: data.rfid,
+                department: data.department,
+                salary: data.salary
+            };
+            const reportObj = data.fullReport || data;
+
+            if (empIndex > 0) {
                 doc.addPage();
             }
-            isFirstEmployee = false;
 
-            // ── Employee header ──
-            const pageWidth = doc.internal.pageSize.getWidth();
-            doc.setFillColor(52, 73, 94);
-            doc.rect(0, 0, pageWidth, 18, 'F');
-            doc.setTextColor(255, 255, 255);
-            doc.setFontSize(13);
-            doc.setFont('helvetica', 'bold');
-            doc.text(`${empIndex + 1}. Salary Report — ${worker.name}`, 14, 12);
-            doc.setFontSize(8);
-            doc.setFont('helvetica', 'normal');
-            doc.text(`${monthName} ${selectedYear}  |  Dept: ${data.department || '—'}  |  ID: ${worker.rfid || '—'}`, 14, 16);
-            doc.setTextColor(0, 0, 0);
-
-            const startY = 25;
-
-            // ── Summary table ──
-            const summaryData = [
-                ['Employee Name', worker?.name],
-                ['Employee ID', worker?.rfid],
-                ['Monthly Base Salary', formatCurrencyForPDF(reportObj.report.summary?.originalSalary || 0)],
-                ['Base Salary (SaaS Only)', formatCurrencyForPDF(reportObj.report.summary?.expectedSaaSSalary || reportObj.report.summary?.originalSalary || 0)],
-                ['Total Deductions', formatCurrencyForPDF(reportObj.report.totalSalaryDeduction || 0)],
-                ['Net Base Salary', formatCurrencyForPDF(reportObj.report.summary?.netBaseSalary || 0)],
-                ['Project Earnings', formatCurrencyForPDF(reportObj.report.summary?.totalProjectSalary || 0)],
-                ...(reportObj.projectAdjustment && reportObj.projectAdjustment !== 0 ? [
-                    ['Project Adjustment', `${reportObj.projectAdjustment > 0 ? '+' : ''}${formatCurrencyForPDF(reportObj.projectAdjustment)}`],
-                    ['Final Project Pay', formatCurrencyForPDF(Math.max(0, (reportObj.report.summary?.totalProjectSalary || 0) + (reportObj.projectAdjustment || 0)))]
-                ] : []),
-                ...(reportObj.totalFinesAmount > 0 ? [['Total Fines', formatCurrencyForPDF(reportObj.totalFinesAmount)]] : []),
-                ...(deductionView && reportObj.delayedTasks?.length > 0 ? (() => {
-                    const reportYear = reportDateRange.fromDate ? new Date(reportDateRange.fromDate).getFullYear() : new Date().getFullYear();
-                    const totalDeducted = calculateTaskDelayPenalty(reportObj, reportYear);
-                    return [
-                        ['Task Delay Deduction Applied', 'YES'],
-                        ['Permanent Delay Penalty', formatCurrencyForPDF(totalDeducted)],
-                        ['Total Final Salary', formatCurrencyForPDF((reportObj.finalSalaryWithFines || 0) - totalDeducted)]
-                    ];
-                })() : [['Total Final Salary', formatCurrencyForPDF(reportObj.finalSalaryWithFines || 0)]]),
-                ['Total Days in Period', reportObj.report.summary?.totalDaysInPeriod || 0],
-                ['Total Working Days', reportObj.report.summary?.totalWorkingDaysInPeriod || 0],
-                ['Total Absent Days', reportObj.report.summary?.totalAbsentDays || 0],
-                ['Total Leave Days', reportObj.report.summary?.totalLeaveDays || 0],
-                ['Total Holidays', reportObj.report.summary?.totalHolidaysInPeriod || 0],
-                ['Total Sundays', reportObj.report.summary?.totalSundaysInPeriod || 0],
-                ['Actual Working Days', reportObj.report.summary?.actualWorkingDays || 0],
-                ['Total Working Hours', `${Number(reportObj.report.totalWorkingHours || 0).toFixed(2)} hrs`],
-                ['Total Permission Time', `${reportObj.report.totalPermissionTime || 0} mins`],
-                ['Absent Deduction', formatCurrencyForPDF(reportObj.report.summary?.absentDeduction || 0)],
-                ['Leave Deduction', formatCurrencyForPDF(reportObj.report.summary?.leaveDeduction || 0)],
-                ['Permission Deduction', formatCurrencyForPDF(reportObj.report.summary?.permissionDeduction || 0)],
-                ['Attendance Rate', `${Number(reportObj.report.summary?.attendanceRate || 0).toFixed(2)}%`],
-                ['Per Minute Salary', `Rs. ${Number(reportObj.report.summary?.perMinuteSalary || 0).toFixed(4)}`],
-            ];
-
-            if (reportObj.totalBonusAmount > 0) {
-                summaryData.push(['Bonus Amount Applied', formatCurrencyForPDF(reportObj.totalBonusAmount)]);
-                (reportObj.bonuses || []).forEach((bonus, i) => {
-                    summaryData.push([`Bonus Period ${i + 1}`, `${new Date(bonus.fromDate).toLocaleDateString()} to ${new Date(bonus.toDate).toLocaleDateString()}`]);
-                });
-            }
-
-            autoTable(doc, {
-                startY,
-                head: [['Metric', 'Value']],
-                body: summaryData,
-                theme: 'striped',
-                headStyles: { fillColor: [52, 73, 94] },
-                styles: { fontSize: 8, font: 'helvetica', cellPadding: 2 },
-                columnStyles: { 1: { cellWidth: 50 } }
-            });
-
-            // ── Fines table ──
-            if (reportObj.worker?.fines && reportObj.worker.fines.length > 0) {
-                const filteredFines = reportObj.worker.fines.filter(fine => {
-                    const fineDate = new Date(fine.date);
-                    const from = new Date(reportDateRange.fromDate);
-                    const to = new Date(reportDateRange.toDate);
-                    return fineDate >= from && fineDate <= to;
-                });
-                if (filteredFines.length > 0) {
-                    doc.addPage();
-                    doc.setFontSize(13);
-                    doc.setFont('helvetica', 'bold');
-                    doc.text(`Fines — ${worker.name}`, 14, 20);
-                    autoTable(doc, {
-                        startY: 28,
-                        head: [['Date', 'Amount', 'Reason']],
-                        body: filteredFines.map(f => [
-                            new Date(f.date).toLocaleDateString(),
-                            formatCurrencyForPDF(f.amount),
-                            f.reason
-                        ]),
-                        theme: 'striped',
-                        headStyles: { fillColor: [52, 73, 94] },
-                        styles: { fontSize: 8, font: 'helvetica', cellPadding: 2 }
-                    });
-                }
-            }
-
-            // ── Daily breakdown ──
-            doc.addPage();
-            doc.setFontSize(13);
-            doc.setFont('helvetica', 'bold');
-            doc.text(`Daily Breakdown — ${worker.name}`, 14, 20);
-            autoTable(doc, {
-                startY: 28,
-                head: [['Date', 'Status', 'In Time', 'Out Time', 'Delay Time', 'Delay Deduction', 'Total Salary']],
-                body: (reportObj.report.report || []).map(row => [
-                    row.date, row.status, row.inTime, row.outTime, row.delayTime,
-                    String(row.deductionAmount || '').replace('₹', 'Rs '),
-                    String(row.totalSalary || '').replace('₹', 'Rs ')
-                ]),
-                theme: 'striped',
-                headStyles: { fillColor: [52, 73, 94] },
-                styles: { fontSize: 7, font: 'helvetica', cellPadding: 1.5 },
-                columnStyles: { 5: { cellWidth: 28 }, 6: { cellWidth: 28 } }
-            });
+            renderEmployeeSinglePagePDF(doc, worker, reportObj, monthName, selectedYear, empIndex + 1);
         });
 
         doc.save(`all_employees_salary_report_${monthName}_${selectedYear}.pdf`);

@@ -31,12 +31,11 @@ const createWorker = asyncHandler(async (req, res) => {
     const photo = req.body.photo ? req.body.photo.trim() : '';
     const batch = req.body.batch ? req.body.batch.trim() : ''; // ADDED THIS
     const faceEmbeddings = req.body.faceEmbeddings ? req.body.faceEmbeddings : []; // ADDED THIS
-    const employeeType = req.body.employeeType ? req.body.employeeType.trim() : 'intern';
-    const classValue = req.body.class ? req.body.class.trim() : 'A';
-    const email = req.body.email ? req.body.email.trim() : '';
-    const phoneNumber = req.body.phoneNumber ? req.body.phoneNumber.trim() : '';
-    const joiningDate = req.body.joiningDate ? req.body.joiningDate : new Date();
-    const designation = req.body.designation ? req.body.designation.trim() : 'Employee';
+    const designation = req.body.designation ? req.body.designation.trim() : 'Developer';
+    let role = req.body.role ? req.body.role.trim() : 'developer';
+    if (designation.toLowerCase().includes('manager')) {
+      role = 'manager';
+    }
     const bankDetails = req.body.bankDetails || {};
     let perDaySalary = 0;
 
@@ -106,6 +105,7 @@ const createWorker = asyncHandler(async (req, res) => {
       batch, // ADDED THIS
       faceEmbeddings: faceEmbeddings || [], // ADDED THIS
       employeeType,
+      role: role || 'developer',
       class: classValue,
       email,
       phoneNumber,
@@ -399,7 +399,7 @@ const updateWorker = asyncHandler(async (req, res) => {
       throw new Error('Worker not found');
     }
 
-    const { name, username, salary, department, password, photo, batch, faceEmbeddings, employeeType, class: classValue, status, email, phoneNumber, joiningDate, designation, bankDetails } = req.body; // ADDED status and new fields
+    const { name, username, salary, department, password, photo, batch, faceEmbeddings, employeeType, role, class: classValue, status, email, phoneNumber, joiningDate, designation, bankDetails } = req.body; // ADDED status and new fields
     const updateData = {};
 
     const isAdmin = req.user && req.user.role === 'admin';
@@ -475,9 +475,17 @@ const updateWorker = asyncHandler(async (req, res) => {
         updateData.faceEmbeddings = faceEmbeddings;
       }
 
-      // ADDED: Handle employeeType update
-      if (employeeType) {
-        updateData.employeeType = employeeType;
+      // ADDED: Handle designation & 3-tier role update (developer, manager, owner)
+      if (designation !== undefined) {
+        updateData.designation = designation;
+        if (designation.toLowerCase().includes('manager') && (!role || role === 'developer')) {
+          updateData.role = 'manager';
+        }
+      }
+
+      // ADDED: Handle 3-tier role update (developer, manager, owner)
+      if (role) {
+        updateData.role = role;
       }
 
       // ADDED: Handle class update

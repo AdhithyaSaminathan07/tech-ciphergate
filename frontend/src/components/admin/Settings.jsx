@@ -25,6 +25,8 @@ import {
     FiCopy,
     FiSliders,
     FiMessageCircle,
+    FiSend,
+    FiFileText,
     FiLogOut,
     FiUpload,
     FiCheckCircle
@@ -160,6 +162,13 @@ const Settings = () => {
             enabled: false,
             amountPerMessage: 0,
             thresholdHours: 24
+        },
+        autoSalaryWhatsappConfig: {
+            enabled: false,
+            scheduleMode: 'end_of_month',
+            customDay: 'last_day',
+            dispatchTime: '00:01',
+            phoneNumbers: ''
         },
         faceRecognition: {
             detectorType: 'tinyFaceDetector',
@@ -470,6 +479,57 @@ const Settings = () => {
         checkForChanges(updatedSettings);
     };
 
+    const handleAutoSalaryWhatsappChange = (field, value) => {
+        const updatedConfig = {
+            ...settings.autoSalaryWhatsappConfig,
+            [field]: value
+        };
+        const updatedSettings = {
+            ...settings,
+            autoSalaryWhatsappConfig: updatedConfig
+        };
+        setSettings(updatedSettings);
+        checkForChanges(updatedSettings);
+    };
+
+    const [testingDispatch, setTestingDispatch] = useState(false);
+
+    const handleTestSalaryDispatch = async () => {
+        const phoneNumbers = settings.autoSalaryWhatsappConfig?.phoneNumbers;
+        if (!phoneNumbers) {
+            toast.error('Please enter recipient WhatsApp phone number(s) first.');
+            return;
+        }
+
+        setTestingDispatch(true);
+        toast.info('🚀 Triggering test dispatch of salary PDF & XLSX to WhatsApp...');
+
+        try {
+            const token = getAuthToken();
+            const response = await api.post(
+                '/salary/send-whatsapp-salary-report',
+                { subdomain, phoneNumbers },
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+
+            if (response.data && response.data.success) {
+                toast.success(`✅ ${response.data.message}`);
+            } else {
+                toast.error(response.data?.error || 'Failed to dispatch WhatsApp salary reports');
+            }
+        } catch (error) {
+            console.error('Error triggering WhatsApp salary report dispatch:', error);
+            toast.error(error.response?.data?.message || error.message || 'Dispatch failed');
+        } finally {
+            setTestingDispatch(false);
+        }
+    };
+
     const handleFaceRecognitionChange = (field, value) => {
         const updatedFaceRecognition = {
             ...settings.faceRecognition,
@@ -654,7 +714,7 @@ const Settings = () => {
             }
         );
 
-        const sectionIds = ['profile', 'meal', 'batches', 'intervals', 'location', 'face', 'access', 'whatsapp', 'advanced', 'ai', 'bounty'];
+        const sectionIds = ['profile', 'meal', 'batches', 'intervals', 'location', 'face', 'access', 'whatsapp', 'whatsappSalary', 'advanced', 'ai', 'bounty'];
         sectionIds.forEach((id) => {
             const el = document.getElementById(`section-${id}`);
             if (el) observer.observe(el);
@@ -689,6 +749,7 @@ const Settings = () => {
         { id: 'face', label: 'Biometrics & Face', icon: FiUserCheck },
         { id: 'access', label: 'Access Control', icon: FiToggleLeft },
         { id: 'whatsapp', label: 'WhatsApp SLA', icon: FiMessageCircle },
+        { id: 'whatsappSalary', label: 'WhatsApp Salary Dispatch', icon: FiSend },
         { id: 'advanced', label: 'Leave Multipliers', icon: FiActivity },
         { id: 'ai', label: 'AI & Second Brain', icon: FiInfo },
         { id: 'bounty', label: 'Bug Bounty', icon: FiShield },
@@ -1089,7 +1150,7 @@ const Settings = () => {
                                         Work Batches & Shift Schedules
                                     </h2>
                                     <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
-                                        Define employee shift timings, factory worker modes, and lunch hour rules
+                                        Define developer shift timings, factory worker modes, and lunch hour rules
                                     </p>
                                 </div>
                                 <button
@@ -1440,7 +1501,7 @@ const Settings = () => {
                                     Attendance Access Controls
                                 </h2>
                                 <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
-                                    Toggle visibility of specific attendance action buttons for Admin and Employee roles
+                                    Toggle visibility of specific attendance action buttons for Admin and Developer roles
                                 </p>
                             </div>
 
@@ -1474,7 +1535,7 @@ const Settings = () => {
                                 </div>
 
                                 <div className="bg-slate-50/80 p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200/80 space-y-3 font-sans">
-                                    <h3 className="text-xs font-bold text-slate-900 pb-2 border-b border-slate-200">Employee Dashboard</h3>
+                                    <h3 className="text-xs font-bold text-slate-900 pb-2 border-b border-slate-200">Developer Dashboard</h3>
                                     <div className="flex items-center justify-between gap-3 min-w-0">
                                         <div className="min-w-0 flex-1">
                                             <label className="text-xs font-bold text-slate-800 block">Show "RFID Attendance"</label>
@@ -1558,6 +1619,132 @@ const Settings = () => {
                                                 className="w-full px-3.5 py-2 sm:py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
                                             />
                                             <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1">Hours before unread chat triggers fine penalty</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+
+                        {/* SECTION 8.5: AUTOMATED WHATSAPP SALARY REPORT DISPATCH */}
+                        <section id="section-whatsappSalary" className="scroll-mt-36 lg:scroll-mt-36">
+                            <div className="mb-4 sm:mb-5 pb-3 border-b border-slate-100">
+                                <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                                    <FiSend className="text-[#006666] h-4.5 w-4.5 sm:h-5 sm:w-5" />
+                                    Automated WhatsApp Salary Report Dispatch
+                                </h2>
+                                <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
+                                    Automatically generate and send monthly All-Employees Salary PDF and Bank Statement XLSX directly to WhatsApp
+                                </p>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between gap-3 p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl min-w-0">
+                                    <div className="min-w-0 flex-1">
+                                        <label className="text-xs font-bold text-slate-900 block">Enable Automatic Salary Dispatch to WhatsApp</label>
+                                        <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 leading-tight">
+                                            Sends PDF report (1 page per employee) and Bank Statement XLSX sheet to configured WhatsApp numbers
+                                        </p>
+                                    </div>
+                                    <div className="flex-shrink-0 shrink-0">
+                                        <CustomToggle
+                                            checked={settings.autoSalaryWhatsappConfig?.enabled ?? false}
+                                            onChange={() => handleAutoSalaryWhatsappChange('enabled', !(settings.autoSalaryWhatsappConfig?.enabled ?? false))}
+                                        />
+                                    </div>
+                                </div>
+
+                                {settings.autoSalaryWhatsappConfig?.enabled && (
+                                    <div className="space-y-4 bg-white p-4 sm:p-5 rounded-xl border border-slate-200/80">
+                                        <div>
+                                            <label className="block text-[11px] sm:text-xs font-bold text-slate-700 tracking-wider mb-1 uppercase">
+                                                WhatsApp Recipient Phone Number(s)
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="e.g. 919876543210, 919876543211"
+                                                value={settings.autoSalaryWhatsappConfig?.phoneNumbers ?? ''}
+                                                onChange={(e) => handleAutoSalaryWhatsappChange('phoneNumbers', e.target.value)}
+                                                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                            />
+                                            <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1">
+                                                Include country code without '+' sign (e.g. 91 for India). Separate multiple numbers with commas.
+                                            </p>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div>
+                                                <label className="block text-[11px] sm:text-xs font-bold text-slate-700 tracking-wider mb-1 uppercase">
+                                                    Schedule Mode
+                                                </label>
+                                                <select
+                                                    value={settings.autoSalaryWhatsappConfig?.scheduleMode ?? 'end_of_month'}
+                                                    onChange={(e) => handleAutoSalaryWhatsappChange('scheduleMode', e.target.value)}
+                                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                >
+                                                    <option value="end_of_month">End of Month (12:01 AM)</option>
+                                                    <option value="custom">Custom Day & Time</option>
+                                                </select>
+                                            </div>
+
+                                            {settings.autoSalaryWhatsappConfig?.scheduleMode === 'custom' && (
+                                                <div>
+                                                    <label className="block text-[11px] sm:text-xs font-bold text-slate-700 tracking-wider mb-1 uppercase">
+                                                        Dispatch Day
+                                                    </label>
+                                                    <select
+                                                        value={settings.autoSalaryWhatsappConfig?.customDay ?? 'last_day'}
+                                                        onChange={(e) => handleAutoSalaryWhatsappChange('customDay', e.target.value)}
+                                                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                    >
+                                                        <option value="last_day">Last Day of Month</option>
+                                                        <option value="1">1st of Month</option>
+                                                        <option value="28">28th of Month</option>
+                                                        <option value="30">30th of Month</option>
+                                                    </select>
+                                                </div>
+                                            )}
+
+                                            <div>
+                                                <label className="block text-[11px] sm:text-xs font-bold text-slate-700 tracking-wider mb-1 uppercase">
+                                                    Dispatch Time (HH:mm)
+                                                </label>
+                                                <input
+                                                    type="time"
+                                                    value={settings.autoSalaryWhatsappConfig?.dispatchTime ?? '00:01'}
+                                                    onChange={(e) => handleAutoSalaryWhatsappChange('dispatchTime', e.target.value)}
+                                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Included Documents Card & Test Dispatch Button */}
+                                        <div className="pt-2 border-t border-slate-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="text-xs font-bold text-slate-700">Documents Attached:</span>
+                                                <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[11px] font-bold flex items-center gap-1">
+                                                    <FiFileText className="w-3.5 h-3.5" /> All Employees PDF Report
+                                                </span>
+                                                <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[11px] font-bold flex items-center gap-1">
+                                                    📊 Bank Statement XLSX Sheet
+                                                </span>
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                onClick={handleTestSalaryDispatch}
+                                                disabled={testingDispatch}
+                                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+                                            >
+                                                {testingDispatch ? (
+                                                    <>
+                                                        <Spinner size="sm" /> Dispatching...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <FiSend className="w-3.5 h-3.5" /> 🚀 Send Now (Test Dispatch)
+                                                    </>
+                                                )}
+                                            </button>
                                         </div>
                                     </div>
                                 )}
@@ -1769,6 +1956,7 @@ const Settings = () => {
                                     <ul className="list-disc list-inside space-y-0.5 text-sky-700 font-medium">
                                         <li>When enabled, system evaluates BOTH attendance and limits.</li>
                                         <li>If ANY condition fails (e.g. low dept attendance OR limit exceeded), <strong>{settings.advancedLeaveDeduction.deductionMultiplier}X deduction factor</strong> is recorded for that specific leave request.</li>
+                                        <li>Departments with fewer than 2 employees (1 person department) are exempt from Department Low % attendance penalties.</li>
                                         <li>If <strong>Include Permission in Penalty</strong> is on, the multiplier applies to late arrival/early departure time as well.</li>
                                         <li>If <strong>5X Unauthorized Absence Policy</strong> is enabled, unapproved or rejected leave/absence results in a 5X daily basic pay penalty.</li>
                                         <li>If <strong>5X Unauthorized Permission Policy</strong> is enabled, unapproved or rejected permission hours result in a 5X daily basic pay penalty for that duration.</li>

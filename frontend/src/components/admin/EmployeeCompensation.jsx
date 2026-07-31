@@ -204,6 +204,7 @@ const EmployeeCompensation = () => {
     setWorkerForm({
       name: '',
       employeeType: 'intern',
+      role: 'developer',
       class: 'A',
       salary: 0
     });
@@ -215,6 +216,7 @@ const EmployeeCompensation = () => {
     setWorkerForm({
       name: worker.name || '',
       employeeType: worker.employeeType || 'intern',
+      role: worker.role || 'developer',
       class: worker.class || 'A',
       salary: worker.salary || 0
     });
@@ -347,6 +349,15 @@ const EmployeeCompensation = () => {
         const type = employeeTypes.find(t => t.value === record.employeeType);
         return type ? type.label : record.employeeType;
       }
+    },
+    {
+      header: 'Hierarchy Role',
+      accessor: 'role',
+      render: (record) => (
+        <span className={`px-2 py-0.5 text-xs font-bold rounded-full border ${record.role === 'manager' ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+          {record.role === 'manager' ? 'Manager Tier' : 'Developer Tier'}
+        </span>
+      )
     },
     {
       header: 'Class',
@@ -523,6 +534,21 @@ const EmployeeCompensation = () => {
                 ))}
               </select>
             </div>
+
+            <div>
+              <label htmlFor="role" className="form-label">Hierarchy Role</label>
+              <select
+                id="role"
+                name="role"
+                className="form-input"
+                value={workerForm.role || 'developer'}
+                onChange={handleFormChange}
+                required
+              >
+                <option value="developer">Developer (Tier 3)</option>
+                <option value="manager">Manager (Tier 2)</option>
+              </select>
+            </div>
             
             {(employeeTypes.find(t => t.value === workerForm.employeeType)?.hasClasses) && (
               <div>
@@ -617,6 +643,21 @@ const EmployeeCompensation = () => {
                 {employeeTypes.map(type => (
                   <option key={type.value} value={type.value}>{type.label}</option>
                 ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="role" className="form-label">Hierarchy Role</label>
+              <select
+                id="role"
+                name="role"
+                className="form-input"
+                value={workerForm.role || 'developer'}
+                onChange={handleFormChange}
+                required
+              >
+                <option value="developer">Developer (Tier 3)</option>
+                <option value="manager">Manager (Tier 2)</option>
               </select>
             </div>
             

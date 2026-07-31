@@ -2,7 +2,7 @@ const express = require('express');
 const { protect, adminOnly, adminOrWorker, workerOnly } = require('../middleware/authMiddleware');
 const { validateRequest } = require('../middleware/validateMiddleware');
 const { generateSalarySchema, updateSalarySchema } = require('../validations/salarySchemas');
-const { giveBonus, removeBonus, resetSalary, getWorkerSalaryReport, getMySalaryReport, getCompensationReport, getBulkSalaryReport, getTopTeamsEarnings, addDeveloperProject, getDeveloperProjects, deleteDeveloperProject, getAllDeveloperProjectsSummary, createSalaryProject, getSalaryProjects, getSalaryProjectsForWorker, updateSalaryProject, deleteSalaryProject, recordProjectPayment, recordAllProjectPayments, getProjectAdjustmentLedger, getPayrollRecord, addPayrollAdjustment, updatePayrollAdjustment, deletePayrollAdjustment, restorePayrollAdjustment, updatePayrollStatus, getDashboardSalaryStats, getWalletBalances, getWalletHistory, debitWallet } = require('../controllers/salaryController');
+const { giveBonus, removeBonus, resetSalary, getWorkerSalaryReport, getMySalaryReport, getCompensationReport, getBulkSalaryReport, getTopTeamsEarnings, addDeveloperProject, getDeveloperProjects, deleteDeveloperProject, getAllDeveloperProjectsSummary, createSalaryProject, getSalaryProjects, getSalaryProjectsForWorker, updateSalaryProject, deleteSalaryProject, recordProjectPayment, recordAllProjectPayments, getProjectAdjustmentLedger, getPayrollRecord, addPayrollAdjustment, updatePayrollAdjustment, deletePayrollAdjustment, restorePayrollAdjustment, updatePayrollStatus, getDashboardSalaryStats, getWalletBalances, getWalletHistory, debitWallet, triggerWhatsappSalaryDispatch } = require('../controllers/salaryController');
 const router = express.Router();
 
 router.route('/give-bonus/:id').post(protect, adminOnly, giveBonus);
@@ -45,5 +45,8 @@ router.route('/payroll-records/:workerId/status').put(protect, adminOnly, update
 router.route('/wallets/balances').get(protect, adminOnly, getWalletBalances);
 router.route('/wallets/history/:workerId').get(protect, adminOrWorker, getWalletHistory);
 router.route('/wallets/debit/:workerId').post(protect, adminOnly, debitWallet);
+
+// ─── Automated WhatsApp Salary Report Routes ───
+router.route('/send-whatsapp-salary-report').post(protect, adminOnly, triggerWhatsappSalaryDispatch);
 
 module.exports = router;

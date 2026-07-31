@@ -120,7 +120,7 @@ const getLeaveApplyStats = asyncHandler(async (req, res) => {
     const employeeVal = thresh.employee?.value ?? thresh.employee ?? 90;
 
     const isCompanyLow = isCompanyEnabled && companyAttendanceRate < companyVal;
-    const isDeptLow = isDeptEnabled && deptAttendanceRate < deptVal;
+    const isDeptLow = isDeptEnabled && totalDeptWorkers >= 2 && deptAttendanceRate < deptVal;
     const isPersonalLow = isEmployeeEnabled && workerAttendanceRate < employeeVal;
 
     if (isCompanyLow || isDeptLow || isPersonalLow) {

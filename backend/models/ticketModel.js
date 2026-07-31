@@ -164,6 +164,31 @@ const ticketSchema = new mongoose.Schema({
         ref: 'RecurringTask',
         default: null
     },
+    // 3-Tier Work Allocation Fields (Owner -> Manager -> Developer)
+    assignedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        refPath: 'assignedByModel'
+    },
+    assignedByModel: {
+        type: String,
+        enum: ['Admin', 'Worker'],
+        default: 'Admin'
+    },
+    targetTier: {
+        type: String,
+        enum: ['manager', 'developer'],
+        default: 'developer'
+    },
+    parentTicket: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Ticket',
+        default: null
+    },
+    approvalStatus: {
+        type: String,
+        enum: ['Pending', 'Approved', 'Rejected'],
+        default: 'Pending'
+    },
     isDeleted: {
         type: Boolean,
         default: false

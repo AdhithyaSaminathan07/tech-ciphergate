@@ -223,45 +223,76 @@ const MonthlyPayslip = () => {
     return result.trim() + ' Only';
   };
 
-  const calculatePageTotals = (pageIdx) => {
-    const page = pages[pageIdx];
+  // calculatePageTotals now takes the already-updated pages array to avoid stale closure issue
+  const calculatePageTotals = (updatedPages, pageIdx) => {
+    const page = updatedPages[pageIdx];
     const earningsSum = page.earnings.reduce((acc, curr) => acc + (parseFloat(curr.value.replace(/[^0-9.]/g, '')) || 0), 0);
     const deductionsSum = page.deductions.reduce((acc, curr) => acc + (parseFloat(curr.value.replace(/[^0-9.]/g, '')) || 0), 0);
     const net = earningsSum - deductionsSum;
-
-    const updatedPages = [...pages];
-    updatedPages[pageIdx] = {
+    const result = [...updatedPages];
+    result[pageIdx] = {
       ...page,
       totalEarnings: earningsSum.toString(),
       totalDeductions: deductionsSum.toString(),
       netPay: net.toString(),
       amountInWords: numberToWords(Math.round(net))
     };
-    setPages(updatedPages);
+    return result;
   };
 
   const handleEdit = (pageIdx, field, value) => {
     if (isViewMode) return;
-    const updatedPages = [...pages];
-    updatedPages[pageIdx] = { ...updatedPages[pageIdx], [field]: value };
+    const updatedPages = pages.map((p, i) =>
+      i === pageIdx ? { ...p, [field]: value } : p
+    );
     setPages(updatedPages);
   };
 
   const handleTableEdit = (pageIdx, tableType, rowIdx, field, value) => {
     if (isViewMode) return;
-    const updatedPages = [...pages];
-    updatedPages[pageIdx][tableType][rowIdx][field] = value;
-    setPages(updatedPages);
-    calculatePageTotals(pageIdx);
+    // Immutable update — never mutate nested arrays directly
+    const updatedPages = pages.map((page, idx) => {
+      if (idx !== pageIdx) return page;
+      return {
+        ...page,
+        [tableType]: page[tableType].map((row, rIdx) =>
+          rIdx === rowIdx ? { ...row, [field]: value } : { ...row }
+        )
+      };
+    });
+    // Calculate totals inline using the already-updated pages (avoids stale state)
+    const finalPages = calculatePageTotals(updatedPages, pageIdx);
+    setPages(finalPages);
   };
 
   const addNewPage = () => {
     if (isViewMode) return;
     const currentPage = pages[currentPageIndex] || pages[0];
     const newPage = {
-      ...currentPage,
       id: Date.now(),
+      dateOfJoining: currentPage.dateOfJoining,
       payPeriod: 'Next Month 2026',
+      workedDays: '00',
+      employeeName: currentPage.employeeName,
+      employeeId: currentPage.employeeId,
+      designation: currentPage.designation,
+      department: currentPage.department,
+      earnings: [
+        { label: 'Basic', value: '0000' },
+        { label: 'House Rent Allowance', value: '0000' },
+        { label: 'Conveyance Allowances', value: '0000' },
+        { label: 'Incentive Pay', value: '0000' }
+      ],
+      deductions: [
+        { label: 'Provident Fund', value: '-' },
+        { label: 'Professional Tax', value: '-' },
+        { label: 'Loan', value: '-' },
+        { label: 'Loss of Pay', value: '000' }
+      ],
+      totalEarnings: '0000',
+      totalDeductions: '000',
+      netPay: '0000',
+      amountInWords: 'Zero Only'
     };
     setPages([...pages, newPage]);
     setCurrentPageIndex(pages.length);
@@ -270,7 +301,13 @@ const MonthlyPayslip = () => {
   const duplicateCurrentPage = () => {
     if (isViewMode) return;
     const currentPage = pages[currentPageIndex] || pages[0];
-    const duplicatedPage = { ...currentPage, id: Date.now() };
+    // Deep-copy earnings and deductions so the duplicate page has its own independent arrays
+    const duplicatedPage = {
+      ...currentPage,
+      id: Date.now(),
+      earnings: currentPage.earnings.map(e => ({ ...e })),
+      deductions: currentPage.deductions.map(d => ({ ...d }))
+    };
     setPages([...pages, duplicatedPage]);
     setCurrentPageIndex(pages.length);
   };
@@ -332,21 +369,107 @@ const MonthlyPayslip = () => {
     }
 
     setIsGenerating(true);
-    
+
     const pdf = new jsPDF('p', 'mm', 'a4');
     const pdfWidth = 210;
     const pdfHeight = 297;
 
     for (let i = 0; i < pages.length; i++) {
-      setCurrentPageIndex(i);
-      // Wait for re-render
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Render each page into a temporary off-screen container
+      const tempContainer = document.createElement('div');
+      tempContainer.style.position = 'fixed';
+      tempContainer.style.top = '-9999px';
+      tempContainer.style.left = '-9999px';
+      tempContainer.style.width = '793px'; // A4 width at 96dpi
+      tempContainer.style.height = '1122px';
+      tempContainer.style.zIndex = '-1';
+      tempContainer.style.background = 'white';
+      document.body.appendChild(tempContainer);
 
-      const canvas = await html2canvas(documentRef.current, {
+      // Dynamically build the page HTML
+      const page = pages[i];
+      const logoSrc = logoSelection === 'tech' ? '/Invoicelogo.png' : '/vaseveda.png';
+
+      tempContainer.innerHTML = `
+        <div style="width:793px;min-height:1122px;background:white;position:relative;display:flex;flex-direction:column;font-family:Inter,sans-serif;color:#1f2937;padding:30px 40px;box-sizing:border-box;">
+          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:400px;height:400px;opacity:0.05;pointer-events:none;">
+            <img src="${logoSrc}" style="width:100%;height:auto;" />
+          </div>
+          <div style="position:absolute;top:10px;right:10px;font-size:12px;color:#9ca3af;">Page ${i + 1}</div>
+          <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:32px;">
+            <img src="${logoSrc}" style="height:64px;object-fit:contain;margin-bottom:8px;" />
+            <div style="color:#4a9d2d;font-weight:700;font-size:24px;letter-spacing:0.15em;border-bottom:2px solid #1f2937;padding-bottom:4px;padding-left:16px;padding-right:16px;">MONTHLY PAYSLIP</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 0;font-size:14px;margin-bottom:32px;padding:0 8px;">
+            <div style="display:flex;gap:8px;"><span style="font-weight:700;min-width:120px;">Date of Joining</span><span>:</span><span style="padding-left:4px;">${page.dateOfJoining}</span></div>
+            <div style="display:flex;gap:8px;"><span style="font-weight:700;min-width:120px;">Employee Name</span><span>:</span><span style="padding-left:4px;font-weight:700;">${page.employeeName}</span></div>
+            <div style="display:flex;gap:8px;"><span style="font-weight:700;min-width:120px;">Pay Period</span><span>:</span><span style="padding-left:4px;">${page.payPeriod}</span></div>
+            <div style="display:flex;gap:8px;"><span style="font-weight:700;min-width:120px;">Employee ID</span><span>:</span><span style="padding-left:4px;">${page.employeeId}</span></div>
+            <div style="display:flex;gap:8px;"><span style="font-weight:700;min-width:120px;">Worked Days</span><span>:</span><span style="padding-left:4px;">${page.workedDays}</span></div>
+            <div style="display:flex;gap:8px;"><span style="font-weight:700;min-width:120px;">Designation</span><span>:</span><span style="padding-left:4px;">${page.designation}</span></div>
+            <div></div>
+            <div style="display:flex;gap:8px;"><span style="font-weight:700;min-width:120px;">Department</span><span>:</span><span style="padding-left:4px;">${page.department}</span></div>
+          </div>
+          <table style="width:100%;border-collapse:collapse;margin-top:20px;">
+            <thead>
+              <tr>
+                <th style="border:1.5px solid #000;padding:10px;text-align:left;background:#f9fafb;font-weight:800;text-transform:uppercase;font-size:14px;width:25%;">EARNINGS</th>
+                <th style="border:1.5px solid #000;padding:10px;text-align:center;background:#f9fafb;font-weight:800;text-transform:uppercase;font-size:14px;width:15%;">AMOUNT</th>
+                <th style="border:1.5px solid #000;padding:10px;text-align:left;background:#f9fafb;font-weight:800;text-transform:uppercase;font-size:14px;width:25%;">DEDUCTIONS</th>
+                <th style="border:1.5px solid #000;padding:10px;text-align:center;background:#f9fafb;font-weight:800;text-transform:uppercase;font-size:14px;width:15%;">AMOUNT</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${[0,1,2,3].map(rowIdx => `
+              <tr>
+                <td style="border:1.5px solid #000;padding:10px;font-weight:700;">${page.earnings[rowIdx]?.label || ''}</td>
+                <td style="border:1.5px solid #000;padding:10px;text-align:center;font-weight:700;">${page.earnings[rowIdx]?.value || ''}</td>
+                <td style="border:1.5px solid #000;padding:10px;font-weight:700;">${page.deductions[rowIdx]?.label || ''}</td>
+                <td style="border:1.5px solid #000;padding:10px;text-align:center;font-weight:700;">${page.deductions[rowIdx]?.value || ''}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+          <table style="width:40%;margin-left:auto;border-collapse:collapse;margin-top:20px;">
+            <tbody>
+              <tr><td style="border:1.5px solid #000;padding:8px 12px;font-weight:700;background:#f9fafb;">Total Earnings</td><td style="border:1.5px solid #000;padding:8px 12px;text-align:right;font-weight:800;">${page.totalEarnings}</td></tr>
+              <tr><td style="border:1.5px solid #000;padding:8px 12px;font-weight:700;background:#f9fafb;">Total Deductions</td><td style="border:1.5px solid #000;padding:8px 12px;text-align:right;font-weight:800;">${page.totalDeductions}</td></tr>
+            </tbody>
+          </table>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;margin-top:16px;padding:0 8px;">
+            <div style="display:flex;gap:48px;align-items:baseline;"><span style="font-weight:700;font-size:18px;">Net Pay</span><span style="font-weight:800;font-size:20px;font-family:monospace;">&#8377;${page.netPay}</span></div>
+            <div style="font-size:12px;font-style:italic;margin-top:4px;font-weight:700;color:#4b5563;">Amount In Words : <span style="color:#1f2937;">${page.amountInWords}</span></div>
+          </div>
+          <div style="margin-top:auto;padding-top:80px;display:flex;justify-content:space-between;padding-left:40px;padding-right:40px;padding-bottom:40px;">
+            <div style="display:flex;flex-direction:column;align-items:center;">
+              ${signatures.signature ? `<img src="${signatures.signature}" style="max-height:80px;max-width:200px;object-fit:contain;margin-bottom:4px;" />` : '<div style="height:80px;"></div>'}
+              <div style="border-top:2px solid #1f2937;width:192px;text-align:center;padding-top:8px;font-weight:800;font-size:14px;">Employer Signature</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;">
+              <div style="border-top:2px solid #1f2937;width:192px;text-align:center;padding-top:8px;font-weight:800;font-size:14px;">Employee Signature</div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Wait for images to load
+      await Promise.all(
+        Array.from(tempContainer.querySelectorAll('img')).map(
+          img => new Promise(resolve => {
+            if (img.complete) resolve();
+            else { img.onload = resolve; img.onerror = resolve; }
+          })
+        )
+      );
+
+      const canvas = await html2canvas(tempContainer, {
         scale: 2,
         useCORS: true,
-        logging: false
+        logging: false,
+        width: 793,
+        height: 1122
       });
+
+      document.body.removeChild(tempContainer);
 
       const imgData = canvas.toDataURL('image/png');
       if (i > 0) pdf.addPage();
@@ -501,37 +624,37 @@ const MonthlyPayslip = () => {
                 </div>
               </div>
 
-              {/* 2. Employee Details Grid */}
-              <div className="grid grid-cols-2 gap-y-3 text-sm mb-8 px-2">
+              {/* 2. Employee Details Grid - key forces full remount on page switch so contentEditable shows correct data */}
+              <div key={`details-${currentPageIndex}`} className="grid grid-cols-2 gap-y-3 text-sm mb-8 px-2">
                 <div className="flex items-center gap-2">
                   <span className="font-bold min-w-[120px]">Date of Joining</span>
                   <span>:</span>
-                  <div contentEditable={!isViewMode} onBlur={(e) => handleEdit(currentPageIndex, 'dateOfJoining', e.target.innerText)} className="editable-area px-1 outline-none min-w-[100px]" suppressContentEditableWarning>{currentPage.dateOfJoining}</div>
+                  <div contentEditable={!isViewMode} onBlur={(e) => handleEdit(currentPageIndex, 'dateOfJoining', e.target.innerText)} className="editable-area px-1 outline-none min-w-[100px]" suppressContentEditableWarning dangerouslySetInnerHTML={{ __html: currentPage.dateOfJoining }} />
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-bold min-w-[120px]">Employee Name</span>
                   <span>:</span>
-                  <div contentEditable={!isViewMode} onBlur={(e) => handleEdit(currentPageIndex, 'employeeName', e.target.innerText)} className="editable-area px-1 font-bold outline-none flex-1" suppressContentEditableWarning>{currentPage.employeeName}</div>
+                  <div contentEditable={!isViewMode} onBlur={(e) => handleEdit(currentPageIndex, 'employeeName', e.target.innerText)} className="editable-area px-1 font-bold outline-none flex-1" suppressContentEditableWarning dangerouslySetInnerHTML={{ __html: currentPage.employeeName }} />
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-bold min-w-[120px]">Pay Period</span>
                   <span>:</span>
-                  <div contentEditable={!isViewMode} onBlur={(e) => handleEdit(currentPageIndex, 'payPeriod', e.target.innerText)} className="editable-area px-1 outline-none min-w-[100px]" suppressContentEditableWarning>{currentPage.payPeriod}</div>
+                  <div contentEditable={!isViewMode} onBlur={(e) => handleEdit(currentPageIndex, 'payPeriod', e.target.innerText)} className="editable-area px-1 outline-none min-w-[100px]" suppressContentEditableWarning dangerouslySetInnerHTML={{ __html: currentPage.payPeriod }} />
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-bold min-w-[120px]">Employee ID</span>
                   <span>:</span>
-                  <div contentEditable={!isViewMode} onBlur={(e) => handleEdit(currentPageIndex, 'employeeId', e.target.innerText)} className="editable-area px-1 outline-none min-w-[100px]" suppressContentEditableWarning>{currentPage.employeeId}</div>
+                  <div contentEditable={!isViewMode} onBlur={(e) => handleEdit(currentPageIndex, 'employeeId', e.target.innerText)} className="editable-area px-1 outline-none min-w-[100px]" suppressContentEditableWarning dangerouslySetInnerHTML={{ __html: currentPage.employeeId }} />
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-bold min-w-[120px]">Worked Days</span>
                   <span>:</span>
-                  <div contentEditable={!isViewMode} onBlur={(e) => handleEdit(currentPageIndex, 'workedDays', e.target.innerText)} className="editable-area px-1 outline-none min-w-[100px]" suppressContentEditableWarning>{currentPage.workedDays}</div>
+                  <div contentEditable={!isViewMode} onBlur={(e) => handleEdit(currentPageIndex, 'workedDays', e.target.innerText)} className="editable-area px-1 outline-none min-w-[100px]" suppressContentEditableWarning dangerouslySetInnerHTML={{ __html: currentPage.workedDays }} />
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-bold min-w-[120px]">Designation</span>
                   <span>:</span>
-                  <div contentEditable={!isViewMode} onBlur={(e) => handleEdit(currentPageIndex, 'designation', e.target.innerText)} className="editable-area px-1 outline-none min-w-[100px]" suppressContentEditableWarning>{currentPage.designation}</div>
+                  <div contentEditable={!isViewMode} onBlur={(e) => handleEdit(currentPageIndex, 'designation', e.target.innerText)} className="editable-area px-1 outline-none min-w-[100px]" suppressContentEditableWarning dangerouslySetInnerHTML={{ __html: currentPage.designation }} />
                 </div>
                 <div className="flex items-center gap-2">
                   {/* Empty for spacing */}
@@ -539,11 +662,11 @@ const MonthlyPayslip = () => {
                 <div className="flex items-center gap-2">
                   <span className="font-bold min-w-[120px]">Department</span>
                   <span>:</span>
-                  <div contentEditable={!isViewMode} onBlur={(e) => handleEdit(currentPageIndex, 'department', e.target.innerText)} className="editable-area px-1 outline-none min-w-[100px]" suppressContentEditableWarning>{currentPage.department}</div>
+                  <div contentEditable={!isViewMode} onBlur={(e) => handleEdit(currentPageIndex, 'department', e.target.innerText)} className="editable-area px-1 outline-none min-w-[100px]" suppressContentEditableWarning dangerouslySetInnerHTML={{ __html: currentPage.department }} />
                 </div>
               </div>
 
-              {/* 3. Earnings and Deductions Table */}
+              {/* 3. Earnings and Deductions Table - tbody key forces full remount on page switch */}
               <table className="payslip-table">
                 <thead>
                   <tr>
@@ -553,28 +676,44 @@ const MonthlyPayslip = () => {
                     <th className="w-[15%] text-center">AMOUNT</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody key={currentPageIndex}>
                   {[0, 1, 2, 3].map(rowIdx => (
                     <tr key={rowIdx}>
                       <td>
-                        <div contentEditable={!isViewMode} onBlur={(e) => handleTableEdit(currentPageIndex, 'earnings', rowIdx, 'label', e.target.innerText)} className="editable-area outline-none font-bold" suppressContentEditableWarning>
-                          {currentPage.earnings[rowIdx]?.label}
-                        </div>
+                        <div
+                          contentEditable={!isViewMode}
+                          onBlur={(e) => handleTableEdit(currentPageIndex, 'earnings', rowIdx, 'label', e.target.innerText)}
+                          className="editable-area outline-none font-bold"
+                          suppressContentEditableWarning
+                          dangerouslySetInnerHTML={{ __html: currentPage.earnings[rowIdx]?.label || '' }}
+                        />
                       </td>
                       <td className="text-center font-bold">
-                        <div contentEditable={!isViewMode} onBlur={(e) => handleTableEdit(currentPageIndex, 'earnings', rowIdx, 'value', e.target.innerText)} className="editable-area outline-none" suppressContentEditableWarning>
-                          {currentPage.earnings[rowIdx]?.value}
-                        </div>
+                        <div
+                          contentEditable={!isViewMode}
+                          onBlur={(e) => handleTableEdit(currentPageIndex, 'earnings', rowIdx, 'value', e.target.innerText)}
+                          className="editable-area outline-none"
+                          suppressContentEditableWarning
+                          dangerouslySetInnerHTML={{ __html: currentPage.earnings[rowIdx]?.value || '' }}
+                        />
                       </td>
                       <td>
-                        <div contentEditable={!isViewMode} onBlur={(e) => handleTableEdit(currentPageIndex, 'deductions', rowIdx, 'label', e.target.innerText)} className="editable-area outline-none font-bold" suppressContentEditableWarning>
-                          {currentPage.deductions[rowIdx]?.label}
-                        </div>
+                        <div
+                          contentEditable={!isViewMode}
+                          onBlur={(e) => handleTableEdit(currentPageIndex, 'deductions', rowIdx, 'label', e.target.innerText)}
+                          className="editable-area outline-none font-bold"
+                          suppressContentEditableWarning
+                          dangerouslySetInnerHTML={{ __html: currentPage.deductions[rowIdx]?.label || '' }}
+                        />
                       </td>
                       <td className="text-center font-bold">
-                        <div contentEditable={!isViewMode} onBlur={(e) => handleTableEdit(currentPageIndex, 'deductions', rowIdx, 'value', e.target.innerText)} className="editable-area outline-none" suppressContentEditableWarning>
-                          {currentPage.deductions[rowIdx]?.value}
-                        </div>
+                        <div
+                          contentEditable={!isViewMode}
+                          onBlur={(e) => handleTableEdit(currentPageIndex, 'deductions', rowIdx, 'value', e.target.innerText)}
+                          className="editable-area outline-none"
+                          suppressContentEditableWarning
+                          dangerouslySetInnerHTML={{ __html: currentPage.deductions[rowIdx]?.value || '' }}
+                        />
                       </td>
                     </tr>
                   ))}

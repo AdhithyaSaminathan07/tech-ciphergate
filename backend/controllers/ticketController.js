@@ -60,6 +60,9 @@ exports.getTickets = async (req, res) => {
         const filterTeam = req.query.filterTeam || req.query.team || '';
         const filterPriority = req.query.filterPriority || req.query.priority || '';
         const filterMonth = req.query.filterMonth || '';
+        const filterAssignedBy = req.query.filterAssignedBy || req.query.assignedBy || '';
+        const filterTargetTier = req.query.filterTargetTier || req.query.targetTier || '';
+        const filterParentTicket = req.query.filterParentTicket || req.query.parentTicket || '';
 
         const conditions = [];
 
@@ -71,6 +74,21 @@ exports.getTickets = async (req, res) => {
                     { description: { $regex: searchTerm, $options: 'i' } }
                 ]
             });
+        }
+
+        // AssignedBy Filter
+        if (filterAssignedBy) {
+            query.assignedBy = filterAssignedBy;
+        }
+
+        // Target Tier Filter
+        if (filterTargetTier) {
+            query.targetTier = filterTargetTier;
+        }
+
+        // Parent Ticket Filter
+        if (filterParentTicket) {
+            query.parentTicket = filterParentTicket;
         }
 
         // Assignee Filter
@@ -146,8 +164,10 @@ exports.getTickets = async (req, res) => {
         const total = await Ticket.countDocuments(query);
 
         let ticketsQuery = Ticket.find(query)
-            .populate('assignee', 'name username status')
-            .populate('assignees', 'name username department status')
+            .populate('assignee', 'name username status role')
+            .populate('assignees', 'name username department status role')
+            .populate('assignedBy', 'name username role')
+            .populate('parentTicket', 'title status')
             .sort({ createdAt: -1 });
 
         if (page !== null) {
@@ -175,9 +195,12 @@ exports.getTickets = async (req, res) => {
 // @access  Private/Admin
 exports.createTicket = async (req, res) => {
     try {
-        const { title, description, assignee, assignees, team, priority, status, issueType, storyPoints, labels, startDate, endDate, checklist, referenceFiles } = req.body;
+        const { title, description, assignee, assignees, team, priority, status, issueType, storyPoints, labels, startDate, endDate, checklist, referenceFiles, targetTier, parentTicket, approvalStatus } = req.body;
         const subdomain = req.user?.subdomain || req.body.subdomain;
         const reporter = req.user?._id;
+
+        const assignedBy = req.user?._id;
+        const assignedByModel = req.user?.role === 'admin' ? 'Admin' : 'Worker';
 
         // Clean up empty strings for dates to prevent CastError
         const formattedStartDate = (startDate && startDate.trim() !== '') ? new Date(startDate) : undefined;
@@ -199,7 +222,12 @@ exports.createTicket = async (req, res) => {
             startDate: formattedStartDate,
             endDate: formattedEndDate,
             checklist: checklist || parseChecklist(description),
-            referenceFiles: referenceFiles || []
+            referenceFiles: referenceFiles || [],
+            assignedBy,
+            assignedByModel,
+            targetTier: targetTier || (req.user?.role === 'admin' ? 'manager' : 'developer'),
+            parentTicket: parentTicket || null,
+            approvalStatus: approvalStatus || 'Pending'
         });
 
         newTicket._reviewerId = req.user?._id;
@@ -222,8 +250,10 @@ exports.createTicket = async (req, res) => {
 
         // Populate assignees before returning
         await savedTicket.populate([
-            { path: 'assignee', select: 'name username status' },
-            { path: 'assignees', select: 'name username department status' }
+            { path: 'assignee', select: 'name username status role' },
+            { path: 'assignees', select: 'name username department status role' },
+            { path: 'assignedBy', select: 'name username role' },
+            { path: 'parentTicket', select: 'title status' }
         ]);
 
         // Trigger push notifications
@@ -264,7 +294,7 @@ exports.createTicket = async (req, res) => {
 exports.updateTicket = async (req, res) => {
     try {
         const ticketId = req.params.id;
-        const { title, description, assignee, assignees, team, priority, status, issueType, storyPoints, labels, startDate, endDate, checklist, feedback, workerQuery } = req.body;
+        const { title, description, assignee, assignees, team, priority, status, issueType, storyPoints, labels, startDate, endDate, checklist, feedback, workerQuery, approvalStatus, targetTier, parentTicket } = req.body;
 
         const ticket = await Ticket.findById(ticketId);
 
@@ -284,17 +314,28 @@ exports.updateTicket = async (req, res) => {
         if (assignees !== undefined) ticket.assignees = assignees;
         if (team !== undefined) ticket.team = team;
         if (priority !== undefined) ticket.priority = priority;
+        if (targetTier !== undefined) ticket.targetTier = targetTier;
+        if (parentTicket !== undefined) ticket.parentTicket = parentTicket;
+        if (approvalStatus !== undefined) ticket.approvalStatus = approvalStatus;
 
-        // Status Update Logic with Validation
+        // Status Update Logic with 3-Tier Validation
         if (status !== undefined) {
-            if (status === 'Done' && req.user.role !== 'admin') {
-                return res.status(403).json({ message: 'Non-admin users cannot mark tasks as Done. Move to Review instead.' });
+            const isOwner = req.user.role === 'admin' || req.user.role === 'owner';
+            const isManager = req.user.role === 'manager';
+            const isCreator = ticket.assignedBy && ticket.assignedBy.toString() === req.user._id?.toString();
+            const canApprove = isOwner || isManager || isCreator;
+
+            if (status === 'Done' && !canApprove) {
+                return res.status(403).json({ message: 'Non-manager users cannot mark tasks as Done. Move to Review instead.' });
             }
-            if (ticket.status === 'Done' && status !== 'Done' && req.user.role !== 'admin') {
-                return res.status(403).json({ message: 'Approved/Done tasks cannot be moved back by non-admin users.' });
+            if (ticket.status === 'Done' && status !== 'Done' && !canApprove) {
+                return res.status(403).json({ message: 'Approved/Done tasks cannot be moved back by developers.' });
             }
             const previousStatus = ticket.status;
             ticket.status = status;
+            if (status === 'Done') {
+                ticket.approvalStatus = 'Approved';
+            }
             // Flag for performance points if newly moved to Done
             if (status === 'Done' && previousStatus !== 'Done') {
                 ticket._justCompletedForPerformance = true;

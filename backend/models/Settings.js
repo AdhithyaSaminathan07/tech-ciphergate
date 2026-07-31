@@ -472,6 +472,34 @@ const settingsSchema = mongoose.Schema({
       min: 0.1,
       max: 0.9
     }
+  },
+
+  // Automated WhatsApp Salary Report Configuration
+  autoSalaryWhatsappConfig: {
+    enabled: {
+      type: Boolean,
+      default: false
+    },
+    scheduleMode: {
+      type: String,
+      enum: ['end_of_month', 'custom'],
+      default: 'end_of_month'
+    },
+    customDay: {
+      type: String,
+      default: 'last_day'
+    },
+    dispatchTime: {
+      type: String,
+      default: '00:01'
+    },
+    phoneNumbers: {
+      type: String,
+      default: ''
+    },
+    lastDispatchedAt: {
+      type: Date
+    }
   }
 
 }, {

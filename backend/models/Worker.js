@@ -123,6 +123,16 @@ const workerSchema = mongoose.Schema({
     enum: ['intern', 'intern_with_stphen', 'employee', 'developer'],
     default: 'intern'
   },
+  role: {
+    type: String,
+    enum: ['developer', 'manager', 'owner'],
+    default: 'developer'
+  },
+  managedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Worker',
+    default: null
+  },
   class: {
     type: String,
     enum: ['A', 'B', 'C'],

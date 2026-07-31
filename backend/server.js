@@ -210,6 +210,12 @@ const startServer = async () => {
 
       initializeServerCronJobs();
 
+      // Automated WhatsApp Salary Dispatch Scheduler
+      const {
+        initAutoSalaryWhatsappScheduler,
+      } = require('./schedulers/autoSalaryWhatsappScheduler');
+      initAutoSalaryWhatsappScheduler();
+
     } else {
       console.log(
         '⚠️ Schedulers disabled. Set NODE_ENV=production or ENABLE_SCHEDULERS=true to enable'
@@ -223,6 +229,10 @@ const startServer = async () => {
     const server = http.createServer(app);
     const { init: initSocket } = require('./utils/socket');
     initSocket(server);
+
+    // Initialize Automated WhatsApp Salary Report Scheduler
+    const { initAutoSalaryWhatsappScheduler } = require('./schedulers/autoSalaryWhatsappScheduler');
+    initAutoSalaryWhatsappScheduler();
 
     const PORT = process.env.PORT || 5000;
     server.listen(PORT, () => {

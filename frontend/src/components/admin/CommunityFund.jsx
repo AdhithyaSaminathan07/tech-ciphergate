@@ -212,7 +212,7 @@ const CommunityFund = () => {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
                 <div className="min-w-0 pr-4">
                     <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 tracking-tight">Community Fund</h1>
-                    <p className="text-sm text-gray-600 mt-1">Centralized wallet for collecting employee fines</p>
+                    <p className="text-sm text-gray-600 mt-1">Centralized wallet for collecting developer fines</p>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
                     <Button
@@ -308,7 +308,7 @@ const CommunityFund = () => {
                             <tr className="bg-gray-50 text-gray-600 text-sm">
                                 <th className="px-6 py-3 font-medium">Date</th>
                                 <th className="px-6 py-3 font-medium">Type</th>
-                                <th className="px-6 py-3 font-medium">Employee</th>
+                                <th className="px-6 py-3 font-medium">Developer</th>
                                 <th className="px-6 py-3 font-medium">Amount</th>
                                 <th className="px-6 py-3 font-medium">Source</th>
                                 <th className="px-6 py-3 font-medium">Reason</th>
@@ -562,8 +562,8 @@ const CommunityFund = () => {
                         Are you sure you want to delete this fine? This will:
                     </p>
                     <ul className="list-disc list-inside mt-3 text-sm text-gray-500 space-y-1">
-                        <li>Remove the fine from the employee's record</li>
-                        <li>Restore the deducted amount to the employee's salary</li>
+                        <li>Remove the fine from the developer's record</li>
+                        <li>Restore the deducted amount to the developer's salary</li>
                         <li>Remove the credit from the Community Fund</li>
                     </ul>
                     {selectedTransaction && (
