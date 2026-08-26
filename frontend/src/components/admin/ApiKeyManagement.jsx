@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { 
-    FiKey, FiPlus, FiTrash2, FiCopy, FiCheck, FiShield, 
+import {
+    FiKey, FiPlus, FiTrash2, FiCopy, FiCheck, FiShield,
     FiCalendar, FiActivity, FiToggleLeft, FiToggleRight,
     FiAlertTriangle, FiChevronDown, FiTerminal, FiCode, FiGlobe, FiInfo
 } from 'react-icons/fi';
@@ -10,6 +10,7 @@ import { toast } from 'react-toastify';
 const AVAILABLE_MODULES = [
     { id: 'attendance', name: 'Attendance', actions: ['read', 'write'] },
     { id: 'invoices', name: 'Invoices', actions: ['read', 'write'] },
+    { id: 'work_allocation', name: 'Work Allocation', actions: ['read', 'write'] },
     { id: 'workers', name: 'Workers', actions: ['read'] },
     { id: 'tasks', name: 'Tasks', actions: ['read'] },
     { id: 'salary', name: 'Salary Report', actions: ['read'] },
@@ -26,7 +27,7 @@ const formatPermissions = (permissions) => {
     if (permissions.includes('admin')) return ['Full Admin'];
     if (permissions.includes('write')) return ['Global Read & Write'];
     if (permissions.includes('read')) return ['Global Read Only'];
-    
+
     // Group by module
     const groups = {};
     permissions.forEach(p => {
@@ -84,7 +85,7 @@ const ApiKeyManagement = () => {
         navigator.clipboard.writeText(snippet);
         toast.info('Copied Axios snippet to clipboard!');
     };
-    
+
     const copyFetchRequest = (key) => {
         const baseUrl = getBaseUrl();
         const snippet = `fetch('${baseUrl}/api/external/${selectedEndpoint}', {\n  headers: {\n    'x-api-key': '${key}'\n  }\n});`;
@@ -98,11 +99,11 @@ const ApiKeyManagement = () => {
         navigator.clipboard.writeText(url);
         toast.info('Copied Endpoint URL to clipboard!');
     };
-    
+
     // Form state
     const [formData, setFormData] = useState({
         clientName: '',
-        subdomain: localStorage.getItem('tasktracker-subdomain') || '',
+        subdomain: localStorage.getItem('tasktracker-subdomain') || 'ciphergate',
         permissions: ['read'],
         expiryDays: 30
     });
@@ -209,8 +210,14 @@ const ApiKeyManagement = () => {
                         </h1>
                         <p className="text-gray-500">Manage external access keys for your team and applications.</p>
                     </div>
-                    <button 
-                        onClick={() => setShowCreateModal(true)}
+                    <button
+                        onClick={() => {
+                            setFormData(prev => ({
+                                ...prev,
+                                subdomain: prev.subdomain || localStorage.getItem('tasktracker-subdomain') || 'ciphergate'
+                            }));
+                            setShowCreateModal(true);
+                        }}
                         className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-all shadow-md"
                     >
                         <FiPlus /> Generate New Key
@@ -287,7 +294,7 @@ const ApiKeyManagement = () => {
                                             </code>
                                             {apiKey.key && (
                                                 <div className="relative flex items-center">
-                                                    <button 
+                                                    <button
                                                         type="button"
                                                         onClick={() => copyToClipboard(apiKey.key)}
                                                         className="text-gray-400 hover:text-blue-600 transition-colors mr-1"
@@ -306,21 +313,22 @@ const ApiKeyManagement = () => {
 
                                                     {activeDropdownId === apiKey._id && (
                                                         <>
-                                                            <div 
-                                                                className="fixed inset-0 z-40" 
+                                                            <div
+                                                                className="fixed inset-0 z-40"
                                                                 onClick={() => setActiveDropdownId(null)}
                                                             />
                                                             <div className="absolute right-0 mt-8 w-72 bg-white rounded-2xl border border-slate-200 shadow-xl z-50 p-2 text-left animate-in fade-in slide-in-from-top-2 duration-150">
                                                                 <div className="px-3 py-2 border-b border-slate-100 mb-1">
                                                                     <label className="block text-[10px] font-bold text-slate-400 tracking-wider mb-1">Target Endpoint</label>
-                                                                    <select 
-                                                                        value={selectedEndpoint} 
+                                                                    <select
+                                                                        value={selectedEndpoint}
                                                                         onChange={(e) => setSelectedEndpoint(e.target.value)}
                                                                         className="w-full bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2.5 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer font-medium"
                                                                     >
                                                                         <option value="attendance">Attendance (/attendance)</option>
                                                                         <option value="report">Attendance Summary (/report)</option>
                                                                         <option value="invoices">Invoices (/invoices)</option>
+                                                                        <option value="work_allocation">Work Allocation (/work-allocation)</option>
                                                                         <option value="workers">Workers List (/workers)</option>
                                                                         <option value="tasks">Tasks (/tasks)</option>
                                                                         <option value="leaves">Leaves (/leaves)</option>
@@ -410,7 +418,7 @@ const ApiKeyManagement = () => {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <button 
+                                        <button
                                             onClick={() => handleToggleStatus(apiKey._id)}
                                             className={`flex items-center gap-1 text-sm font-medium ${apiKey.isActive ? 'text-green-600' : 'text-red-500'}`}
                                         >
@@ -419,7 +427,7 @@ const ApiKeyManagement = () => {
                                         </button>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <button 
+                                        <button
                                             onClick={() => initiateDelete(apiKey._id)}
                                             className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                                             title="Revoke Key"
@@ -451,55 +459,62 @@ const ApiKeyManagement = () => {
 
             {/* Create Modal */}
             {showCreateModal && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] border border-slate-100 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 p-6 text-white relative">
-                            <button 
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 z-[9999] animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        {/* Modal Header */}
+                        <div className="flex items-start justify-between p-6 sm:p-7 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white shrink-0 border-b border-slate-800">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-blue-500/15 rounded-2xl text-blue-400 border border-blue-400/20 shadow-inner shrink-0">
+                                    <FiKey size={22} />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-extrabold text-white tracking-tight !mb-0">
+                                        Generate API Key
+                                    </h3>
+                                    <p className="text-slate-300 text-xs sm:text-sm mt-0.5 font-normal leading-relaxed">
+                                        Issue a secure credential key for external integrations to authenticate programmatically.
+                                    </p>
+                                </div>
+                            </div>
+                            <button
                                 type="button"
                                 onClick={() => setShowCreateModal(false)}
-                                className="absolute top-5 right-5 text-slate-400 hover:text-white transition-colors p-1.5 hover:bg-white/10 rounded-xl"
+                                className="text-slate-400 hover:text-white transition-colors p-2 hover:bg-white/10 rounded-xl shrink-0 -mr-2 -mt-1"
                             >
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                             </button>
-                            <h2 className="text-xl font-extrabold flex items-center gap-3">
-                                <div className="p-2.5 bg-white/10 rounded-xl text-blue-400 border border-white/10 shadow-inner">
-                                    <FiKey size={18} />
-                                </div>
-                                Generate API Key
-                            </h2>
-                            <p className="text-slate-300 text-xs mt-2 font-normal leading-relaxed">
-                                Issue a secure credential key for external integrations to authenticate programmatically.
-                            </p>
                         </div>
-                        <form onSubmit={handleCreateKey} className="p-6 space-y-5">
+
+                        {/* Scrollable Modal Form Body */}
+                        <form onSubmit={handleCreateKey} className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-5">
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 tracking-widest mb-2">Client / App Name</label>
-                                <input 
+                                <label className="block text-xs font-bold text-slate-600 tracking-wider uppercase mb-1.5">Client / App Name</label>
+                                <input
                                     type="text"
                                     required
                                     placeholder="e.g. Mobile App Team, Billing Integration"
-                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm text-slate-800"
+                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm text-slate-800 font-medium placeholder:text-slate-400 placeholder:font-normal"
                                     value={formData.clientName}
                                     onChange={e => setFormData({ ...formData, clientName: e.target.value })}
                                 />
                             </div>
+
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 tracking-widest mb-2">Tenant Subdomain</label>
-                                <input 
-                                    type="text"
-                                    required
-                                    disabled
-                                    className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-400 text-sm cursor-not-allowed font-medium"
-                                    value={formData.subdomain}
-                                />
+                                <label className="block text-xs font-bold text-slate-600 tracking-wider uppercase mb-1.5">Tenant Subdomain</label>
+                                <div className="flex items-center gap-2.5 px-4 py-3 bg-slate-100/80 border border-slate-200 rounded-xl text-slate-600 text-sm font-mono font-medium select-none">
+                                    <FiGlobe className="text-slate-400 shrink-0" size={16} />
+                                    <span>{formData.subdomain}</span>
+                                    <span className="text-xs text-slate-400 font-sans font-normal ml-auto bg-slate-200/60 px-2.5 py-0.5 rounded-md">Default</span>
+                                </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 tracking-widest mb-2">Key Lifespan</label>
-                                    <select 
-                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm text-slate-700 cursor-pointer"
+                                    <label className="block text-xs font-bold text-slate-600 tracking-wider uppercase mb-1.5">Key Lifespan</label>
+                                    <select
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm text-slate-700 font-medium cursor-pointer"
                                         value={formData.expiryDays}
                                         onChange={e => setFormData({ ...formData, expiryDays: parseInt(e.target.value) })}
                                     >
@@ -510,9 +525,9 @@ const ApiKeyManagement = () => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 tracking-widest mb-2">Permission Profile</label>
-                                    <select 
-                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm text-slate-700 cursor-pointer"
+                                    <label className="block text-xs font-bold text-slate-600 tracking-wider uppercase mb-1.5">Permission Profile</label>
+                                    <select
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm text-slate-700 font-medium cursor-pointer"
                                         value={permissionType}
                                         onChange={e => setPermissionType(e.target.value)}
                                     >
@@ -525,19 +540,19 @@ const ApiKeyManagement = () => {
                             </div>
 
                             {permissionType === 'custom' && (
-                                <div className="space-y-3 mt-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-150 max-h-64 overflow-y-auto">
-                                    <label className="block text-[10px] font-extrabold tracking-widest text-slate-400 mb-2">Select Scopes</label>
-                                    <div className="grid grid-cols-1 gap-2">
+                                <div className="space-y-3 mt-3 bg-slate-50 p-4 rounded-2xl border border-slate-200/80 max-h-72 overflow-y-auto">
+                                    <label className="block text-[10px] font-extrabold tracking-widest text-slate-400 uppercase mb-2">Select Scopes</label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                                         {AVAILABLE_MODULES.map(module => (
-                                            <div key={module.id} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl hover:border-slate-200/80 transition-all shadow-sm">
+                                            <div key={module.id} className="flex items-center justify-between p-3 bg-white border border-slate-200/60 rounded-xl hover:border-blue-300 transition-all shadow-2xs">
                                                 <div className="flex flex-col">
                                                     <span className="text-xs font-bold text-slate-800">{module.name}</span>
-                                                    <span className="text-[10px] text-slate-400 font-mono mt-0.5">{module.id}</span>
+                                                    <span className="text-[10px] text-slate-400 font-mono">{module.id}</span>
                                                 </div>
-                                                <div className="flex gap-4">
+                                                <div className="flex gap-3">
                                                     {module.actions.includes('read') && (
                                                         <label className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-800 cursor-pointer select-none font-medium transition-colors">
-                                                            <input 
+                                                            <input
                                                                 type="checkbox"
                                                                 className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 focus:ring-offset-0 transition-all h-4 w-4 cursor-pointer"
                                                                 checked={customPermissions.includes(`${module.id}:read`)}
@@ -555,7 +570,7 @@ const ApiKeyManagement = () => {
                                                     )}
                                                     {module.actions.includes('write') && (
                                                         <label className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-800 cursor-pointer select-none font-medium transition-colors">
-                                                            <input 
+                                                            <input
                                                                 type="checkbox"
                                                                 className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 focus:ring-offset-0 transition-all h-4 w-4 cursor-pointer"
                                                                 checked={customPermissions.includes(`${module.id}:write`)}
@@ -563,8 +578,8 @@ const ApiKeyManagement = () => {
                                                                     const val = `${module.id}:write`;
                                                                     if (e.target.checked) {
                                                                         const readVal = `${module.id}:read`;
-                                                                        const newPerms = customPermissions.includes(readVal) 
-                                                                            ? [...customPermissions, val] 
+                                                                        const newPerms = customPermissions.includes(readVal)
+                                                                            ? [...customPermissions, val]
                                                                             : [...customPermissions, readVal, val];
                                                                         setCustomPermissions(newPerms);
                                                                     } else {
@@ -581,17 +596,19 @@ const ApiKeyManagement = () => {
                                     </div>
                                 </div>
                             )}
-                            <div className="flex gap-3 mt-6 pt-4 border-t border-slate-100">
-                                <button 
+
+                            {/* Form Action Buttons */}
+                            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                                <button
                                     type="button"
                                     onClick={() => setShowCreateModal(false)}
-                                    className="flex-1 px-4 py-2.5 text-slate-600 hover:text-slate-800 font-semibold hover:bg-slate-50 border border-slate-200 rounded-xl transition-all text-sm"
+                                    className="px-6 py-2.5 text-slate-600 hover:text-slate-800 font-semibold hover:bg-slate-100 border border-slate-200 rounded-xl transition-all text-sm"
                                 >
                                     Cancel
                                 </button>
-                                <button 
+                                <button
                                     type="submit"
-                                    className="flex-1 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/10 hover:shadow-blue-500/25 transition-all text-sm"
+                                    className="px-7 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-md shadow-blue-500/20 hover:shadow-lg transition-all text-sm"
                                 >
                                     Generate Key
                                 </button>
@@ -603,14 +620,14 @@ const ApiKeyManagement = () => {
 
             {/* Delete Confirmation Modal */}
             {showDeleteConfirm && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] border border-slate-100 w-full max-w-md overflow-hidden p-6 animate-in fade-in zoom-in-95 duration-200">
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 w-full max-w-lg overflow-hidden p-7 animate-in fade-in zoom-in-95 duration-200">
                         <div className="text-center">
-                            <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-100 shadow-sm">
-                                <FiAlertTriangle size={28} />
+                            <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-100 shadow-sm">
+                                <FiAlertTriangle size={32} />
                             </div>
-                            <h2 className="text-xl font-extrabold text-slate-900 tracking-tight mb-2">Revoke API Key</h2>
-                            <p className="text-slate-500 text-sm mb-5 leading-relaxed">
+                            <h3 className="text-xl font-extrabold text-slate-900 tracking-tight !mb-2">Revoke API Key</h3>
+                            <p className="text-slate-500 text-sm mb-6 leading-relaxed">
                                 Are you sure you want to revoke this credentials key? This action is permanent and cannot be reversed.
                             </p>
 
@@ -621,7 +638,7 @@ const ApiKeyManagement = () => {
                                 return (
                                     <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-6 text-left relative overflow-hidden">
                                         <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/5 rounded-full -mr-8 -mt-8 pointer-events-none" />
-                                        <span className="block text-[10px] font-bold text-slate-400 tracking-widest mb-1.5">Key to be revoked</span>
+                                        <span className="block text-[10px] font-bold text-slate-400 tracking-widest uppercase mb-1.5">Key to be revoked</span>
                                         <span className="block text-sm font-bold text-slate-800 truncate mb-1">{targetKey.clientName}</span>
                                         <div className="flex items-center gap-1.5 font-mono text-xs text-slate-500 bg-white border border-slate-200/60 rounded-lg px-2.5 py-1.5 w-fit mt-2">
                                             <FiKey size={12} className="text-slate-400" />
@@ -632,20 +649,20 @@ const ApiKeyManagement = () => {
                             })()}
 
                             <div className="flex gap-3">
-                                <button 
+                                <button
                                     type="button"
                                     onClick={() => {
                                         setShowDeleteConfirm(false);
                                         setKeyToDelete(null);
                                     }}
-                                    className="flex-1 px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold rounded-xl transition-all text-sm"
+                                    className="flex-1 px-5 py-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold rounded-xl transition-all text-sm"
                                 >
                                     Cancel
                                 </button>
-                                <button 
+                                <button
                                     type="button"
                                     onClick={confirmDeleteKey}
-                                    className="flex-1 px-4 py-2.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold rounded-xl shadow-lg shadow-red-500/10 hover:shadow-red-500/25 transition-all text-sm"
+                                    className="flex-1 px-5 py-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold rounded-xl shadow-lg shadow-red-500/10 hover:shadow-red-500/25 transition-all text-sm"
                                 >
                                     Yes, Revoke
                                 </button>
@@ -657,62 +674,68 @@ const ApiKeyManagement = () => {
 
             {/* Success Modal (Generated Key) */}
             {showSuccessModal && generatedKeyData && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] border border-slate-100 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                        <div className="bg-gradient-to-br from-green-600 via-emerald-600 to-teal-800 p-6 text-white relative">
-                            <button 
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 z-[9999] animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        {/* Success Header */}
+                        <div className="flex items-start justify-between p-6 sm:p-7 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-800 text-white shrink-0 border-b border-emerald-500/30">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-white/15 rounded-2xl text-emerald-200 border border-white/20 shadow-inner shrink-0">
+                                    <FiCheck size={22} />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-extrabold text-white tracking-tight !mb-0">
+                                        Key Generated Successfully!
+                                    </h3>
+                                    <p className="text-emerald-100 text-xs sm:text-sm mt-0.5 font-normal leading-relaxed">
+                                        Your API key for <strong className="text-white font-semibold">{generatedKeyData.clientName}</strong> is ready.
+                                    </p>
+                                </div>
+                            </div>
+                            <button
                                 type="button"
                                 onClick={() => setShowSuccessModal(false)}
-                                className="absolute top-5 right-5 text-emerald-100 hover:text-white transition-colors p-1.5 hover:bg-white/10 rounded-xl"
+                                className="text-emerald-100 hover:text-white transition-colors p-2 hover:bg-white/10 rounded-xl shrink-0 -mr-2 -mt-1"
                             >
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                             </button>
-                            <h2 className="text-xl font-extrabold flex items-center gap-3">
-                                <div className="p-2.5 bg-white/10 rounded-xl text-green-300 border border-white/10 shadow-inner animate-bounce">
-                                    <FiCheck size={18} />
-                                </div>
-                                Key Generated Successfully!
-                            </h2>
-                            <p className="text-emerald-100 text-xs mt-2 font-normal leading-relaxed">
-                                Your API key for <strong className="text-white font-bold">{generatedKeyData.clientName}</strong> is ready. Please save it now.
-                            </p>
                         </div>
-                        
-                        <div className="p-6 space-y-5">
+
+                        <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6">
                             {/* Key display field */}
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 tracking-widest mb-2">Your Secret API Key</label>
-                                <div className="flex items-center justify-between gap-3 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-4 font-mono text-sm text-slate-800 break-all select-all font-semibold relative group">
+                                <label className="block text-xs font-bold text-slate-500 tracking-wider uppercase mb-2">Your Secret API Key</label>
+                                <div className="flex items-center justify-between gap-3 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-4 sm:p-5 font-mono text-sm sm:text-base text-slate-800 break-all select-all font-semibold relative group">
                                     <span className="text-blue-700">{generatedKeyData.key}</span>
-                                    <button 
+                                    <button
                                         type="button"
                                         onClick={() => copyToClipboard(generatedKeyData.key)}
-                                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all shrink-0"
+                                        className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all shrink-0"
                                         title="Copy API Key"
                                     >
-                                        {copiedKey === generatedKeyData.key ? <FiCheck className="text-green-500" /> : <FiCopy size={16} />}
+                                        {copiedKey === generatedKeyData.key ? <FiCheck className="text-green-500" size={18} /> : <FiCopy size={18} />}
                                     </button>
                                 </div>
-                                <p className="text-[11px] text-amber-600 font-medium flex items-center gap-1.5 mt-2 bg-amber-50 border border-amber-100 px-3 py-2 rounded-xl">
-                                    <FiInfo size={14} className="shrink-0" />
+                                <p className="text-xs text-amber-700 font-medium flex items-center gap-2 mt-2.5 bg-amber-50 border border-amber-200/80 px-3.5 py-2.5 rounded-xl">
+                                    <FiInfo size={16} className="shrink-0 text-amber-500" />
                                     Make sure to copy this key now. You will not be able to see the full key here again for security.
                                 </p>
                             </div>
 
                             {/* Options to Copy with/without Endpoint */}
-                            <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-150 space-y-4">
-                                <div className="flex items-center justify-between border-b border-slate-150 pb-3">
-                                    <span className="text-xs font-bold text-slate-700 tracking-wider">Quick Integration Snippets</span>
-                                    <select 
-                                        value={selectedEndpoint} 
+                            <div className="bg-slate-50/50 p-5 sm:p-6 rounded-2xl border border-slate-200/80 space-y-4">
+                                <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+                                    <span className="text-xs font-bold text-slate-700 tracking-wider uppercase">Quick Integration Snippets</span>
+                                    <select
+                                        value={selectedEndpoint}
                                         onChange={(e) => setSelectedEndpoint(e.target.value)}
-                                        className="bg-white border border-slate-200 rounded-lg py-1.5 px-2.5 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer font-medium shadow-sm"
+                                        className="bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer font-medium shadow-2xs"
                                     >
                                         <option value="attendance">Attendance (/attendance)</option>
                                         <option value="report">Attendance Summary (/report)</option>
                                         <option value="invoices">Invoices (/invoices)</option>
+                                        <option value="work_allocation">Work Allocation (/work-allocation)</option>
                                         <option value="workers">Workers List (/workers)</option>
                                         <option value="tasks">Tasks (/tasks)</option>
                                         <option value="leaves">Leaves (/leaves)</option>
@@ -724,64 +747,64 @@ const ApiKeyManagement = () => {
                                     </select>
                                 </div>
 
-                                <div className="grid grid-cols-1 gap-2">
+                                <div className="grid grid-cols-1 gap-2.5">
                                     <button
                                         type="button"
                                         onClick={() => copyCurlCommand(generatedKeyData.key)}
-                                        className="w-full flex items-center justify-between px-4 py-3 bg-white border border-slate-150 hover:border-blue-400 hover:shadow-md rounded-xl text-left transition-all group"
+                                        className="w-full flex items-center justify-between px-4 py-3.5 bg-white border border-slate-200/80 hover:border-blue-400 hover:shadow-md rounded-xl text-left transition-all group"
                                     >
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2 bg-slate-50 text-slate-600 rounded-lg group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
-                                                <FiTerminal size={15} />
+                                        <div className="flex items-center gap-3.5">
+                                            <div className="p-2.5 bg-slate-50 text-slate-600 rounded-xl group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                                                <FiTerminal size={16} />
                                             </div>
                                             <div>
                                                 <p className="text-xs font-bold text-slate-800">Copy curl Command</p>
-                                                <p className="text-[10px] text-slate-400 font-medium">For terminal testing and command-line usage</p>
+                                                <p className="text-[11px] text-slate-400 font-medium">For terminal testing and command-line usage</p>
                                             </div>
                                         </div>
-                                        <FiCopy size={14} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
+                                        <FiCopy size={15} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
                                     </button>
 
                                     <button
                                         type="button"
                                         onClick={() => copyEndpointUrl()}
-                                        className="w-full flex items-center justify-between px-4 py-3 bg-white border border-slate-150 hover:border-blue-400 hover:shadow-md rounded-xl text-left transition-all group"
+                                        className="w-full flex items-center justify-between px-4 py-3.5 bg-white border border-slate-200/80 hover:border-blue-400 hover:shadow-md rounded-xl text-left transition-all group"
                                     >
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2 bg-slate-50 text-slate-600 rounded-lg group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
-                                                <FiGlobe size={15} />
+                                        <div className="flex items-center gap-3.5">
+                                            <div className="p-2.5 bg-slate-50 text-slate-600 rounded-lg group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                                                <FiGlobe size={16} />
                                             </div>
                                             <div>
                                                 <p className="text-xs font-bold text-slate-800">Copy Endpoint URL Only</p>
-                                                <p className="text-[10px] text-slate-400 font-medium">Get the raw REST API target url</p>
+                                                <p className="text-[11px] text-slate-400 font-medium">Get the raw REST API target url</p>
                                             </div>
                                         </div>
-                                        <FiCopy size={14} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
+                                        <FiCopy size={15} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
                                     </button>
 
                                     <button
                                         type="button"
                                         onClick={() => copyAxiosRequest(generatedKeyData.key)}
-                                        className="w-full flex items-center justify-between px-4 py-3 bg-white border border-slate-150 hover:border-blue-400 hover:shadow-md rounded-xl text-left transition-all group"
+                                        className="w-full flex items-center justify-between px-4 py-3.5 bg-white border border-slate-200/80 hover:border-blue-400 hover:shadow-md rounded-xl text-left transition-all group"
                                     >
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2 bg-slate-50 text-slate-600 rounded-lg group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
-                                                <FiCode size={15} />
+                                        <div className="flex items-center gap-3.5">
+                                            <div className="p-2.5 bg-slate-50 text-slate-600 rounded-lg group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                                                <FiCode size={16} />
                                             </div>
                                             <div>
                                                 <p className="text-xs font-bold text-slate-800">Copy Axios Code Snippet</p>
-                                                <p className="text-[10px] text-slate-400 font-medium">Ready-to-use JavaScript Axios request snippet</p>
+                                                <p className="text-[11px] text-slate-400 font-medium">Ready-to-use JavaScript Axios request snippet</p>
                                             </div>
                                         </div>
-                                        <FiCopy size={14} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
+                                        <FiCopy size={15} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
                                     </button>
                                 </div>
                             </div>
 
-                            <button 
+                            <button
                                 type="button"
                                 onClick={() => setShowSuccessModal(false)}
-                                className="w-full py-3 bg-slate-800 hover:bg-slate-900 text-white font-semibold rounded-xl shadow-md transition-all text-sm"
+                                className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl shadow-md transition-all text-sm"
                             >
                                 Done, I have saved the key
                             </button>

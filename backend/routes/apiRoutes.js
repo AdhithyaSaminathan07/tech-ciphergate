@@ -343,6 +343,103 @@ router.get('/tickets', authorizeApi('tickets', 'read'), (req, res, next) => {
     getTickets(req, res, next);
 });
 
+// --- Work Allocation Modules ---
+
+const handleGetWorkAllocation = async (req, res) => {
+    try {
+        const subdomain = req.apiKey.subdomain;
+        const TicketModel = require('../models/ticketModel');
+        const tasks = await TicketModel.find({ subdomain, isDeleted: { $ne: true } })
+            .populate('assignee', 'name email department')
+            .populate('assignees', 'name email department')
+            .sort({ createdAt: -1 });
+
+        res.json({
+            success: true,
+            data: tasks
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+/**
+ * @route   GET /api/external/work-allocation
+ * @desc    Get all work allocation tasks for the company
+ * @access  Private (API Key)
+ */
+router.get('/work-allocation', authorizeApi('work_allocation', 'read'), handleGetWorkAllocation);
+router.get('/work_allocation', authorizeApi('work_allocation', 'read'), handleGetWorkAllocation);
+
+const handlePostWorkAllocation = async (req, res) => {
+    try {
+        const subdomain = req.apiKey.subdomain;
+        const { title, description, priority, category, dueDate, assignee, team } = req.body;
+        if (!title) {
+            return res.status(400).json({ success: false, message: 'Title is required' });
+        }
+
+        const WorkerModel = require('../models/Worker');
+        let assignedWorkerId = null;
+
+        // Smart worker resolution (by ObjectId, Email, or Name)
+        if (assignee) {
+            const mongoose = require('mongoose');
+            if (mongoose.Types.ObjectId.isValid(assignee)) {
+                assignedWorkerId = assignee;
+            } else {
+                const foundWorker = await WorkerModel.findOne({
+                    subdomain,
+                    $or: [
+                        { email: assignee.trim() },
+                        { name: new RegExp(`^${assignee.trim()}$`, 'i') }
+                    ]
+                });
+                if (foundWorker) {
+                    assignedWorkerId = foundWorker._id;
+                }
+            }
+        }
+
+        const TicketModel = require('../models/ticketModel');
+        const taskData = {
+            title,
+            description: description || '',
+            priority: priority || 'Medium',
+            category: category || 'General',
+            dueDate: dueDate || null,
+            team: team || 'DEV',
+            subdomain,
+            status: req.body.status || 'To Do'
+        };
+
+        if (assignedWorkerId) {
+            taskData.assignee = assignedWorkerId;
+            taskData.assignees = [assignedWorkerId];
+        }
+
+        const task = await TicketModel.create(taskData);
+        const populatedTask = await TicketModel.findById(task._id)
+            .populate('assignee', 'name email department')
+            .populate('assignees', 'name email department');
+
+        res.status(201).json({
+            success: true,
+            data: populatedTask
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+/**
+ * @route   POST /api/external/work-allocation
+ * @desc    Create a new work allocation task
+ * @access  Private (API Key)
+ */
+router.post('/work-allocation', authorizeApi('work_allocation', 'write'), handlePostWorkAllocation);
+router.post('/work_allocation', authorizeApi('work_allocation', 'write'), handlePostWorkAllocation);
+
 // --- Settings Modules ---
 
 /**

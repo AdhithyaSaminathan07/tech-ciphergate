@@ -31,6 +31,11 @@ const createWorker = asyncHandler(async (req, res) => {
     const photo = req.body.photo ? req.body.photo.trim() : '';
     const batch = req.body.batch ? req.body.batch.trim() : ''; // ADDED THIS
     const faceEmbeddings = req.body.faceEmbeddings ? req.body.faceEmbeddings : []; // ADDED THIS
+    const employeeType = req.body.employeeType ? req.body.employeeType.trim() : 'intern';
+    const classValue = req.body.class ? req.body.class.trim() : (req.body.classValue ? req.body.classValue.trim() : 'A');
+    const email = req.body.email ? req.body.email.trim() : '';
+    const phoneNumber = req.body.phoneNumber ? req.body.phoneNumber.trim() : '';
+    const joiningDate = req.body.joiningDate || new Date();
     const designation = req.body.designation ? req.body.designation.trim() : 'Developer';
     let role = req.body.role ? req.body.role.trim() : 'developer';
     if (designation.toLowerCase().includes('manager')) {
