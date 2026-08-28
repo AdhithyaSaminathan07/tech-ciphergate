@@ -46,29 +46,66 @@ const startServer = async () => {
     });
     console.log('🧹 Purged seeded/mock AWS accounts from database.');
 
+    // const app = express();
+    // app.set("trust proxy", 1);
+    // const corsOptions = {
+    //   origin: true,
+    //   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    //   allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+    //   credentials: true
+    // };
+
+    // // Apply CORS middleware
+    // app.use(cors(corsOptions));
+
+    // // Handle preflight requests globally
+    // app.options('*', cors(corsOptions));
+
+    // // Security Middleware
+    // app.use(helmet({
+    //   contentSecurityPolicy: false, // CSP handled by Nginx
+    //   crossOriginEmbedderPolicy: false // Prevent breaking cross-origin resources temporarily
+    // }));
+    // app.use(mongoSanitize()); // Prevent NoSQL injection
+    // app.use(cookieParser()); // Parse cookies
+    // app.use('/api', generalLimiter); // Apply general rate limit to all /api routes
+// ----------------------------changed By Adhithya--------------------------------------------
     const app = express();
     app.set("trust proxy", 1);
+
+    // --- NEW LOGIC STARTS HERE ---
+    const isProduction = process.env.NODE_ENV === 'production';
+
     const corsOptions = {
-      origin: true,
+      // On AWS (Prod), it uses your ENV variable. 
+      // On Render (Test), it allows your Vercel URL.
+      origin: isProduction 
+        ? process.env.FRONTEND_URL 
+        : ['https://tech-ciphergate.vercel.app', 'http://localhost:5173'],
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'Cookie'],
       credentials: true
     };
 
     // Apply CORS middleware
     app.use(cors(corsOptions));
 
-    // Handle preflight requests globally
+    // Handle preflight requests globally (Fixes the "Pending" issue)
     app.options('*', cors(corsOptions));
 
     // Security Middleware
     app.use(helmet({
       contentSecurityPolicy: false, // CSP handled by Nginx
-      crossOriginEmbedderPolicy: false // Prevent breaking cross-origin resources temporarily
+      // FIX: This allows your Vercel frontend to load Face Recognition models from Render
+      crossOriginResourcePolicy: { policy: "cross-origin" }, 
+      crossOriginEmbedderPolicy: false 
     }));
+    // --- NEW LOGIC ENDS HERE ---
+
     app.use(mongoSanitize()); // Prevent NoSQL injection
     app.use(cookieParser()); // Parse cookies
-    app.use('/api', generalLimiter); // Apply general rate limit to all /api routes
+    app.use('/api', generalLimiter); // Apply general rate limit
+// ------------------------------------------------------------------------
 
     // Middleware
     app.use(express.json({ limit: '50mb' }));

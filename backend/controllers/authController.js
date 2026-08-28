@@ -9,21 +9,44 @@ const RefreshToken = require('../models/RefreshToken');
 const { sendPasswordResetEmail } = require('../config/email');
 const { logAudit } = require('../services/logger');
 
-const BCRYPT_SALT_ROUNDS = 12;
+// const BCRYPT_SALT_ROUNDS = 12;
+const BCRYPT_SALT_ROUNDS = process.env.NODE_ENV === 'production' ? 12 : 10;
+
+
+// // Helper: Set secure cookies
+// const setCookies = (res, accessToken, refreshToken) => {
+//   res.cookie('token', accessToken, {
+//     httpOnly: true,
+//     secure: process.env.NODE_ENV === 'production',
+//     sameSite: 'Lax',
+//     maxAge: 30 * 60 * 1000 // 30 minutes
+//   });
+
+//   res.cookie('refreshToken', refreshToken, {
+//     httpOnly: true,
+//     secure: process.env.NODE_ENV === 'production',
+//     sameSite: 'Lax',
+//     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+//   });
+// };
 
 // Helper: Set secure cookies
 const setCookies = (res, accessToken, refreshToken) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+
   res.cookie('token', accessToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'Lax',
+    // FIX: Use 'none' for testing cross-site, 'Lax' for AWS production
+    sameSite: isProduction ? 'Lax' : 'none', 
+    // FIX: Must be true for 'none' to work. Both Render and AWS use HTTPS, so true is safe.
+    secure: true, 
     maxAge: 30 * 60 * 1000 // 30 minutes
   });
 
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'Lax',
+    sameSite: isProduction ? 'Lax' : 'none',
+    secure: true,
     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
   });
 };
