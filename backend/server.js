@@ -70,36 +70,30 @@ const startServer = async () => {
     // app.use(cookieParser()); // Parse cookies
     // app.use('/api', generalLimiter); // Apply general rate limit to all /api routes
 // ----------------------------changed By Adhithya--------------------------------------------
-    const app = express();
+const app = express();
     app.set("trust proxy", 1);
 
-    // --- NEW LOGIC STARTS HERE ---
-    const isProduction = process.env.NODE_ENV === 'production';
-
+    // Simplified CORS for testing
     const corsOptions = {
-      // On AWS (Prod), it uses your ENV variable. 
-      // On Render (Test), it allows your Vercel URL.
-      origin: isProduction 
-        ? process.env.FRONTEND_URL 
-        : ['https://tech-ciphergate.vercel.app', 'http://localhost:5173'],
+      // Use a function to allow both Vercel and Localhost without checking NODE_ENV
+      origin: function (origin, callback) {
+        const allowedOrigins = [
+          'https://tech-ciphergate.vercel.app',
+          'http://localhost:5173'
+        ];
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+          callback(null, true);
+        } else {
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'Cookie'],
       credentials: true
     };
 
-    // Apply CORS middleware
     app.use(cors(corsOptions));
-
-    // Handle preflight requests globally (Fixes the "Pending" issue)
-    app.options('*', cors(corsOptions));
-
-    // Security Middleware
-    app.use(helmet({
-      contentSecurityPolicy: false, // CSP handled by Nginx
-      // FIX: This allows your Vercel frontend to load Face Recognition models from Render
-      crossOriginResourcePolicy: { policy: "cross-origin" }, 
-      crossOriginEmbedderPolicy: false 
-    }));
+    app.options('*', cors(corsOptions)); // This is the fix for the "Preflight" error in your screenshot
     // --- NEW LOGIC ENDS HERE ---
 
     app.use(mongoSanitize()); // Prevent NoSQL injection
