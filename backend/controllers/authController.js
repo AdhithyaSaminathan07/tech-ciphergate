@@ -218,7 +218,14 @@ const loginAdmin = asyncHandler(async (req, res) => {
   console.log('--- LOGIN ADMIN ATTEMPT ---', req.body);
   const { username, password } = req.body;
 
-  const admin = await Admin.findOne({ username }).select('+password');
+  // const admin = await Admin.findOne({ username }).select('+password');
+
+    const admin = await Admin.findOne({
+    $or: [
+      { username: username },
+      { email: username }
+    ]
+  }).select('+password');
 
   if (admin && (await bcrypt.compare(password, admin.password))) {
     const { accessToken, refreshToken } = await generateTokens(admin._id, 'admin');
