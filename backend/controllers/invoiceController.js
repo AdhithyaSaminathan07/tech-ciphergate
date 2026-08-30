@@ -778,19 +778,23 @@ const sendInvoiceWhatsApp = async (req, res) => {
       `• *UPI ID:* ${invoice.upiId || 'techvaseegrah.ibz@icici'}\n\n` +
       `Attached below is your complete invoice document with embedded UPI QR code.`;
 
+    console.log(`[Invoice WhatsApp] Dispatching to ${phone}...`);
     const textRes = await sendWhatsApp(req.user?.subdomain || 'tech-vaseegrah', phone, {
       type: 'text',
       text: textMsg
     });
+    console.log(`[Invoice WhatsApp] Text result:`, textRes);
 
     let docRes = null;
-    if (pdfUrl) {
+    if (filePath || pdfUrl) {
       docRes = await sendWhatsApp(req.user?.subdomain || 'tech-vaseegrah', phone, {
         type: 'document',
+        filePath: filePath,
         link: pdfUrl,
         filename: `invoice-${invoice.invoiceNo}.pdf`,
         caption: `📄 Invoice ${invoice.invoiceNo} from Tech Vaseegrah`
       });
+      console.log(`[Invoice WhatsApp] Document result:`, docRes);
     }
 
     res.status(200).json({

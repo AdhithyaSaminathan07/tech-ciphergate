@@ -1019,13 +1019,36 @@ temporarily interrupt app availability. We will provide advance notice when poss
       // 2. Generate PDF document with embedded bank details & UPI QR Code
       const pdfBase64 = await generatePdfBase64();
 
-      // 3. Send via Tech Vaseegrah WhatsApp API
+      // 3. Send via Tech Vaseegrah WhatsApp API (with WhatsApp Web/App direct link fallback)
       if (targetId && pdfBase64) {
         const waRes = await sendInvoiceWhatsApp(targetId, pdfBase64, invoiceData.customerContact);
-        if (waRes.success) {
+        const textSuccess = waRes.whatsappResult?.textRes?.success;
+        
+        if (waRes.success && textSuccess) {
           toast.success('Invoice saved in software and sent to customer via WhatsApp successfully!');
         } else {
-          toast.warn('Invoice saved in software, but WhatsApp dispatch notice: ' + (waRes.message || waRes.error || 'Check customer phone number.'));
+          const cleanPhone = (invoiceData.customerContact || '').replace(/\D/g, '');
+          const formattedPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
+          const apiError = waRes.whatsappResult?.textRes?.error || waRes.message || waRes.error;
+
+          if (formattedPhone && formattedPhone.length >= 10) {
+            const summaryText = `📄 *TECH VASEEGRAH INVOICE*\n` +
+              `----------------------------------\n` +
+              `• *Invoice No:* ${invoiceData.invoiceNo || ''}\n` +
+              `• *Date:* ${invoiceData.invoiceDate || ''}\n` +
+              `• *Customer Name:* ${invoiceData.customerName || 'Valued Customer'}\n` +
+              `• *Grand Total:* ₹${totals?.grandTotal ? totals.grandTotal.toFixed(2) : '0.00'}\n\n` +
+              `💳 *Bank Details for Payment:*\n` +
+              `• *Bank:* ${invoiceData.bankName || 'ICICI'}\n` +
+              `• *A/C No:* ${invoiceData.accountNumber || '612805036053'}\n` +
+              `• *IFSC:* ${invoiceData.ifscCode || 'ICIC0006128'}\n` +
+              `• *UPI ID:* ${invoiceData.upiId || 'techvaseegrah.ibz@icici'}`;
+
+            const waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(summaryText)}`;
+            window.open(waUrl, '_blank');
+          }
+
+          toast.warn('Invoice saved! WhatsApp Cloud API notice: ' + (apiError || 'Opening WhatsApp Chat fallback...'));
         }
       } else {
         toast.success('Invoice saved successfully!');
@@ -1647,21 +1670,38 @@ temporarily interrupt app availability. We will provide advance notice when poss
 
             <div className="flex justify-between mb-8 text-sm">
               <div>
-                <div className="flex items-center mb-1">
+                <div className="flex items-center mb-2">
                   <input
                     type="checkbox"
                     checked={includeFields.customerName}
                     onChange={() => handleCheckboxChange('customerName')}
                     className="mr-2 h-4 w-4 text-green-600 rounded"
                   />
-                  <label className="font-bold text-gray-700 mr-2">Invoice to :</label>
+                  <label className="font-bold text-gray-700 mr-2 min-w-[120px]">Invoice to :</label>
                   <input
                     type="text"
                     name="customerName"
                     value={invoiceData.customerName}
                     onChange={handleInputChange}
                     placeholder="Customer Name"
-                    className="px-1 py-0.5 border-b border-gray-300 focus:outline-none focus:border-green-500 text-sm font-normal"
+                    className="px-1 py-0.5 border-b border-gray-300 focus:outline-none focus:border-green-500 text-sm font-normal w-60"
+                  />
+                </div>
+                <div className="flex items-center mb-1">
+                  <input
+                    type="checkbox"
+                    checked={includeFields.customerContact ?? true}
+                    onChange={() => handleCheckboxChange('customerContact')}
+                    className="mr-2 h-4 w-4 text-green-600 rounded"
+                  />
+                  <label className="font-bold text-gray-700 mr-2 min-w-[120px]">Customer Mobile :</label>
+                  <input
+                    type="text"
+                    name="customerContact"
+                    value={invoiceData.customerContact}
+                    onChange={handleInputChange}
+                    placeholder="Mobile / WhatsApp Number"
+                    className="px-1 py-0.5 border-b border-gray-300 focus:outline-none focus:border-green-500 text-sm font-normal w-60"
                   />
                 </div>
               </div>

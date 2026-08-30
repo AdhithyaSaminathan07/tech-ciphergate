@@ -1620,17 +1620,17 @@ support period.`;
                   className="mr-2 h-4 w-4 text-green-600 rounded mt-1"
                 />
                 <label className="font-bold text-gray-700 mr-2">
-                  {invoiceData.gstEnabled ? 'Address :' : 'Contact :'}
+                  Customer Mobile :
                 </label>
               </div>
               <div className="ml-6">
-                <textarea
+                <input
+                  type="text"
                   name="customerContact"
                   value={invoiceData.customerContact}
                   onChange={handleInputChange}
-                  placeholder={invoiceData.gstEnabled ? "Enter full address" : "Contact details"}
-                  className="w-full px-1 py-0.5 border-b border-gray-300 focus:outline-none focus:border-green-500 text-sm font-normal resize-none"
-                  rows="3"
+                  placeholder="WhatsApp Mobile Number (e.g. 9876543210)"
+                  className="w-full px-1 py-0.5 border-b border-gray-300 focus:outline-none focus:border-green-500 text-sm font-normal"
                 />
               </div>
             </div>

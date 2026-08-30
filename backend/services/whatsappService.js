@@ -45,24 +45,77 @@ exports.sendWhatsApp = async (subdomain, phone, data) => {
         text: { body: data.text }
       };
     } else if (data.type === 'document') {
+      let mediaId = data.mediaId;
+
+      // If local filePath is provided, upload PDF directly to Meta Cloud Media Storage
+      if (!mediaId && data.filePath) {
+        try {
+          const fs = require('fs');
+          const fileBuffer = fs.readFileSync(data.filePath);
+          const formData = new FormData();
+          formData.append('messaging_product', 'whatsapp');
+          formData.append('type', 'application/pdf');
+          formData.append('file', new Blob([fileBuffer], { type: 'application/pdf' }), data.filename || 'invoice.pdf');
+
+          const uploadUrl = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/media`;
+          console.log(`[WhatsApp Service] Uploading PDF media file to Meta (${data.filePath})...`);
+          const uploadRes = await axios.post(uploadUrl, formData, {
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+          });
+          if (uploadRes.data && uploadRes.data.id) {
+            mediaId = uploadRes.data.id;
+            console.log(`[WhatsApp Service] PDF Media uploaded successfully. Media ID: ${mediaId}`);
+          }
+        } catch (uploadErr) {
+          console.error('[WhatsApp Service] Error uploading media to Meta:', uploadErr.response?.data || uploadErr.message);
+        }
+      }
+
+      if (mediaId) {
+        messageData = {
+          messaging_product: 'whatsapp',
+          to: phone,
+          type: 'document',
+          document: {
+            id: mediaId,
+            filename: data.filename || 'invoice.pdf',
+            caption: data.caption || ''
+          }
+        };
+      } else {
+        messageData = {
+          messaging_product: 'whatsapp',
+          to: phone,
+          type: 'document',
+          document: {
+            link: data.link,
+            filename: data.filename || 'invoice.pdf',
+            caption: data.caption || ''
+          }
+        };
+      }
+    } else if (data.type === 'template') {
       messageData = {
         messaging_product: 'whatsapp',
         to: phone,
-        type: 'document',
-        document: {
-          link: data.link,
-          filename: data.filename || 'document.pdf',
-          caption: data.caption || ''
+        type: 'template',
+        template: {
+          name: data.templateName || process.env.WHATSAPP_INVOICE_TEMPLATE_NAME || 'invoice_notification',
+          language: { code: data.languageCode || 'en' },
+          components: data.components || []
         }
       };
     }
 
+    console.log(`[WhatsApp Service] Sending ${data.type} to ${phone} via PhoneID ${phoneNumberId}`);
     const response = await axios.post(url, messageData, { headers });
+    console.log(`[WhatsApp Service] Success:`, response.data);
     return { success: true, response: response.data };
 
   } catch (error) {
+    const errorDetails = error.response?.data || error.message;
     const errorMessage = error.response?.data?.error?.message || error.message;
-    console.error(`[WhatsApp Service] Error: ${errorMessage}`);
-    return { success: false, error: errorMessage };
+    console.error(`[WhatsApp Service] Error sending message:`, JSON.stringify(errorDetails, null, 2));
+    return { success: false, error: errorMessage, errorDetails };
   }
 };
