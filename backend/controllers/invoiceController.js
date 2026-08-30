@@ -79,7 +79,7 @@ const createInvoice = async (req, res) => {
       accountNumber: accountNumber || '',
       ifscCode: ifscCode || '',
       upiId: upiId || '',
-      gstEnabled: gstEnabled || false,
+      gstEnabled: true,
       saleType: saleType || 'Intrastate',
       customerGst: customerGst || '',
       invoiceType: invoiceType || 'INVOICE',
@@ -697,6 +697,118 @@ const getNextInvoiceNo = async (req, res) => {
   }
 };
 
+// Send Invoice PDF & Summary via WhatsApp API
+const sendInvoiceWhatsApp = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { pdfBase64, recipientPhone } = req.body;
+
+    const invoice = await Invoice.findById(id);
+    if (!invoice) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invoice not found'
+      });
+    }
+
+    // Determine target phone number
+    let phone = recipientPhone || invoice.customerContact || '';
+    // Extract phone numbers from contact text (digits only)
+    const phoneMatches = phone.match(/\d{10,12}/g);
+    if (phoneMatches && phoneMatches.length > 0) {
+      phone = phoneMatches[0];
+    } else {
+      phone = phone.replace(/\D/g, '');
+    }
+
+    if (!phone || phone.length < 10) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid customer WhatsApp phone number is required'
+      });
+    }
+
+    // Ensure phone has country code if 10 digits
+    if (phone.length === 10) {
+      phone = '91' + phone;
+    }
+
+    let pdfUrl = '';
+
+    if (pdfBase64) {
+      const fs = require('fs');
+      const path = require('path');
+
+      const uploadsDir = path.join(__dirname, '../uploads/invoices');
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+
+      const filename = `invoice-${invoice.invoiceNo.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
+      const filePath = path.join(uploadsDir, filename);
+
+      // Clean base64 string
+      const base64Data = pdfBase64.replace(/^data:application\/pdf;base64,/, '');
+      fs.writeFileSync(filePath, base64Data, 'base64');
+
+      const baseUrl = process.env.BACKEND_URL || process.env.SERVER_URL || `${req.protocol}://${req.get('host')}`;
+      pdfUrl = `${baseUrl}/uploads/invoices/${filename}`;
+    }
+
+    // Calculate Grand Total
+    const subtotal = (invoice.items || []).reduce((sum, item) =>
+      sum + (item.isTotalOverridden ? item.total : (item.qty * item.rate)), 0);
+    const gstTotal = (invoice.items || []).reduce((sum, item) =>
+      sum + (item.isTotalOverridden ? (item.total * item.gst / 100) : (item.qty * item.rate * item.gst / 100)), 0);
+    const grandTotal = subtotal + gstTotal;
+
+    const { sendWhatsApp } = require('../services/whatsappService');
+
+    // 1. Send Text Summary Message
+    const textMsg = `📄 *TECH VASEEGRAH INVOICE*\n` +
+      `----------------------------------\n` +
+      `• *Invoice No:* ${invoice.invoiceNo}\n` +
+      `• *Date:* ${invoice.invoiceDate}\n` +
+      `• *Customer Name:* ${invoice.customerName || 'Valued Customer'}\n` +
+      `• *Grand Total:* ₹${grandTotal.toFixed(2)}\n\n` +
+      `💳 *Bank Details for Payment:*\n` +
+      `• *Bank:* ${invoice.bankName || 'ICICI'}\n` +
+      `• *A/C No:* ${invoice.accountNumber || '612805036053'}\n` +
+      `• *IFSC:* ${invoice.ifscCode || 'ICIC0006128'}\n` +
+      `• *UPI ID:* ${invoice.upiId || 'techvaseegrah.ibz@icici'}\n\n` +
+      `Attached below is your complete invoice document with embedded UPI QR code.`;
+
+    const textRes = await sendWhatsApp(req.user?.subdomain || 'tech-vaseegrah', phone, {
+      type: 'text',
+      text: textMsg
+    });
+
+    let docRes = null;
+    if (pdfUrl) {
+      docRes = await sendWhatsApp(req.user?.subdomain || 'tech-vaseegrah', phone, {
+        type: 'document',
+        link: pdfUrl,
+        filename: `invoice-${invoice.invoiceNo}.pdf`,
+        caption: `📄 Invoice ${invoice.invoiceNo} from Tech Vaseegrah`
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Invoice saved and sent via WhatsApp successfully',
+      pdfUrl,
+      whatsappResult: { textRes, docRes }
+    });
+  } catch (error) {
+    console.error('Error sending invoice via WhatsApp:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error sending invoice via WhatsApp',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   createInvoice,
   updateInvoice,
@@ -711,5 +823,6 @@ module.exports = {
   getDeleteHistoryForAdmin,
   getDeleteHistoryForWorker,
   getDeletedInvoiceById,
-  getNextInvoiceNo
+  getNextInvoiceNo,
+  sendInvoiceWhatsApp
 };

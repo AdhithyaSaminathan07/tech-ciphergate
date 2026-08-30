@@ -23,7 +23,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <AuthProvider>
       <BrowserRouter>
         <App />
-        <ToastContainer position="top-right" autoClose={3500} hideProgressBar={true} closeButton={false} icon={false} newestOnTop={true} pauseOnHover={false} pauseOnFocusLoss={false} />
+        <ToastContainer position="top-right" autoClose={3000} hideProgressBar={true} closeButton={false} icon={false} newestOnTop={true} pauseOnHover={false} pauseOnFocusLoss={false} />
       </BrowserRouter>
     </AuthProvider>
   </React.StrictMode>,

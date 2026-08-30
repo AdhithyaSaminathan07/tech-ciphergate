@@ -68,9 +68,10 @@ const WorkerInvoiceManagement = () => {
       if (response.success) {
         // Refresh invoices list
         await fetchInvoices();
-        toast.success('Invoice saved successfully!');
+        return response.data;
       } else {
         toast.error('Failed to save invoice: ' + response.message);
+        return null;
       }
     } catch (err) {
       console.error('Error saving invoice:', err);

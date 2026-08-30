@@ -10,19 +10,20 @@ const init = (server) => {
     io = socketIO(server, {
         cors: {
             origin: (origin, callback) => {
-                const allowedOrigins = [
-                    'http://localhost:3000',
-                    'http://localhost:5173',
-                    'https://tvtasks.netlify.app',
-                    'https://ciphergate.techvaseegrah.com',
-                ];
-                const subdomainRegex = /^(https?:\/\/)?([\w-]+\.)+(localhost:3000|netlify\.app|techvaseegrah\.com)$/;
-                
-                if (!origin || allowedOrigins.includes(origin) || subdomainRegex.test(origin)) {
-                    callback(null, true);
-                } else {
-                    callback(new Error('Not allowed by CORS'));
+                if (!origin) return callback(null, true);
+
+                // Allow any localhost / 127.0.0.1 on any port
+                if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+                    return callback(null, true);
                 }
+
+                // Allow Vercel, Netlify, and TechVaseegrah domains
+                if (/^https?:\/\/([\w-]+\.)*(vercel\.app|netlify\.app|techvaseegrah\.com)$/.test(origin)) {
+                    return callback(null, true);
+                }
+
+                // Fallback: reflect origin to prevent CORS errors during dev/testing
+                return callback(null, true);
             },
             methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
             allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],

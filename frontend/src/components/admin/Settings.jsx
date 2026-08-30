@@ -139,6 +139,13 @@ const Settings = () => {
             enableUnauthorizedPermissionPenalty: false
         },
         includePermission: false,
+        paymentDetails: {
+            bankName: 'ICICI',
+            accountNumber: '612805036053',
+            ifscCode: 'ICIC0006128',
+            upiId: 'techvaseegrah.ibz@icici',
+            companyName: 'TECH VASEEGRAH'
+        },
         paidLeaveConfig: {
             enabled: false,
             leavesPerMonth: 1
@@ -203,16 +210,14 @@ const Settings = () => {
     };
 
     const fetchSettings = async () => {
-        if (!subdomain || subdomain === 'main') {
-            toast.error('Invalid subdomain. Please check the URL.');
-            setLoading(false);
-            return;
-        }
+        const targetSubdomain = (subdomain && subdomain !== 'main' && subdomain !== 'undefined') 
+            ? subdomain 
+            : (user?.subdomain || localStorage.getItem('subdomain') || 'tech-vaseegrah');
 
         setLoading(true);
         try {
             const token = getAuthToken();
-            const response = await api.get(`/settings/${subdomain}`, {
+            const response = await api.get(`/settings/${targetSubdomain}`, {
                 headers: {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${token}`
@@ -285,6 +290,13 @@ const Settings = () => {
                 faceRecognition: {
                     detectorType: fetchedSettings.faceRecognition?.detectorType || 'tinyFaceDetector',
                     matchingThreshold: fetchedSettings.faceRecognition?.matchingThreshold ?? 0.50
+                },
+                paymentDetails: {
+                    bankName: fetchedSettings.paymentDetails?.bankName ?? 'ICICI',
+                    accountNumber: fetchedSettings.paymentDetails?.accountNumber ?? '612805036053',
+                    ifscCode: fetchedSettings.paymentDetails?.ifscCode ?? 'ICIC0006128',
+                    upiId: fetchedSettings.paymentDetails?.upiId ?? 'techvaseegrah.ibz@icici',
+                    companyName: fetchedSettings.paymentDetails?.companyName ?? 'TECH VASEEGRAH'
                 }
             };
 
@@ -301,6 +313,10 @@ const Settings = () => {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        fetchSettings();
+    }, [subdomain]);
 
     const handleInputChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -582,11 +598,15 @@ const Settings = () => {
                 enabled: settings.bugBountyConfig?.popupFrequency !== 'disabled',
                 lastUpdated: hasBountyChanges ? new Date().toISOString() : (settings.bugBountyConfig?.lastUpdated || new Date().toISOString())
             };
+            const targetSubdomain = (subdomain && subdomain !== 'main' && subdomain !== 'undefined') 
+                ? subdomain 
+                : (user?.subdomain || localStorage.getItem('subdomain') || 'tech-vaseegrah');
+
             const payload = {
                 ...settings,
                 bugBountyConfig: updatedBountyConfig
             };
-            await api.put(`/settings/${subdomain}`, payload, {
+            await api.put(`/settings/${targetSubdomain}`, payload, {
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
@@ -742,6 +762,7 @@ const Settings = () => {
 
     const navItems = [
         { id: 'profile', label: 'Profile', icon: FiUser },
+        { id: 'paymentDetails', label: 'Payment Details', icon: FiFileText },
         { id: 'meal', label: 'Meal Service', icon: FiSunrise },
         { id: 'batches', label: 'Work Batches', icon: FiClock },
         { id: 'intervals', label: 'Break Intervals', icon: FiSliders },
@@ -1034,6 +1055,126 @@ const Settings = () => {
                                         />
                                     </div>
                                     <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1">Managed via authentication provider</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* SECTION: PAYMENT & BANK DETAILS CONFIGURATION */}
+                        <section id="section-paymentDetails" className="scroll-mt-36 lg:scroll-mt-36">
+                            <div className="mb-4 sm:mb-5 pb-3 border-b border-slate-100 flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                                        <FiFileText className="text-[#006666] h-4.5 w-4.5 sm:h-5 sm:w-5" />
+                                        Payment & Bank Details Settings
+                                    </h2>
+                                    <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
+                                        Configure your company bank credentials and UPI ID for automatically pre-filling invoices
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 max-w-4xl bg-slate-50/50 p-4 sm:p-6 rounded-2xl border border-slate-200/80">
+                                <div>
+                                    <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                        Bank Name
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={settings.paymentDetails?.bankName || ''}
+                                        onChange={(e) => {
+                                            const updated = {
+                                                ...settings,
+                                                paymentDetails: { ...(settings.paymentDetails || {}), bankName: e.target.value }
+                                            };
+                                            setSettings(updated);
+                                            checkForChanges(updated);
+                                        }}
+                                        className="w-full px-4 py-2 sm:py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                        placeholder="e.g. ICICI Bank"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                        Account Number
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={settings.paymentDetails?.accountNumber || ''}
+                                        onChange={(e) => {
+                                            const updated = {
+                                                ...settings,
+                                                paymentDetails: { ...(settings.paymentDetails || {}), accountNumber: e.target.value }
+                                            };
+                                            setSettings(updated);
+                                            checkForChanges(updated);
+                                        }}
+                                        className="w-full px-4 py-2 sm:py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                        placeholder="e.g. 612805036053"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                        IFSC Code
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={settings.paymentDetails?.ifscCode || ''}
+                                        onChange={(e) => {
+                                            const updated = {
+                                                ...settings,
+                                                paymentDetails: { ...(settings.paymentDetails || {}), ifscCode: e.target.value }
+                                            };
+                                            setSettings(updated);
+                                            checkForChanges(updated);
+                                        }}
+                                        className="w-full px-4 py-2 sm:py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                        placeholder="e.g. ICIC0006128"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                        UPI ID (VPA)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={settings.paymentDetails?.upiId || ''}
+                                        onChange={(e) => {
+                                            const updated = {
+                                                ...settings,
+                                                paymentDetails: { ...(settings.paymentDetails || {}), upiId: e.target.value }
+                                            };
+                                            setSettings(updated);
+                                            checkForChanges(updated);
+                                        }}
+                                        className="w-full px-4 py-2 sm:py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                        placeholder="e.g. techvaseegrah.ibz@icici"
+                                    />
+                                </div>
+
+                                <div className="md:col-span-2">
+                                    <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                        Company / Payee Name
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={settings.paymentDetails?.companyName || ''}
+                                        onChange={(e) => {
+                                            const updated = {
+                                                ...settings,
+                                                paymentDetails: { ...(settings.paymentDetails || {}), companyName: e.target.value }
+                                            };
+                                            setSettings(updated);
+                                            checkForChanges(updated);
+                                        }}
+                                        className="w-full px-4 py-2 sm:py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                        placeholder="e.g. TECH VASEEGRAH"
+                                    />
+                                    <p className="text-[11px] text-slate-500 mt-1 font-medium">
+                                        These bank credentials and UPI ID will be saved to database and used on all newly created invoices and payment QR codes.
+                                    </p>
                                 </div>
                             </div>
                         </section>

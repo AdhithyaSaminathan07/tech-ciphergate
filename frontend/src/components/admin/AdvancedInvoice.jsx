@@ -1,9 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useContext } from 'react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
-import { getNextInvoiceNo } from '../../services/invoiceService';
+import QRCode from 'qrcode';
+import api from '../../services/api';
+import appContext from '../../context/AppContext';
+import { getNextInvoiceNo, sendInvoiceWhatsApp, createInvoice, updateInvoice } from '../../services/invoiceService';
 
 // Helper to normalize any date string to DD/MM/YYYY
 const normalizeInvoiceDate = (dateStr) => {
@@ -47,7 +50,6 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
     year: 'numeric'
   });
 
-
   const {
     invoiceNo = 'TV000',
     invoiceDate = formattedDate,
@@ -81,10 +83,10 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
     accountNumber = '612805036053',
     ifscCode = 'ICIC0006128',
     upiId = 'techvaseegrah.ibz@icici',
-    gstEnabled = false,
+    gstEnabled = true,
     saleType = 'Intrastate',
     customerGst = '',
-    invoiceType = 'INVOICE',
+    invoiceType = 'TAX INVOICE',
     status = 'Invoice',
     isPaid = false,
     paymentRecords = []
@@ -104,14 +106,17 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
     accountNumber,
     ifscCode,
     upiId,
-    gstEnabled,
+    gstEnabled: true,
     saleType,
     customerGst,
-    invoiceType,
+    invoiceType: 'TAX INVOICE',
     status,
     isPaid,
     paymentRecords
   });
+
+  const [upiQrCodeUrl, setUpiQrCodeUrl] = useState('');
+  const [isSending, setIsSending] = useState(false);
 
   const [includeFields, setIncludeFields] = useState({
     customerName: true,
@@ -138,6 +143,7 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
     if (initialData) {
       setInvoiceData({
         ...initialData,
+        gstEnabled: true,
         invoiceDate: initialData.invoiceDate ? normalizeInvoiceDate(initialData.invoiceDate) : formattedDate,
         fromSection: initialData.fromSection || {
           company: 'TECH VASEEGRAH',
@@ -158,6 +164,56 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
       });
     }
   }, [initialData]);
+
+  const { subdomain: contextSubdomain } = useContext(appContext) || {};
+
+  // Fetch tenant Payment & Bank Details from Settings whenever creating an invoice
+  useEffect(() => {
+    const fetchPaymentSettings = async () => {
+      if (initialData?._id) return;
+      try {
+        const targetSubdomain = contextSubdomain || localStorage.getItem('subdomain') || 'tech-vaseegrah';
+        let res;
+        try {
+          res = await api.get(`/settings/${targetSubdomain}`);
+        } catch (subErr) {
+          res = await api.get(`/settings/public/${targetSubdomain}`);
+        }
+        if (res.data && res.data.paymentDetails) {
+          const { bankName, accountNumber, ifscCode, upiId, companyName } = res.data.paymentDetails;
+          setInvoiceData(prev => ({
+            ...prev,
+            bankName: bankName || prev.bankName,
+            accountNumber: accountNumber || prev.accountNumber,
+            ifscCode: ifscCode || prev.ifscCode,
+            upiId: upiId || prev.upiId,
+            companyName: companyName || prev.companyName
+          }));
+        }
+      } catch (err) {
+        console.error('Error fetching tenant payment settings:', err);
+      }
+    };
+    fetchPaymentSettings();
+  }, [initialData, contextSubdomain]);
+
+  // Generate UPI QR Code whenever invoice details/amount change
+  useEffect(() => {
+    const generateUpiQr = async () => {
+      try {
+        const upiId = invoiceData.upiId || 'techvaseegrah.ibz@icici';
+        const companyName = invoiceData.companyName || 'TECH VASEEGRAH';
+        const amount = totals?.grandTotal ? totals.grandTotal.toFixed(2) : '0.00';
+        const note = `Invoice ${invoiceData.invoiceNo || ''}`;
+        const upiString = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(companyName)}&am=${amount}&cu=INR&tn=${encodeURIComponent(note)}`;
+        const qrUrl = await QRCode.toDataURL(upiString, { margin: 1, width: 140 });
+        setUpiQrCodeUrl(qrUrl);
+      } catch (err) {
+        console.error('Error generating UPI QR code:', err);
+      }
+    };
+    generateUpiQr();
+  }, [invoiceData.upiId, invoiceData.companyName, invoiceData.invoiceNo, invoiceData.items, invoiceData.gstEnabled, invoiceData.saleType]);
 
   // Auto-fetch next invoice number when creating a new invoice (not editing)
   useEffect(() => {
@@ -361,16 +417,12 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
     }
   };
 
-  // Export to PDF
-  const exportToPDF = async () => {
+  // Generate PDF Document
+  const generatePdfDoc = async () => {
     const hasEmptyDescriptions = invoiceData.items.some(item => !item.description || item.description.trim() === '');
     if (hasEmptyDescriptions) {
-      toast.error('Please fill in descriptions for all items before exporting to PDF.');
-      return;
-    }
-
-    if (onInvoiceSave) {
-      onInvoiceSave({ ...invoiceData, _id: initialData?._id, createdAt: new Date().toISOString() });
+      toast.error('Please fill in descriptions for all items before generating PDF.');
+      return null;
     }
 
     try {
@@ -541,12 +593,12 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
       pdf.setFontSize(10);
 
       const tableColumn = ['NO', 'DESCRIPTION'];
-      if (invoiceData.gstEnabled) tableColumn.push('HSN/SAC', 'GST (%)');
+      if (invoiceData.gstEnabled) tableColumn.push('GST (%)');
       tableColumn.push('QTY', 'PRICE', 'TOTAL');
 
       const tableRows = invoiceData.items.map((item, index) => {
         const row = [(index + 1).toString(), item.description];
-        if (invoiceData.gstEnabled) row.push(item.hsn || '', item.gst.toFixed(2));
+        if (invoiceData.gstEnabled) row.push(item.gst.toFixed(2));
         row.push(item.qty.toString(), item.rate.toFixed(2), item.total.toFixed(2));
         return row;
       });
@@ -570,12 +622,11 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
           0: { cellWidth: 15, halign: 'center' },
           1: { cellWidth: 'auto', halign: 'left' },
           ...(invoiceData.gstEnabled ? {
-            2: { cellWidth: 25, halign: 'center' },
-            3: { cellWidth: 25, halign: 'center' }
+            2: { cellWidth: 25, halign: 'center' }
           } : {}),
-          [invoiceData.gstEnabled ? 4 : 2]: { cellWidth: 20, halign: 'center' },
-          [invoiceData.gstEnabled ? 5 : 3]: { cellWidth: 25, halign: 'center' },
-          [invoiceData.gstEnabled ? 6 : 4]: { cellWidth: 30, halign: 'center' }
+          [invoiceData.gstEnabled ? 3 : 2]: { cellWidth: 20, halign: 'center' },
+          [invoiceData.gstEnabled ? 4 : 3]: { cellWidth: 25, halign: 'center' },
+          [invoiceData.gstEnabled ? 5 : 4]: { cellWidth: 30, halign: 'center' }
         },
         pageBreak: 'auto',
         rowPageBreak: 'avoid',
@@ -643,7 +694,7 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
       pdf.setFontSize(11);
 
       const printRow = (label, value, background = null, bold = false) => {
-        const formattedValue = "Rs. " + Number(value).toLocaleString("en-IN", { minimumFractionDigits: 2 }) + " /-";
+        const formattedValue = "₹ " + Number(value).toLocaleString("en-IN", { minimumFractionDigits: 2 });
         const fullText = `${label} ${formattedValue}`;
 
         pdf.setFont("helvetica", bold ? "bold" : "normal");
@@ -732,6 +783,19 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
           pdf.text(`UPI ID: ${invoiceData.upiId}`, paymentLeftX, payDetailsY);
           payDetailsY += paymentLineHeight;
         }
+        if (upiQrCodeUrl) {
+          payDetailsY += 2;
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(9);
+          pdf.text("Scan UPI QR to Pay:", paymentLeftX, payDetailsY);
+          payDetailsY += 3;
+          try {
+            pdf.addImage(upiQrCodeUrl, "PNG", paymentLeftX, payDetailsY, 28, 28);
+            payDetailsY += 30;
+          } catch (qrErr) {
+            console.error('Error adding UPI QR to PDF:', qrErr);
+          }
+        }
       }
 
       if (invoiceData.paymentRecords && invoiceData.paymentRecords.length > 0) {
@@ -742,7 +806,7 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
         pdf.setFont("helvetica", "normal");
         
         invoiceData.paymentRecords.forEach((record, idx) => {
-          pdf.text(`${idx + 1}. Amount: Rs.${record.amount} | Date: ${record.dateReceived} | Txn ID: ${record.transactionId}`, paymentLeftX, payDetailsY);
+          pdf.text(`${idx + 1}. Amount: ₹${record.amount} | Date: ${record.dateReceived} | Txn ID: ${record.transactionId}`, paymentLeftX, payDetailsY);
           payDetailsY += paymentLineHeight;
         });
       }
@@ -898,10 +962,79 @@ temporarily interrupt app availability. We will provide advance notice when poss
         }
       }
 
-      pdf.save(`invoice-${invoiceData.invoiceNo}.pdf`);
+      return pdf;
     } catch (error) {
       console.error('Error generating PDF:', error);
       toast.error('An error occurred while generating the PDF. Please try again.');
+      return null;
+    }
+  };
+
+  // Generate Base64 string for WhatsApp dispatch
+  const generatePdfBase64 = async () => {
+    const pdf = await generatePdfDoc();
+    if (!pdf) return null;
+    return pdf.output('datauristring');
+  };
+
+  // Handle Send Invoice (Saves to software database AND sends via Tech Vaseegrah WhatsApp API)
+  const handleSendInvoice = async () => {
+    const hasEmptyDescriptions = invoiceData.items.some(item => !item.description || item.description.trim() === '');
+    if (hasEmptyDescriptions) {
+      toast.error('Please fill in descriptions for all items before sending.');
+      return;
+    }
+
+    if (!invoiceData.customerName || !invoiceData.customerName.trim()) {
+      toast.error('Please enter customer name.');
+      return;
+    }
+
+    if (!invoiceData.customerContact || !invoiceData.customerContact.trim()) {
+      toast.error('Please enter customer address and contact phone number.');
+      return;
+    }
+
+    try {
+      setIsSending(true);
+
+      // 1. Save invoice to backend software first
+      let savedInvoice = null;
+      if (onInvoiceSave) {
+        savedInvoice = await onInvoiceSave({ ...invoiceData, _id: initialData?._id, gstEnabled: true });
+      } else {
+        let res;
+        if (initialData?._id) {
+          res = await updateInvoice(initialData._id, { ...invoiceData, gstEnabled: true });
+        } else {
+          res = await createInvoice({ ...invoiceData, gstEnabled: true });
+        }
+        if (res.success) {
+          savedInvoice = res.data;
+        }
+      }
+
+      const targetId = savedInvoice?._id || savedInvoice?.mongoId || initialData?._id;
+
+      // 2. Generate PDF document with embedded bank details & UPI QR Code
+      const pdfBase64 = await generatePdfBase64();
+
+      // 3. Send via Tech Vaseegrah WhatsApp API
+      if (targetId && pdfBase64) {
+        const waRes = await sendInvoiceWhatsApp(targetId, pdfBase64, invoiceData.customerContact);
+        if (waRes.success) {
+          toast.success('Invoice saved in software and sent to customer via WhatsApp successfully!');
+        } else {
+          toast.warn('Invoice saved in software, but WhatsApp dispatch notice: ' + (waRes.message || waRes.error || 'Check customer phone number.'));
+        }
+      } else {
+        toast.success('Invoice saved successfully!');
+      }
+    } catch (err) {
+      console.error('Error sending invoice:', err);
+      toast.error('Error sending invoice: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -1308,8 +1441,7 @@ temporarily interrupt app availability. We will provide advance notice when poss
                     <th style="width: 15mm;">NO</th>
                     <th class="description">DESCRIPTION</th>
                     ${invoiceData.gstEnabled ?
-        `<th style="width: 25mm; text-align: left;">HSN/SAC</th>
-                        <th style="width: 25mm; text-align: right;">GST (%)</th>` : ''}
+        `<th style="width: 25mm; text-align: right;">GST (%)</th>` : ''}
                     <th style="width: 20mm; text-align: right;">QTY</th>
                     <th style="width: 25mm; text-align: right;">PRICE</th>
                     <th style="width: 30mm; text-align: right;">TOTAL</th>
@@ -1321,8 +1453,7 @@ temporarily interrupt app availability. We will provide advance notice when poss
                         <td style="text-align: center;">${index + 1}</td>
                         <td>${item.description}</td>
                         ${invoiceData.gstEnabled ?
-            `<td>${item.hsn || ''}</td>
-                        <td style="text-align: right;">${item.gst.toFixed(2)}</td>` : ''}
+            `<td style="text-align: right;">${item.gst.toFixed(2)}</td>` : ''}
                         <td style="text-align: right;">${item.qty}</td>
                         <td style="text-align: right;">${item.rate.toFixed(2)}</td>
                         <td style="text-align: right;">${item.total.toFixed(2)}</td>
@@ -1380,6 +1511,11 @@ temporarily interrupt app availability. We will provide advance notice when poss
                                 ${invoiceData.accountNumber ? `<div><span style="font-weight: 500;">Account Number:</span> ${invoiceData.accountNumber}</div>` : ''}
                                 ${invoiceData.ifscCode ? `<div><span style="font-weight: 500;">IFSC Code:</span> ${invoiceData.ifscCode}</div>` : ''}
                                 ${invoiceData.upiId ? `<div><span style="font-weight: 500;">UPI ID:</span> ${invoiceData.upiId}</div>` : ''}
+                                ${upiQrCodeUrl ? `
+                                <div style="margin-top: 6px;">
+                                    <div style="font-weight: 500; font-size: 11px; margin-bottom: 2px;">Scan UPI QR to Pay:</div>
+                                    <img src="${upiQrCodeUrl}" style="width: 100px; height: 100px; border: 1px solid #e5e7eb; padding: 2px;" />
+                                </div>` : ''}
                             </div>` : ''}
                         </div>
                         <div style="text-align: center;">
@@ -1451,36 +1587,25 @@ temporarily interrupt app availability. We will provide advance notice when poss
         <div className="flex flex-wrap gap-2 invoice-action-buttons">
           {!isPreviewMode && (
             <button
-              onClick={() => {
-                // Validate that all items have descriptions before saving
-                const hasEmptyDescriptions = invoiceData.items.some(item => !item.description || item.description.trim() === '');
-                if (hasEmptyDescriptions) {
-                  toast.error('Please fill in descriptions for all items before saving.');
-                  return;
-                }
-
-                // Save invoice to backend
-                if (onInvoiceSave) {
-                  onInvoiceSave({ ...invoiceData, _id: initialData?._id });
-                }
-              }}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition duration-300 text-sm whitespace-nowrap"
+              onClick={handleSendInvoice}
+              disabled={isSending}
+              className="flex items-center gap-2 bg-[#25D366] hover:bg-[#128C7E] text-white px-5 py-2.5 rounded-lg transition duration-300 text-sm font-bold shadow-md disabled:opacity-50 whitespace-nowrap"
             >
-              Save Invoice
+              {isSending ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Sending Invoice...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.705 1.754zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+                  </svg>
+                  Send Invoice
+                </>
+              )}
             </button>
           )}
-          <button
-            onClick={printInvoice}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition duration-300 text-sm whitespace-nowrap"
-          >
-            Print
-          </button>
-          <button
-            onClick={exportToPDF}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition duration-300 text-sm whitespace-nowrap"
-          >
-            Download PDF
-          </button>
         </div>
       </div>
 
@@ -1575,26 +1700,16 @@ temporarily interrupt app availability. We will provide advance notice when poss
                 </div>
 
                 <div className="flex items-center justify-end mt-2">
-                  <input
-                    type="checkbox"
-                    name="gstEnabled"
-                    checked={invoiceData.gstEnabled}
+                  <span className="text-sm font-bold text-gray-700 mr-2">Sale Type (GST Compulsory):</span>
+                  <select
+                    name="saleType"
+                    value={invoiceData.saleType}
                     onChange={handleInputChange}
-                    className="mr-2 h-4 w-4 text-green-600 rounded"
-                  />
-                  <label className="text-sm font-bold text-gray-700 mr-2">GST</label>
-                  {invoiceData.gstEnabled && (
-                    <select
-
-                      name="saleType"
-                      value={invoiceData.saleType}
-                      onChange={handleInputChange}
-                      className="px-1 py-0.5 border-b border-gray-300 focus:outline-none focus:border-green-500 text-sm font-normal"
-                    >
-                      <option value="Intrastate">Intrastate</option>
-                      <option value="Interstate">Interstate</option>
-                    </select>
-                  )}
+                    className="px-1 py-0.5 border-b border-gray-300 focus:outline-none focus:border-green-500 text-sm font-normal"
+                  >
+                    <option value="Intrastate">Intrastate (CGST + SGST)</option>
+                    <option value="Interstate">Interstate (IGST)</option>
+                  </select>
                 </div>
 
                 <div className="flex items-center justify-end mt-2">
@@ -1715,10 +1830,7 @@ temporarily interrupt app availability. We will provide advance notice when poss
                     <th className="py-2 px-3 border-r border-gray-300 text-center text-white text-xs font-bold">NO</th>
                     <th className="py-2 px-3 border-r border-gray-300 text-left text-white text-xs font-bold">DESCRIPTION</th>
                     {invoiceData.gstEnabled && (
-                      <>
-                        <th className="py-2 px-3 border-r border-gray-300 text-left text-white text-xs font-bold">HSN/SAC</th>
-                        <th className="py-2 px-3 border-r border-gray-300 text-right text-white text-xs font-bold">GST (%)</th>
-                      </>
+                      <th className="py-2 px-3 border-r border-gray-300 text-right text-white text-xs font-bold">GST (%)</th>
                     )}
                     <th className="py-2 px-3 border-r border-gray-300 text-right text-white text-xs font-bold">QTY</th>
                     <th className="py-2 px-3 border-r border-gray-300 text-right text-white text-xs font-bold">PRICE</th>
@@ -1745,27 +1857,16 @@ temporarily interrupt app availability. We will provide advance notice when poss
                             />
                           </td>
                           {invoiceData.gstEnabled && (
-                            <>
-                              <td className="py-2 px-3 border-r border-gray-300">
-                                <input
-                                  type="text"
-                                  value={item.hsn}
-                                  onChange={(e) => handleItemChange(item.id, 'hsn', e.target.value)}
-                                  className="w-full px-1 py-1 focus:outline-none focus:bg-gray-100 text-sm font-normal"
-                                  placeholder="HSN/SAC"
-                                />
-                              </td>
-                              <td className="py-2 px-3 border-r border-gray-300">
-                                <input
-                                  type="text"
-                                  min="0"
-                                  step="0.01"
-                                  value={item.gst}
-                                  onChange={(e) => handleItemChange(item.id, 'gst', e.target.value)}
-                                  className="w-full px-1 py-1 text-right focus:outline-none focus:bg-gray-100 text-sm font-normal"
-                                />
-                              </td>
-                            </>
+                            <td className="py-2 px-3 border-r border-gray-300">
+                              <input
+                                type="text"
+                                min="0"
+                                step="0.01"
+                                value={item.gst}
+                                onChange={(e) => handleItemChange(item.id, 'gst', e.target.value)}
+                                className="w-full px-1 py-1 text-right focus:outline-none focus:bg-gray-100 text-sm font-normal"
+                              />
+                            </td>
                           )}
                           <td className="py-2 px-3 border-r border-gray-300">
                             <input
@@ -1813,10 +1914,7 @@ temporarily interrupt app availability. We will provide advance notice when poss
                           <td className="py-2 px-3 border-r border-gray-300 text-sm text-center">&nbsp;</td>
                           <td className="py-2 px-3 border-r border-gray-300">&nbsp;</td>
                           {invoiceData.gstEnabled && (
-                            <>
-                              <td className="py-2 px-3 border-r border-gray-300">&nbsp;</td>
-                              <td className="py-2 px-3 border-r border-gray-300">&nbsp;</td>
-                            </>
+                            <td className="py-2 px-3 border-r border-gray-300">&nbsp;</td>
                           )}
                           <td className="py-2 px-3 border-r border-gray-300">&nbsp;</td>
                           <td className="py-2 px-3 border-r border-gray-300">&nbsp;</td>
@@ -1829,7 +1927,7 @@ temporarily interrupt app availability. We will provide advance notice when poss
                 </tbody>
                 <tfoot>
                   <tr className="bg-white">
-                    <td colSpan={invoiceData.gstEnabled ? (isPreviewMode ? 7 : 8) : (isPreviewMode ? 5 : 6)} className="py-2 px-3 text-right">
+                    <td colSpan={invoiceData.gstEnabled ? (isPreviewMode ? 6 : 7) : (isPreviewMode ? 5 : 6)} className="py-2 px-3 text-right">
                       <button
                         onClick={addItem}
                         className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-md transition duration-300 text-xs"
@@ -1944,6 +2042,16 @@ temporarily interrupt app availability. We will provide advance notice when poss
                       />
                     </p>
                   </div>
+                  {upiQrCodeUrl && (
+                    <div className="mt-3">
+                      <p className="text-xs font-semibold text-gray-700 mb-1">Scan UPI QR Code to Pay:</p>
+                      <img
+                        src={upiQrCodeUrl}
+                        alt="UPI Payment QR Code"
+                        className="w-28 h-28 border border-gray-200 p-1 rounded-md shadow-sm bg-white"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 

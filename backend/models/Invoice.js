@@ -24,7 +24,7 @@ const invoiceSchema = new mongoose.Schema({
   accountNumber: { type: String, default: '' },
   ifscCode: { type: String, default: '' },
   upiId: { type: String, default: '' },
-  gstEnabled: { type: Boolean, default: false },
+  gstEnabled: { type: Boolean, default: true },
   saleType: { type: String, enum: ['Intrastate', 'Interstate'], default: 'Intrastate' },
   customerGst: { type: String, default: '' },
   invoiceType: { type: String, enum: ['INVOICE', 'PROFORMA INVOICE', 'TAX INVOICE'], default: 'INVOICE' },

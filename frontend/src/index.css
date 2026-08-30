@@ -958,6 +958,41 @@ h3 {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.88) 0%, rgba(219, 234, 254, 0.22) 100%);
 }
 
+/* Animated 3-second Loading Progress Bar */
+.custom-toast-progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3.5px;
+  border-radius: 0 0 20px 20px;
+  animation: toast-progress-shrink 3000ms linear forwards;
+}
+
+.type-progress-success {
+  background: linear-gradient(90deg, #10b981, #059669);
+}
+
+.type-progress-error {
+  background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+
+.type-progress-warning {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+
+.type-progress-info {
+  background: linear-gradient(90deg, #3b82f6, #2563eb);
+}
+
+@keyframes toast-progress-shrink {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
 /* Status Icon Wrapper */
 .custom-toast-icon-wrapper {
   display: flex;

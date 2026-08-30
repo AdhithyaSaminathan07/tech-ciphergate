@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
 
 const splitMessage = (content, type) => {
@@ -38,6 +38,15 @@ const splitMessage = (content, type) => {
 
 const CustomToast = ({ type = 'info', content, closeToast }) => {
   const { isElement, element, title, description } = splitMessage(content, type);
+
+  // Fallback timer to guarantee auto-dismiss after exactly 3 seconds (3000ms)
+  useEffect(() => {
+    if (!closeToast) return;
+    const timer = setTimeout(() => {
+      closeToast();
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [closeToast]);
 
   // Render SVG icons with custom animations
   const renderIcon = () => {
@@ -159,6 +168,9 @@ const CustomToast = ({ type = 'info', content, closeToast }) => {
           <X size={15} />
         </button>
       )}
+
+      {/* Sleek 3-second animated loading progress bar */}
+      <div className={`custom-toast-progress-bar type-progress-${type}`} />
     </div>
   );
 };

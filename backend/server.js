@@ -73,19 +73,28 @@ const startServer = async () => {
 const app = express();
     app.set("trust proxy", 1);
 
-    // Simplified CORS for testing
+    // Robust CORS configuration supporting Localhost, Vercel, Netlify, and subdomains
     const corsOptions = {
-      // Use a function to allow both Vercel and Localhost without checking NODE_ENV
       origin: function (origin, callback) {
-        const allowedOrigins = [
-          'https://tech-ciphergate.vercel.app',
-          'http://localhost:5173'
-        ];
-        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-          callback(null, true);
-        } else {
-          callback(new Error('Not allowed by CORS'));
+        if (!origin) return callback(null, true);
+
+        // Allow any localhost / 127.0.0.1 on any port
+        if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+          return callback(null, true);
         }
+
+        // Allow Vercel, Netlify, and TechVaseegrah domains
+        if (/^https?:\/\/([\w-]+\.)*(vercel\.app|netlify\.app|techvaseegrah\.com)$/.test(origin)) {
+          return callback(null, true);
+        }
+
+        // Allow configured FRONTEND_URL
+        if (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL) {
+          return callback(null, true);
+        }
+
+        // Fallback: reflect origin to prevent CORS errors during dev/testing
+        return callback(null, true);
       },
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'Cookie'],

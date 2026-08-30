@@ -9,13 +9,26 @@ const GowhatsConfig = require('../models/GowhatsConfig');
  */
 exports.sendWhatsApp = async (subdomain, phone, data) => {
   try {
-    const config = await GowhatsConfig.findOne({ subdomain });
-    if (!config || !config.apiKey || !config.phoneNumberId) {
-      throw new Error('WhatsApp configuration missing for this tenant');
+    let apiKey, phoneNumberId;
+    if (subdomain) {
+      const config = await GowhatsConfig.findOne({ subdomain });
+      if (config && config.apiKey && config.phoneNumberId) {
+        apiKey = config.apiKey;
+        phoneNumberId = config.phoneNumberId;
+      }
     }
 
-    const { apiKey, phoneNumberId } = config;
-    const url = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
+    if (!apiKey || !phoneNumberId) {
+      apiKey = process.env.WHATSAPP_ACCESS_TOKEN;
+      phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    }
+
+    if (!apiKey || !phoneNumberId) {
+      throw new Error('WhatsApp configuration missing');
+    }
+
+    const apiVersion = process.env.WHATSAPP_API_VERSION || 'v19.0';
+    const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;
     
     const headers = {
       'Authorization': `Bearer ${apiKey}`,

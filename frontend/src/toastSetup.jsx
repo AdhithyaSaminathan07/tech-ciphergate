@@ -20,7 +20,7 @@ const patchToastMethod = (methodName) => {
       {
         icon: false,
         closeButton: false,
-        autoClose: 3500,
+        autoClose: 3000,
         ...options,
       }
     );

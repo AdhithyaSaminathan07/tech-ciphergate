@@ -136,7 +136,6 @@ const InvoiceManagement = () => {
       if (response.success) {
         // Refresh invoices list
         await fetchInvoices();
-        toast.success('Invoice saved successfully!');
 
         // Automatically trigger renewal modal after save
         setRenewalInvoiceData({
@@ -146,8 +145,10 @@ const InvoiceManagement = () => {
           customerContact: invoiceData.customerContact
         });
         setIsRenewalModalOpen(true);
+        return response.data;
       } else {
         toast.error('Failed to save invoice: ' + response.message);
+        return null;
       }
     } catch (err) {
       console.error('Error saving invoice:', err);
@@ -370,9 +371,7 @@ const InvoiceManagement = () => {
               onChange={(e) => handleGstFilterChange(e.target.value)}
               className="bg-transparent border-none text-sm font-bold text-[#0d9488] focus:ring-0 cursor-pointer pr-8"
             >
-              <option value="all">All Invoices</option>
-              <option value="gst">GST Only</option>
-              <option value="non-gst">Non-GST</option>
+              <option value="all">All Invoices (GST Compulsory)</option>
               <option value="igst">IGST (Interstate)</option>
               <option value="cgst-sgst">CGST/SGST (Intrastate)</option>
             </select>

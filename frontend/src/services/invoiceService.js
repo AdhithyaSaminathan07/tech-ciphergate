@@ -139,3 +139,16 @@ export const getNextInvoiceNo = async () => {
     throw error.response?.data || { message: 'Error fetching next invoice number' };
   }
 };
+
+// Send invoice via WhatsApp API
+export const sendInvoiceWhatsApp = async (id, pdfBase64, recipientPhone) => {
+  try {
+    const response = await api.post(`/invoices/${id}/send-whatsapp`, {
+      pdfBase64,
+      recipientPhone
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: 'Error sending invoice via WhatsApp' };
+  }
+};

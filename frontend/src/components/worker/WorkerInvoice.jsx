@@ -1,8 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useContext } from 'react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
+import api from '../../services/api';
+import appContext from '../../context/AppContext';
 
 // Helper to normalize any date string to DD/MM/YYYY
 const normalizeInvoiceDate = (dateStr) => {
@@ -154,6 +156,38 @@ const WorkerInvoice = ({ onInvoiceSave, initialData }) => {
       });
     }
   }, [initialData]);
+
+  const { subdomain: contextSubdomain } = useContext(appContext) || {};
+
+  // Fetch tenant Payment & Bank Details from Settings whenever creating an invoice
+  useEffect(() => {
+    const fetchPaymentSettings = async () => {
+      if (initialData?._id) return;
+      try {
+        const targetSubdomain = contextSubdomain || localStorage.getItem('subdomain') || 'tech-vaseegrah';
+        let res;
+        try {
+          res = await api.get(`/settings/${targetSubdomain}`);
+        } catch (subErr) {
+          res = await api.get(`/settings/public/${targetSubdomain}`);
+        }
+        if (res.data && res.data.paymentDetails) {
+          const { bankName, accountNumber, ifscCode, upiId, companyName } = res.data.paymentDetails;
+          setInvoiceData(prev => ({
+            ...prev,
+            bankName: bankName || prev.bankName,
+            accountNumber: accountNumber || prev.accountNumber,
+            ifscCode: ifscCode || prev.ifscCode,
+            upiId: upiId || prev.upiId,
+            companyName: companyName || prev.companyName
+          }));
+        }
+      } catch (err) {
+        console.error('Error fetching tenant payment settings:', err);
+      }
+    };
+    fetchPaymentSettings();
+  }, [initialData, contextSubdomain]);
 
   // Convert number to words
   const numberToWords = (num) => {

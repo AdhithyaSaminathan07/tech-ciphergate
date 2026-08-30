@@ -37,6 +37,10 @@ router.route('/delete-history/:id')
 router.route('/next-number')
   .get(adminOrWorker, invoiceController.getNextInvoiceNo);
 
+// Send invoice via WhatsApp
+router.route('/:id/send-whatsapp')
+  .post(adminOrWorker, invoiceController.sendInvoiceWhatsApp);
+
 // Individual invoice routes (allow both admin and worker for their own invoices)
 router.route('/:id')
   .get(adminOrWorker, invoiceController.getInvoiceById)

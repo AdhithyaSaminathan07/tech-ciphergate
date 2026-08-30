@@ -1,18 +1,29 @@
 const Settings = require('../models/Settings');
 
-// @desc    Get settings
+const resolveSubdomain = (req) => {
+  const param = req.params?.subdomain;
+  if (param && param !== 'undefined' && param !== 'null' && param !== 'main') {
+    return param.trim().toLowerCase();
+  }
+  if (req.user && req.user.subdomain) {
+    return req.user.subdomain.trim().toLowerCase();
+  }
+  return 'tech-vaseegrah';
+};
 
+// @desc    Get settings
 // @route   GET /api/settings/:subdomain
 // @access  Private/Admin
 const getSettings = async (req, res) => {
   try {
-    let settings = await Settings.findOne({ subdomain: req.params.subdomain });
+    const subdomain = resolveSubdomain(req);
+    let settings = await Settings.findOne({ subdomain });
 
     // If settings don't exist, create default settings
     if (!settings) {
       // Use req.user._id if available, otherwise create without it
       const settingsData = {
-        subdomain: req.params.subdomain
+        subdomain: subdomain
       };
 
       // Only add updatedBy if req.user exists and has an _id
@@ -21,7 +32,7 @@ const getSettings = async (req, res) => {
       }
 
       settings = await Settings.create(settingsData);
-      console.log(`Created default settings for subdomain: ${req.params.subdomain}`);
+      console.log(`Created default settings for subdomain: ${subdomain}`);
     }
 
     const settingsObj = settings.toObject ? settings.toObject() : { ...settings };
@@ -45,14 +56,15 @@ const getSettings = async (req, res) => {
 // @access  Public
 const getSettingsPublic = async (req, res) => {
   try {
-    let settings = await Settings.findOne({ subdomain: req.params.subdomain });
+    const subdomain = resolveSubdomain(req);
+    let settings = await Settings.findOne({ subdomain });
 
     // If settings don't exist, create default settings
     if (!settings) {
       settings = await Settings.create({
-        subdomain: req.params.subdomain
+        subdomain: subdomain
       });
-      console.log(`Created default public settings for subdomain: ${req.params.subdomain}`);
+      console.log(`Created default public settings for subdomain: ${subdomain}`);
     }
 
     // Only return location settings for public access
@@ -60,6 +72,13 @@ const getSettingsPublic = async (req, res) => {
       attendanceLocation: settings.attendanceLocation,
       attendanceAccessControl: settings.attendanceAccessControl,
       faceRecognition: settings.faceRecognition,
+      paymentDetails: settings.paymentDetails || {
+        bankName: 'ICICI',
+        accountNumber: '612805036053',
+        ifscCode: 'ICIC0006128',
+        upiId: 'techvaseegrah.ibz@icici',
+        companyName: 'TECH VASEEGRAH'
+      },
       bugBountyConfig: settings.bugBountyConfig || {
         enabled: true,
         bugReportUrl: 'https://techvaseegrah.com/bug-bounty',
@@ -80,7 +99,8 @@ const getSettingsPublic = async (req, res) => {
 // @access  Private/Admin
 const updateMealSettings = async (req, res) => {
   try {
-    const { subdomain, mealType } = req.params;
+    const subdomain = resolveSubdomain(req);
+    const { mealType } = req.params;
     const updateData = req.body;
 
     let settings = await Settings.findOne({ subdomain });
@@ -120,7 +140,7 @@ const updateMealSettings = async (req, res) => {
 // @access  Private/Admin
 const updateSettings = async (req, res) => {
   try {
-    const { subdomain } = req.params;
+    const subdomain = resolveSubdomain(req);
     const updateData = req.body;
     console.log(`[Settings] Updating settings for subdomain: ${subdomain}. Payload:`, JSON.stringify(updateData, null, 2));
 
@@ -128,7 +148,6 @@ const updateSettings = async (req, res) => {
 
     // If settings don't exist, create them
     if (!settings) {
-      // Use req.user._id if available, otherwise create without it
       const settingsData = {
         subdomain: subdomain
       };
@@ -188,7 +207,7 @@ const updateSettings = async (req, res) => {
     const updatedSettings = await Settings.findOneAndUpdate(
       { subdomain },
       { $set: updateObject },
-      { new: true, runValidators: true }
+      { new: true, upsert: true, runValidators: true }
     );
 
     res.json(updatedSettings);

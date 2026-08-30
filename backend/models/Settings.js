@@ -500,6 +500,30 @@ const settingsSchema = mongoose.Schema({
     lastDispatchedAt: {
       type: Date
     }
+  },
+
+  // Payment & Bank Details Configuration
+  paymentDetails: {
+    bankName: {
+      type: String,
+      default: 'ICICI'
+    },
+    accountNumber: {
+      type: String,
+      default: '612805036053'
+    },
+    ifscCode: {
+      type: String,
+      default: 'ICIC0006128'
+    },
+    upiId: {
+      type: String,
+      default: 'techvaseegrah.ibz@icici'
+    },
+    companyName: {
+      type: String,
+      default: 'TECH VASEEGRAH'
+    }
   }
 
 }, {
