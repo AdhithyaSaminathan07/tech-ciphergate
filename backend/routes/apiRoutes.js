@@ -43,6 +43,9 @@ const {
     getInvoiceById,
     deleteInvoice
 } = require('../controllers/invoiceController');
+const {
+    getLeaderboard
+} = require('../controllers/performanceController');
 const { validateApiKey, authorizeApi } = require('../middleware/apiKeyMiddleware');
 const apiRateLimiter = require('../middleware/rateLimiter');
 
@@ -452,6 +455,27 @@ router.get('/settings', authorizeApi('settings', 'read'), (req, res, next) => {
     req.params.subdomain = req.apiKey.subdomain;
     getSettings(req, res, next);
 });
+
+// --- Top Performer / Performance Modules ---
+
+const handleGetTopPerformer = (req, res, next) => {
+    req.user = req.user || { _id: 'api-key-system', role: 'admin', subdomain: req.apiKey.subdomain };
+    req.user.subdomain = req.apiKey.subdomain;
+    getLeaderboard(req, res, next);
+};
+
+/**
+ * @route   GET /api/external/top-performer
+ * @route   GET /api/external/top_performer
+ * @route   GET /api/external/top-performers
+ * @route   GET /api/external/leaderboard
+ * @desc    Get top performers / leaderboard for the company
+ * @access  Private (API Key)
+ */
+router.get('/top-performer', authorizeApi(['top_performer', 'top_performers', 'performance'], 'read'), handleGetTopPerformer);
+router.get('/top_performer', authorizeApi(['top_performer', 'top_performers', 'performance'], 'read'), handleGetTopPerformer);
+router.get('/top-performers', authorizeApi(['top_performer', 'top_performers', 'performance'], 'read'), handleGetTopPerformer);
+router.get('/leaderboard', authorizeApi(['top_performer', 'top_performers', 'performance'], 'read'), handleGetTopPerformer);
 
 // --- Invoice Modules ---
 

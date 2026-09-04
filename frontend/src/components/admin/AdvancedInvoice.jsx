@@ -55,6 +55,7 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
     invoiceDate = formattedDate,
     customerName = '',
     customerContact = '',
+    customerAddress = '',
     salesPerson = '',
     terms = '',
     dueDate = '',
@@ -97,6 +98,7 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
     invoiceDate: normalizeInvoiceDate(invoiceDate),
     customerName,
     customerContact,
+    customerAddress,
     salesPerson,
     terms,
     dueDate,
@@ -314,6 +316,9 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
         }
         return updatedData;
       });
+    } else if (name === 'customerContact') {
+      const sanitized = value.replace(/\D/g, '').slice(0, 10);
+      setInvoiceData(prev => ({ ...prev, [name]: sanitized }));
     } else {
       setInvoiceData(prev => ({ ...prev, [name]: value }));
     }
@@ -518,53 +523,25 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
       yPosition += 10;
       pdf.setFontSize(10);
 
-      if (includeFields.customerContact && invoiceData.customerContact) {
-        const leftColumnX = marginLeft;
-        const rightColumnX = pageWidth - marginRight - 60;
-        const sectionWidth = 80;
+      const rightColumnX = pageWidth - marginRight - 60;
+      const headerSectionWidth = 80;
+      let addressHeight = 0;
 
+      if (invoiceData.customerAddress && invoiceData.customerAddress.trim()) {
+        const leftColumnX = marginLeft;
         pdf.setFont(undefined, 'bold');
         const addressLabelText = 'Address:';
         const addressLabelWidth = pdf.getTextWidth(addressLabelText);
         pdf.text(addressLabelText, leftColumnX, yPosition);
         pdf.setFont(undefined, 'normal');
 
-        const addressLines = pdf.splitTextToSize(invoiceData.customerContact, (pageWidth - marginLeft - marginRight) / 2 - 15);
+        const addressLines = pdf.splitTextToSize(invoiceData.customerAddress, (pageWidth - marginLeft - marginRight) / 2 - 15);
         pdf.text(addressLines, leftColumnX + addressLabelWidth + 1, yPosition);
+        addressHeight = addressLines.length * 4;
+      }
 
-        if (includeFields.consignerDetails) {
-          pdf.setFont(undefined, 'bold');
-          const fromLabelText = 'From:';
-          pdf.text(fromLabelText, rightColumnX, yPosition);
-          pdf.setFont(undefined, 'normal');
-
-          const fromDetails = [
-            invoiceData.fromSection.company,
-            invoiceData.fromSection.addressLine1,
-            invoiceData.fromSection.addressLine2,
-            invoiceData.fromSection.addressLine3,
-            invoiceData.fromSection.cityZip,
-            invoiceData.fromSection.mobile
-          ];
-
-          if (invoiceData.gstEnabled) fromDetails.push(invoiceData.fromSection.gstin);
-
-          let currentY = yPosition;
-          fromDetails.forEach((line) => {
-            const splitLines = pdf.splitTextToSize(line, sectionWidth);
-            pdf.text(splitLines, rightColumnX + pdf.getTextWidth('From:') + 1, currentY);
-            currentY += splitLines.length * 4;
-          });
-        }
-
-        const addressHeight = addressLines.length * 4;
-        const fromHeight = includeFields.consignerDetails ? 7 * 4 : 0;
-        yPosition += Math.max(addressHeight, fromHeight) + 2;
-
-      } else if (includeFields.consignerDetails) {
-        const rightColumnX = pageWidth - marginRight - 60;
-        const sectionWidth = 80;
-
+      let fromHeight = 0;
+      if (includeFields.consignerDetails) {
         pdf.setFont(undefined, 'bold');
         const fromLabelText = 'From:';
         pdf.text(fromLabelText, rightColumnX, yPosition);
@@ -583,12 +560,14 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
 
         let currentY = yPosition;
         fromDetails.forEach((line) => {
-          const splitLines = pdf.splitTextToSize(line, sectionWidth);
+          const splitLines = pdf.splitTextToSize(line, headerSectionWidth);
           pdf.text(splitLines, rightColumnX + pdf.getTextWidth('From:') + 1, currentY);
           currentY += splitLines.length * 4;
         });
-        yPosition += fromDetails.length * 4 + 2;
+        fromHeight = fromDetails.length * 4;
       }
+
+      yPosition += Math.max(addressHeight, fromHeight) + 4;
 
       pdf.setFontSize(10);
 
@@ -686,49 +665,46 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
       const words = pdf.splitTextToSize(totals.totalInWords, sectionWidth);
       pdf.text(words, leftColumnX, y + 8);
 
-      // Right: Numbers
-      const rightMarginX = pageWidth - marginRight;
+      // Right: Numbers Totals Block (Matches Frontend Preview HTML Layout 100%)
+      const totalsRightX = pageWidth - marginRight;
+      const col1RightX = totalsRightX - 38; // Right-aligned label column
+      const col2RightX = totalsRightX - 3;  // Right-aligned amount column
+      const totalsBoxWidth = 76;
+      const totalsBoxX = totalsRightX - totalsBoxWidth;
       let totalsY = y;
 
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(11);
+      const printRow = (label, value, isGrandTotal = false) => {
+        const formattedValue = "₹" + Number(value).toLocaleString("en-IN", { minimumFractionDigits: 2 });
 
-      const printRow = (label, value, background = null, bold = false) => {
-        const formattedValue = "₹ " + Number(value).toLocaleString("en-IN", { minimumFractionDigits: 2 });
-        const fullText = `${label} ${formattedValue}`;
-
-        pdf.setFont("helvetica", bold ? "bold" : "normal");
-        pdf.setFontSize(11);
-        const textWidth = pdf.getTextWidth(fullText);
-
-        if (background) {
-          pdf.setFillColor(...background);
-          const boxPadding = 6;
-          const boxWidth = textWidth + boxPadding;
-          const boxX = rightMarginX - boxWidth;
-          pdf.rect(boxX, totalsY - 5, boxWidth, 7.5, "F");
+        if (isGrandTotal) {
+          pdf.setFillColor(0, 132, 61);
+          pdf.rect(totalsBoxX, totalsY - 5, totalsBoxWidth, 7.5, "F");
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(10);
           pdf.setTextColor(255, 255, 255);
-          const textX = boxX + (boxWidth - textWidth) / 2;
-          pdf.text(fullText, textX, totalsY);
+          pdf.text(label, col1RightX, totalsY, { align: 'right' });
+          pdf.text(formattedValue, col2RightX, totalsY, { align: 'right' });
         } else {
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(10);
           pdf.setTextColor(51, 51, 51);
-          const textX = rightMarginX - textWidth;
-          pdf.text(fullText, textX, totalsY);
+          pdf.text(label, col1RightX, totalsY, { align: 'right' });
+          pdf.text(formattedValue, col2RightX, totalsY, { align: 'right' });
         }
         pdf.setTextColor(51, 51, 51);
         totalsY += lineH;
       };
 
-      printRow("Sub Total:", totals.subtotal.toFixed(2));
+      printRow("Sub Total :", totals.subtotal.toFixed(2));
       if (invoiceData.gstEnabled) {
         if (invoiceData.saleType === "Intrastate") {
-          printRow("CGST Total:", totals.cgstTotal.toFixed(2));
-          printRow("SGST Total:", totals.sgstTotal.toFixed(2));
+          printRow("CGST Total :", totals.cgstTotal.toFixed(2));
+          printRow("SGST Total :", totals.sgstTotal.toFixed(2));
         } else {
-          printRow("IGST Total:", totals.igstTotal.toFixed(2));
+          printRow("IGST Total :", totals.igstTotal.toFixed(2));
         }
       }
-      printRow("Grand Total:", totals.grandTotal.toFixed(2), [0, 132, 61], true);
+      printRow("GRAND TOTAL :", totals.grandTotal.toFixed(2), true);
 
       // --- STICKY FOOTER SECTION ---
       // Check if the footer overlaps with the just-drawn totals
@@ -1022,33 +998,14 @@ temporarily interrupt app availability. We will provide advance notice when poss
       // 3. Send via Tech Vaseegrah WhatsApp API (with WhatsApp Web/App direct link fallback)
       if (targetId && pdfBase64) {
         const waRes = await sendInvoiceWhatsApp(targetId, pdfBase64, invoiceData.customerContact);
-        const textSuccess = waRes.whatsappResult?.textRes?.success;
+        const templateRes = waRes.whatsappResult?.templateRes || waRes.whatsappResult?.textRes;
         
-        if (waRes.success && textSuccess) {
-          toast.success('Invoice saved in software and sent to customer via WhatsApp successfully!');
+        if (waRes.success) {
+          toast.success('Invoice saved and sent directly to customer via WhatsApp!');
         } else {
-          const cleanPhone = (invoiceData.customerContact || '').replace(/\D/g, '');
-          const formattedPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
-          const apiError = waRes.whatsappResult?.textRes?.error || waRes.message || waRes.error;
-
-          if (formattedPhone && formattedPhone.length >= 10) {
-            const summaryText = `📄 *TECH VASEEGRAH INVOICE*\n` +
-              `----------------------------------\n` +
-              `• *Invoice No:* ${invoiceData.invoiceNo || ''}\n` +
-              `• *Date:* ${invoiceData.invoiceDate || ''}\n` +
-              `• *Customer Name:* ${invoiceData.customerName || 'Valued Customer'}\n` +
-              `• *Grand Total:* ₹${totals?.grandTotal ? totals.grandTotal.toFixed(2) : '0.00'}\n\n` +
-              `💳 *Bank Details for Payment:*\n` +
-              `• *Bank:* ${invoiceData.bankName || 'ICICI'}\n` +
-              `• *A/C No:* ${invoiceData.accountNumber || '612805036053'}\n` +
-              `• *IFSC:* ${invoiceData.ifscCode || 'ICIC0006128'}\n` +
-              `• *UPI ID:* ${invoiceData.upiId || 'techvaseegrah.ibz@icici'}`;
-
-            const waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodeURIComponent(summaryText)}`;
-            window.open(waUrl, '_blank');
-          }
-
-          toast.warn('Invoice saved! WhatsApp Cloud API notice: ' + (apiError || 'Opening WhatsApp Chat fallback...'));
+          const apiError = templateRes?.error || waRes.message || waRes.error || 'WhatsApp API dispatch failed';
+          console.error('[Invoice WhatsApp] Cloud API Error:', apiError);
+          toast.error(`Invoice saved! WhatsApp API Error: ${apiError}`);
         }
       } else {
         toast.success('Invoice saved successfully!');
@@ -1440,9 +1397,9 @@ temporarily interrupt app availability. We will provide advance notice when poss
                 
                 <div class="address-section">
                 <div class="address-container">
-                    ${includeFields.customerContact && invoiceData.customerContact ?
-        `<div class="address-label">${invoiceData.gstEnabled ? 'Address' : 'Contact'} :</div>
-                    <div class="address-text">${invoiceData.customerContact}</div>` : ''}
+                    ${includeFields.customerAddress && invoiceData.customerAddress ?
+        `<div class="address-label">Address :</div>
+                    <div class="address-text">${invoiceData.customerAddress}</div>` : ''}
                 </div>
                 ${includeFields.consignerDetails ?
         `<div class="from-section">
@@ -1696,11 +1653,14 @@ temporarily interrupt app availability. We will provide advance notice when poss
                   />
                   <label className="font-bold text-gray-700 mr-2 min-w-[120px]">Customer Mobile :</label>
                   <input
-                    type="text"
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={10}
                     name="customerContact"
                     value={invoiceData.customerContact}
                     onChange={handleInputChange}
-                    placeholder="Mobile / WhatsApp Number"
+                    placeholder="10-digit Mobile Number"
                     className="px-1 py-0.5 border-b border-gray-300 focus:outline-none focus:border-green-500 text-sm font-normal w-60"
                   />
                 </div>
@@ -1777,17 +1737,17 @@ temporarily interrupt app availability. We will provide advance notice when poss
                 <div className="flex items-start">
                   <input
                     type="checkbox"
-                    checked={includeFields.customerContact}
-                    onChange={() => handleCheckboxChange('customerContact')}
+                    checked={includeFields.customerAddress ?? true}
+                    onChange={() => handleCheckboxChange('customerAddress')}
                     className="mr-2 h-4 w-4 text-green-600 rounded mt-1"
                   />
                   <div className="flex-1">
                     <label className="font-bold text-gray-700 mr-2">Address :</label>
                     <textarea
-                      name="customerContact"
-                      value={invoiceData.customerContact}
+                      name="customerAddress"
+                      value={invoiceData.customerAddress || ''}
                       onChange={handleInputChange}
-                      placeholder="Enter full address"
+                      placeholder="Enter full customer address"
                       className="px-1 py-0.5 border-b border-gray-300 focus:outline-none focus:border-green-500 text-sm font-normal w-full h-24 resize-none"
                       rows="4"
                     />

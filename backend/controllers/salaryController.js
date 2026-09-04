@@ -1105,14 +1105,10 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
     });
 
     const totalBonusAmount = bonusesForPeriod.reduce((total, bonus) => total + bonus.amount, 0);
-    let finalSalaryWithBonus = report.summary.finalSalary;
+    let finalSalaryWithBonus = report.summary.finalSalary || 0;
 
-    if (totalBonusAmount > 0 && bonusesForPeriod.length > 0) {
-      const bonus = bonusesForPeriod[0];
-      const baseSalary = worker.salary || 0;
-      const actualEarnedSalary = report.summary.finalSalary || 0;
-      const remainingBonus = Math.max(0, bonus.amount - baseSalary);
-      finalSalaryWithBonus = actualEarnedSalary + remainingBonus;
+    if (totalBonusAmount > 0) {
+      finalSalaryWithBonus = finalSalaryWithBonus + totalBonusAmount;
     }
 
     let totalFinesAmount = 0;
@@ -1120,7 +1116,7 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
       totalFinesAmount = worker.fines
         .filter(fine => {
           const fineDate = new Date(fine.date);
-          return fineDate >= new Date(start) && fineDate <= new Date(end);r
+          return fineDate >= new Date(start) && fineDate <= new Date(end);
         })
         .reduce((total, fine) => total + (fine.amount || 0), 0);
     }

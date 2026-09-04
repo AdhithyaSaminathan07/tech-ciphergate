@@ -136,15 +136,6 @@ const InvoiceManagement = () => {
       if (response.success) {
         // Refresh invoices list
         await fetchInvoices();
-
-        // Automatically trigger renewal modal after save
-        setRenewalInvoiceData({
-          id: response.data.invoiceNo,
-          mongoId: response.data._id,
-          customerName: invoiceData.customerName,
-          customerContact: invoiceData.customerContact
-        });
-        setIsRenewalModalOpen(true);
         return response.data;
       } else {
         toast.error('Failed to save invoice: ' + response.message);

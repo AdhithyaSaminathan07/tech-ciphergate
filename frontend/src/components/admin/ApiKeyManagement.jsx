@@ -11,6 +11,7 @@ const AVAILABLE_MODULES = [
     { id: 'attendance', name: 'Attendance', actions: ['read', 'write'] },
     { id: 'invoices', name: 'Invoices', actions: ['read', 'write'] },
     { id: 'work_allocation', name: 'Work Allocation', actions: ['read', 'write'] },
+    { id: 'top_performer', name: 'Top Performer', actions: ['read'] },
     { id: 'workers', name: 'Workers', actions: ['read'] },
     { id: 'tasks', name: 'Tasks', actions: ['read'] },
     { id: 'salary', name: 'Salary Report', actions: ['read'] },
@@ -329,6 +330,7 @@ const ApiKeyManagement = () => {
                                                                         <option value="report">Attendance Summary (/report)</option>
                                                                         <option value="invoices">Invoices (/invoices)</option>
                                                                         <option value="work_allocation">Work Allocation (/work-allocation)</option>
+                                                                        <option value="top-performer">Top Performer (/top-performer)</option>
                                                                         <option value="workers">Workers List (/workers)</option>
                                                                         <option value="tasks">Tasks (/tasks)</option>
                                                                         <option value="leaves">Leaves (/leaves)</option>

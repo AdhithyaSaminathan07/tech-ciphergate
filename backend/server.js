@@ -250,10 +250,8 @@ const app = express();
 
       initializeServerCronJobs();
 
-      // Automated WhatsApp Salary Dispatch Scheduler
-      const {
-        initAutoSalaryWhatsappScheduler,
-      } = require('./schedulers/autoSalaryWhatsappScheduler');
+      // Automated WhatsApp Salary Scheduler
+      const { initAutoSalaryWhatsappScheduler } = require('./schedulers/autoSalaryWhatsappScheduler');
       initAutoSalaryWhatsappScheduler();
 
     } else {

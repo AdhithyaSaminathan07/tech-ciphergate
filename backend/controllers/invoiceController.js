@@ -734,6 +734,7 @@ const sendInvoiceWhatsApp = async (req, res) => {
     }
 
     let pdfUrl = '';
+    let filePath = '';
 
     if (pdfBase64) {
       const fs = require('fs');
@@ -745,11 +746,11 @@ const sendInvoiceWhatsApp = async (req, res) => {
       }
 
       const filename = `invoice-${invoice.invoiceNo.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
-      const filePath = path.join(uploadsDir, filename);
+      filePath = path.join(uploadsDir, filename);
 
-      // Clean base64 string
-      const base64Data = pdfBase64.replace(/^data:application\/pdf;base64,/, '');
-      fs.writeFileSync(filePath, base64Data, 'base64');
+      // Clean base64 string properly (strips any data URI header prefix)
+      const base64Data = pdfBase64.includes(',') ? pdfBase64.split(',')[1] : pdfBase64;
+      fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
 
       const baseUrl = process.env.BACKEND_URL || process.env.SERVER_URL || `${req.protocol}://${req.get('host')}`;
       pdfUrl = `${baseUrl}/uploads/invoices/${filename}`;
@@ -763,45 +764,86 @@ const sendInvoiceWhatsApp = async (req, res) => {
     const grandTotal = subtotal + gstTotal;
 
     const { sendWhatsApp } = require('../services/whatsappService');
+    const templateName = 'tech_invoice_send';
 
-    // 1. Send Text Summary Message
-    const textMsg = `📄 *TECH VASEEGRAH INVOICE*\n` +
-      `----------------------------------\n` +
-      `• *Invoice No:* ${invoice.invoiceNo}\n` +
-      `• *Date:* ${invoice.invoiceDate}\n` +
-      `• *Customer Name:* ${invoice.customerName || 'Valued Customer'}\n` +
-      `• *Grand Total:* ₹${grandTotal.toFixed(2)}\n\n` +
-      `💳 *Bank Details for Payment:*\n` +
-      `• *Bank:* ${invoice.bankName || 'ICICI'}\n` +
-      `• *A/C No:* ${invoice.accountNumber || '612805036053'}\n` +
-      `• *IFSC:* ${invoice.ifscCode || 'ICIC0006128'}\n` +
-      `• *UPI ID:* ${invoice.upiId || 'techvaseegrah.ibz@icici'}\n\n` +
-      `Attached below is your complete invoice document with embedded UPI QR code.`;
+    let whatsappResult = {};
 
-    console.log(`[Invoice WhatsApp] Dispatching to ${phone}...`);
-    const textRes = await sendWhatsApp(req.user?.subdomain || 'tech-vaseegrah', phone, {
-      type: 'text',
-      text: textMsg
-    });
-    console.log(`[Invoice WhatsApp] Text result:`, textRes);
-
-    let docRes = null;
-    if (filePath || pdfUrl) {
-      docRes = await sendWhatsApp(req.user?.subdomain || 'tech-vaseegrah', phone, {
-        type: 'document',
+    if (templateName) {
+      // Send via Meta Approved WhatsApp Template (Required for 24h business-initiated messaging window)
+      console.log(`[Invoice WhatsApp] Sending template '${templateName}' to ${phone}...`);
+      const templateRes = await sendWhatsApp(req.user?.subdomain || 'tech-vaseegrah', phone, {
+        type: 'template',
+        templateName: templateName,
+        languageCode: 'en',
         filePath: filePath,
-        link: pdfUrl,
-        filename: `invoice-${invoice.invoiceNo}.pdf`,
-        caption: `📄 Invoice ${invoice.invoiceNo} from Tech Vaseegrah`
+        filename: `Invoice_${invoice.invoiceNo}.pdf`,
+        components: [
+          {
+            type: 'header',
+            parameters: [
+              {
+                type: 'document',
+                document: {
+                  link: pdfUrl,
+                  filename: `Invoice_${invoice.invoiceNo}.pdf`
+                }
+              }
+            ]
+          },
+          {
+            type: 'body',
+            parameters: [
+              { type: 'text', text: invoice.customerName || 'Valued Customer' },
+              { type: 'text', text: invoice.invoiceNo },
+              { type: 'text', text: invoice.invoiceDate },
+              { type: 'text', text: grandTotal.toFixed(2) }
+            ]
+          }
+        ]
       });
-      console.log(`[Invoice WhatsApp] Document result:`, docRes);
+      whatsappResult = { templateRes, textRes: templateRes };
+
+      if (!templateRes.success) {
+        return res.status(400).json({
+          success: false,
+          message: templateRes.error || 'WhatsApp Meta API dispatch failed',
+          whatsappResult
+        });
+      }
+    } else {
+      // 1. Send Text Summary Message
+      const textMsg = `📄 *TECH VASEEGRAH INVOICE*\n` +
+        `----------------------------------\n` +
+        `• *Invoice No:* ${invoice.invoiceNo}\n` +
+        `• *Date:* ${invoice.invoiceDate}\n` +
+        `• *Customer Name:* ${invoice.customerName || 'Valued Customer'}\n` +
+        `• *Grand Total:* ₹${grandTotal.toFixed(2)}\n\n` +
+        `Attached below is your complete invoice document.`;
+
+      console.log(`[Invoice WhatsApp] Dispatching text & document to ${phone}...`);
+      const textRes = await sendWhatsApp(req.user?.subdomain || 'tech-vaseegrah', phone, {
+        type: 'text',
+        text: textMsg
+      });
+
+      let docRes = null;
+      if (filePath || pdfUrl) {
+        docRes = await sendWhatsApp(req.user?.subdomain || 'tech-vaseegrah', phone, {
+          type: 'document',
+          filePath: filePath,
+          link: pdfUrl,
+          filename: `invoice-${invoice.invoiceNo}.pdf`,
+          caption: `📄 Invoice ${invoice.invoiceNo} from Tech Vaseegrah`
+        });
+      }
+      whatsappResult = { textRes, docRes };
     }
 
     res.status(200).json({
       success: true,
       message: 'Invoice saved and sent via WhatsApp successfully',
       pdfUrl,
-      whatsappResult: { textRes, docRes }
+      whatsappResult
     });
   } catch (error) {
     console.error('Error sending invoice via WhatsApp:', error);

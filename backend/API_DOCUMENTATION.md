@@ -72,6 +72,16 @@ const response = await axios.get('https://your-domain.com/api/external/report', 
 });
 ```
 
+### GET /top-performer
+Retrieve top performers / leaderboard metrics for your company.
+
+**Example Request:**
+```javascript
+const response = await axios.get('https://your-domain.com/api/external/top-performer', {
+  headers: { 'x-api-key': 'cg_1234567890abcdef' }
+});
+```
+
 ## 4. Rate Limiting
 - Each API key is limited to **100 requests per 15 minutes**.
 - If exceeded, you will receive a `429 Too Many Requests` response.

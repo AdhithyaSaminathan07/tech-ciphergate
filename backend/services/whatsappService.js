@@ -9,8 +9,15 @@ const GowhatsConfig = require('../models/GowhatsConfig');
  */
 exports.sendWhatsApp = async (subdomain, phone, data) => {
   try {
-    let apiKey, phoneNumberId;
-    if (subdomain) {
+    let cleanPhone = (phone || '').toString().replace(/\D/g, '');
+    if (cleanPhone.length === 10) {
+      cleanPhone = '91' + cleanPhone;
+    }
+    phone = cleanPhone;
+    let apiKey = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN;
+    let phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+    if ((!apiKey || !phoneNumberId) && subdomain) {
       const config = await GowhatsConfig.findOne({ subdomain });
       if (config && config.apiKey && config.phoneNumberId) {
         apiKey = config.apiKey;
@@ -19,12 +26,8 @@ exports.sendWhatsApp = async (subdomain, phone, data) => {
     }
 
     if (!apiKey || !phoneNumberId) {
-      apiKey = process.env.WHATSAPP_ACCESS_TOKEN;
-      phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-    }
-
-    if (!apiKey || !phoneNumberId) {
-      throw new Error('WhatsApp configuration missing');
+      console.error('[WhatsApp Service] WhatsApp credentials missing');
+      return { success: false, error: 'WhatsApp API Token / Phone Number ID not configured' };
     }
 
     const apiVersion = process.env.WHATSAPP_API_VERSION || 'v19.0';
@@ -95,6 +98,54 @@ exports.sendWhatsApp = async (subdomain, phone, data) => {
         };
       }
     } else if (data.type === 'template') {
+      let components = data.components || [];
+
+      // If local filePath is provided, upload PDF directly to Meta Cloud Media Storage to get mediaId
+      if (data.filePath) {
+        try {
+          const fs = require('fs');
+          const fileBuffer = fs.readFileSync(data.filePath);
+          const formData = new FormData();
+          formData.append('messaging_product', 'whatsapp');
+          formData.append('type', 'application/pdf');
+          formData.append('file', new Blob([fileBuffer], { type: 'application/pdf' }), data.filename || 'invoice.pdf');
+
+          const uploadUrl = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/media`;
+          console.log(`[WhatsApp Service] Uploading PDF media file to Meta for Template (${data.filePath})...`);
+          const uploadRes = await axios.post(uploadUrl, formData, {
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+          });
+          if (uploadRes.data && uploadRes.data.id) {
+            const mediaId = uploadRes.data.id;
+            console.log(`[WhatsApp Service] Template PDF Media uploaded successfully. Media ID: ${mediaId}`);
+            
+            // Replace document link with uploaded mediaId in header component
+            components = components.map(comp => {
+              if (comp.type === 'header' && comp.parameters) {
+                return {
+                  ...comp,
+                  parameters: comp.parameters.map(param => {
+                    if (param.type === 'document') {
+                      return {
+                        type: 'document',
+                        document: {
+                          id: mediaId,
+                          filename: param.document?.filename || data.filename || 'invoice.pdf'
+                        }
+                      };
+                    }
+                    return param;
+                  })
+                };
+              }
+              return comp;
+            });
+          }
+        } catch (uploadErr) {
+          console.error('[WhatsApp Service] Error uploading template media to Meta:', uploadErr.response?.data || uploadErr.message);
+        }
+      }
+
       messageData = {
         messaging_product: 'whatsapp',
         to: phone,
@@ -102,7 +153,7 @@ exports.sendWhatsApp = async (subdomain, phone, data) => {
         template: {
           name: data.templateName || process.env.WHATSAPP_INVOICE_TEMPLATE_NAME || 'invoice_notification',
           language: { code: data.languageCode || 'en' },
-          components: data.components || []
+          components: components
         }
       };
     }

@@ -2308,7 +2308,7 @@ const SalaryManagement = () => {
                                                 <div className="bg-emerald-50 border border-emerald-100 rounded-3xl p-6 shadow-sm">
                                                     <p className="text-[10px] font-black text-emerald-600 tracking-widest mb-1">Total Net Payout</p>
                                                     <p className="text-2xl font-black text-emerald-700">
-                                                        ₹{bulkReportData.reduce((sum, r) => sum + Math.max(0, r.totalFinalSalary - (deductionView ? (r.taskPenalty || 0) : 0)), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                        ₹{bulkReportData.reduce((sum, r) => sum + Math.max(0, (r.payableSalary !== undefined ? r.payableSalary : r.totalFinalSalary) - (deductionView ? (r.taskPenalty || 0) : 0)), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                                     </p>
                                                 </div>
                                                 <div className="bg-slate-50 border border-slate-100 rounded-3xl p-6 shadow-sm">
@@ -2318,13 +2318,13 @@ const SalaryManagement = () => {
                                                 <div className="bg-rose-50 border border-rose-100 rounded-3xl p-6 shadow-sm">
                                                     <p className="text-[10px] font-black text-rose-500 tracking-widest mb-1">Avg Attendance</p>
                                                     <p className="text-2xl font-black text-rose-700">
-                                                        {(bulkReportData.reduce((sum, r) => sum + (r.totalWorkingDays / (r.totalWorkingDays + r.totalAbsentDays || 1)), 0) / bulkReportData.length * 100).toFixed(1)}%
+                                                        {(bulkReportData.reduce((sum, r) => sum + (r.totalWorkingDays / (r.totalWorkingDays + r.totalAbsentDays || 1)), 0) / (bulkReportData.length || 1) * 100).toFixed(1)}%
                                                     </p>
                                                 </div>
                                                 <div className="bg-violet-50 border border-violet-100 rounded-3xl p-6 shadow-sm">
                                                     <p className="text-[10px] font-black text-violet-600 tracking-widest mb-1">Avg Salary / Worker</p>
                                                     <p className="text-2xl font-black text-violet-700">
-                                                        ₹{bulkReportData.length > 0 ? (bulkReportData.reduce((sum, r) => sum + Math.max(0, r.totalFinalSalary - (deductionView ? (r.taskPenalty || 0) : 0)), 0) / bulkReportData.length).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
+                                                        ₹{bulkReportData.length > 0 ? (bulkReportData.reduce((sum, r) => sum + Math.max(0, (r.payableSalary !== undefined ? r.payableSalary : r.totalFinalSalary) - (deductionView ? (r.taskPenalty || 0) : 0)), 0) / bulkReportData.length).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
                                                     </p>
                                                 </div>
                                             </div>
