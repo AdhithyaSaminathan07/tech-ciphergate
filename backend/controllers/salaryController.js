@@ -710,33 +710,50 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
   }
 
   try {
-    // POPULATE DEPARTMENT AND INCLUDE FINES IN THE WORKER DATA
     const worker = await Worker.findById(id).populate('department').select('+fines');
 
     if (!worker) {
       return res.status(404).json({ message: 'Worker not found' });
     }
 
-    // Filter attendance data directly in the database using range queries on the date string
-    const attendanceData = await Attendance.find({
-      worker: id,
-      date: { $gte: fromDate, $lte: toDate }
-    });
+    const reportFromDate = new Date(fromDate);
+    const currentReportMonth = reportFromDate.getMonth() + 1;
+    const currentReportYear = reportFromDate.getFullYear();
+    const PayrollRecord = require('../models/PayrollRecord');
 
-    const leaveData = await Leave.find({
-      worker: id,
-      $or: [
-        { status: 'Approved' },
-        { leaveType: 'Paid Leave' }
-      ]
-    });
+    // Run all independent queries in parallel using Promise.all
+    const [
+      attendanceData,
+      allLeavesForPenalty,
+      holidays,
+      settings,
+      salaryProjects,
+      allTasks,
+      payrollRecord
+    ] = await Promise.all([
+      Attendance.find({ worker: id, date: { $gte: fromDate, $lte: toDate } }),
+      Leave.find({ worker: id }),
+      Holiday.find({}),
+      Settings.findOne({ subdomain: worker.subdomain }),
+      SalaryProject.find({
+        subdomain: worker.subdomain,
+        developers: id,
+        $or: [{ startDate: { $lte: new Date(toDate) }, endDate: { $gte: new Date(fromDate) } }]
+      }).populate('developers', 'name rfid'),
+      Ticket.find({
+        $or: [{ assignee: id }, { assignees: id }],
+        subdomain: worker.subdomain,
+        isDeleted: { $ne: true }
+      }),
+      PayrollRecord.findOne({
+        subdomain: worker.subdomain,
+        workerId: id,
+        month: currentReportMonth,
+        year: currentReportYear
+      }).populate('adjustments.addedBy', 'name')
+    ]);
 
-    // Fetch ALL leaves (all statuses) separately for the 5X unauthorized absence penalty check
-    // This does NOT affect the existing salary calculation (leaveData above remains unchanged)
-    const allLeavesForPenalty = await Leave.find({ worker: id });
-
-    const holidays = await Holiday.find({});
-    const settings = await Settings.findOne({ subdomain: worker.subdomain });
+    const leaveData = allLeavesForPenalty.filter(l => l.status === 'Approved' || l.leaveType === 'Paid Leave');
     const batches = settings ? settings.batches : [];
 
     // Calculate Company/Dept Attendance Penalties (Daily rates)
@@ -752,14 +769,6 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
       companyPenaltyMap = penaltyMaps.companyPenaltyMap;
       deptPenaltyMap = penaltyMaps.deptPenaltyMap;
     }
-
-    // FIXED THIS LINE: Pass the worker object to the calculator function
-    // Fetch salary projects for this worker overlapping the report period
-    const salaryProjects = await SalaryProject.find({
-      subdomain: worker.subdomain,
-      developers: id,
-      $or: [{ startDate: { $lte: new Date(toDate) }, endDate: { $gte: new Date(fromDate) } }]
-    }).populate('developers', 'name rfid');
 
     // Enrich projects with per-day value
     const enrichedProjects = salaryProjects.map(p => {
@@ -778,12 +787,12 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
     });
 
     const report = calculateWorkerProductivity({
-      worker, // ADDED: Pass the worker object
+      worker,
       attendanceData,
       fromDate,
       toDate,
-      leaveData, // ADDED: Pass the leave data
-      projects: enrichedProjects, // HYBRID: Pass salary projects
+      leaveData,
+      projects: enrichedProjects,
       options: {
         batches,
         holidays,
@@ -814,12 +823,12 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
       finalSalaryWithBonus = finalSalaryWithBonus + totalBonusAmount;
     }
 
-    // ADD FINE CALCULATION FOR THE REPORT PERIOD
     // Calculate total fines for the report period
     let totalFinesAmount = 0;
     if (worker.fines && Array.isArray(worker.fines)) {
       const reportStartDate = new Date(fromDate);
       const reportEndDate = new Date(toDate);
+      reportEndDate.setHours(23, 59, 59, 999);
 
       totalFinesAmount = worker.fines
         .filter(fine => {
@@ -831,16 +840,6 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
 
     // Calculate final salary after deducting fines
     const finalSalaryWithFines = Math.max(0, finalSalaryWithBonus - totalFinesAmount);
-
-    // Fetch all tasks for this worker
-    const allTasks = await Ticket.find({
-      $or: [
-        { assignee: id },
-        { assignees: id }
-      ],
-      subdomain: worker.subdomain,
-      isDeleted: { $ne: true }
-    });
 
     const { taskPenalties: delayedTasks, totalTaskPenalty: taskPenalty } = calculateTaskPenalties({
       worker,
@@ -878,10 +877,6 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
     });
 
     // ─── PROJECT ADJUSTMENT LEDGER: Recalculate past overpayments/underpayments ──
-    const reportFromDate = new Date(fromDate);
-    const currentReportMonth = reportFromDate.getMonth() + 1;
-    const currentReportYear = reportFromDate.getFullYear();
-
     // Auto-record if it is a completed past month
     const now = new Date();
     const currentYear = now.getFullYear();
@@ -898,10 +893,7 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
     // Apply project adjustment to final salary (adjustment may be negative for overpayments)
     const finalSalaryWithAdjustment = Math.max(0, finalSalaryWithFines + projectAdjustment);
 
-    // ── 5X Unauthorized Absence Penalty (separate from all existing calculations) ──
-    // Only triggers for past days where employee: did not punch in, has no Approved/Pending leave,
-    // and either has a Rejected leave OR submitted no leave at all.
-    // Permissions are excluded entirely. Does NOT modify leaveData or existing salary logic.
+    // ── 5X Unauthorized Absence Penalty ──
     const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
     const enableUnauthorizedPermissionPenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty === true;
     const { penalties: unauthorizedAbsencePenalties, totalUnauthorizedPenalty } =
@@ -919,6 +911,33 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
 
     // Final salary after subtracting unauthorized absence penalty
     const finalSalaryAfterUnauthorizedPenalty = Math.max(0, finalSalaryWithAdjustment - totalUnauthorizedPenalty);
+
+    // Enterprise Payroll Module: Fetch payroll record for this month/year
+    const PayrollRecord = require('../models/PayrollRecord');
+    const payrollRecord = await PayrollRecord.findOne({
+      subdomain: worker.subdomain,
+      workerId: id,
+      month: currentReportMonth,
+      year: currentReportYear
+    }).populate('adjustments.addedBy', 'name');
+
+    let totalAdditions = 0;
+    let totalDeductions = 0;
+
+    if (payrollRecord && payrollRecord.adjustments) {
+      payrollRecord.adjustments.forEach(adj => {
+        if (!adj.isDeleted) {
+          if (adj.type === 'addition') totalAdditions += adj.amount;
+          if (adj.type === 'deduction') totalDeductions += adj.amount;
+        }
+      });
+    }
+
+    const attendanceSalary = payrollRecord && ['Locked', 'Paid'].includes(payrollRecord.status) && payrollRecord.attendanceSalarySnapshot !== null
+      ? payrollRecord.attendanceSalarySnapshot
+      : finalSalaryAfterUnauthorizedPenalty;
+
+    const payableSalary = Math.max(0, attendanceSalary + totalAdditions - totalDeductions);
 
     res.status(200).json({
       message: 'Salary report generated successfully',
@@ -942,6 +961,11 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
       // 5X Unauthorized Absence Penalty — stored separately for display
       unauthorizedAbsencePenalties,
       totalUnauthorizedPenalty,
+      payrollRecord: payrollRecord || null,
+      payableSalary: payableSalary,
+      attendanceSalary: attendanceSalary,
+      totalAdditions,
+      totalDeductions,
       worker: {
         name: worker.name,
         salary: worker.salary,
@@ -1850,37 +1874,45 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
     }
 
     const workers = await workersQuery;
-    const holidays = await Holiday.find({});
-    const settings = await Settings.findOne({ subdomain });
-    const batches = settings ? settings.batches : [];
     const fromDateObj = new Date(fromDate);
     const toDateObj = new Date(toDate);
+    toDateObj.setHours(23, 59, 59, 999);
     const reportYear = fromDateObj.getFullYear();
-
-    // Fetch all needed data for the subdomain once
-    const allAttendanceData = await Attendance.find({
-      subdomain,
-      date: { $gte: fromDate, $lte: toDate }
-    });
-    const allLeaveData = await Leave.find({
-      subdomain
-    });
-    const allSalaryProjects = await SalaryProject.find({
-      subdomain,
-      $or: [{ startDate: { $lte: toDateObj }, endDate: { $gte: fromDateObj } }]
-    }).populate('developers', 'name');
-    const allTickets = await Ticket.find({ subdomain, isDeleted: { $ne: true } });
-
-    // Enterprise Payroll Module: Fetch payroll records for this month
     const bulkFromDate = new Date(fromDate);
     const bulkMonth = bulkFromDate.getMonth() + 1;
     const bulkYear = bulkFromDate.getFullYear();
     const PayrollRecord = require('../models/PayrollRecord');
-    const allPayrollRecords = await PayrollRecord.find({
-      subdomain,
-      month: bulkMonth,
-      year: bulkYear
-    }).populate('adjustments.addedBy', 'name');
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const isPastMonth = (bulkYear < currentYear) || (bulkYear === currentYear && bulkMonth < currentMonth);
+
+    // Parallelize all data fetching for the subdomain
+    const [
+      holidays,
+      settings,
+      allAttendanceData,
+      allLeaveData,
+      allSalaryProjects,
+      allTickets,
+      allPayrollRecords,
+      allPastLedgers,
+      currentMonthSettledLedgers
+    ] = await Promise.all([
+      Holiday.find({}),
+      Settings.findOne({ subdomain }),
+      Attendance.find({ subdomain, date: { $gte: fromDate, $lte: toDate } }),
+      Leave.find({ subdomain }),
+      SalaryProject.find({ subdomain, $or: [{ startDate: { $lte: toDateObj }, endDate: { $gte: fromDateObj } }] }).populate('developers', 'name'),
+      Ticket.find({ subdomain, isDeleted: { $ne: true } }),
+      PayrollRecord.find({ subdomain, month: bulkMonth, year: bulkYear }).populate('adjustments.addedBy', 'name'),
+      ProjectPaymentLedger.find({ subdomain, isSettled: true, $or: [{ year: { $lt: bulkYear } }, { year: bulkYear, month: { $lt: bulkMonth } }] }),
+      ProjectPaymentLedger.find({ subdomain, month: bulkMonth, year: bulkYear, isSettled: true }).select('employeeId projectId')
+    ]);
+
+    const batches = settings ? settings.batches : [];
+    const settledWorkerIds = new Set(currentMonthSettledLedgers.map(l => l.employeeId.toString()));
 
     // PRE-FETCH AND PRE-COMPUTE DATA FOR LOOP OPTIMIZATION
     const attendanceByDate = {};
@@ -1946,8 +1978,8 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
 
       // Filter data for this worker
       const workerAttendance = allAttendanceData.filter(record => {
-        const recordDate = new Date(record.date);
-        return record.worker.toString() === workerId && recordDate >= fromDateObj && recordDate <= toDateObj;
+        const dStr = typeof record.date === 'string' ? record.date : record.date?.toISOString()?.split('T')[0];
+        return record.worker.toString() === workerId && dStr >= fromDate && dStr <= toDate;
       });
 
       const workerLeaves = allLeaveData.filter(l => l.worker.toString() === workerId);
@@ -2063,9 +2095,6 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         toDate
       });
 
-      // ─── PROJECT ADJUSTMENT for bulk ──
-      // Note: for bulk we use a sync-compatible approach — query ledger entries
-      // We'll calculate this in a post-processing step below
       return {
         workerId,
         _id: worker._id,
@@ -2106,25 +2135,10 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
     }));
 
     // ─── Apply project adjustments to bulk results ──
-
-    // Auto-record if it is a completed past month
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1;
-    const isPastMonth = (bulkYear < currentYear) || (bulkYear === currentYear && bulkMonth < currentMonth);
-
-    // Pre-fetch all past ledger entries and relevant projects to avoid N+1 queries during project adjustments
-    const allPastLedgers = await ProjectPaymentLedger.find({
-      subdomain,
-      isSettled: true,
-      $or: [
-        { year: { $lt: bulkYear } },
-        { year: bulkYear, month: { $lt: bulkMonth } }
-      ]
-    });
-    
     const uniqueProjectIdsForLedgers = [...new Set(allPastLedgers.map(l => l.projectId.toString()))];
-    const allPastProjects = await SalaryProject.find({ _id: { $in: uniqueProjectIdsForLedgers } }).populate('developers');
+    const allPastProjects = uniqueProjectIdsForLedgers.length > 0
+      ? await SalaryProject.find({ _id: { $in: uniqueProjectIdsForLedgers } }).populate('developers')
+      : [];
     const pastProjectsMap = {};
     allPastProjects.forEach(p => pastProjectsMap[p._id.toString()] = p);
 
@@ -2165,16 +2179,22 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         const currentEntitlement = entry.paidWorkingDays * project.currentPerDayValue;
         const adjustment = currentEntitlement - entry.paidAmount;
 
-        // Queue updates
-        ledgerUpdates.push(ProjectPaymentLedger.updateOne(
-          { _id: entry._id },
-          {
-            currentPerDayValue: project.currentPerDayValue,
-            currentEntitlement,
-            adjustmentAmount: adjustment,
-            updatedAt: new Date()
-          }
-        ));
+        // Queue updates ONLY if values have actually changed
+        if (
+          entry.currentPerDayValue !== project.currentPerDayValue ||
+          entry.currentEntitlement !== currentEntitlement ||
+          entry.adjustmentAmount !== adjustment
+        ) {
+          ledgerUpdates.push(ProjectPaymentLedger.updateOne(
+            { _id: entry._id },
+            {
+              currentPerDayValue: project.currentPerDayValue,
+              currentEntitlement,
+              adjustmentAmount: adjustment,
+              updatedAt: new Date()
+            }
+          ));
+        }
 
         totalAdjustment += adjustment;
         adjustmentDetails.push({
@@ -2200,8 +2220,7 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
 
     const adjustedResults = await Promise.all(results.map(async (result) => {
       try {
-        if (isPastMonth) {
-          // It's acceptable to use the existing helper since it only acts for past months once
+        if (isPastMonth && !settledWorkerIds.has(result.workerId)) {
           await autoRecordProjectPaymentsHelper(result.workerId, result.subdomain || subdomain, bulkMonth, bulkYear);
         }
         const { totalAdjustment, adjustmentDetails } = await calculateProjectAdjustmentsOptimized(result.workerId);

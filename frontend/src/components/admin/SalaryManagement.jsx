@@ -41,39 +41,8 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
 const calculateTaskDelayPenalty = (reportData, reportYear) => {
-    if (!reportData || !reportData.delayedTasks || reportData.delayedTasks.length === 0 || !reportData.report?.report) {
-        return 0;
-    }
-
-    const parseSalary = (str) => {
-        if (!str) return 0;
-        const cleaned = str.replace(/[^0-9.]/g, '');
-        return parseFloat(cleaned) || 0;
-    };
-
-    const claimedDays = new Set();
-    let totalPenalty = 0;
-
-    reportData.delayedTasks.forEach(task => {
-        const start = new Date(task.endDate);
-        start.setDate(start.getDate() + 1);
-        start.setHours(0, 0, 0, 0);
-
-        const end = task.doneDate ? new Date(task.doneDate) : new Date();
-        end.setHours(23, 59, 59, 999);
-
-        reportData.report.report.forEach(day => {
-            const dDate = new Date(`${day.date}, ${reportYear}`);
-            if (dDate >= start && dDate <= end) {
-                if (!claimedDays.has(day.date)) {
-                    claimedDays.add(day.date);
-                    totalPenalty += parseSalary(day.totalSalary);
-                }
-            }
-        });
-    });
-
-    return parseFloat(totalPenalty.toFixed(4));
+    if (!reportData) return 0;
+    return reportData.taskPenalty ?? 0;
 };
 
 const WorkerAvatar = ({ record }) => {
@@ -2627,7 +2596,7 @@ const SalaryManagement = () => {
                                 <div className="flex flex-col items-end gap-3">
                                     <div className="flex items-center gap-2 bg-white/5 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10">
                                         <div className={`w-2 h-2 rounded-full ${deductionView ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)] animate-pulse' : 'bg-slate-500'}`}></div>
-                                        <span className="text-[10px] font-black tracking-widest text-slate-300 mr-2">Deduction View</span>
+                                        <span className="text-[10px] font-black tracking-widest text-slate-300 mr-2">Task Deduction</span>
                                         <label className="relative inline-flex items-center cursor-pointer">
                                             <input
                                                 type="checkbox"
@@ -2646,7 +2615,7 @@ const SalaryManagement = () => {
                                     { label: 'Working Days', value: selectedIndividualWorker?.totalWorkingDays, sub: 'Total Scheduled', icon: <Calendar size={14} />, color: 'text-teal-400' },
                                     { label: 'Absent Days', value: selectedIndividualWorker?.totalAbsentDays, sub: 'Deductions Applied', icon: <Calendar size={14} />, color: 'text-rose-400' },
                                     { label: 'Base Earnings', value: `₹${individualReportData?.report?.summary?.netBaseSalary?.toLocaleString('en-IN', { minimumFractionDigits: 0 })}`, sub: 'After Attendance', icon: <Coins size={14} />, color: 'text-white' },
-                                    { label: 'Final Settlement', value: `₹${Math.max(0, (selectedIndividualWorker?.totalFinalSalary || 0) - (deductionView ? (calculateTaskDelayPenalty(individualReportData, selectedYear)) : 0))?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: 'Current Balance', icon: <Wallet size={14} />, color: 'text-teal-400' }
+                                    { label: 'Final Settlement', value: `₹${Math.max(0, (individualReportData?.payableSalary !== undefined ? individualReportData.payableSalary : (selectedIndividualWorker?.totalFinalSalary || individualReportData?.finalSalaryWithFines || 0)) - (deductionView ? (individualReportData?.taskPenalty || 0) : 0))?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: 'Current Balance', icon: <Wallet size={14} />, color: 'text-teal-400' }
                                 ].map((stat, i) => (
                                     <div key={i} className="space-y-1">
                                         <div className="flex items-center gap-2 text-slate-400">
@@ -2732,49 +2701,55 @@ const SalaryManagement = () => {
                                         </div>
                                     </div>
 
-                                    <div className="space-y-6">
-                                        <div>
-                                            <p className="text-[10px] font-black text-rose-400 tracking-widest mb-3 px-1">Active Deductions</p>
-                                            <div className="space-y-3">
-                                                <div className="flex justify-between items-center bg-rose-50/50 p-3 px-4 rounded-2xl border border-rose-100/50">
-                                                    <span className="text-xs font-bold text-rose-600">Attendance/Leaves</span>
-                                                    <span className="text-xs font-black text-rose-600">- ₹{individualReportData.report.totalSalaryDeduction?.toLocaleString()}</span>
+                                    <div className="space-y-4 md:col-span-2">
+                                        <p className="text-[10px] font-black text-slate-400 tracking-widest uppercase px-1">Deduction Details</p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {/* Daily Breakdown */}
+                                            <div className="bg-rose-50/40 p-4 rounded-2xl border border-rose-100/60 space-y-2">
+                                                <div className="flex justify-between items-center pb-2 border-b border-rose-100/80">
+                                                    <span className="text-xs font-bold text-rose-700">📅 Daily Breakdown</span>
+                                                    <span className="text-xs font-black text-rose-600">- ₹{(individualReportData.report.totalSalaryDeduction + (individualReportData.totalFinesAmount || 0) + (individualReportData.totalUnauthorizedPenalty || 0)).toFixed(2)}</span>
                                                 </div>
-                                                {individualReportData.totalFinesAmount > 0 && (
-                                                    <div className="flex justify-between items-center bg-rose-50/50 p-3 px-4 rounded-2xl border border-rose-100/50">
-                                                        <span className="text-xs font-bold text-rose-600">Disciplinary Fines</span>
-                                                        <span className="text-xs font-black text-rose-600">- ₹{individualReportData.totalFinesAmount.toLocaleString()}</span>
+                                                <div className="space-y-1.5 text-xs text-rose-600/90">
+                                                    <div className="flex justify-between">
+                                                        <span>Attendance/Leaves</span>
+                                                        <span className="font-bold">- ₹{individualReportData.report.totalSalaryDeduction?.toFixed(2)}</span>
                                                     </div>
-                                                )}
-                                                {deductionView && individualReportData.delayedTasks?.length > 0 && (
-                                                    <div className="flex justify-between items-center bg-rose-600 p-3 px-4 rounded-2xl shadow-lg shadow-rose-200">
-                                                        <span className="text-xs font-bold text-white">Task Delay Penalties</span>
-                                                        <span className="text-xs font-black text-white">- ₹{(() => {
-                                                            const parseSalary = (str) => { if (!str) return 0; const cleaned = str.replace(/[^0-9.]/g, ''); return parseFloat(cleaned) || 0; };
-                                                            const reportYear = reportDateRange.fromDate ? new Date(reportDateRange.fromDate).getFullYear() : new Date().getFullYear();
-                                                            const claimed = new Set();
-                                                            let penalty = 0;
-                                                            individualReportData.delayedTasks.forEach(task => {
-                                                                const start = new Date(task.endDate); start.setDate(start.getDate() + 1); start.setHours(0, 0, 0, 0);
-                                                                const end = task.doneDate ? new Date(task.doneDate) : new Date(); end.setHours(23, 59, 59, 999);
-                                                                individualReportData.report.report.forEach(day => {
-                                                                    const dDate = new Date(`${day.date}, ${reportYear}`);
-                                                                    if (dDate >= start && dDate <= end && !claimed.has(day.date)) { claimed.add(day.date); penalty += parseSalary(day.totalSalary); }
-                                                                });
-                                                            });
-                                                            return penalty.toLocaleString();
-                                                        })()}</span>
-                                                    </div>
-                                                )}
-                                                {individualReportData.totalUnauthorizedPenalty > 0 && (
-                                                    <div className="flex justify-between items-center bg-orange-500 p-3 px-4 rounded-2xl shadow-lg shadow-orange-200">
-                                                        <div>
-                                                            <span className="text-xs font-bold text-white">⚠ Unauthorized Absence</span>
-                                                            <p className="text-[9px] text-orange-100 mt-0.5">{individualReportData.unauthorizedAbsencePenalties?.length} day(s) × 5X</p>
+                                                    {individualReportData.totalFinesAmount > 0 && (
+                                                        <div className="flex justify-between">
+                                                            <span>Disciplinary Fines</span>
+                                                            <span className="font-bold">- ₹{individualReportData.totalFinesAmount.toFixed(2)}</span>
                                                         </div>
-                                                        <span className="text-xs font-black text-white">- ₹{individualReportData.totalUnauthorizedPenalty?.toFixed(2)}</span>
+                                                    )}
+                                                    {individualReportData.totalUnauthorizedPenalty > 0 && (
+                                                        <div className="flex justify-between text-orange-600">
+                                                            <span>Unauthorized Absence (5X)</span>
+                                                            <span className="font-bold">- ₹{individualReportData.totalUnauthorizedPenalty.toFixed(2)}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Task Deduction */}
+                                            <div className={`p-4 rounded-2xl border space-y-2 ${deductionView ? 'bg-amber-50/40 border-amber-100/80' : 'bg-slate-50 border-slate-200'}`}>
+                                                <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
+                                                    <span className="text-xs font-bold text-slate-700">📋 Task Deduction</span>
+                                                    <span className={`text-xs font-black ${deductionView ? 'text-amber-600' : 'text-slate-400'}`}>
+                                                        {deductionView ? `- ₹${(individualReportData.taskPenalty || 0).toFixed(2)}` : '₹0.00'}
+                                                    </span>
+                                                </div>
+                                                <div className="space-y-1.5 text-xs text-slate-600">
+                                                    <div className="flex justify-between">
+                                                        <span>Overdue Task Penalties</span>
+                                                        <span className="font-bold text-slate-800">₹{(individualReportData.taskPenalty || 0).toFixed(2)}</span>
                                                     </div>
-                                                )}
+                                                    <div className="flex justify-between items-center pt-1 border-t border-slate-100">
+                                                        <span className="text-[10px] text-slate-400">Status</span>
+                                                        <span className={`font-bold px-2 py-0.5 rounded text-[9px] ${deductionView ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'}`}>
+                                                            {deductionView ? 'Applied' : 'Waived (Toggle Off)'}
+                                                        </span>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -2783,23 +2758,9 @@ const SalaryManagement = () => {
                                         <div className="bg-slate-900 rounded-[2rem] p-6 text-right shadow-2xl shadow-slate-900/30">
                                             <p className="text-[10px] font-black text-slate-400 tracking-[0.2em] mb-2">Final Net Payout</p>
                                             <p className="text-3xl font-black text-teal-400 tracking-tighter">₹{(() => {
-                                                const baseVal = individualReportData.finalSalaryWithFines || 0;
-                                                if (deductionView && individualReportData.delayedTasks?.length > 0) {
-                                                    const parseSalary = (str) => { if (!str) return 0; const cleaned = str.replace(/[^0-9.]/g, ''); return parseFloat(cleaned) || 0; };
-                                                    const reportYear = reportDateRange.fromDate ? new Date(reportDateRange.fromDate).getFullYear() : new Date().getFullYear();
-                                                    const claimed = new Set();
-                                                    let penalty = 0;
-                                                    individualReportData.delayedTasks.forEach(task => {
-                                                        const start = new Date(task.endDate); start.setDate(start.getDate() + 1); start.setHours(0, 0, 0, 0);
-                                                        const end = task.doneDate ? new Date(task.doneDate) : new Date(); end.setHours(23, 59, 59, 999);
-                                                        individualReportData.report.report.forEach(day => {
-                                                            const dDate = new Date(`${day.date}, ${reportYear}`);
-                                                            if (dDate >= start && dDate <= end && !claimed.has(day.date)) { claimed.add(day.date); penalty += parseSalary(day.totalSalary); }
-                                                        });
-                                                    });
-                                                    return Math.max(0, baseVal - penalty).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-                                                }
-                                                return baseVal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+                                                const baseVal = individualReportData.payableSalary !== undefined ? individualReportData.payableSalary : (individualReportData.finalSalaryWithFines || 0);
+                                                const penalty = deductionView ? (individualReportData.taskPenalty || 0) : 0;
+                                                return Math.max(0, baseVal - penalty).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                                             })()}</p>
                                         </div>
                                     </div>
@@ -3068,7 +3029,7 @@ const SalaryManagement = () => {
                             </button>
                             <div className="w-px h-4 bg-slate-200"></div>
                             <label className="flex items-center gap-2 cursor-pointer group">
-                                <span className="text-[11px] font-black tracking-widest text-slate-400 group-hover:text-rose-500 transition-colors">Deduction View</span>
+                                <span className="text-[11px] font-black tracking-widest text-slate-400 group-hover:text-rose-500 transition-colors">Task Deduction</span>
                                 <div className="relative">
                                     <input
                                         type="checkbox"
@@ -3162,95 +3123,110 @@ const SalaryManagement = () => {
                     {reportData && (
                         <div className="space-y-6">
                             {/* Summary Section - Primary Focus */}
-                            <div className="bg-slate-50/50 rounded-[2.5rem] p-3 border border-slate-200/60 shadow-inner flex flex-col gap-4">
+                            <div className="bg-slate-50/50 rounded-[2.5rem] p-4 border border-slate-200/60 shadow-inner flex flex-col gap-4">
                                 {/* Top Metrics Row */}
-                                <div className="p-4 bg-white/40 rounded-[2rem]">
-                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                        {/* Monthly Base Salary */}
-                                        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
-                                            <div className="absolute top-0 right-0 w-16 h-16 bg-blue-50/50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
-                                            <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-1 group-hover:text-blue-500 transition-colors relative z-10">Monthly Base Salary</p>
-                                            <p className="text-xl font-bold text-slate-800 tracking-tight relative z-10">₹{reportData.report.summary.originalSalary?.toFixed(2) || '0.00'}</p>
-                                        </div>
-                                        
-                                        {/* Base Salary (SaaS) */}
-                                        <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
-                                            <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-50/50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
-                                            <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-1 group-hover:text-indigo-500 transition-colors relative z-10">Base Salary (SaaS)</p>
-                                            <p className="text-xl font-bold text-slate-800 tracking-tight relative z-10">₹{reportData.report.summary.expectedSaaSSalary?.toFixed(2) || reportData.report.summary.originalSalary?.toFixed(2) || '0.00'}</p>
-                                        </div>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    {/* Monthly Base Salary */}
+                                    <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-16 h-16 bg-blue-50/50 rounded-full -mr-8 -mt-8"></div>
+                                        <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-1 relative z-10">Monthly Base Salary</p>
+                                        <p className="text-xl font-bold text-slate-800 tracking-tight relative z-10">₹{reportData.report.summary.originalSalary?.toFixed(2) || '0.00'}</p>
+                                    </div>
+                                    
+                                    {/* Base Salary (SaaS) */}
+                                    <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-50/50 rounded-full -mr-8 -mt-8"></div>
+                                        <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-1 relative z-10">Base Salary (SaaS)</p>
+                                        <p className="text-xl font-bold text-slate-800 tracking-tight relative z-10">₹{reportData.report.summary.expectedSaaSSalary?.toFixed(2) || reportData.report.summary.originalSalary?.toFixed(2) || '0.00'}</p>
+                                    </div>
 
-                                        {/* Total Deductions */}
-                                        <div className="bg-rose-50/40 rounded-2xl p-4 border border-rose-100/60 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
-                                            <div className="absolute top-0 right-0 w-16 h-16 bg-rose-100/50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
-                                            <p className="text-[10px] font-black text-rose-400/80 tracking-[0.15em] mb-1 group-hover:text-rose-500 transition-colors relative z-10">Total Deductions</p>
-                                            <p className="text-xl font-bold text-rose-600 tracking-tight relative z-10">- ₹{reportData.report.totalSalaryDeduction?.toFixed(2) || '0.00'}</p>
-                                        </div>
+                                    {/* Total Deductions */}
+                                    <div className="bg-rose-50/40 rounded-2xl p-4 border border-rose-100/60 shadow-sm relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-16 h-16 bg-rose-100/50 rounded-full -mr-8 -mt-8"></div>
+                                        <p className="text-[10px] font-black text-rose-400/80 tracking-[0.15em] mb-1 relative z-10">Total Deductions</p>
+                                        <p className="text-xl font-bold text-rose-600 tracking-tight relative z-10">- ₹{reportData.report.totalSalaryDeduction?.toFixed(2) || '0.00'}</p>
+                                    </div>
 
-                                        {/* Net Base Salary */}
-                                        <div className="bg-emerald-50/40 rounded-2xl p-4 border border-emerald-100/60 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
-                                            <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-100/50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
-                                            <p className="text-[10px] font-black text-emerald-600/70 tracking-[0.15em] mb-1 group-hover:text-emerald-600 transition-colors relative z-10">Net Base Salary</p>
-                                            <p className="text-xl font-bold text-emerald-700 tracking-tight relative z-10">₹{reportData.report.summary.netBaseSalary?.toFixed(2) || '0.00'}</p>
-                                        </div>
+                                    {/* Net Base Salary */}
+                                    <div className="bg-emerald-50/40 rounded-2xl p-4 border border-emerald-100/60 shadow-sm relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-100/50 rounded-full -mr-8 -mt-8"></div>
+                                        <p className="text-[10px] font-black text-emerald-600/70 tracking-[0.15em] mb-1 relative z-10">Net Base Salary</p>
+                                        <p className="text-xl font-bold text-emerald-700 tracking-tight relative z-10">₹{reportData.report.summary.netBaseSalary?.toFixed(2) || '0.00'}</p>
+                                    </div>
+                                </div>
 
-                                        {(reportData.report.summary.grossProjectSalary > 0 || reportData.report.summary.totalProjectSalary > 0) && (
-                                            <>
-                                                <div className="bg-white rounded-2xl p-4 border border-teal-100 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
-                                                    <div className="absolute top-0 right-0 w-16 h-16 bg-teal-50/50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
-                                                    <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-1 group-hover:text-teal-600 transition-colors relative z-10">Gross Project Earnings</p>
-                                                    <p className="text-xl font-bold text-teal-600 tracking-tight relative z-10">₹{(reportData.report.summary.grossProjectSalary !== undefined ? reportData.report.summary.grossProjectSalary : reportData.report.summary.totalProjectSalary)?.toFixed(2) || '0.00'}</p>
+                                {/* Deductions & Penalties Breakdown - Separating Daily Breakdown vs Task Deduction */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* 1. Daily Breakdown Card */}
+                                    <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm space-y-3">
+                                        <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                                            <div className="flex items-center gap-2">
+                                                <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                                                <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">Daily Breakdown</h4>
+                                            </div>
+                                            <span className="text-xs font-black text-rose-600">
+                                                - ₹{(reportData.report.totalSalaryDeduction + (reportData.totalFinesAmount || 0) + (reportData.totalUnauthorizedPenalty || 0)).toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <div className="space-y-2 text-xs">
+                                            <div className="flex justify-between items-center text-slate-600">
+                                                <span>Absent Deductions</span>
+                                                <span className="font-bold text-rose-500">- ₹{(reportData.report.summary.absentDeduction || 0).toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-slate-600">
+                                                <span>Leave Deductions</span>
+                                                <span className="font-bold text-rose-500">- ₹{(reportData.report.summary.leaveDeduction || 0).toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-slate-600">
+                                                <span>Permission Deductions</span>
+                                                <span className="font-bold text-rose-500">- ₹{(reportData.report.summary.permissionDeduction || 0).toFixed(2)}</span>
+                                            </div>
+                                            {reportData.totalFinesAmount > 0 && (
+                                                <div className="flex justify-between items-center text-rose-600 font-medium pt-1 border-t border-slate-50">
+                                                    <span>Disciplinary Fines</span>
+                                                    <span className="font-bold">- ₹{reportData.totalFinesAmount.toFixed(2)}</span>
                                                 </div>
-                                                {reportData.report.summary.totalProjectDeductions > 0 && (
-                                                    <div className="bg-rose-50/40 rounded-2xl p-4 border border-rose-100/60 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
-                                                        <div className="absolute top-0 right-0 w-16 h-16 bg-rose-100/50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
-                                                        <p className="text-[10px] font-black text-rose-400/80 tracking-[0.15em] mb-1 group-hover:text-rose-500 transition-colors relative z-10">Project Deductions</p>
-                                                        <p className="text-xl font-bold text-rose-600 tracking-tight relative z-10">- ₹{reportData.report.summary.totalProjectDeductions?.toFixed(2) || '0.00'}</p>
+                                            )}
+                                            {reportData.totalUnauthorizedPenalty > 0 && (
+                                                <div className="flex justify-between items-center text-orange-600 font-medium pt-1 border-t border-slate-50">
+                                                    <div>
+                                                        <span>⚠ Unauthorized Absence (5X)</span>
+                                                        <span className="text-[9px] text-orange-400 block">{reportData.unauthorizedAbsencePenalties?.length || 0} day(s)</span>
                                                     </div>
-                                                )}
-                                                <div className="bg-teal-50/40 rounded-2xl p-4 border border-teal-100/60 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
-                                                    <div className="absolute top-0 right-0 w-16 h-16 bg-teal-100/50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
-                                                    <p className="text-[10px] font-black text-teal-600/70 tracking-[0.15em] mb-1 group-hover:text-teal-700 transition-colors relative z-10">Net Project Earnings</p>
-                                                    <p className="text-xl font-bold text-teal-700 tracking-tight relative z-10">₹{reportData.report.summary.totalProjectSalary?.toFixed(2) || '0.00'}</p>
+                                                    <span className="font-bold">- ₹{reportData.totalUnauthorizedPenalty.toFixed(2)}</span>
                                                 </div>
-                                            </>
-                                        )}
-                                        {reportData.projectAdjustment !== undefined && reportData.projectAdjustment !== 0 && (
-                                            <div className={`rounded-2xl p-4 border shadow-sm hover:shadow-md transition-all group relative overflow-hidden ${reportData.projectAdjustment < 0 ? 'bg-rose-50/40 border-rose-100/60' : 'bg-emerald-50/40 border-emerald-100/60'}`}>
-                                                <div className={`absolute top-0 right-0 w-16 h-16 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110 ${reportData.projectAdjustment < 0 ? 'bg-rose-100/50' : 'bg-emerald-100/50'}`}></div>
-                                                <p className={`text-[10px] font-black tracking-[0.15em] mb-1 relative z-10 ${reportData.projectAdjustment < 0 ? 'text-rose-400/80 group-hover:text-rose-500' : 'text-emerald-500/80 group-hover:text-emerald-600'} transition-colors`}>Project Adjustment</p>
-                                                <p className={`text-xl font-bold tracking-tight relative z-10 ${reportData.projectAdjustment < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{reportData.projectAdjustment > 0 ? '+' : ''} ₹{reportData.projectAdjustment?.toFixed(2)}</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* 2. Task Deduction Card */}
+                                    <div className={`rounded-2xl p-5 border shadow-sm space-y-3 transition-all ${deductionView ? 'bg-white border-amber-200' : 'bg-slate-50/70 border-slate-200 opacity-80'}`}>
+                                        <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                                            <div className="flex items-center gap-2">
+                                                <span className={`w-2 h-2 rounded-full ${deductionView ? 'bg-amber-500' : 'bg-slate-400'}`}></span>
+                                                <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">Task Deduction</h4>
                                             </div>
-                                        )}
-                                        {reportData.projectAdjustment !== undefined && reportData.projectAdjustment !== 0 && (
-                                            <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
-                                                <div className="absolute top-0 right-0 w-16 h-16 bg-slate-50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
-                                                <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-1 group-hover:text-slate-600 transition-colors relative z-10">Final Project Pay</p>
-                                                <p className="text-xl font-bold text-slate-800 tracking-tight relative z-10">₹{Math.max(0, (reportData.report.summary.totalProjectSalary || 0) + (reportData.projectAdjustment || 0)).toFixed(2)}</p>
+                                            <span className={`text-xs font-black ${deductionView ? 'text-amber-600' : 'text-slate-400'}`}>
+                                                {deductionView ? `- ₹${(reportData.taskPenalty || 0).toFixed(2)}` : '₹0.00 (Off)'}
+                                            </span>
+                                        </div>
+                                        <div className="space-y-2 text-xs">
+                                            <div className="flex justify-between items-center text-slate-600">
+                                                <span>Overdue Task Penalties</span>
+                                                <span className="font-bold text-slate-800">₹{(reportData.taskPenalty || 0).toFixed(2)}</span>
                                             </div>
-                                        )}
-                                        {reportData.totalBonusAmount > 0 && (
-                                            <div className="bg-amber-50/40 rounded-2xl p-4 border border-amber-100/60 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
-                                                <div className="absolute top-0 right-0 w-16 h-16 bg-amber-100/50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
-                                                <p className="text-[10px] font-black text-amber-500/80 tracking-[0.15em] mb-1 group-hover:text-amber-600 transition-colors relative z-10">Bonus Amount</p>
-                                                <p className="text-xl font-bold text-amber-600 tracking-tight relative z-10">+ ₹{reportData.totalBonusAmount.toFixed(2)}</p>
+                                            <div className="flex justify-between items-center pt-1 border-t border-slate-50">
+                                                <span className="text-slate-500">Status</span>
+                                                <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${deductionView ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'}`}>
+                                                    {deductionView ? 'Deducted from Final Salary' : 'Task Deduction Toggle OFF'}
+                                                </span>
                                             </div>
-                                        )}
-                                        {reportData.totalFinesAmount > 0 && (
-                                            <div className="bg-rose-50/40 rounded-2xl p-4 border border-rose-100/60 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
-                                                <div className="absolute top-0 right-0 w-16 h-16 bg-rose-100/50 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
-                                                <p className="text-[10px] font-black text-rose-400/80 tracking-[0.15em] mb-1 group-hover:text-rose-500 transition-colors relative z-10">Total Fines</p>
-                                                <p className="text-xl font-bold text-rose-600 tracking-tight relative z-10">- ₹{reportData.totalFinesAmount.toFixed(2)}</p>
-                                            </div>
-                                        )}
-                                        {reportData.totalUnauthorizedPenalty > 0 && (
-                                            <div className="bg-orange-50/50 rounded-2xl p-4 border border-orange-200/60 shadow-sm hover:shadow-md transition-all group relative overflow-hidden col-span-2 md:col-span-2 lg:col-span-2">
-                                                <div className="absolute top-0 right-0 w-24 h-24 bg-orange-100/50 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-110"></div>
-                                                <p className="text-[10px] font-black text-orange-500 tracking-[0.15em] mb-1 relative z-10">⚠ Unauthorized Absence Penalty</p>
-                                                <p className="text-xl font-bold text-orange-600 tracking-tight relative z-10">- ₹{reportData.totalUnauthorizedPenalty.toFixed(2)}</p>
-                                                <p className="text-[9px] font-bold text-orange-400 mt-1 relative z-10">{reportData.unauthorizedAbsencePenalties?.length || 0} day(s) × 5X</p>
-                                            </div>
-                                        )}
+                                            {reportData.delayedTasks?.length > 0 && (
+                                                <p className="text-[10px] text-slate-400 italic pt-1">
+                                                    {reportData.delayedTasks.length} delayed task(s) in this period
+                                                </p>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -3271,61 +3247,7 @@ const SalaryManagement = () => {
 
                                         <div className="relative z-10 flex flex-col items-center md:items-end text-center md:text-right">
                                             <div className="text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-teal-700 to-emerald-600 tracking-tighter drop-shadow-sm">
-                                                {(() => {
-                                                    const parseSalary = (str) => {
-                                                        if (!str) return 0;
-                                                        const cleaned = str.replace(/[^0-9.]/g, '');
-                                                        return parseFloat(cleaned) || 0;
-                                                    };
-                                                    const reportYear = reportDateRange.fromDate ? new Date(reportDateRange.fromDate).getFullYear() : new Date().getFullYear();
-
-                                                    // SINGLE PASS CALCULATION for both Final Salary and Breakdown
-                                                    const claimedDays = new Set();
-                                                    let totalDeductionVal = 0;
-
-                                                    const taskPenalties = (reportData.delayedTasks || []).map(task => {
-                                                        const start = new Date(task.endDate);
-                                                        start.setDate(start.getDate() + 1);
-                                                        start.setHours(0, 0, 0, 0);
-
-                                                        const end = task.doneDate ? new Date(task.doneDate) : new Date();
-                                                        end.setHours(23, 59, 59, 999);
-
-                                                        let taskDeduction = 0;
-                                                        const dailyList = [];
-
-                                                        reportData.report.report.forEach(day => {
-                                                            const dDate = new Date(`${day.date}, ${reportYear}`);
-                                                            if (dDate >= start && dDate <= end) {
-                                                                const amt = parseSalary(day.totalSalary);
-                                                                // To avoid double/triple deduction, only count day if not claimed
-                                                                if (!claimedDays.has(day.date)) {
-                                                                    claimedDays.add(day.date);
-                                                                    totalDeductionVal += amt;
-                                                                    taskDeduction += amt;
-                                                                    dailyList.push({ date: day.date, amount: amt });
-                                                                } else {
-                                                                    // If already claimed by another task, show as ₹0 in this task's breakdown to avoid confusion
-                                                                    dailyList.push({ date: day.date, amount: 0, alreadyDeducted: true });
-                                                                }
-                                                            }
-                                                        });
-
-                                                        return {
-                                                            ...task,
-                                                            taskDeduction,
-                                                            dailyList,
-                                                            overdueWorkingDays: dailyList.length,
-                                                            period: `${start.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} → ${task.doneDate ? new Date(task.doneDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'Ongoing'}`
-                                                        };
-                                                    });
-
-                                                    // We attach this to the reportData object temporarily for the Breakdown Section to use
-                                                    reportData._calculatedTaskPenalties = taskPenalties;
-                                                    reportData._totalTaskPenalty = totalDeductionVal;
-                                                    return null;
-                                                })()}
-                                                ₹{Math.max(0, (reportData.finalSalaryWithFines || 0) - (deductionView ? (reportData._totalTaskPenalty || 0) : 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                ₹{Math.max(0, (reportData.payableSalary !== undefined ? reportData.payableSalary : (reportData.finalSalaryWithFines || 0)) - (deductionView ? (reportData.taskPenalty || 0) : 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                             </div>
                                         </div>
                                     </div>
@@ -3484,9 +3406,9 @@ const SalaryManagement = () => {
                             {/* Task Deduction Breakdown Section */}
                             <AnimatePresence>
                                 {deductionView && reportData.delayedTasks?.length > 0 && showTaskDeductionBreakdown && (() => {
-                                    const taskPenalties = reportData._calculatedTaskPenalties || [];
-                                    const totalPenaltyAmount = reportData._totalTaskPenalty || 0;
-                                    const salaryBefore = reportData.finalSalaryWithFines || 0;
+                                    const taskPenalties = reportData.delayedTasks || [];
+                                    const totalPenaltyAmount = reportData.taskPenalty || 0;
+                                    const salaryBefore = reportData.payableSalary !== undefined ? reportData.payableSalary : (reportData.finalSalaryWithFines || 0);
                                     const finalSalary = Math.max(0, salaryBefore - totalPenaltyAmount);
 
                                     return (
