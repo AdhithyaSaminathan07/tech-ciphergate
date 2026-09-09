@@ -9,6 +9,7 @@ import {
     FiChevronUp, FiX, FiCheckCircle, FiAlertCircle 
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
+import Spinner from '../common/Spinner';
 
 const CATEGORIES = [
     'General Info',
@@ -335,14 +336,13 @@ const AdminRulesDashboard = () => {
         if (monitorDeptFilter) {
             matchesDept = a.department && a.department.toLowerCase() === monitorDeptFilter.toLowerCase();
         }
-        return matchesSearch && matchesStatus && matchesDept;
     });
 
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-[50vh]">
                 <div className="flex flex-col items-center">
-                    <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
+                    <Spinner size="lg" />
                     <p className="mt-3 text-slate-500 font-medium">Loading rules console...</p>
                 </div>
             </div>

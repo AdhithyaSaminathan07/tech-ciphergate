@@ -16,6 +16,8 @@ const LEVEL_COLORS = {
 
 const rankMedals = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
+import Spinner from '../common/Spinner';
+
 const WorkerPerformancePage = () => {
     const { user } = useAuth();
     const [data, setData] = useState(null);
@@ -39,7 +41,7 @@ const WorkerPerformancePage = () => {
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
-                <div className="w-10 h-10 border-4 border-teal-200 border-t-teal-500 rounded-full animate-spin" />
+                <Spinner size="lg" />
             </div>
         );
     }

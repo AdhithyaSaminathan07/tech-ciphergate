@@ -83,7 +83,7 @@ const TitleInput = ({ initialValue, onUpdate }) => {
             value={localValue}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
-            className="w-full text-sm sm:text-base font-bold text-slate-800 border border-slate-200 bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:border-teal-500 rounded-xl px-3 py-2 sm:px-3.5 sm:py-2.5 focus:outline-none transition-all leading-snug placeholder-slate-300 shadow-2xs resize-none overflow-hidden block break-words"
+            className="w-full text-sm sm:text-base font-bold text-slate-800 border border-slate-200/90 bg-slate-50/60 hover:bg-slate-50 focus:bg-white focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 rounded-2xl px-3.5 py-2.5 sm:px-4 sm:py-3 focus:outline-none transition-all leading-snug placeholder-slate-300 shadow-2xs resize-none overflow-hidden block break-words"
             placeholder="Enter workspace title..."
             title={localValue}
         />
@@ -279,7 +279,6 @@ const MultiSelect = ({ options, selected, onChange, placeholder }) => {
     const filteredOptions = options.filter(opt => opt.status !== 'Relieved' && opt.name.toLowerCase().includes(search.toLowerCase()));
     const selectedOptions = options.filter(opt => selected.includes(opt.id));
     const allFilteredIds = filteredOptions.map(o => o.id);
-    const allSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selected.includes(id));
 
     const selectAll = () => {
         const merged = [...new Set([...selected, ...allFilteredIds])];
@@ -293,47 +292,47 @@ const MultiSelect = ({ options, selected, onChange, placeholder }) => {
     return (
         <div className="relative" ref={containerRef}>
             <div
-                className="flex flex-wrap items-center gap-1.5 p-2 bg-white border border-gray-200 rounded-xl min-h-[38px] cursor-pointer hover:border-teal-500 transition-all shadow-2xs group"
+                className="flex flex-wrap items-center gap-1.5 p-2 bg-white border border-slate-200 hover:border-teal-500 rounded-2xl min-h-[42px] cursor-pointer transition-all shadow-2xs group focus-within:ring-2 focus-within:ring-teal-500/20"
                 onClick={() => setIsOpen(!isOpen)}
             >
                 {selectedOptions.length > 0 ? (
-                    <div className="flex flex-wrap gap-1 w-[calc(100%-24px)]">
+                    <div className="flex flex-wrap gap-1.5 w-[calc(100%-24px)]">
                         {selectedOptions.map(opt => (
-                            <span key={opt.id} className={`flex items-center gap-1 px-2 py-0.5 text-[9.5px] font-bold rounded-md border shadow-2xs animate-in zoom-in-90 ${opt.role === 'manager' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-teal-50 text-teal-700 border-teal-100'}`}>
+                            <span key={opt.id} className={`flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-xl border shadow-2xs animate-in zoom-in-90 ${opt.role === 'manager' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-teal-50 text-teal-700 border-teal-100'}`}>
                                 <span>{opt.name}</span>
-                                {opt.role === 'manager' && <span className="text-[8px] font-black text-purple-700 bg-purple-100 px-1 rounded">MGR</span>}
-                                <X className="w-2.5 h-2.5 hover:text-red-500 transition-colors" onClick={(e) => { e.stopPropagation(); toggleOption(opt.id); }} />
+                                {opt.role === 'manager' && <span className="text-[8px] font-black text-purple-700 bg-purple-100 px-1 rounded-md">MGR</span>}
+                                <X className="w-3 h-3 hover:text-red-500 transition-colors cursor-pointer" onClick={(e) => { e.stopPropagation(); toggleOption(opt.id); }} />
                             </span>
                         ))}
                     </div>
                 ) : (
-                    <span className="text-gray-400 text-xs font-medium">{placeholder}</span>
+                    <span className="text-slate-400 text-xs font-medium px-1">{placeholder}</span>
                 )}
-                <ChevronDown className={`w-3.5 h-3.5 ml-auto text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''} group-hover:text-teal-500`} />
+                <ChevronDown className={`w-4 h-4 ml-auto text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180 text-teal-600' : ''} group-hover:text-teal-500`} />
             </div>
 
             {isOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-100 rounded-xl shadow-xl z-[300] max-h-72 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl z-[300] max-h-72 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col">
                     {/* Search + Actions */}
-                    <div className="p-2 border-b border-gray-100 shrink-0">
+                    <div className="p-2.5 border-b border-slate-100 shrink-0 bg-slate-50/50">
                         <input
                             type="text"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search..."
-                            className="w-full px-2.5 py-1 text-xs bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-400/20"
+                            placeholder="Search assignees..."
+                            className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 font-medium"
                             onClick={(e) => e.stopPropagation()}
                         />
-                        <div className="flex gap-1.5 mt-1.5">
+                        <div className="flex gap-1.5 mt-2">
                             <button
                                 onClick={(e) => { e.stopPropagation(); selectAll(); }}
-                                className="flex-1 text-[9px] font-black uppercase tracking-wider text-teal-600 bg-teal-50 hover:bg-teal-100 px-2 py-0.5 rounded-md border border-teal-100 transition-colors"
+                                className="flex-1 text-[9px] font-black uppercase tracking-wider text-teal-600 bg-teal-50 hover:bg-teal-100 px-2 py-1 rounded-lg border border-teal-100 transition-colors"
                             >
                                 Select All ({filteredOptions.length})
                             </button>
                             <button
                                 onClick={(e) => { e.stopPropagation(); clearAll(); }}
-                                className="flex-1 text-[9px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 hover:bg-rose-100 px-2 py-0.5 rounded-md border border-rose-100 transition-colors"
+                                className="flex-1 text-[9px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 hover:bg-rose-100 px-2 py-1 rounded-lg border border-rose-100 transition-colors"
                             >
                                 Clear All
                             </button>
@@ -342,27 +341,27 @@ const MultiSelect = ({ options, selected, onChange, placeholder }) => {
                     {/* Options list */}
                     <div className="p-1.5 space-y-0.5 overflow-y-auto custom-scrollbar">
                         {filteredOptions.length === 0 ? (
-                            <div className="text-center py-2 text-gray-400 text-xs font-medium">No results</div>
+                            <div className="text-center py-3 text-slate-400 text-xs font-medium">No results found</div>
                         ) : (
                             filteredOptions.map(opt => (
                                 <div
                                     key={opt.id}
-                                    className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${selected.includes(opt.id) ? 'bg-teal-50 text-teal-700' : 'hover:bg-gray-50 text-gray-700'}`}
+                                    className={`flex items-center justify-between p-2 rounded-xl cursor-pointer transition-colors ${selected.includes(opt.id) ? 'bg-teal-50/80 text-teal-700 font-bold' : 'hover:bg-slate-50 text-slate-700'}`}
                                     onClick={(e) => { e.stopPropagation(); toggleOption(opt.id); }}
                                 >
                                     <div className="flex items-center gap-2">
-                                        <span className="text-xs font-medium">{opt.name}</span>
+                                        <span className="text-xs font-semibold">{opt.name}</span>
                                         {opt.role === 'manager' ? (
-                                            <span className="px-1.5 py-0.5 text-[8.5px] font-extrabold uppercase tracking-wider bg-purple-100 text-purple-700 rounded border border-purple-200">
+                                            <span className="px-1.5 py-0.5 text-[8.5px] font-extrabold uppercase tracking-wider bg-purple-100 text-purple-700 rounded-md border border-purple-200">
                                                 Manager
                                             </span>
                                         ) : (
-                                            <span className="px-1.5 py-0.5 text-[8.5px] font-extrabold uppercase tracking-wider bg-slate-100 text-slate-600 rounded border border-slate-200">
+                                            <span className="px-1.5 py-0.5 text-[8.5px] font-extrabold uppercase tracking-wider bg-slate-100 text-slate-600 rounded-md border border-slate-200">
                                                 Developer
                                             </span>
                                         )}
                                     </div>
-                                    {selected.includes(opt.id) && <Check className="w-3.5 h-3.5 text-teal-600" />}
+                                    {selected.includes(opt.id) && <Check className="w-4 h-4 text-teal-600 stroke-[3]" />}
                                 </div>
                             ))
                         )}
@@ -425,16 +424,16 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers, assi
     const teamMembersCount = selectedTicket.team ? workers.filter(w => w.status !== 'Relieved' && w.department === selectedTicket.team).length : 0;
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-3.5">
             <div className="flex flex-col gap-1.5">
                 <span className="text-slate-400 font-extrabold text-[9.5px] uppercase tracking-wider">Assign To</span>
-                <div className="flex gap-1 p-1 bg-slate-100/90 rounded-xl w-full">
+                <div className="flex gap-1 p-1 bg-slate-100/90 rounded-2xl w-full border border-slate-200/50">
                     {['Team', 'Individual', 'Both'].map(type => (
                         <button
                             key={type}
                             type="button"
                             onClick={() => handleTypeChange(type)}
-                            className={`flex-1 text-center py-1.5 rounded-lg text-xs font-bold transition-all ${assignmentType === type ? 'bg-white text-teal-600 shadow-2xs' : 'text-slate-500 hover:text-slate-700'}`}
+                            className={`flex-1 text-center py-1.5 rounded-xl text-xs font-extrabold transition-all ${assignmentType === type ? 'bg-white text-teal-700 shadow-2xs border border-slate-200/80' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             {type}
                         </button>
@@ -444,15 +443,15 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers, assi
 
             {(assignmentType === 'Team' || assignmentType === 'Both') && (
                 <div className="flex flex-col gap-1.5 animate-in slide-in-from-top-2 duration-300">
-                    <span className="text-gray-400 font-bold text-[9.5px] uppercase tracking-wider">Select Team</span>
+                    <span className="text-slate-400 font-extrabold text-[9.5px] uppercase tracking-wider">Select Team</span>
                     <Select value={selectedTicket.team || undefined} onValueChange={handleTeamChange}>
-                        <SelectTrigger className="w-full bg-white border-gray-300 h-9 text-xs shadow-2xs rounded-lg">
+                        <SelectTrigger className="w-full bg-white border-slate-200 h-10 text-xs font-bold shadow-2xs rounded-2xl focus:ring-2 focus:ring-teal-500/20">
                             <SelectValue placeholder="Select a team..." />
                         </SelectTrigger>
-                        <SelectContent className="z-[700]">
+                        <SelectContent className="z-[700] rounded-2xl border-slate-200">
                             {[...new Set(workers.filter(w => w.status !== 'Relieved').map(w => w.department).filter(d => d && d.trim() !== '' && d.trim().toUpperCase() !== 'N/A'))].length > 0 ? (
                                 [...new Set(workers.filter(w => w.status !== 'Relieved').map(w => w.department).filter(d => d && d.trim() !== '' && d.trim().toUpperCase() !== 'N/A'))].map(team => (
-                                    <SelectItem key={team} value={team}>{team}</SelectItem>
+                                    <SelectItem key={team} value={team} className="rounded-xl font-medium">{team}</SelectItem>
                                 ))
                             ) : (
                                 <SelectItem value="none" disabled>No teams available</SelectItem>
@@ -460,14 +459,14 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers, assi
                         </SelectContent>
                     </Select>
                     {selectedTicket.team && (
-                        <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 bg-teal-50 border border-teal-100 rounded-lg text-teal-700 text-[10px] font-bold mt-0.5">
-                            <div className="flex items-center gap-1">
-                                <Users className="w-3 h-3" />
+                        <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-teal-50 border border-teal-100 rounded-xl text-teal-700 text-[10px] font-extrabold mt-0.5">
+                            <div className="flex items-center gap-1.5">
+                                <Users className="w-3.5 h-3.5" />
                                 Team: {selectedTicket.team} ({teamMembersCount} members)
                             </div>
                             <button
                                 onClick={() => { updateSelectedTicket({ team: '', assignees: [] }); }}
-                                className="text-[9px] font-black text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-1.5 py-0.5 rounded border border-rose-100 transition-colors flex items-center gap-0.5"
+                                className="text-[9px] font-black text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2 py-0.5 rounded-md border border-rose-100 transition-colors flex items-center gap-0.5"
                             >
                                 <X className="w-2.5 h-2.5" /> Clear
                             </button>
@@ -478,7 +477,7 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers, assi
 
             {(assignmentType === 'Individual' || assignmentType === 'Both') && (
                 <div className="flex flex-col gap-1.5 animate-in slide-in-from-top-2 duration-300">
-                    <span className="text-gray-400 font-bold text-[9.5px] uppercase tracking-wider">Select Assignees (Managers / Developers)</span>
+                    <span className="text-slate-400 font-extrabold text-[9.5px] uppercase tracking-wider">Select Assignees (Managers / Developers)</span>
                     <MultiSelect
                         options={workers.map(w => {
                             const isMgr = w.role === 'manager' || (w.designation && w.designation.toLowerCase().includes('manager'));
@@ -493,45 +492,45 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers, assi
 
             {/* Multi-Assignee Mode Selector: Group Task vs Assign Separately */}
             {selectedTicket._id === 'new' && setAssignmentMode && (
-                <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-100 animate-in slide-in-from-top-2 duration-300">
+                <div className="flex flex-col gap-2 pt-2 border-t border-slate-100 animate-in slide-in-from-top-2 duration-300">
                     <span className="text-slate-400 font-extrabold text-[9.5px] uppercase tracking-wider flex items-center justify-between">
                         <span>Assignment Mode</span>
-                        <span className="text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded text-[8.5px] font-black">{currentAssigneeIds.length} Assignees Selected</span>
+                        <span className="text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100 text-[8.5px] font-black">{currentAssigneeIds.length} Assignees Selected</span>
                     </span>
-                    <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-xl">
+                    <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100/90 rounded-2xl border border-slate-200/50">
                         <button
                             type="button"
                             onClick={() => setAssignmentMode('group')}
-                            className={`py-1.5 px-2 rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 transition-all ${
+                            className={`py-2 px-2.5 rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1.5 transition-all ${
                                 assignmentMode === 'group'
                                     ? 'bg-white text-teal-700 shadow-2xs border border-slate-200/80'
                                     : 'text-slate-500 hover:text-slate-700'
                             }`}
                         >
-                            <Users className="w-3 h-3 text-teal-600" />
+                            <Users className="w-3.5 h-3.5 text-teal-600" />
                             <span>Group Task</span>
                         </button>
                         <button
                             type="button"
                             onClick={() => setAssignmentMode('separate')}
-                            className={`py-1.5 px-2 rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 transition-all ${
+                            className={`py-2 px-2.5 rounded-xl text-[10px] font-extrabold flex items-center justify-center gap-1.5 transition-all ${
                                 assignmentMode === 'separate'
                                     ? 'bg-teal-600 text-white shadow-xs'
                                     : 'text-slate-500 hover:text-slate-700'
                             }`}
                         >
-                            <User className="w-3 h-3" />
+                            <User className="w-3.5 h-3.5" />
                             <span>Assign Separately</span>
                         </button>
                     </div>
                     <div className="text-[9.5px] font-bold mt-0.5 transition-all">
                         {assignmentMode === 'separate' ? (
-                            <div className="bg-teal-50 border border-teal-200/80 text-teal-700 p-2 rounded-xl flex items-start gap-1.5 shadow-2xs">
+                            <div className="bg-teal-50/80 border border-teal-200/80 text-teal-700 p-2.5 rounded-2xl flex items-start gap-2 shadow-2xs">
                                 <Sparkles className="w-3.5 h-3.5 text-teal-600 shrink-0 mt-0.5" />
                                 <span className="leading-tight">Creates <strong>{currentAssigneeIds.length > 0 ? currentAssigneeIds.length : 'individual'} separate tasks</strong> (1 dedicated task copy for each assignee).</span>
                             </div>
                         ) : (
-                            <div className="bg-slate-50 border border-slate-200/80 text-slate-600 p-2 rounded-xl flex items-start gap-1.5 shadow-2xs">
+                            <div className="bg-slate-50 border border-slate-200/80 text-slate-600 p-2.5 rounded-2xl flex items-start gap-2 shadow-2xs">
                                 <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
                                 <span className="leading-tight">Creates <strong>1 shared task</strong> assigned to all selected assignees together.</span>
                             </div>
@@ -706,7 +705,17 @@ const WorkAllocation = () => {
         });
 
         socket.on('ticket:updated', (updatedTicket) => {
-            setTickets(prev => prev.map(t => t._id === updatedTicket._id ? updatedTicket : t));
+            setTickets(prev => {
+                const existing = prev.find(t => t._id === updatedTicket._id);
+                // Trigger toast notification if a new or updated developer query is present
+                if (updatedTicket.workerQuery && (!existing || existing.workerQuery !== updatedTicket.workerQuery)) {
+                    toast.info(`❓ Developer Query on "${updatedTicket.title}": ${updatedTicket.workerQuery}`, {
+                        autoClose: 6000,
+                        position: 'top-right'
+                    });
+                }
+                return prev.map(t => t._id === updatedTicket._id ? updatedTicket : t);
+            });
             // Also update selected ticket if it's the one open, ensuring dates are formatted for the UI
             setSelectedTicket(prev => {
                 if (prev && prev._id === updatedTicket._id) {
@@ -2217,6 +2226,14 @@ const WorkAllocation = () => {
                                             </button>
                                         </div>
 
+                                        {/* Developer Query Badge */}
+                                        {ticket.workerQuery && (
+                                            <div className="flex items-center gap-1.5 text-[10px] font-semibold px-2 py-1 bg-amber-500/10 text-amber-700 border border-amber-500/30 rounded-md animate-pulse my-1">
+                                                <HelpCircle className="w-3 h-3 text-amber-600 shrink-0" />
+                                                <span className="truncate">Query: {ticket.workerQuery}</span>
+                                            </div>
+                                        )}
+
                                         {/* Title */}
                                         <div>
                                             <div className="text-xs font-semibold text-slate-900 leading-tight line-clamp-2 my-1">
@@ -2368,49 +2385,49 @@ const WorkAllocation = () => {
             {/* Full-Screen Workspace Task Modal */}
             {isModalOpen && selectedTicket && (
                 <div className="fixed inset-0 bg-black/60 z-[600] flex flex-col items-center justify-center backdrop-blur-sm transition-all duration-300 p-2">
-                    <div className="bg-white rounded-2xl lg:rounded-3xl shadow-2xl w-full max-w-[97vw] h-[96vh] flex flex-col animate-in zoom-in-95 duration-300 overflow-hidden border border-white/20">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[97vw] h-[96vh] flex flex-col animate-in zoom-in-95 duration-300 overflow-hidden border border-slate-200/80">
 
-                        {/* Header */}
-                        <div className="px-3 py-2 sm:px-6 md:px-8 flex flex-col md:flex-row justify-between items-stretch md:items-center text-slate-600 shrink-0 border-b border-slate-100 bg-slate-50/20 gap-2 md:gap-3">
-                            <div className="flex items-center justify-between md:justify-start gap-2 w-full md:w-auto">
-                                <div className="flex items-center gap-1.5 sm:gap-2.5 flex-wrap">
-                                    <div className="flex items-center space-x-1.5 text-[9px] sm:text-xs font-black bg-white px-2 py-1 sm:px-3 sm:py-2 rounded-xl shadow-sm border border-slate-200 uppercase tracking-wider text-teal-605">
+                        {/* Header Bar */}
+                        <div className="px-4 py-3 sm:px-6 md:px-8 flex flex-col md:flex-row justify-between items-stretch md:items-center text-slate-600 shrink-0 border-b border-slate-200/70 bg-gradient-to-r from-slate-50/80 via-white to-slate-50/80 gap-3 backdrop-blur-md">
+                            <div className="flex items-center justify-between md:justify-start gap-2.5 w-full md:w-auto">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <div className="flex items-center space-x-2 text-[10px] sm:text-xs font-extrabold bg-white px-3 py-1.5 rounded-2xl shadow-sm border border-slate-200 uppercase tracking-wider text-teal-600">
                                         <IssueIcon type={selectedTicket.issueType} />
                                         <span>{selectedTicket._id === 'new' ? 'New Workspace' : `Task: ${selectedTicket._id.substring(selectedTicket._id.length - 6).toUpperCase()}`}</span>
                                     </div>
                                     {selectedTicket.team && (
-                                        <div className="bg-teal-50/60 text-teal-700 px-2 py-1 sm:px-3 sm:py-2 rounded-xl text-[9px] sm:text-[10px] font-extrabold uppercase border border-teal-100 flex items-center gap-1 shadow-sm">
+                                        <div className="bg-teal-50/80 text-teal-700 px-3 py-1.5 rounded-2xl text-[10px] font-extrabold uppercase border border-teal-100 flex items-center gap-1.5 shadow-2xs">
                                             <Users className="w-3.5 h-3.5" /> Team: {selectedTicket.team}
                                         </div>
                                     )}
                                     {selectedTicket._id !== 'new' && selectedTicket.endDate && (
-                                        <div className={`px-2 py-1 sm:px-3 sm:py-2 rounded-xl text-[9px] sm:text-[10px] font-extrabold uppercase border flex items-center gap-1 shadow-sm ${getProtectionState(selectedTicket) === 'Submitted on time' ? 'bg-teal-50 text-teal-700 border-teal-100 shadow-sm animate-pulse' :
-                                            getProtectionState(selectedTicket) === 'Awaiting review' ? 'bg-amber-50 text-amber-700 border-amber-100 shadow-sm' :
-                                                getProtectionState(selectedTicket) === 'Deduction active' ? 'bg-rose-50 text-rose-700 border-rose-100 shadow-sm' :
-                                                    getProtectionState(selectedTicket) === 'Approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-100 shadow-sm' :
+                                        <div className={`px-3 py-1.5 rounded-2xl text-[10px] font-extrabold uppercase border flex items-center gap-1.5 shadow-2xs ${getProtectionState(selectedTicket) === 'Submitted on time' ? 'bg-teal-50 text-teal-700 border-teal-100 shadow-2xs animate-pulse' :
+                                            getProtectionState(selectedTicket) === 'Awaiting review' ? 'bg-amber-50 text-amber-700 border-amber-100 shadow-2xs' :
+                                                getProtectionState(selectedTicket) === 'Deduction active' ? 'bg-rose-50 text-rose-700 border-rose-100 shadow-2xs' :
+                                                    getProtectionState(selectedTicket) === 'Approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-100 shadow-2xs' :
                                                         'bg-slate-50 text-slate-500 border-slate-200'
                                             }`}>
                                             Salary: {getProtectionState(selectedTicket) === 'None' ? 'On Track' : getProtectionState(selectedTicket)}
                                         </div>
                                     )}
                                 </div>
-                                <button onClick={() => setIsModalOpen(false)} className="md:hidden p-1 rounded-lg text-gray-400 hover:text-red-500 bg-slate-100 border border-slate-250">
+                                <button onClick={() => setIsModalOpen(false)} className="md:hidden p-1.5 rounded-xl text-slate-400 hover:text-rose-500 bg-slate-100 border border-slate-200 transition-colors">
                                     <X className="w-4 h-4" />
                                 </button>
                             </div>
 
-                            {/* 📱 Mobile: single compact row — Phase Status + AI Brain + Create */}
+                            {/* Right side controls — Phase Status + AI Brain + Create + Close */}
                             <div className="flex items-center gap-2 w-full md:w-auto justify-start md:justify-end">
                                 {/* Phase Status */}
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap hidden sm:inline">Phase:</span>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider whitespace-nowrap hidden sm:inline">Phase:</span>
                                     <Select value={selectedTicket.status} onValueChange={(val) => updateSelectedTicket({ status: val })}>
-                                        <SelectTrigger className="bg-white border border-slate-200 h-8 sm:h-9 px-2.5 text-[10px] sm:text-xs font-bold shadow-sm rounded-xl w-28 sm:w-36 focus:ring-1 focus:ring-teal-500 focus:border-teal-505">
+                                        <SelectTrigger className="bg-white border border-slate-200 h-9 px-3 text-xs font-bold shadow-2xs rounded-xl w-32 sm:w-40 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500">
                                             <SelectValue />
                                         </SelectTrigger>
-                                        <SelectContent className="z-[700]">
+                                        <SelectContent className="z-[700] rounded-2xl border-slate-200">
                                             {columns.map(col => (
-                                                <SelectItem key={col} value={col}>{col.toUpperCase()}</SelectItem>
+                                                <SelectItem key={col} value={col} className="rounded-xl font-bold">{col.toUpperCase()}</SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>
@@ -2419,10 +2436,10 @@ const WorkAllocation = () => {
                                 {/* AI Second Brain Button */}
                                 <button
                                     onClick={() => setShowBrainModal(true)}
-                                    className="flex items-center gap-1 bg-gradient-to-r from-violet-600 to-indigo-600 text-white h-8 sm:h-9 px-2.5 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-wider hover:from-violet-700 hover:to-indigo-700 transition-all shadow-md shadow-violet-100 active:scale-95 shrink-0"
+                                    className="flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white h-9 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider hover:from-violet-700 hover:to-indigo-700 transition-all shadow-md shadow-violet-200 active:scale-95 shrink-0"
                                     title="Upload chat files to AI Second Brain"
                                 >
-                                    <Brain className="w-3 h-3" />
+                                    <Brain className="w-3.5 h-3.5" />
                                     <span className="hidden xs:inline">AI Brain</span>
                                 </button>
 
@@ -2534,14 +2551,14 @@ const WorkAllocation = () => {
                                                 setLoading(false);
                                             }
                                         }}
-                                        className="flex-1 sm:flex-none bg-teal-600 text-white h-7 sm:h-9 px-2 sm:px-4 rounded-lg text-[10px] sm:text-xs font-bold hover:bg-teal-700 transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-1 disabled:opacity-50"
+                                        className="flex-1 sm:flex-none bg-teal-600 text-white h-9 px-4 rounded-xl text-xs font-bold hover:bg-teal-700 transition-all shadow-md shadow-teal-100 active:scale-[0.98] flex items-center justify-center gap-1.5 disabled:opacity-50"
                                     >
-                                        <Check className="w-3 h-3" /><span>Create</span>
+                                        <Check className="w-3.5 h-3.5 stroke-[3]" /><span>Create</span>
                                     </button>
                                 )}
 
-                                <button onClick={() => setIsModalOpen(false)} className="hidden md:flex p-2 rounded-lg text-gray-400 transition-all bg-gray-100 border border-gray-200 hover:bg-red-50 hover:text-red-500">
-                                    <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                                <button onClick={() => setIsModalOpen(false)} className="hidden md:flex p-2 rounded-xl text-slate-400 transition-all bg-slate-100 border border-slate-200 hover:bg-rose-50 hover:text-rose-500 hover:border-rose-200">
+                                    <X className="w-4 h-4 sm:w-4 sm:h-4" />
                                 </button>
                             </div>
                         </div>
@@ -2616,14 +2633,14 @@ const WorkAllocation = () => {
                                     {/* 🔹 COLUMN 1: Task Input & Checklist (LEFT) */}
                                     <div id="modal-sec-details" className="w-full md:w-auto flex flex-col px-4 py-4 md:h-full md:overflow-hidden lg:px-6 lg:py-6 overflow-visible md:overflow-y-hidden">
                                         {/* Mobile section label */}
-                                        <div className="md:hidden flex items-center gap-2 mb-4 pb-2 border-b border-slate-150">
+                                        <div className="md:hidden flex items-center gap-2 mb-4 pb-2 border-b border-slate-200">
                                             <AlignLeft className="w-4 h-4 text-teal-600" />
                                             <span className="text-xs font-black text-slate-700 uppercase tracking-widest">Details</span>
                                         </div>
-                                        <div className="shrink-0 mb-2">
-                                            <div className="flex items-center gap-1.5 mb-1">
+                                        <div className="shrink-0 mb-3">
+                                            <div className="flex items-center gap-1.5 mb-1.5">
                                                 <AlignLeft className="w-3.5 h-3.5 text-teal-600" />
-                                                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Workspace Definition</span>
+                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Workspace Definition</span>
                                             </div>
                                             <TitleInput
                                                 initialValue={selectedTicket.title}
@@ -2633,38 +2650,38 @@ const WorkAllocation = () => {
                                             />
 
                                             {selectedTicket._id !== 'new' && selectedTicket.createdAt && (
-                                                <div className="flex items-center gap-3 mt-1.5 text-[8.5px] font-bold text-gray-400">
-                                                    <div className="flex items-center gap-1 opacity-70 hover:opacity-100 transition-opacity">
-                                                        <Calendar className="w-2.5 h-2.5" />
+                                                <div className="flex items-center gap-3 mt-2 text-[8.5px] font-bold text-slate-400 px-1">
+                                                    <div className="flex items-center gap-1 opacity-80 hover:opacity-100 transition-opacity">
+                                                        <Calendar className="w-3 h-3 text-teal-600" />
                                                         <span>Created: {new Date(selectedTicket.createdAt).toLocaleDateString()}</span>
                                                     </div>
-                                                    <div className="flex items-center gap-1 opacity-70 hover:opacity-100 transition-opacity">
-                                                        <History className="w-2.5 h-2.5" />
+                                                    <div className="flex items-center gap-1 opacity-80 hover:opacity-100 transition-opacity">
+                                                        <History className="w-3 h-3 text-teal-600" />
                                                         <span>Mod: {new Date(selectedTicket.updatedAt).toLocaleTimeString()}</span>
                                                     </div>
                                                 </div>
                                             )}
                                         </div>
 
-                                        <div className="flex-1 flex flex-col min-h-[160px] lg:min-h-0 bg-gray-50/30 rounded-2xl p-2.5 lg:p-3 border border-gray-100/50">
-                                            <div className="flex justify-between items-center mb-1.5 shrink-0">
-                                                <label className="text-xs font-bold text-gray-700 flex items-center">
-                                                    <List className="w-3.5 h-3.5 mr-1.5 text-teal-600" /> Task Checklist
+                                        <div className="flex-1 flex flex-col min-h-[180px] lg:min-h-0 bg-slate-50/50 rounded-2xl p-3 border border-slate-200/60 shadow-2xs">
+                                            <div className="flex justify-between items-center mb-2 shrink-0">
+                                                <label className="text-xs font-extrabold text-slate-700 flex items-center">
+                                                    <List className="w-4 h-4 mr-1.5 text-teal-600" /> Task Checklist
                                                 </label>
-                                                <span className="text-[9px] font-extrabold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100">
+                                                <span className="text-[9.5px] font-black text-teal-600 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-100 shadow-2xs">
                                                     {selectedTicket.checklist?.length || 0} SUB-TASKS
                                                 </span>
                                             </div>
 
                                             <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-2 pb-1">
                                                 {(selectedTicket.checklist && selectedTicket.checklist.length > 0 ? selectedTicket.checklist : [{ text: '', completed: false, _id: 'default-0' }]).map((item, idx) => (
-                                                    <div key={item._id || `item-${idx}`} className="flex items-start gap-2 group p-1.5 bg-white hover:bg-slate-50/50 rounded-md transition-all border border-slate-200/80 hover:border-slate-300 focus-within:border-teal-500 focus-within:ring-1 focus-within:ring-teal-500/20 shadow-2xs relative min-h-[34px]">
+                                                    <div key={item._id || `item-${idx}`} className="flex items-start gap-2.5 group p-2 bg-white hover:bg-slate-50/80 rounded-xl transition-all border border-slate-200/80 hover:border-slate-300 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/10 shadow-2xs relative min-h-[38px]">
                                                         <div className="flex items-center shrink-0 mt-0.5">
                                                             <div
                                                                 onClick={() => toggleChecklistItem(idx)}
-                                                                className={`w-4 h-4 rounded flex items-center justify-center border-2 transition-colors cursor-pointer ${item.completed ? 'bg-teal-500 border-teal-500 text-white' : 'border-slate-300 hover:border-teal-500'}`}
+                                                                className={`w-4 h-4 rounded-md flex items-center justify-center border-2 transition-all cursor-pointer ${item.completed ? 'bg-teal-500 border-teal-500 text-white shadow-2xs' : 'border-slate-300 hover:border-teal-500 bg-white'}`}
                                                             >
-                                                                {item.completed && <Check className="w-2.5 h-2.5" />}
+                                                                {item.completed && <Check className="w-3 h-3 stroke-[3]" />}
                                                             </div>
                                                         </div>
                                                         <div className="flex-1 flex items-center min-w-0">
@@ -2676,7 +2693,7 @@ const WorkAllocation = () => {
                                                                     if (e.key === 'Enter') { e.preventDefault(); addChecklistItem(idx); }
                                                                     else if (e.key === 'Backspace' && item.text === '' && (selectedTicket.checklist || []).length > 1) { e.preventDefault(); removeChecklistItem(idx); }
                                                                 }}
-                                                                className={`w-full bg-transparent border-none focus:ring-0 text-[11.5px] font-medium text-slate-700 placeholder-slate-300 outline-none resize-none min-h-[18px] max-h-[90px] leading-tight py-0 scrollbar-hidden ${item.completed ? 'text-slate-400 line-through italic' : ''}`}
+                                                                className={`w-full bg-transparent border-none focus:ring-0 text-xs font-semibold text-slate-700 placeholder-slate-300 outline-none resize-none min-h-[20px] max-h-[90px] leading-snug py-0 scrollbar-hidden ${item.completed ? 'text-slate-400 line-through italic' : ''}`}
                                                                 placeholder="Add sub-task details..."
                                                                 rows={1}
                                                                 title={item.text}
@@ -2694,44 +2711,44 @@ const WorkAllocation = () => {
                                                         </div>
                                                         <button
                                                             onClick={() => removeChecklistItem(idx)}
-                                                            className="p-0.5 text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all rounded shrink-0 mt-0.5"
+                                                            className="p-1 text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all rounded-lg shrink-0 mt-0.5"
                                                         >
-                                                            <X className="w-3 h-3" />
+                                                            <X className="w-3.5 h-3.5" />
                                                         </button>
                                                     </div>
                                                 ))}
                                             </div>
                                             <button
                                                 onClick={() => addChecklistItem()}
-                                                className="mt-1.5 flex items-center justify-center gap-1.5 text-teal-600 hover:bg-teal-600 hover:text-white text-[9.5px] font-bold uppercase tracking-wider transition-all py-1.5 px-3 bg-white border border-dashed border-teal-200/90 rounded-lg group shadow-2xs active:scale-95"
+                                                className="mt-2 flex items-center justify-center gap-1.5 text-teal-600 hover:bg-teal-600 hover:text-white text-[10px] font-extrabold uppercase tracking-wider transition-all py-2 px-3.5 bg-teal-50/50 hover:bg-teal-600 border border-dashed border-teal-200 rounded-xl group shadow-2xs active:scale-95 w-full"
                                             >
-                                                <Plus className="w-3.5 h-3.5 transition-transform group-hover:rotate-90" /> Add Next Point
+                                                <Plus className="w-4 h-4 transition-transform group-hover:rotate-90" /> Add Next Point
                                             </button>
                                         </div>
 
-                                        {/* REFINED COMPACT Planning Section at Bottom (Timeline & Priority) */}
-                                        <div className="shrink-0 mt-1.5 pt-1.5 border-t border-gray-100 px-0.5 pb-0.5 animate-in fade-in duration-300">
-                                            <div className="bg-white border border-slate-200/80 rounded-xl shadow-2xs overflow-hidden">
-                                                <div className="bg-slate-50/80 px-2.5 py-1.5 border-b border-slate-100 flex items-center justify-between">
+                                        {/* REFINED Planning Section at Bottom (Timeline & Priority) */}
+                                        <div className="shrink-0 mt-2.5 pt-2 border-t border-slate-100 px-0.5 pb-0.5 animate-in fade-in duration-300">
+                                            <div className="bg-white border border-slate-200/80 rounded-2xl shadow-2xs overflow-hidden">
+                                                <div className="bg-slate-50/80 px-3 py-2 border-b border-slate-100 flex items-center justify-between">
                                                     <div className="flex items-center gap-1.5">
-                                                        <LayoutDashboard className="w-3 h-3 text-teal-600" />
-                                                        <h3 className="text-[9.5px] font-black text-slate-500 uppercase tracking-wider">Timeline & Priority</h3>
+                                                        <LayoutDashboard className="w-3.5 h-3.5 text-teal-600" />
+                                                        <h3 className="text-[10px] font-black text-slate-600 uppercase tracking-wider">Timeline & Priority</h3>
                                                     </div>
-                                                    <div className="flex items-center gap-1">
-                                                        <span className={`w-1.5 h-1.5 rounded-full ${isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'bg-rose-500 animate-pulse' : 'bg-teal-500'}`}></span>
-                                                        <span className="text-[8.5px] font-extrabold text-slate-400 uppercase tracking-wide">{isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'Overdue' : 'Active'}</span>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className={`w-2 h-2 rounded-full ${isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'bg-rose-500 animate-pulse' : 'bg-teal-500'}`}></span>
+                                                        <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wide">{isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'Overdue' : 'Active'}</span>
                                                     </div>
                                                 </div>
 
-                                                <div className="p-2 space-y-2">
+                                                <div className="p-2.5 space-y-2.5">
                                                     {/* Timeline Row - Full width 2-column grid for date inputs */}
                                                     <div className="flex flex-col gap-1">
                                                         <div className="flex items-center gap-1">
-                                                            <Calendar className="w-3 h-3 text-teal-600 shrink-0" />
-                                                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Dates</span>
+                                                            <Calendar className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                                                            <span className="text-[9.5px] font-extrabold text-slate-500 uppercase tracking-wider">Dates</span>
                                                         </div>
-                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 w-full">
-                                                            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 h-8 focus-within:ring-1 focus-within:ring-teal-500 focus-within:bg-white shadow-2xs">
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full">
+                                                            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/90 rounded-xl px-3 py-1.5 h-9 focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-500 focus-within:bg-white shadow-2xs">
                                                                 <span className="text-[9px] font-black text-slate-400 uppercase shrink-0">Start</span>
                                                                 <input
                                                                     type="date"
@@ -2742,9 +2759,9 @@ const WorkAllocation = () => {
                                                                     title="Start Date"
                                                                 />
                                                             </div>
-                                                            <div className={`flex items-center gap-2 border rounded-lg px-2.5 py-1 h-8 focus-within:ring-1 focus-within:ring-teal-500 focus-within:bg-white shadow-2xs ${isOverdue(selectedTicket.endDate, selectedTicket.status)
+                                                            <div className={`flex items-center gap-2 border rounded-xl px-3 py-1.5 h-9 focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:bg-white shadow-2xs ${isOverdue(selectedTicket.endDate, selectedTicket.status)
                                                                 ? 'bg-rose-50 border-rose-200 text-rose-700'
-                                                                : 'bg-slate-50 border-slate-200 text-slate-700'
+                                                                : 'bg-slate-50 border-slate-200/90 text-slate-700'
                                                                 }`}>
                                                                 <span className="text-[9px] font-black text-slate-400 uppercase shrink-0">End</span>
                                                                 <input
@@ -2762,8 +2779,8 @@ const WorkAllocation = () => {
                                                     {/* Priority Row */}
                                                     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                                                         <div className="flex items-center gap-1 shrink-0">
-                                                            <Zap className="w-3 h-3 text-amber-500 shrink-0" />
-                                                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Priority</span>
+                                                            <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                                                            <span className="text-[9.5px] font-extrabold text-slate-500 uppercase tracking-wider">Priority</span>
                                                         </div>
                                                         <div className="flex gap-1.5 flex-1 w-full">
                                                             {['Low', 'Medium', 'High'].map(p => (
@@ -2771,7 +2788,7 @@ const WorkAllocation = () => {
                                                                     key={p}
                                                                     type="button"
                                                                     onClick={() => updateSelectedTicket({ priority: p })}
-                                                                    className={`flex-1 py-1 rounded-lg text-[10px] sm:text-xs font-extrabold uppercase transition-all border flex items-center justify-center text-center h-8 ${selectedTicket.priority === p
+                                                                    className={`flex-1 py-1.5 rounded-xl text-[10px] sm:text-xs font-black uppercase transition-all border flex items-center justify-center text-center h-8 ${selectedTicket.priority === p
                                                                         ? (p === 'High' ? 'bg-red-500 border-red-500 text-white shadow-xs' : p === 'Medium' ? 'bg-amber-500 border-amber-500 text-white shadow-xs' : 'bg-blue-500 border-blue-500 text-white shadow-xs')
                                                                         : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300 hover:bg-slate-50'
                                                                         }`}
@@ -3079,17 +3096,25 @@ const WorkAllocation = () => {
 
                                             {/* Employee Query Display */}
                                             {selectedTicket.workerQuery && (
-                                                <div className="flex flex-col gap-2 pt-1 mb-2 bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-                                                    <div className="flex items-center gap-2">
-                                                        <HelpCircle className="w-3 h-3 text-teal-600" />
-                                                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Developer Query</span>
+                                                <div className="flex flex-col gap-2 pt-1 mb-2 bg-amber-50/60 rounded-2xl p-4 shadow-sm border border-amber-200">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            <HelpCircle className="w-4 h-4 text-amber-600 animate-pulse" />
+                                                            <span className="text-[10px] font-bold text-amber-800 uppercase tracking-widest">Developer Query</span>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => updateSelectedTicket({ workerQuery: '' })}
+                                                            className="text-[10px] font-bold text-amber-700 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 px-2 py-1 rounded-lg transition-all"
+                                                        >
+                                                            Mark Resolved
+                                                        </button>
                                                     </div>
-                                                    <div className="w-full bg-teal-50 border border-teal-100 rounded-xl p-3 text-xs font-medium text-teal-800">
+                                                    <div className="w-full bg-white border border-amber-200 rounded-xl p-3 text-xs font-medium text-slate-800 shadow-2xs">
                                                         {selectedTicket.workerQuery}
                                                     </div>
                                                 </div>
                                             )}
-
                                             <div className="flex flex-col gap-2 pt-1 bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
                                                 <div className="flex items-center gap-2">
                                                     <MessageSquare className="w-3 h-3 text-orange-500" />
@@ -3114,14 +3139,14 @@ const WorkAllocation = () => {
                                         </div>
                                     </div>
 
-                                    {/* 🔹 COLUMN 3: Execution & Analytics (RIGHT - MOVED FROM CENTER) */}
+                                    {/* 🔹 COLUMN 3: Execution & Analytics (RIGHT) */}
                                     <div id="modal-sec-execution" className="w-full md:w-auto flex flex-col px-4 py-4 md:h-full md:overflow-y-auto custom-scrollbar bg-slate-50/10 lg:px-6 lg:py-6 overflow-visible md:overflow-y-auto">
                                         {/* Mobile section label */}
-                                        <div className="md:hidden flex items-center gap-2 mb-4 pb-2 border-b border-slate-150">
+                                        <div className="md:hidden flex items-center gap-2 mb-4 pb-2 border-b border-slate-200">
                                             <BarChart2 className="w-4 h-4 text-teal-600" />
                                             <span className="text-xs font-black text-slate-700 uppercase tracking-widest">Execution</span>
                                         </div>
-                                        <div className="hidden md:flex items-center gap-1.5 mb-2 pb-2 border-b border-slate-100">
+                                        <div className="hidden md:flex items-center gap-1.5 mb-3 pb-2 border-b border-slate-100">
                                             <BarChart2 className="w-3.5 h-3.5 text-teal-600" />
                                             <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Execution</span>
                                         </div>
@@ -3131,31 +3156,31 @@ const WorkAllocation = () => {
                                             {selectedTicket._id !== 'new' ? (
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 shrink-0">
                                                     {/* Left Column: Progress Card */}
-                                                    <div className="bg-white border border-teal-100/50 rounded-2xl p-4 shadow-sm relative overflow-hidden flex flex-col justify-center">
-                                                        <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
+                                                    <div className="bg-white border border-teal-100 rounded-2xl p-4 shadow-2xs relative overflow-hidden flex flex-col justify-center">
+                                                        <div className="absolute top-0 left-0 w-1.5 h-full bg-teal-500"></div>
                                                         <div className="flex justify-between items-center mb-3">
-                                                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-                                                                <BarChart2 className="w-3.5 h-3.5 text-teal-500" />
+                                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                                                                <BarChart2 className="w-4 h-4 text-teal-600" />
                                                                 Overall Completion
                                                             </span>
-                                                            <span className="text-[11px] font-extrabold bg-teal-50 text-teal-600 px-2 py-0.5 rounded-full border border-teal-100">
+                                                            <span className="text-[10px] font-black bg-teal-50 text-teal-600 px-2.5 py-0.5 rounded-full border border-teal-100">
                                                                 {selectedTicket.status === 'Done' ? 100 : (selectedTicket.status === 'Review' ? 90 : (selectedTicket.status === 'In Progress' ? 25 : 0))}% DONE
                                                             </span>
                                                         </div>
-                                                        <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden shadow-inner flex">
+                                                        <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden shadow-inner flex p-0.5 border border-slate-200/50">
                                                             <div
-                                                                className="bg-teal-500 h-2 transition-all duration-1000 ease-out"
+                                                                className="bg-teal-500 h-1.5 rounded-full transition-all duration-1000 ease-out shadow-xs"
                                                                 style={{ width: `${selectedTicket.status === 'Done' ? 100 : (selectedTicket.status === 'Review' ? 90 : (selectedTicket.status === 'In Progress' ? 25 : 0))}%` }}
                                                             ></div>
                                                         </div>
                                                     </div>
 
                                                     {/* Right Column: Shared Task References Card */}
-                                                    <div className="bg-white border border-teal-100/50 rounded-2xl p-4 shadow-sm relative overflow-hidden flex flex-col justify-between">
-                                                        <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
+                                                    <div className="bg-white border border-teal-100 rounded-2xl p-4 shadow-2xs relative overflow-hidden flex flex-col justify-between">
+                                                        <div className="absolute top-0 left-0 w-1.5 h-full bg-teal-500"></div>
                                                         <div className="flex justify-between items-center mb-3">
-                                                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-                                                                <Paperclip className="w-3.5 h-3.5 text-teal-500" />
+                                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                                                                <Paperclip className="w-4 h-4 text-teal-600" />
                                                                 Task References
                                                             </span>
                                                             <input
@@ -3168,7 +3193,7 @@ const WorkAllocation = () => {
                                                             />
                                                             <button
                                                                 onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
-                                                                className="text-[10px] font-extrabold uppercase bg-teal-50 text-teal-600 hover:bg-teal-100 px-2 py-1 rounded-lg border border-teal-100 transition-colors"
+                                                                className="text-[10px] font-black uppercase bg-teal-50 text-teal-600 hover:bg-teal-100 px-2.5 py-1 rounded-xl border border-teal-100 transition-colors shadow-2xs"
                                                             >
                                                                 Upload
                                                             </button>
@@ -3185,13 +3210,14 @@ const WorkAllocation = () => {
                                                                 const files = e.dataTransfer.files;
                                                                 await uploadTaskRefFiles(files, selectedTicket._id);
                                                             }}
-                                                            className={`text-center py-2 px-3 border border-dashed rounded-xl transition-all cursor-pointer ${isDraggingTaskRef
-                                                                ? 'border-teal-500 bg-teal-50/50'
-                                                                : 'border-gray-200 hover:border-teal-400 hover:bg-gray-50/30'
+                                                            className={`text-center py-3 px-3 border-2 border-dashed rounded-xl transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${isDraggingTaskRef
+                                                                ? 'border-teal-500 bg-teal-50/60 shadow-inner'
+                                                                : 'border-slate-200 hover:border-teal-400 bg-slate-50/40 hover:bg-teal-50/20'
                                                                 }`}
                                                             onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
                                                         >
-                                                            <p className="text-[10px] font-bold text-gray-400">
+                                                            <Paperclip className="w-4 h-4 text-teal-500" />
+                                                            <p className="text-[10px] font-bold text-slate-500">
                                                                 {isDraggingTaskRef ? 'Drop files here!' : 'Drag & drop references here'}
                                                             </p>
                                                         </div>
@@ -3200,7 +3226,7 @@ const WorkAllocation = () => {
                                                         {selectedTicket.referenceFiles && selectedTicket.referenceFiles.length > 0 && (
                                                             <div className="flex flex-wrap gap-2 mt-3 max-h-[80px] overflow-y-auto custom-scrollbar">
                                                                 {selectedTicket.referenceFiles.map(file => (
-                                                                    <div key={file._id} className="relative w-14 h-14 rounded-lg border border-slate-200 overflow-hidden group shadow-sm shrink-0">
+                                                                    <div key={file._id} className="relative w-14 h-14 rounded-xl border border-slate-200 overflow-hidden group shadow-2xs shrink-0">
                                                                         <img
                                                                             src={getFullFileUrl(file.url)}
                                                                             alt={file.name}
@@ -3237,11 +3263,11 @@ const WorkAllocation = () => {
                                             ) : (
                                                 <div className="mb-6 shrink-0">
                                                     {/* Full-width Task References Card for New Task */}
-                                                    <div className="bg-white border border-teal-100/50 rounded-2xl p-4 shadow-sm relative overflow-hidden flex flex-col justify-between min-h-[140px]">
-                                                        <div className="absolute top-0 left-0 w-1 h-full bg-teal-500"></div>
+                                                    <div className="bg-white border border-teal-100 rounded-2xl p-4 shadow-2xs relative overflow-hidden flex flex-col justify-between min-h-[140px]">
+                                                        <div className="absolute top-0 left-0 w-1.5 h-full bg-teal-500"></div>
                                                         <div className="flex justify-between items-center mb-3">
-                                                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-                                                                <Paperclip className="w-3.5 h-3.5 text-teal-500" />
+                                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                                                                <Paperclip className="w-4 h-4 text-teal-600" />
                                                                 Task References
                                                             </span>
                                                             <input
@@ -3254,7 +3280,7 @@ const WorkAllocation = () => {
                                                             />
                                                             <button
                                                                 onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
-                                                                className="text-[10px] font-extrabold uppercase bg-teal-50 text-teal-600 hover:bg-teal-100 px-2 py-1 rounded-lg border border-teal-100 transition-colors"
+                                                                className="text-[10px] font-black uppercase bg-teal-50 text-teal-600 hover:bg-teal-100 px-2.5 py-1 rounded-xl border border-teal-100 transition-colors shadow-2xs"
                                                             >
                                                                 Upload
                                                             </button>
@@ -3271,22 +3297,24 @@ const WorkAllocation = () => {
                                                                 const files = e.dataTransfer.files;
                                                                 await uploadTaskRefFiles(files, selectedTicket._id);
                                                             }}
-                                                            className={`text-center py-4 px-3 border border-dashed rounded-xl transition-all cursor-pointer ${isDraggingTaskRef
-                                                                ? 'border-teal-500 bg-teal-50/50'
-                                                                : 'border-gray-200 hover:border-teal-400 hover:bg-gray-50/30'
+                                                            className={`text-center py-6 px-4 border-2 border-dashed rounded-2xl transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${isDraggingTaskRef
+                                                                ? 'border-teal-500 bg-teal-50/60 shadow-inner'
+                                                                : 'border-slate-200 hover:border-teal-400 bg-slate-50/40 hover:bg-teal-50/20'
                                                                 }`}
                                                             onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
                                                         >
-                                                            <p className="text-[10px] font-bold text-gray-400">
+                                                            <Paperclip className="w-5 h-5 text-teal-500 mb-1" />
+                                                            <p className="text-xs font-bold text-slate-500">
                                                                 {isDraggingTaskRef ? 'Drop files here!' : 'Drag & drop references here'}
                                                             </p>
+                                                            <p className="text-[10px] text-slate-400 font-medium">Supports images & reference attachments</p>
                                                         </div>
 
                                                         {/* Previews of uploaded task references */}
                                                         {selectedTicket.referenceFiles && selectedTicket.referenceFiles.length > 0 && (
                                                             <div className="flex flex-wrap gap-2 mt-3 max-h-[80px] overflow-y-auto custom-scrollbar">
                                                                 {selectedTicket.referenceFiles.map(file => (
-                                                                    <div key={file._id} className="relative w-14 h-14 rounded-lg border border-slate-200 overflow-hidden group shadow-sm shrink-0">
+                                                                    <div key={file._id} className="relative w-14 h-14 rounded-xl border border-slate-200 overflow-hidden group shadow-2xs shrink-0">
                                                                         <img
                                                                             src={getFullFileUrl(file.url)}
                                                                             alt={file.name}
@@ -3324,17 +3352,17 @@ const WorkAllocation = () => {
 
                                             {/* Execution Breakdown Area (SCROLLABLE) */}
                                             <div className="flex-1 flex flex-col min-h-0">
-                                                <div className="flex items-center gap-2 mb-4 shrink-0">
-                                                    <div className="w-8 h-8 bg-teal-100 rounded-lg flex items-center justify-center">
+                                                <div className="flex items-center gap-2.5 mb-4 shrink-0">
+                                                    <div className="w-8 h-8 bg-teal-50 border border-teal-100 rounded-xl flex items-center justify-center shadow-2xs">
                                                         <Users className="w-4 h-4 text-teal-600" />
                                                     </div>
-                                                    <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Resource Execution Graph</h3>
+                                                    <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider">Resource Execution Graph</h3>
                                                 </div>
 
                                                 <div className="flex-1 overflow-y-auto custom-scrollbar pr-3 space-y-4 pb-6">
                                                     {isFetchingCompletions ? (
                                                         <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-                                                            <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                                                            <Spinner size="md" className="mb-4" />
                                                             <p className="text-xs font-bold uppercase tracking-widest">Loading Analytics...</p>
                                                         </div>
                                                     ) : selectedTicket.assignees?.length > 0 ? (
@@ -3427,9 +3455,12 @@ const WorkAllocation = () => {
                                                             );
                                                         })
                                                     ) : (
-                                                        <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
-                                                            <Users className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-                                                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">No Execution Data</p>
+                                                        <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 flex flex-col items-center justify-center p-6 shadow-2xs">
+                                                            <div className="w-12 h-12 rounded-2xl bg-slate-100/80 flex items-center justify-center text-slate-400 mb-3 border border-slate-200/50">
+                                                                <Users className="w-6 h-6" />
+                                                            </div>
+                                                            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">No Execution Data Available</p>
+                                                            <p className="text-[11px] text-slate-400 font-medium mt-1 max-w-[220px] leading-relaxed">Assign sub-tasks to team members to start tracking real-time execution.</p>
                                                         </div>
                                                     )}
                                                 </div>

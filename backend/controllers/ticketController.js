@@ -1,4 +1,5 @@
 const Ticket = require('../models/ticketModel');
+const Admin = require('../models/Admin');
 const { getIO } = require('../utils/socket');
 
 const parseChecklist = (description, existingChecklist = []) => {
@@ -407,6 +408,24 @@ exports.updateTicket = async (req, res) => {
                     type: 'task_updated',
                     link: '/worker/work-allocation'
                 });
+            }
+
+            // Notify Admins if developer raised or updated a query
+            if (workerQuery !== undefined && workerQuery && workerQuery.trim() !== '') {
+                const ticketSubdomain = updatedTicket.subdomain || subdomain;
+                const admins = await Admin.find({ subdomain: ticketSubdomain });
+
+                for (const adminUser of admins) {
+                    await sendNotification({
+                        userId: adminUser._id,
+                        userModel: 'Admin',
+                        subdomain: ticketSubdomain,
+                        title: '❓ Developer Query Raised',
+                        message: `Query on "${updatedTicket.title}": ${updatedTicket.workerQuery}`,
+                        type: 'task_query',
+                        link: '/admin/work-allocation'
+                    });
+                }
             }
         } catch (notifError) {
             console.error('Failed to send push notifications:', notifError);

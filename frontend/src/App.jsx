@@ -82,12 +82,14 @@ const ServerSettings = lazy(() => import('./components/server/Settings'));
 import { SocketProvider } from './context/SocketContextNew';
 import { NotificationProvider } from './context/NotificationContext';
 
+import Spinner from './components/common/Spinner';
+
 // Loading Fallback
 const MainLoader = () => (
   <div className="flex h-screen w-full items-center justify-center bg-white">
     <div className="flex flex-col items-center">
-      <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
-      <p className="mt-4 text-gray-600 font-medium">Initializing CipherGate...</p>
+      <Spinner size="lg" />
+      <p className="mt-4 text-gray-600 font-medium tracking-wide">Initializing CipherGate...</p>
     </div>
   </div>
 );

@@ -7,6 +7,7 @@ import {
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import SafeHTML from '../common/SafeHTML';
+import TaskSpinner from '../common/Spinner';
 
 const EmployeeRulesView = () => {
     const [rules, setRules] = useState([]);
@@ -82,7 +83,7 @@ const EmployeeRulesView = () => {
         return (
             <div className="flex items-center justify-center min-h-[50vh]">
                 <div className="flex flex-col items-center gap-3">
-                    <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+                    <TaskSpinner size="lg" />
                     <p className="text-slate-500 font-medium text-sm">Loading Rules Book...</p>
                 </div>
             </div>

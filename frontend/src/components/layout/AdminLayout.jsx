@@ -147,13 +147,12 @@ const MonthlyPayslip = React.lazy(() => import('../admin/MonthlyPayslip'));
 // Lazy load GitHub Tracker
 const GitHubDashboard = React.lazy(() => import('../github-tracker/GitHubDashboard'));
 
-// Custom Premium Loader
+import Spinner from '../common/Spinner';
+
+// Custom Premium Loader using Logo Spinner
 const PageLoader = () => (
   <div className="flex justify-center items-center h-[70vh]">
-    <div className="relative">
-      <div className="w-16 h-16 border-4 border-[#0d9488]/20 border-t-[#0d9488] rounded-full animate-spin"></div>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 border-4 border-[#10B981]/20 border-b-[#10B981] rounded-full animate-spin-reverse"></div>
-    </div>
+    <Spinner size="lg" />
   </div>
 );
 

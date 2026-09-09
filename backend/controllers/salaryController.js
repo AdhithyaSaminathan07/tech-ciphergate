@@ -69,7 +69,7 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
   let lunchStart = 0;
   let lunchEnd = 0;
   let isLunchConsider = false;
-  
+
   const timeToMinutes = (timeStr) => {
     if (!timeStr) return 0;
     let time = timeStr.trim();
@@ -163,7 +163,7 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
 
         // Safety Rule: Approved leave → normal processing, skip
         const hasApprovedLeave = fullDayLeavesForDay.some(l => l.status === 'Approved' || l.leaveType === 'Paid Leave');
-        
+
         if (!hasApprovedLeave) {
           const hasRejectedLeave = fullDayLeavesForDay.some(l => l.status === 'Rejected');
           const hasPendingLeave = fullDayLeavesForDay.some(l => l.status === 'Pending');
@@ -171,7 +171,7 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
 
           if (hasRejectedLeave || hasPendingLeave || hasNoLeave) {
             const penaltyAmount = parseFloat((perDaySalary * 5).toFixed(4));
-            
+
             let leaveStatus = 'No Leave Request';
             let status = 'Unauthorized Absence';
             let reason = 'Absent Without Leave Request';
@@ -609,14 +609,14 @@ const giveBonus = asyncHandler(async (req, res) => {
   const enableUnauthorizedPermissionPenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty === true;
   const { totalUnauthorizedPenalty } = (enableUnauthorizedLeavePenalty || enableUnauthorizedPermissionPenalty)
     ? calculateUnauthorizedAbsencePenalty(
-        worker,
-        fromDate,
-        toDate,
-        allLeavesForPenalty,
-        attendanceData,
-        holidays,
-        settings
-      )
+      worker,
+      fromDate,
+      toDate,
+      allLeavesForPenalty,
+      attendanceData,
+      holidays,
+      settings
+    )
     : { totalUnauthorizedPenalty: 0 };
 
   const actualEarnedSalary = Math.max(0, standardEarnedSalary - totalUnauthorizedPenalty);
@@ -899,27 +899,21 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
     const { penalties: unauthorizedAbsencePenalties, totalUnauthorizedPenalty } =
       (enableUnauthorizedLeavePenalty || enableUnauthorizedPermissionPenalty)
         ? calculateUnauthorizedAbsencePenalty(
-            worker,
-            fromDate,
-            toDate,
-            allLeavesForPenalty,
-            attendanceData,
-            holidays,
-            settings
-          )
+          worker,
+          fromDate,
+          toDate,
+          allLeavesForPenalty,
+          attendanceData,
+          holidays,
+          settings
+        )
         : { penalties: [], totalUnauthorizedPenalty: 0 };
 
     // Final salary after subtracting unauthorized absence penalty
     const finalSalaryAfterUnauthorizedPenalty = Math.max(0, finalSalaryWithAdjustment - totalUnauthorizedPenalty);
 
-    // Enterprise Payroll Module: Fetch payroll record for this month/year
-    const PayrollRecord = require('../models/PayrollRecord');
-    const payrollRecord = await PayrollRecord.findOne({
-      subdomain: worker.subdomain,
-      workerId: id,
-      month: currentReportMonth,
-      year: currentReportYear
-    }).populate('adjustments.addedBy', 'name');
+    // Enterprise Payroll Module: payrollRecord already fetched via Promise.all above
+
 
     let totalAdditions = 0;
     let totalDeductions = 0;
@@ -1085,7 +1079,7 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
         if (cur.getDay() !== 0) workingDays++;
         cur.setDate(cur.getDate() + 1);
       }
-      
+
       let perDayValue = workingDays > 0 ? share / workingDays : 0;
       let totalWorkingDays = workingDays;
 
@@ -1219,14 +1213,14 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
     const { penalties: unauthorizedAbsencePenalties, totalUnauthorizedPenalty } =
       (enableUnauthorizedLeavePenalty || enableUnauthorizedPermissionPenalty)
         ? calculateUnauthorizedAbsencePenalty(
-            worker,
-            start,
-            end,
-            allLeavesForPenalty,
-            attendanceData,
-            holidays,
-            settings
-          )
+          worker,
+          start,
+          end,
+          allLeavesForPenalty,
+          attendanceData,
+          holidays,
+          settings
+        )
         : { penalties: [], totalUnauthorizedPenalty: 0 };
 
     const finalSalaryAfterUnauthorizedPenalty = Math.max(0, finalSalaryWithAdjustment - totalUnauthorizedPenalty);
@@ -1554,13 +1548,13 @@ const createSalaryProject = asyncHandler(async (req, res) => {
   if (project.walletAmount > 0 && project.developers.length > 0) {
     const Worker = require('../models/Worker');
     const WalletTransaction = require('../models/WalletTransaction');
-    
+
     for (const devId of project.developers) {
       const worker = await Worker.findById(devId);
       if (worker) {
         worker.walletBalance = (worker.walletBalance || 0) + project.perDeveloperWalletShare;
         await worker.save();
-        
+
         await WalletTransaction.create({
           workerId: devId,
           projectId: project._id,
@@ -1699,7 +1693,7 @@ const updateSalaryProject = asyncHandler(async (req, res) => {
       if (worker) {
         worker.walletBalance = (worker.walletBalance || 0) + project.perDeveloperWalletShare;
         await worker.save();
-        
+
         await WalletTransaction.create({
           workerId: devId,
           projectId: project._id,
@@ -1750,7 +1744,7 @@ const updateSalaryProject = asyncHandler(async (req, res) => {
 // Delete a salary project
 const deleteSalaryProject = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  
+
   // Revert wallet credits first
   const Worker = require('../models/Worker');
   const WalletTransaction = require('../models/WalletTransaction');
@@ -1925,7 +1919,7 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         if (attWorker) {
           const attWorkerDeptId = attWorker.department?._id?.toString() || attWorker.department?.toString();
           if (!attendanceByDate[att.date].dept[attWorkerDeptId]) {
-             attendanceByDate[att.date].dept[attWorkerDeptId] = [];
+            attendanceByDate[att.date].dept[attWorkerDeptId] = [];
           }
           attendanceByDate[att.date].dept[attWorkerDeptId].push(wId);
         }
@@ -1941,36 +1935,36 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
     }
 
     const buildPenaltyMapsForWorker = (wId, wDeptId, thresh, dArr) => {
-        const cMap = {};
-        const dMap = {};
-        const cEnabled = thresh.company?.enabled ?? true;
-        const dEnabled = thresh.department?.enabled ?? true;
-        if (!cEnabled && !dEnabled) return { companyPenaltyMap: cMap, deptPenaltyMap: dMap };
-        
-        const cVal = thresh.company?.value ?? thresh.company ?? 80;
-        const dVal = thresh.department?.value ?? thresh.department ?? 80;
-        const tDeptW = workers.filter(w => (w.department?._id?.toString() || w.department?.toString()) === wDeptId).length;
-        
-        const wIdStr = wId.toString();
-        dArr.forEach(dateStr => {
-           const dayData = attendanceByDate[dateStr] || { company: [], dept: {} };
-           if (cEnabled) {
-             const oW = Math.max(1, workers.length - 1);
-             const pW = dayData.company.filter(id => id !== wIdStr).length;
-             cMap[dateStr] = ((pW / oW) * 100) < cVal;
-           }
-           if (dEnabled) {
-             if (tDeptW < 2) {
-               dMap[dateStr] = false;
-             } else {
-               const deptList = dayData.dept[wDeptId] || [];
-               const oDW = Math.max(1, tDeptW - 1);
-               const pDW = deptList.filter(id => id !== wIdStr).length;
-               dMap[dateStr] = ((pDW / oDW) * 100) < dVal;
-             }
-           }
-        });
-        return { companyPenaltyMap: cMap, deptPenaltyMap: dMap };
+      const cMap = {};
+      const dMap = {};
+      const cEnabled = thresh.company?.enabled ?? true;
+      const dEnabled = thresh.department?.enabled ?? true;
+      if (!cEnabled && !dEnabled) return { companyPenaltyMap: cMap, deptPenaltyMap: dMap };
+
+      const cVal = thresh.company?.value ?? thresh.company ?? 80;
+      const dVal = thresh.department?.value ?? thresh.department ?? 80;
+      const tDeptW = workers.filter(w => (w.department?._id?.toString() || w.department?.toString()) === wDeptId).length;
+
+      const wIdStr = wId.toString();
+      dArr.forEach(dateStr => {
+        const dayData = attendanceByDate[dateStr] || { company: [], dept: {} };
+        if (cEnabled) {
+          const oW = Math.max(1, workers.length - 1);
+          const pW = dayData.company.filter(id => id !== wIdStr).length;
+          cMap[dateStr] = ((pW / oW) * 100) < cVal;
+        }
+        if (dEnabled) {
+          if (tDeptW < 2) {
+            dMap[dateStr] = false;
+          } else {
+            const deptList = dayData.dept[wDeptId] || [];
+            const oDW = Math.max(1, tDeptW - 1);
+            const pDW = deptList.filter(id => id !== wIdStr).length;
+            dMap[dateStr] = ((pDW / oDW) * 100) < dVal;
+          }
+        }
+      });
+      return { companyPenaltyMap: cMap, deptPenaltyMap: dMap };
     };
 
     const results = await Promise.all(workers.map(async worker => {
@@ -2069,14 +2063,14 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
       const { penalties: unauthorizedAbsencePenalties, totalUnauthorizedPenalty } =
         (enableUnauthorizedLeavePenalty || enableUnauthorizedPermissionPenalty)
           ? calculateUnauthorizedAbsencePenalty(
-              worker,
-              fromDate,
-              toDate,
-              workerLeaves,
-              workerAttendance,
-              holidays,
-              settings
-            )
+            worker,
+            fromDate,
+            toDate,
+            workerLeaves,
+            workerAttendance,
+            holidays,
+            settings
+          )
           : { penalties: [], totalUnauthorizedPenalty: 0 };
 
       const finalSalaryAfterUnauthorizedPenalty = Math.max(0, finalSalaryWithFines - totalUnauthorizedPenalty);
@@ -2162,9 +2156,9 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
             cur.setDate(cur.getDate() + 1);
           }
           projectMap[pStr] = {
-             projectName: project.projectName,
-             currentTotalWorkingDays: workingDays,
-             currentPerDayValue: workingDays > 0 ? share / workingDays : 0
+            projectName: project.projectName,
+            currentTotalWorkingDays: workingDays,
+            currentPerDayValue: workingDays > 0 ? share / workingDays : 0
           };
         }
       });
@@ -2228,10 +2222,10 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
 
         // Enterprise Payroll Module: Attach Payroll Record
         const payrollRecord = allPayrollRecords.find(pr => pr.workerId.toString() === result.workerId);
-        
+
         let totalAdditions = 0;
         let totalDeductions = 0;
-        
+
         if (payrollRecord && payrollRecord.adjustments) {
           payrollRecord.adjustments.forEach(adj => {
             if (!adj.isDeleted) {
@@ -2240,11 +2234,11 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
             }
           });
         }
-        
-        const attendanceSalary = payrollRecord && ['Locked', 'Paid'].includes(payrollRecord.status) && payrollRecord.attendanceSalarySnapshot !== null 
-          ? payrollRecord.attendanceSalarySnapshot 
+
+        const attendanceSalary = payrollRecord && ['Locked', 'Paid'].includes(payrollRecord.status) && payrollRecord.attendanceSalarySnapshot !== null
+          ? payrollRecord.attendanceSalarySnapshot
           : finalSalaryWithAdjustment;
-          
+
         const payableSalary = Math.max(0, attendanceSalary + totalAdditions - totalDeductions);
 
         const finalSalaryCalculated = Math.max(0, finalSalaryWithAdjustment - (result.taskPenalty || 0));
@@ -2287,23 +2281,23 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
     if (isExport || !req.query.page) {
       const teamEarnings = {};
       const activeWorkerIds = new Set(workers.map(w => w._id.toString()));
-      
+
       let totalNetPayout = 0;
       adjustedResults.forEach(r => {
         if (activeWorkerIds.has(r.workerId)) {
           totalNetPayout += (Number(r.grossFinalSalary || r.totalFinalSalary) || 0);
-          
+
           if (r.department && r.department !== 'N/A') {
             teamEarnings[r.department] = (teamEarnings[r.department] || 0) + (Number(r.totalFinalSalary) || 0);
           }
         }
       });
-      
+
       const sortedTeams = Object.entries(teamEarnings)
         .map(([name, amount]) => ({ name, amount }))
         .sort((a, b) => b.amount - a.amount)
         .slice(0, 3);
-        
+
       await DashboardSalaryStat.findOneAndUpdate(
         { subdomain },
         { totalNetPayout, topTeams: sortedTeams, lastCalculated: new Date() },
@@ -2463,14 +2457,14 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
       const enableUnauthorizedPermissionPenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty === true;
       const { totalUnauthorizedPenalty } = (enableUnauthorizedLeavePenalty || enableUnauthorizedPermissionPenalty)
         ? calculateUnauthorizedAbsencePenalty(
-            worker,
-            calcFromDate,
-            calcToDate,
-            workerLeaves,
-            workerAttendance,
-            holidays,
-            settings
-          )
+          worker,
+          calcFromDate,
+          calcToDate,
+          workerLeaves,
+          workerAttendance,
+          holidays,
+          settings
+        )
         : { totalUnauthorizedPenalty: 0 };
 
       const workerTickets = allTickets.filter(task => {
@@ -2768,9 +2762,9 @@ const addPayrollAdjustment = async (req, res) => {
   try {
     const { workerId } = req.params;
     const { month, year, subdomain, type, category, amount, reason, remarks } = req.body;
-    
+
     let record = await PayrollRecord.findOne({ workerId, month, year, subdomain });
-    
+
     if (!record) {
       record = new PayrollRecord({
         workerId,
@@ -2975,31 +2969,31 @@ const getDashboardSalaryStats = asyncHandler(async (req, res) => {
 
   try {
     const stat = await DashboardSalaryStat.findOne({ subdomain });
-    
+
     // Check if stat exists and is less than 7 days old
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    
+
     if (stat && stat.lastCalculated > oneWeekAgo && !req.query.forceRecalculate) {
       return res.status(200).json(stat);
     }
-    
+
     // If we reach here, we need to calculate it (heavy processing)
     // We will simulate the bulk salary logic for the current month
     const now = new Date();
     const fromDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
     const toDate = new Date(now.getFullYear(), now.getMonth() + 1, 0).toLocaleDateString('en-CA');
-    
+
     // For calculating the stats properly, we would ideally just call the logic in getBulkSalaryReport,
     // but since we want this as an API, we can either re-use getTopTeamsEarnings logic or just return empty for now
     // and wait for the admin to generate a bulk report.
     // However, to ensure they see SOMETHING if it's missing, let's just do a basic fallback or call the heavy logic.
     // Actually, we can just use the fast approximation for totalNetPayout based on active workers base salary!
     const workers = await Worker.find({ subdomain, status: { $ne: 'Relieved' } }).populate('department');
-    
+
     const teamEarnings = {};
     let totalNetPayout = 0;
-    
+
     workers.forEach(worker => {
       const deptName = worker.department?.name || 'N/A';
       const salary = Number(worker.finalSalary || worker.salary) || 0;
@@ -3008,18 +3002,18 @@ const getDashboardSalaryStats = asyncHandler(async (req, res) => {
         teamEarnings[deptName] = (teamEarnings[deptName] || 0) + salary;
       }
     });
-    
+
     const sortedTeams = Object.entries(teamEarnings)
       .map(([name, amount]) => ({ name, amount }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 3);
-      
+
     const newStat = await DashboardSalaryStat.findOneAndUpdate(
       { subdomain },
       { totalNetPayout, topTeams: sortedTeams, lastCalculated: new Date() },
       { upsert: true, new: true }
     );
-    
+
     return res.status(200).json(newStat);
   } catch (error) {
     console.error('Dashboard salary stats error:', error);
@@ -3056,13 +3050,13 @@ const getWalletHistory = asyncHandler(async (req, res) => {
 const debitWallet = asyncHandler(async (req, res) => {
   const { workerId } = req.params;
   const { amount, debitType, description, month, year, subdomain } = req.body;
-  
+
   if (!amount || amount <= 0) return res.status(400).json({ message: 'Valid amount is required' });
   if (!debitType || !['Direct', 'Salary'].includes(debitType)) return res.status(400).json({ message: 'Valid debitType required' });
 
   const worker = await Worker.findById(workerId);
   if (!worker || worker.subdomain !== subdomain) return res.status(404).json({ message: 'Worker not found' });
-  
+
   if ((worker.walletBalance || 0) < amount) {
     return res.status(400).json({ message: 'Insufficient wallet balance' });
   }
@@ -3083,14 +3077,14 @@ const debitWallet = asyncHandler(async (req, res) => {
   // If Salary Debit, we auto-create a Payroll Adjustment for the given month/year
   if (debitType === 'Salary') {
     if (!month || !year) {
-       // rollback?
-       return res.status(400).json({ message: 'Month and year are required for Salary Debit' });
+      // rollback?
+      return res.status(400).json({ message: 'Month and year are required for Salary Debit' });
     }
     let record = await PayrollRecord.findOne({ workerId, month, year, subdomain });
     if (!record) {
       record = new PayrollRecord({ workerId, month, year, subdomain, adjustments: [], history: [] });
     }
-    
+
     const adjustment = {
       type: 'addition',
       category: 'Other',
@@ -3105,7 +3099,7 @@ const debitWallet = asyncHandler(async (req, res) => {
       newValue: adjustment,
       actionBy: req.user ? req.user._id : null
     });
-    
+
     await record.save();
   }
 

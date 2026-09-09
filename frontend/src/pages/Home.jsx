@@ -1,17 +1,20 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import ShatteredLogo from '../components/common/ShatteredLogo';
+import {
+  ShieldCheck,
+  Terminal,
+  ArrowRight,
+  Cpu,
+  Sparkles,
+  Lock
+} from 'lucide-react';
 
 const Home = () => {
   const navigate = useNavigate();
-  const { user, isAuthenticated, isAdmin, isWorker, loading: authLoading } = useAuth();
-  const [activeFeature, setActiveFeature] = useState(0);
-  const [typingText, setTypingText] = useState('');
-  const [cipherGateText, setCipherGateText] = useState('');
-  const [showColorAnimation, setShowColorAnimation] = useState(false);
-  const cipherGateFullText = "CipherGate";
+  const { isAuthenticated, isAdmin, isWorker, loading: authLoading } = useAuth();
 
   // Auto-redirect if already logged in
   useEffect(() => {
@@ -21,165 +24,134 @@ const Home = () => {
     }
   }, [isAuthenticated, isAdmin, isWorker, authLoading, navigate]);
 
-  const features = [
-    {
-      title: 'Performance Tracking',
-      description: 'Real-time monitoring of developer productivity and task completion rates.',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-        </svg>
-      )
-    },
-    {
-      title: 'Workflow Optimization',
-      description: 'Intelligent task allocation and process streamlining for enhanced productivity.',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2m0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-        </svg>
-      )
-    },
-    {
-      title: 'Advanced Analytics',
-      description: 'Deep insights into team performance and productivity trends for strategic decision-making.',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-        </svg>
-      )
-    }
-  ];
-
-  // Typing animation for CipherGate text
-  useEffect(() => {
-    let index = 0;
-    const timer = setInterval(() => {
-      if (index <= cipherGateFullText.length) {
-        setCipherGateText(cipherGateFullText.slice(0, index));
-        index++;
-      } else {
-        clearInterval(timer);
-        // After text is fully typed, start the color animation after a delay
-        setTimeout(() => {
-          setShowColorAnimation(true);
-        }, 500);
-      }
-    }, 100); // 0.1s delay between letters
-
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    const featureRotation = setInterval(() => {
-      setActiveFeature((prev) => (prev + 1) % features.length);
-    }, 5000);
-
-    return () => clearInterval(featureRotation);
-  }, []);
-
-  useEffect(() => {
-    const currentFeature = features[activeFeature];
-    let currentIndex = 0;
-
-    const typingInterval = setInterval(() => {
-      if (currentIndex <= currentFeature.description.length) {
-        setTypingText(currentFeature.description.slice(0, currentIndex));
-        currentIndex++;
-      } else {
-        clearInterval(typingInterval);
-      }
-    }, 50);
-
-    return () => clearInterval(typingInterval);
-  }, [activeFeature]);
-
   return (
-    <div className="min-h-screen bg-white text-black flex items-center justify-center p-6 overflow-hidden relative">
-      <div className="absolute inset-0 bg-white/90 backdrop-blur-sm"></div>
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans select-none">
+      {/* Ambient Radial Background Glows (Teal Theme #0d9488) */}
+      <div
+        className="pointer-events-none absolute inset-0 z-0 opacity-40"
+        style={{
+          backgroundImage: `
+            radial-gradient(circle at 50% 20%, rgba(13, 148, 136, 0.12), transparent 50%),
+            radial-gradient(circle at 80% 80%, rgba(13, 148, 136, 0.06), transparent 45%),
+            radial-gradient(circle at 20% 80%, rgba(13, 148, 136, 0.05), transparent 45%)
+          `
+        }}
+      />
 
-      {/* Main Content */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 1 }}
-        className="relative z-10 max-w-5xl w-full grid md:grid-cols-2 gap-12 bg-white rounded-2xl p-8 md:p-12 shadow-2xl border border-gray-200"
+      {/* Subtle Mesh Grid Overlay */}
+      <div
+        className="pointer-events-none absolute inset-0 z-0 opacity-[0.025]"
+        style={{
+          backgroundImage: `linear-gradient(#0d9488 1px, transparent 1px), linear-gradient(90deg, #0d9488 1px, transparent 1px)`,
+          backgroundSize: '28px 28px'
+        }}
+      />
+
+      {/* Main Professional Card */}
+      <motion.main
+        initial={{ opacity: 0, y: 20, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        className="relative z-10 max-w-md w-full bg-white/90 backdrop-blur-2xl rounded-3xl p-7 sm:p-9 shadow-2xl shadow-slate-900/10 border border-slate-200/80 text-center overflow-hidden flex flex-col items-center"
       >
-        {/* Left Section */}
-        <div className="flex flex-col justify-center space-y-8">
-          <div className="flex items-center">
-            {/* Static Logo */}
-            <div className="h-16 w-16 mr-4">
-              <ShatteredLogo
-                src="/logo.png"
-                alt="CipherGate Logo"
-                className="h-16 w-16"
-              />
-            </div>
-            <h1
-              className={`text-4xl md:text-5xl font-bold ${showColorAnimation ? 'ciphergate-animated' : ''}`}
-              style={{ fontFamily: 'Times New Roman, serif' }}
-            >
-              {cipherGateText}
+        {/* Top Accent Gradient Border Line */}
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#0d9488]/20 via-[#0d9488] to-[#0d9488]/20" />
+
+        {/* Company Pill Badge */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, duration: 0.4 }}
+          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0d9488]/10 border border-[#0d9488]/20 text-[#0d9488] text-xs font-semibold tracking-wide mb-6 shadow-xs"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-[#0d9488]" />
+          <span>Tech Vaseegrah</span>
+          <span className="text-slate-300">•</span>
+          <span className="text-slate-600 font-medium">Workforce OS</span>
+        </motion.div>
+
+        {/* Brand Icon & Name */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.2, duration: 0.4 }}
+          className="flex flex-col items-center gap-3 mb-6"
+        >
+          <div className="relative h-16 w-16 sm:h-20 sm:w-20 flex items-center justify-center rounded-2xl bg-gradient-to-br from-[#0d9488]/15 via-[#0d9488]/5 to-slate-50 border border-[#0d9488]/25 p-3 shadow-inner">
+            <ShatteredLogo
+              src="/logo.png"
+              alt="CipherGate Logo"
+              className="h-12 w-12 sm:h-14 sm:w-14"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight font-display">
+              CipherGate
             </h1>
+            <span className="p-1 rounded-md bg-[#0d9488]/10 text-[#0d9488]">
+              <Cpu className="w-4 h-4" strokeWidth={2} />
+            </span>
           </div>
+        </motion.div>
 
-          <p className="text-lg md:text-xl text-black">
-            Presence is not Performance.We track Both.
-            Boost Productivity Through Intelligent Workforce Management
+        {/* Welcome Message */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.4 }}
+          className="space-y-2 mb-8 max-w-sm"
+        >
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            Welcome to CipherGate
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-500 font-normal leading-relaxed">
+            Intelligent workforce & attendance management portal built for Tech Vaseegrah teams.
           </p>
+        </motion.div>
 
-          <div className="flex flex-col sm:flex-row gap-4">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => navigate('/admin/login')}
-              className="px-6 py-3 bg-[#0d9488] text-white rounded-full hover:bg-[#0f766e] border-2 border-[#0d9488] transition-colors"
-            >
-              Admin Portal
-            </motion.button>
-
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => navigate('/worker/login')}
-              className="px-6 py-3 border-2 border-[#0d9488] text-[#0d9488] rounded-full hover:bg-[#0d9488] hover:text-white transition-colors"
-            >
-              Developer Login
-            </motion.button>
-          </div>
-        </div>
-
-        {/* Right Section */}
-        <div className="flex flex-col space-y-6">
-          <div className="grid grid-cols-3 gap-4">
-            {features.map((feature, index) => (
-              <motion.div
-                key={feature.title}
-                onClick={() => setActiveFeature(index)}
-                className={`flex flex-col items-center p-4 rounded-xl cursor-pointer transition-all ${activeFeature === index ? 'bg-[#0d9488]/20 border border-[#0d9488]' : 'bg-gray-100 hover:bg-gray-200' }`}
-              >
-                <div className={`mb-2 ${activeFeature === index ? 'text-[#0d9488]' : 'text-black'}`}>
-                  {feature.icon}
-                </div>
-                <h3 className="text-sm font-semibold text-center text-black">{feature.title}</h3>
-              </motion.div>
-            ))}
-          </div>
-
-          <motion.div
-            key={activeFeature}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-gray-100 p-6 rounded-xl"
+        {/* Action Buttons (CTAs) */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4, duration: 0.4 }}
+          className="w-full space-y-3"
+        >
+          {/* Admin Portal Button */}
+          <button
+            type="button"
+            onClick={() => navigate('/admin/login')}
+            className="w-full py-3.5 px-6 bg-[#0d9488] hover:bg-[#0f766e] text-white font-semibold text-sm rounded-xl shadow-lg shadow-[#0d9488]/25 hover:shadow-xl hover:shadow-[#0d9488]/35 transition-all duration-200 flex items-center justify-center gap-2 group active:scale-[0.98] cursor-pointer"
+            aria-label="Access Admin Portal"
           >
-            <h2 className="text-xl md:text-2xl font-bold mb-4 text-[#0d9488]">
-              {features[activeFeature].title}
-            </h2>
-            <p className="text-black">{typingText}</p>
-          </motion.div>
+            <ShieldCheck className="w-4 h-4 text-white/90 group-hover:scale-110 transition-transform" strokeWidth={2} />
+            <span>Admin Portal</span>
+            <ArrowRight className="w-4 h-4 text-white/70 group-hover:translate-x-1 transition-transform ml-auto" strokeWidth={2} />
+          </button>
+
+          {/* Developer Login Button */}
+          <button
+            type="button"
+            onClick={() => navigate('/worker/login')}
+            className="w-full py-3.5 px-6 bg-white hover:bg-teal-50/50 border-2 border-[#0d9488] text-[#0d9488] hover:bg-[#0d9488] hover:text-white font-semibold text-sm rounded-xl shadow-xs transition-all duration-200 flex items-center justify-center gap-2 group active:scale-[0.98] cursor-pointer"
+            aria-label="Developer Login"
+          >
+            <Terminal className="w-4 h-4 text-[#0d9488] group-hover:text-white transition-colors" strokeWidth={2} />
+            <span>Developer Login</span>
+            <ArrowRight className="w-4 h-4 text-[#0d9488] group-hover:translate-x-1 group-hover:text-white transition-all ml-auto" strokeWidth={2} />
+          </button>
+        </motion.div>
+
+        {/* Security & System Info Footer */}
+        <div className="mt-8 pt-5 border-t border-slate-100 w-full flex items-center justify-between text-[11px] text-slate-400">
+          <div className="flex items-center gap-1.5">
+            <Lock className="w-3 h-3 text-[#0d9488]" />
+            <span>Tech Vaseegrah Systems</span>
+          </div>
+          <span>&copy; {new Date().getFullYear()}</span>
         </div>
-      </motion.div>
+
+      </motion.main>
     </div>
   );
 };

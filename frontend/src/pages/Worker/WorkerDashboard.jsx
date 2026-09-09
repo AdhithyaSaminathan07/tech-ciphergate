@@ -22,10 +22,12 @@ const Profile = lazy(() => import('../../components/worker/Profile'));
 const EmployeeRulesView = lazy(() => import('../../components/worker/EmployeeRulesView'));
 const WorkerPerformancePage = lazy(() => import('../../components/worker/WorkerPerformancePage'));
 
-// Simple loader for worker dashboard
+import Spinner from '../../components/common/Spinner';
+
+// Simple loader for worker dashboard using logo spinner
 const WorkerPageLoader = () => (
   <div className="flex justify-center items-center h-64">
-    <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin"></div>
+    <Spinner size="lg" />
   </div>
 );
 
