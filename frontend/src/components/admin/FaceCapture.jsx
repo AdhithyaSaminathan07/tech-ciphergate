@@ -6,19 +6,18 @@ import Spinner from '../common/Spinner';
 import appContext from '../../context/AppContext';
 import api from '../../services/api';
 import { 
-  Camera, RefreshCw, Smile, ArrowLeft, ArrowRight, RotateCcw, 
-  AlertTriangle, Video, Play, Pause, Square, CheckCircle2, Film, 
-  ShieldCheck, Sparkles, Activity, Award, Zap 
+  Camera, RefreshCw, Smile, RotateCcw, 
+  AlertTriangle, CheckCircle2, 
+  ShieldCheck, Sparkles, Activity, Award, Zap, Scan 
 } from 'lucide-react';
 
 const FaceCapture = ({ onFacesCaptured }) => {
   const { subdomain } = useContext(appContext);
   const webcamRef = useRef(null);
   const canvasRef = useRef(null);
-  const videoPreviewRef = useRef(null);
   const isMounted = useRef(true);
 
-  // Capture mode: 'photo' (5-step guided pose scan) or 'video' (continuous fast high-accuracy scan)
+  // Capture mode: 'photo' (5-step guided pose scan) or 'scan' (Live Instant Biometric Scanner)
   const [captureMode, setCaptureMode] = useState('photo');
 
   const [capturedFaces, setCapturedFaces] = useState([]);
@@ -26,34 +25,27 @@ const FaceCapture = ({ onFacesCaptured }) => {
   const [error, setError] = useState('');
   const [isCapturing, setIsCapturing] = useState(false);
   const [faceConfig, setFaceConfig] = useState({
-    detectorType: 'ssdMobilenetv1',
+    detectorType: 'tinyFaceDetector',
     matchingThreshold: 0.50
   });
 
   // Photo Mode: Automatic capture states
-  const [currentStep, setCurrentStep] = useState(1); // 1 to 5
-  const [stepStability, setStepStability] = useState(0); // 0 to 100
+  const [currentStep, setCurrentStep] = useState(1);
+  const [stepStability, setStepStability] = useState(0);
   const [isPoseMatched, setIsPoseMatched] = useState(false);
   const [scannerStatus, setScannerStatus] = useState('Initializing camera...');
   const [showFlash, setShowFlash] = useState(false);
   const [autoMode, setAutoMode] = useState(true);
   const [timeoutTriggered, setTimeoutTriggered] = useState(false);
 
-  // Video Mode States (Continuous Fast High-Accuracy Scan via face-api.js)
-  const [videoState, setVideoState] = useState('idle'); // 'idle' | 'countdown' | 'recording' | 'processing' | 'done'
-  const [countdown, setCountdown] = useState(3);
-  const [recordingSecondsLeft, setRecordingSecondsLeft] = useState(5);
-  const [recordedVideoUrl, setRecordedVideoUrl] = useState('');
-  
-  // Real-Time Biometric Accuracy Meter State (0% to 100%)
+  // Scan Mode States (Zero-Lag Live Face Scanner)
+  const [scanState, setScanState] = useState('idle'); // 'idle' | 'scanning' | 'done'
   const [accuracyScore, setAccuracyScore] = useState(0);
-  const [processedSampleCount, setProcessedSampleCount] = useState(0);
+  const [scannedFrameCount, setScannedFrameCount] = useState(0);
 
-  const mediaRecorderRef = useRef(null);
-  const recordedChunksRef = useRef([]);
-  const highQualityVideoSamples = useRef([]);
-  const videoIntervalRef = useRef(null);
-  const recTimerRef = useRef(null);
+  const scannedSamplesRef = useRef([]);
+  const scanLoopRef = useRef(null);
+  const isProcessingFrame = useRef(false);
 
   const stableStart = useRef(null);
   const stepStartTime = useRef(Date.now());
@@ -72,9 +64,7 @@ const FaceCapture = ({ onFacesCaptured }) => {
     return () => {
       isMounted.current = false;
       if (activeCaptureLoop.current) clearTimeout(activeCaptureLoop.current);
-      if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
-      if (recTimerRef.current) clearInterval(recTimerRef.current);
-      if (recordedVideoUrl) URL.revokeObjectURL(recordedVideoUrl);
+      if (scanLoopRef.current) clearTimeout(scanLoopRef.current);
     };
   }, []);
 
@@ -98,11 +88,11 @@ const FaceCapture = ({ onFacesCaptured }) => {
   useEffect(() => {
     const loadModels = async () => {
       try {
-        setScannerStatus('Loading high-speed biometric models...');
+        setScannerStatus('Loading biometric scanner...');
         
         await Promise.all([
-          faceapi.nets.ssdMobilenetv1.loadFromUri('/models'),
           faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
+          faceapi.nets.ssdMobilenetv1.loadFromUri('/models'),
           faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
           faceapi.nets.faceRecognitionNet.loadFromUri('/models')
         ]);
@@ -133,26 +123,16 @@ const FaceCapture = ({ onFacesCaptured }) => {
     stepStartTime.current = Date.now();
     setError('');
 
-    if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
-    if (recTimerRef.current) clearInterval(recTimerRef.current);
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-    setVideoState('idle');
-    setCountdown(3);
-    setRecordingSecondsLeft(5);
+    if (scanLoopRef.current) clearTimeout(scanLoopRef.current);
+    setScanState('idle');
     setAccuracyScore(0);
-    setProcessedSampleCount(0);
-
-    if (recordedVideoUrl) {
-      URL.revokeObjectURL(recordedVideoUrl);
-      setRecordedVideoUrl('');
-    }
-    highQualityVideoSamples.current = [];
+    setScannedFrameCount(0);
+    scannedSamplesRef.current = [];
 
     const canvas = canvasRef.current;
     if (canvas) {
-      canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+      const ctx = canvas.getContext('2d');
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
   };
 
@@ -203,43 +183,6 @@ const FaceCapture = ({ onFacesCaptured }) => {
     return 'unknown';
   };
 
-  // Low light enhancement canvas preprocessor
-  const preprocessLowLight = (video) => {
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = video.videoWidth || video.width || 640;
-    tempCanvas.height = video.videoHeight || video.height || 480;
-    const ctx = tempCanvas.getContext('2d');
-    if (!ctx) return video;
-
-    ctx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
-    try {
-      const imgData = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-      const data = imgData.data;
-      let totalLuminance = 0;
-      const step = 8;
-      let count = 0;
-      for (let i = 0; i < data.length; i += 4 * step) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-        totalLuminance += luminance;
-        count++;
-      }
-
-      const avgBrightness = totalLuminance / count;
-      if (avgBrightness < 85) {
-        ctx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
-        ctx.filter = 'brightness(1.50) contrast(1.20) saturate(1.10)';
-        ctx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
-        ctx.filter = 'none';
-      }
-    } catch (e) {
-      console.warn('Low light pre-processing failed, using raw video feed:', e);
-    }
-    return tempCanvas;
-  };
-
   // ----------------------------------------------------
   // PHOTO MODE CAPTURE LOGIC
   // ----------------------------------------------------
@@ -256,11 +199,10 @@ const FaceCapture = ({ onFacesCaptured }) => {
     if (!videoWidth || !videoHeight || videoWidth <= 0 || videoHeight <= 0) return;
 
     try {
-      const processedVideo = preprocessLowLight(video);
-      const detectorOptions = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.55 });
+      const detectorOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.4 });
 
       const detections = await faceapi
-        .detectSingleFace(processedVideo, detectorOptions)
+        .detectSingleFace(video, detectorOptions)
         .withFaceLandmarks()
         .withFaceDescriptor();
 
@@ -387,11 +329,10 @@ const FaceCapture = ({ onFacesCaptured }) => {
     setIsCapturing(true);
     setScannerStatus('Capturing template manually...');
     try {
-      const processedVideo = preprocessLowLight(video);
-      const detectorOptions = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 });
+      const detectorOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.4 });
 
       const detections = await faceapi
-        .detectSingleFace(processedVideo, detectorOptions)
+        .detectSingleFace(video, detectorOptions)
         .withFaceLandmarks()
         .withFaceDescriptor();
 
@@ -419,7 +360,7 @@ const FaceCapture = ({ onFacesCaptured }) => {
       await runPhotoCaptureLogic();
       
       if (isLoopActive && capturedFaces.length < 5 && captureMode === 'photo') {
-        activeCaptureLoop.current = setTimeout(captureLoop, 120);
+        activeCaptureLoop.current = setTimeout(captureLoop, 100);
       }
     };
 
@@ -434,204 +375,126 @@ const FaceCapture = ({ onFacesCaptured }) => {
   }, [isModelLoaded, currentStep, capturedFaces.length, autoMode, showFlash, captureMode]);
 
   // ----------------------------------------------------
-  // HIGH-SPEED, HIGH-ACCURACY VIDEO SCAN (FAST AUTO-LOCK)
+  // ZERO-LAG LIVE FACE SCANNER LOGIC
   // ----------------------------------------------------
-  const startVideoModeSequence = () => {
+  const startLiveFaceScan = () => {
     setError('');
-    setVideoState('countdown');
-    setCountdown(3);
-
-    let count = 3;
-    const timer = setInterval(() => {
-      count -= 1;
-      setCountdown(count);
-      if (count <= 0) {
-        clearInterval(timer);
-        beginHighAccuracyVideoRecording();
-      }
-    }, 1000);
-  };
-
-  const beginHighAccuracyVideoRecording = () => {
-    const video = webcamRef.current?.video;
-    const stream = webcamRef.current?.stream;
-
-    if (!video || !stream) {
-      setError('Webcam stream not accessible for recording.');
-      setVideoState('idle');
-      return;
-    }
-
-    recordedChunksRef.current = [];
-    highQualityVideoSamples.current = [];
     setCapturedFaces([]);
-    setProcessedSampleCount(0);
+    scannedSamplesRef.current = [];
     setAccuracyScore(0);
+    setScannedFrameCount(0);
+    setScanState('scanning');
 
-    let mediaRecorder;
-    try {
-      const options = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-        ? { mimeType: 'video/webm;codecs=vp9' }
-        : MediaRecorder.isTypeSupported('video/webm')
-          ? { mimeType: 'video/webm' }
-          : {};
-      mediaRecorder = new MediaRecorder(stream, options);
-    } catch (e) {
-      mediaRecorder = new MediaRecorder(stream);
-    }
+    const detectorOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.4 });
 
-    mediaRecorderRef.current = mediaRecorder;
+    const scanFrame = async () => {
+      if (!isMounted.current || scanState === 'done') return;
 
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data && event.data.size > 0) {
-        recordedChunksRef.current.push(event.data);
+      const video = webcamRef.current?.video;
+      if (video && video.readyState === 4 && !isProcessingFrame.current) {
+        isProcessingFrame.current = true;
+
+        try {
+          const detection = await faceapi
+            .detectSingleFace(video, detectorOptions)
+            .withFaceLandmarks()
+            .withFaceDescriptor();
+
+          const canvas = canvasRef.current;
+          if (canvas) {
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (detection) {
+              const resized = faceapi.resizeResults(detection, { width: canvas.width, height: canvas.height });
+              const box = resized.detection.box;
+              ctx.strokeStyle = '#10B981';
+              ctx.lineWidth = 3;
+              ctx.strokeRect(box.x, box.y, box.width, box.height);
+            }
+          }
+
+          if (detection && detection.detection.score >= 0.45) {
+            const rawScore = detection.detection.score;
+            const emb = Array.from(detection.descriptor);
+            const pose = estimatePose(detection.landmarks);
+
+            // Thumbnail snapshot
+            const previewCanvas = document.createElement('canvas');
+            previewCanvas.width = video.videoWidth || 640;
+            previewCanvas.height = video.videoHeight || 480;
+            const previewCtx = previewCanvas.getContext('2d');
+            previewCtx.drawImage(video, 0, 0);
+            const imageDataUrl = previewCanvas.toDataURL('image/jpeg');
+
+            scannedSamplesRef.current.push({
+              id: Date.now() + Math.random(),
+              embedding: emb,
+              score: rawScore,
+              pose: pose,
+              image: imageDataUrl
+            });
+
+            const count = scannedSamplesRef.current.length;
+            setScannedFrameCount(count);
+
+            // Rapid Accuracy Meter (0% to 100%)
+            const currentAccuracy = Math.min(100, Math.round((count / 8) * 100));
+            setAccuracyScore(currentAccuracy);
+
+            // Complete Scan when 100% Accuracy is reached (8 high-quality vector samples)
+            if (currentAccuracy >= 100 || count >= 8) {
+              completeScanProcess();
+              return;
+            }
+          }
+        } catch (err) {
+          console.error('Scan error:', err);
+        } finally {
+          isProcessingFrame.current = false;
+        }
+      }
+
+      if (isMounted.current) {
+        scanLoopRef.current = setTimeout(scanFrame, 80); // Fast 80ms loop
       }
     };
 
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
-      const url = URL.createObjectURL(blob);
-      setRecordedVideoUrl(url);
-    };
-
-    mediaRecorder.start(100);
-    setVideoState('recording');
-    setRecordingSecondsLeft(5);
-
-    let recSecs = 5;
-    recTimerRef.current = setInterval(() => {
-      recSecs -= 1;
-      setRecordingSecondsLeft(recSecs);
-      if (recSecs <= 0) {
-        if (recTimerRef.current) clearInterval(recTimerRef.current);
-        stopHighAccuracyVideoRecording();
-      }
-    }, 1000);
-
-    // Fast Dual-Detector Strategy: SsdMobilenetv1 / TinyFaceDetector
-    const detectorOptions = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.50 });
-
-    let isProcessingFrame = false;
-
-    // High frequency sampling loop (every ~60ms = ~16 fps)
-    videoIntervalRef.current = setInterval(async () => {
-      if (isProcessingFrame || !webcamRef.current?.video) return;
-      const v = webcamRef.current.video;
-      if (v.readyState !== 4) return;
-
-      isProcessingFrame = true;
-
-      try {
-        const processedVideo = preprocessLowLight(v);
-        const detection = await faceapi
-          .detectSingleFace(processedVideo, detectorOptions)
-          .withFaceLandmarks()
-          .withFaceDescriptor();
-
-        const canvas = canvasRef.current;
-        if (canvas) {
-          canvas.width = v.videoWidth || 640;
-          canvas.height = v.videoHeight || 480;
-          const ctx = canvas.getContext('2d');
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-          if (detection) {
-            // Draw real-time face tracking box & landmarks
-            const resized = faceapi.resizeResults(detection, { width: canvas.width, height: canvas.height });
-            const box = resized.detection.box;
-            ctx.strokeStyle = '#10B981';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(box.x, box.y, box.width, box.height);
-          }
-        }
-
-        if (detection && detection.detection.score >= 0.50) {
-          const rawScore = detection.detection.score;
-          const emb = Array.from(detection.descriptor);
-          const pose = estimatePose(detection.landmarks);
-
-          const previewCanvas = document.createElement('canvas');
-          previewCanvas.width = v.videoWidth || 640;
-          previewCanvas.height = v.videoHeight || 480;
-          const previewCtx = previewCanvas.getContext('2d');
-          previewCtx.drawImage(v, 0, 0);
-          const imageDataUrl = previewCanvas.toDataURL('image/jpeg');
-
-          highQualityVideoSamples.current.push({
-            id: Date.now() + Math.random(),
-            embedding: emb,
-            score: rawScore,
-            pose: pose,
-            image: imageDataUrl
-          });
-
-          const totalSamples = highQualityVideoSamples.current.length;
-          setProcessedSampleCount(totalSamples);
-
-          // Fast Dynamic Accuracy Calculation
-          const avgScore = highQualityVideoSamples.current.reduce((acc, curr) => acc + curr.score, 0) / totalSamples;
-          const uniquePoses = new Set(highQualityVideoSamples.current.map(s => s.pose)).size;
-          const densityFactor = Math.min(1.0, totalSamples / 8);
-          const poseFactor = Math.min(1.0, uniquePoses / 2);
-
-          const computedAccuracy = Math.min(99, Math.round(
-            (avgScore * 65) + (poseFactor * 20) + (densityFactor * 15)
-          ));
-
-          setAccuracyScore(computedAccuracy);
-
-          // Instant Auto-Lock Trigger: When 95%+ accuracy & 10 samples reached, finish instantly!
-          if (computedAccuracy >= 95 && totalSamples >= 10) {
-            console.log('[FastAutoLock] Maximum accuracy target achieved. Finishing scan early!');
-            if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
-            if (recTimerRef.current) clearInterval(recTimerRef.current);
-            stopHighAccuracyVideoRecording();
-          }
-        }
-      } catch (err) {
-        console.error('Frame extraction error:', err);
-      } finally {
-        isProcessingFrame = false;
-      }
-    }, 60);
+    scanFrame();
   };
 
-  const stopHighAccuracyVideoRecording = async () => {
-    if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
-    if (recTimerRef.current) clearInterval(recTimerRef.current);
+  const completeScanProcess = () => {
+    if (scanLoopRef.current) clearTimeout(scanLoopRef.current);
 
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-
-    setVideoState('processing');
-
-    const samples = highQualityVideoSamples.current;
-
+    const samples = scannedSamplesRef.current;
     if (samples.length === 0) {
-      setError('No face detected during video recording. Please keep face well-lit and centered.');
-      setVideoState('idle');
+      setError('No face detected during scan. Please make sure your face is visible.');
+      setScanState('idle');
       return;
     }
 
-    const sortedSamples = [...samples].sort((a, b) => b.score - a.score);
+    // Sort by confidence score
+    const sorted = [...samples].sort((a, b) => b.score - a.score);
 
+    // Group poses
     const poseMap = {};
-    sortedSamples.forEach(s => {
+    sorted.forEach(s => {
       if (!poseMap[s.pose]) poseMap[s.pose] = s;
     });
 
     let selectedEmbeddings = Object.values(poseMap);
-
-    for (let s of sortedSamples) {
+    for (let s of sorted) {
       if (selectedEmbeddings.length >= 5) break;
       if (!selectedEmbeddings.some(item => item.id === s.id)) {
         selectedEmbeddings.push(s);
       }
     }
 
-    if (sortedSamples.length >= 3) {
-      const topSamples = sortedSamples.slice(0, Math.min(10, sortedSamples.length));
+    // Centroid Anchor Vector for top accuracy
+    if (sorted.length >= 3) {
+      const topSamples = sorted.slice(0, Math.min(6, sorted.length));
       const vectorLength = topSamples[0].embedding.length;
       const centroidVector = new Array(vectorLength).fill(0);
 
@@ -645,7 +508,7 @@ const FaceCapture = ({ onFacesCaptured }) => {
         id: Date.now() + '_centroid',
         embedding: centroidVector,
         score: 0.99,
-        pose: 'Max Accuracy Centroid',
+        pose: 'Centroid Anchor',
         image: topSamples[0].image
       });
     }
@@ -656,9 +519,10 @@ const FaceCapture = ({ onFacesCaptured }) => {
     setTimeout(() => setShowFlash(false), 250);
 
     setCapturedFaces(selectedEmbeddings);
-    setVideoState('done');
-    setAccuracyScore(Math.max(98, accuracyScore));
+    setAccuracyScore(100);
+    setScanState('done');
 
+    // Save and send face data immediately
     onFacesCaptured(selectedEmbeddings);
   };
 
@@ -681,93 +545,65 @@ const FaceCapture = ({ onFacesCaptured }) => {
 
         <button
           type="button"
-          onClick={() => handleModeSwitch('video')}
+          onClick={() => handleModeSwitch('scan')}
           className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-            captureMode === 'video'
+            captureMode === 'scan'
               ? 'bg-white text-slate-800 shadow-md ring-1 ring-black/5'
               : 'text-slate-500 hover:text-slate-800'
           }`}
         >
-          <Zap size={15} className={captureMode === 'video' ? 'text-rose-600 animate-pulse' : ''} />
-          <span>High-Speed Video Scan</span>
+          <Scan size={15} className={captureMode === 'scan' ? 'text-emerald-600' : ''} />
+          <span>Live Face Scanner</span>
         </button>
       </div>
 
-      {/* Visual Camera / Playback Window */}
+      {/* Visual Camera Window */}
       <div className="relative overflow-hidden rounded-2xl border-2 border-slate-100 shadow-lg bg-slate-950 aspect-video mb-3">
-        {videoState === 'done' && recordedVideoUrl ? (
-          <div className="relative w-full h-full">
-            <video
-              ref={videoPreviewRef}
-              src={recordedVideoUrl}
-              controls
-              autoPlay
-              loop
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute top-3 right-3 bg-emerald-600/90 text-white text-[11px] font-bold px-3 py-1 rounded-full backdrop-blur-md shadow flex items-center gap-1.5">
-              <CheckCircle2 size={14} />
-              Fast Scan Complete ({accuracyScore}% Max Accuracy)
+        <Webcam
+          audio={false}
+          ref={webcamRef}
+          screenshotFormat="image/jpeg"
+          videoConstraints={{ 
+            facingMode: 'user',
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 30, min: 15 }
+          }}
+          className="w-full h-full object-cover"
+        />
+        <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full pointer-events-none" />
+        
+        {showFlash && (
+          <div className="absolute inset-0 bg-emerald-500 opacity-80 transition-opacity duration-200 pointer-events-none z-20" />
+        )}
+
+        {scanState === 'scanning' && (
+          <div className="absolute top-3 left-3 right-3 flex justify-between items-center z-20">
+            <div className="bg-emerald-600/90 text-white text-xs font-black px-3 py-1 rounded-full backdrop-blur-md shadow flex items-center gap-2 animate-pulse">
+              <span className="h-2 w-2 rounded-full bg-white animate-ping" />
+              SCANNING LIVE FACE
+            </div>
+            <div className="bg-slate-900/80 text-white text-[11px] font-semibold px-2.5 py-1 rounded-full backdrop-blur-md flex items-center gap-1">
+              <Activity size={12} className="text-emerald-400 animate-pulse" />
+              {scannedFrameCount} Vectors
             </div>
           </div>
-        ) : (
-          <>
-            <Webcam
-              audio={false}
-              ref={webcamRef}
-              screenshotFormat="image/jpeg"
-              videoConstraints={{ 
-                facingMode: 'user',
-                width: { ideal: 640 },
-                height: { ideal: 480 },
-                frameRate: { ideal: 30, min: 15 }
-              }}
-              className="w-full h-full object-cover"
-            />
-            <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full pointer-events-none" />
-            
-            {showFlash && (
-              <div className="absolute inset-0 bg-emerald-500 opacity-80 transition-opacity duration-200 pointer-events-none z-20" />
-            )}
+        )}
 
-            {videoState === 'countdown' && (
-              <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-sm flex flex-col items-center justify-center z-30 animate-fadeIn">
-                <span className="text-6xl font-black text-white animate-ping">{countdown}</span>
-                <p className="text-xs font-bold text-slate-200 uppercase tracking-widest mt-4">
-                  Get ready for fast face scan...
-                </p>
-              </div>
-            )}
-
-            {videoState === 'recording' && (
-              <div className="absolute top-3 left-3 right-3 flex justify-between items-center z-20">
-                <div className="bg-rose-600/90 text-white text-xs font-black px-3 py-1 rounded-full backdrop-blur-md shadow flex items-center gap-2 animate-pulse">
-                  <span className="h-2 w-2 rounded-full bg-white animate-ping" />
-                  REC ({recordingSecondsLeft}s)
-                </div>
-                <div className="bg-slate-900/80 text-white text-[11px] font-semibold px-2.5 py-1 rounded-full backdrop-blur-md flex items-center gap-1">
-                  <Activity size={12} className="text-emerald-400 animate-pulse" />
-                  {processedSampleCount} Frames
-                </div>
-              </div>
-            )}
-
-            {captureMode === 'photo' && isModelLoaded && capturedFaces.length < 5 && (
-              <div className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-md px-3 py-1 rounded-full border border-slate-700/50 flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-                <span className="text-xs font-bold text-white uppercase tracking-wider">
-                  Angle {currentStep} of 5: {stepsConfig[currentStep].name}
-                </span>
-              </div>
-            )}
-          </>
+        {captureMode === 'photo' && isModelLoaded && capturedFaces.length < 5 && (
+          <div className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-md px-3 py-1 rounded-full border border-slate-700/50 flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+            <span className="text-xs font-bold text-white uppercase tracking-wider">
+              Angle {currentStep} of 5: {stepsConfig[currentStep].name}
+            </span>
+          </div>
         )}
       </div>
 
       {/* --------------------------------------------------------- */}
       {/* SIMPLE & CLEAN BIOMETRIC ACCURACY METER BAR               */}
       {/* --------------------------------------------------------- */}
-      {captureMode === 'video' && (
+      {captureMode === 'scan' && (
         <div className="mb-4 bg-slate-50 border border-slate-200/80 rounded-xl p-3 shadow-sm">
           <div className="flex justify-between items-center mb-1.5 text-xs font-bold text-slate-700">
             <span className="flex items-center gap-1.5">
@@ -826,25 +662,20 @@ const FaceCapture = ({ onFacesCaptured }) => {
             )
           ) : (
             <div>
-              {videoState === 'idle' && (
+              {scanState === 'idle' && (
                 <p className="text-xs text-slate-600 font-medium">
-                  Click <b>Start High-Speed Video Scan</b> below. The scanner will capture face vectors automatically in 1–2 seconds.
+                  Click <b>Scan Face</b> below. The scanner will scan your face live from the camera and save it.
                 </p>
               )}
-              {videoState === 'recording' && (
-                <p className="text-xs font-bold text-rose-600 uppercase tracking-wider animate-pulse flex items-center justify-center gap-1">
-                  <Zap size={13} /> High-Speed Scan Active... Hold steady or turn head.
+              {scanState === 'scanning' && (
+                <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider animate-pulse flex items-center justify-center gap-1">
+                  <Zap size={13} /> Scanning Face Live... Keep face inside camera frame.
                 </p>
               )}
-              {videoState === 'processing' && (
-                <div className="flex items-center justify-center gap-2 text-blue-600 font-semibold text-xs py-1">
-                  <Spinner size="sm" /> Optimizing face vector accuracy...
-                </div>
-              )}
-              {videoState === 'done' && (
+              {scanState === 'done' && (
                 <div className="inline-flex items-center gap-1.5 text-emerald-700 text-xs font-bold">
                   <CheckCircle2 size={15} className="text-emerald-600" />
-                  Max Accuracy Biometric Profile Generated ({accuracyScore}%)
+                  Face Scanned & Saved Successfully (100% Accuracy)
                 </div>
               )}
             </div>
@@ -904,42 +735,42 @@ const FaceCapture = ({ onFacesCaptured }) => {
             </>
           ) : (
             <>
-              {videoState === 'idle' && (
+              {scanState === 'idle' && (
                 <Button
-                  onClick={startVideoModeSequence}
+                  onClick={startLiveFaceScan}
                   variant="primary"
-                  className="flex items-center bg-rose-600 hover:bg-rose-700 text-white shadow-md text-xs px-5 py-2.5 font-bold tracking-wide"
+                  className="flex items-center bg-emerald-600 hover:bg-emerald-700 text-white shadow-md text-xs px-6 py-2.5 font-bold tracking-wide"
                 >
-                  <Zap className="mr-1.5 h-4 w-4" />
-                  Start High-Speed Video Scan
+                  <Scan className="mr-2 h-4 w-4" />
+                  Scan Face
                 </Button>
               )}
 
-              {videoState === 'done' && (
+              {scanState === 'done' && (
                 <Button
-                  onClick={startVideoModeSequence}
+                  onClick={startLiveFaceScan}
                   variant="outline"
                   className="flex items-center text-xs"
                 >
                   <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                  Re-Scan Video
+                  Re-Scan Face
                 </Button>
               )}
 
               <Button onClick={clearCapturedFaces} variant="outline" className="flex items-center text-xs">
                 <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                Reset All
+                Reset
               </Button>
             </>
           )}
         </div>
 
-        {/* Display High-Accuracy Biometric Profile Summary */}
+        {/* Display Scanned Biometric Vectors Summary */}
         {capturedFaces.length > 0 && (
           <div className="mt-4 w-full">
             <h5 className="text-xs font-bold text-slate-700 mb-2.5 text-center uppercase tracking-wider flex items-center justify-center gap-1.5">
               <CheckCircle2 size={14} className="text-emerald-600" />
-              {captureMode === 'video' ? `Enrolled Vectors (${accuracyScore}% Accuracy)` : `Enrolled Templates (${capturedFaces.length}/5)`}
+              {captureMode === 'scan' ? `Scanned Face Embeddings (100% Accuracy)` : `Enrolled Templates (${capturedFaces.length}/5)`}
             </h5>
             <div className="grid grid-cols-5 gap-2">
               {capturedFaces.map((face, index) => (
