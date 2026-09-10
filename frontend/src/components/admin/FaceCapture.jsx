@@ -527,38 +527,38 @@ const FaceCapture = ({ onFacesCaptured }) => {
   };
 
   return (
-    <div className="face-capture-container max-w-lg mx-auto py-2">
+    <div className="face-capture-container w-full max-w-xl mx-auto px-0 sm:px-2 py-1">
       {/* Mode Selection Switcher */}
-      <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-4 shadow-inner border border-slate-200/80">
+      <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-3 sm:mb-4 shadow-inner border border-slate-200/80">
         <button
           type="button"
           onClick={() => handleModeSwitch('photo')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+          className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 ${
             captureMode === 'photo'
               ? 'bg-white text-slate-800 shadow-md ring-1 ring-black/5'
               : 'text-slate-500 hover:text-slate-800'
           }`}
         >
-          <Camera size={15} className={captureMode === 'photo' ? 'text-blue-600' : ''} />
+          <Camera size={16} className={captureMode === 'photo' ? 'text-blue-600' : ''} />
           <span>Multi-Angle Photo Scan</span>
         </button>
 
         <button
           type="button"
           onClick={() => handleModeSwitch('scan')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+          className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 ${
             captureMode === 'scan'
               ? 'bg-white text-slate-800 shadow-md ring-1 ring-black/5'
               : 'text-slate-500 hover:text-slate-800'
           }`}
         >
-          <Scan size={15} className={captureMode === 'scan' ? 'text-emerald-600' : ''} />
+          <Scan size={16} className={captureMode === 'scan' ? 'text-emerald-600' : ''} />
           <span>Live Face Scanner</span>
         </button>
       </div>
 
-      {/* Visual Camera Window */}
-      <div className="relative overflow-hidden rounded-2xl border-2 border-slate-100 shadow-lg bg-slate-950 aspect-video mb-3">
+      {/* Visual Camera Window - Responsive aspect ratio for mobile (4:3 on phone, 16:9 on desktop) */}
+      <div className="relative overflow-hidden rounded-2xl border-2 border-slate-100 shadow-lg bg-slate-950 aspect-[4/3] sm:aspect-video mb-3">
         <Webcam
           audio={false}
           ref={webcamRef}
@@ -566,7 +566,7 @@ const FaceCapture = ({ onFacesCaptured }) => {
           videoConstraints={{ 
             facingMode: 'user',
             width: { ideal: 640 },
-            height: { ideal: 480 },
+            height: { ideal: 640 },
             frameRate: { ideal: 30, min: 15 }
           }}
           className="w-full h-full object-cover"
