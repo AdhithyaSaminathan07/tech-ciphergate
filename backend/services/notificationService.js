@@ -17,7 +17,10 @@ const Worker = require('../models/Worker');
  */
 const sendWhatsAppTemplateMessage = async (subdomain, templateName, recipientNumber, headerParams, bodyParams, buttonParams) => {
   try {
-    const config = await GowhatsConfig.findOne({ subdomain });
+    let config = await GowhatsConfig.findOne({ subdomain: new RegExp(`^${subdomain}$`, 'i') });
+    if (!config) {
+      config = await GowhatsConfig.findOne({});
+    }
 
     if (!config || !config.apiKey || !config.phoneNumberId) {
       console.error(`[WhatsApp Error] GoWhats configuration not found or incomplete for subdomain: ${subdomain}`);
@@ -220,7 +223,10 @@ const sendNewLeaveRequestNotification = async (leave) => {
     // Destructure all required fields from the leave object
     const { subdomain, worker: workerId, leaveType, startDate, endDate, totalDays, reason, startTime, endTime } = leave;
 
-    const config = await GowhatsConfig.findOne({ subdomain });
+    let config = await GowhatsConfig.findOne({ subdomain: new RegExp(`^${subdomain}$`, 'i') });
+    if (!config) {
+      config = await GowhatsConfig.findOne({});
+    }
     console.log('[WhatsApp Debug] Config found:', !!config, 'Admin numbers:', config?.adminWhatsappNumbers);
     
     if (!config || !config.adminWhatsappNumbers || config.adminWhatsappNumbers.length === 0) {

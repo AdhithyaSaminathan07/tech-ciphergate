@@ -347,3 +347,21 @@ export const debitWallet = async (workerId, data) => {
     throw error.response ? error.response.data : new Error('Failed to debit wallet');
   }
 };
+
+// ─── Automated WhatsApp Salary Report API ───
+
+export const triggerWhatsappSalaryDispatch = async (subdomain, phoneNumbers) => {
+  try {
+    const token = getAuthToken();
+    const response = await api.post('/salary/send-whatsapp-salary-report', {
+      subdomain,
+      phoneNumbers
+    }, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response ? error.response.data : new Error('Failed to dispatch WhatsApp salary reports');
+  }
+};
+

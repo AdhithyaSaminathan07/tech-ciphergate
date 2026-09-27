@@ -19,7 +19,8 @@ import {
     Receipt,
     Wallet,
     Filter,
-    AlertTriangle
+    AlertTriangle,
+    Send
 } from 'lucide-react';
 import { getWorkers } from '../../services/workerService';
 import { getDepartments } from '../../services/departmentService';
@@ -29,7 +30,7 @@ import Table from '../common/Table';
 import Modal from '../common/Modal';
 import Spinner from '../common/Spinner';
 import appContext from '../../context/AppContext';
-import { giveBonusAmount, removeBonusAmount, resetSalaryAmount, getSalaryReport, getBulkSalaryReport } from '../../services/salaryService';
+import { giveBonusAmount, removeBonusAmount, resetSalaryAmount, getSalaryReport, getBulkSalaryReport, triggerWhatsappSalaryDispatch } from '../../services/salaryService';
 import { deleteFine, getAllFines } from '../../services/fineService';
 import { getAllHolidays } from '../../services/holidayService';
 import jsPDF from 'jspdf';
@@ -1603,6 +1604,26 @@ const SalaryManagement = () => {
         toast.success("Salary report XLSX downloaded!");
     };
 
+    const [isDispatchingWhatsapp, setIsDispatchingWhatsapp] = useState(false);
+
+    const handleWhatsappSalaryDispatch = async () => {
+        setIsDispatchingWhatsapp(true);
+        toast.info('🚀 Dispatching Monthly Salary PDF & Bank Statement XLSX to WhatsApp...');
+        try {
+            const res = await triggerWhatsappSalaryDispatch(subdomain);
+            if (res && res.success) {
+                toast.success(`✅ ${res.message || 'Salary reports sent to WhatsApp successfully!'}`);
+            } else {
+                toast.error(res?.error || 'Failed to dispatch WhatsApp salary reports');
+            }
+        } catch (err) {
+            console.error('WhatsApp Salary dispatch error:', err);
+            toast.error(err.response?.data?.message || err.message || 'Dispatch failed');
+        } finally {
+            setIsDispatchingWhatsapp(false);
+        }
+    };
+
     return (
         <div>
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
@@ -2326,6 +2347,28 @@ const SalaryManagement = () => {
                                                         </button>
                                                     )}
 
+                                                    {/* WhatsApp Dispatch Button */}
+                                                    {bulkReportData && bulkReportData.length > 0 && (
+                                                        <button
+                                                            onClick={handleWhatsappSalaryDispatch}
+                                                            disabled={isDispatchingWhatsapp}
+                                                            className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700 transition-all text-[10px] font-black tracking-widest shadow-lg shadow-emerald-200 disabled:opacity-50"
+                                                            title="Send PDF & Bank Statement XLSX to configured WhatsApp numbers"
+                                                        >
+                                                            {isDispatchingWhatsapp ? (
+                                                                <>
+                                                                    <Spinner size="sm" />
+                                                                    <span>Sending...</span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <Send size={12} />
+                                                                    <span>Send to WhatsApp</span>
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                    )}
+
                                                     {/* Export Dropdown */}
                                                     <div className="relative">
                                                         <button
@@ -2339,6 +2382,14 @@ const SalaryManagement = () => {
                                                         {isExportDropdownOpen && (
                                                             <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 z-[1000] overflow-hidden">
                                                                 <div className="py-2">
+                                                                    <button
+                                                                        onClick={() => { setIsExportDropdownOpen(false); handleWhatsappSalaryDispatch(); }}
+                                                                        disabled={isDispatchingWhatsapp}
+                                                                        className="w-full text-left px-4 py-2.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 border-b border-slate-100"
+                                                                    >
+                                                                        <Send className="w-4 h-4 text-emerald-600" />
+                                                                        Dispatch to WhatsApp
+                                                                    </button>
                                                                     <button
                                                                         onClick={() => { setIsExportDropdownOpen(false); downloadGeneralXLSX(); }}
                                                                         className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
@@ -2712,19 +2763,21 @@ const SalaryManagement = () => {
                                                 </div>
                                                 <div className="space-y-1.5 text-xs text-rose-600/90">
                                                     <div className="flex justify-between">
-                                                        <span>Attendance/Leaves</span>
-                                                        <span className="font-bold">- ₹{individualReportData.report.totalSalaryDeduction?.toFixed(2)}</span>
+                                                        <span>Unauthorized Leaves {individualReportData.totalUnauthorizedPenalty > 0 ? `(${individualReportData.unauthorizedAbsencePenalties?.[0]?.penaltyFactor || 2}X)` : ''}</span>
+                                                        <span className="font-bold">- ₹{((individualReportData.report?.summary?.absentDeduction || 0) + (individualReportData.totalUnauthorizedPenalty || 0)).toFixed(2)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span>Approved Leaves</span>
+                                                        <span className="font-bold">- ₹{(individualReportData.report?.summary?.leaveDeduction || 0).toFixed(2)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span>Permissions</span>
+                                                        <span className="font-bold">- ₹{(individualReportData.report?.summary?.permissionDeduction || 0).toFixed(2)}</span>
                                                     </div>
                                                     {individualReportData.totalFinesAmount > 0 && (
                                                         <div className="flex justify-between">
                                                             <span>Disciplinary Fines</span>
                                                             <span className="font-bold">- ₹{individualReportData.totalFinesAmount.toFixed(2)}</span>
-                                                        </div>
-                                                    )}
-                                                    {individualReportData.totalUnauthorizedPenalty > 0 && (
-                                                        <div className="flex justify-between text-orange-600">
-                                                            <span>Unauthorized Absence (5X)</span>
-                                                            <span className="font-bold">- ₹{individualReportData.totalUnauthorizedPenalty.toFixed(2)}</span>
                                                         </div>
                                                     )}
                                                 </div>
@@ -3144,14 +3197,14 @@ const SalaryManagement = () => {
                                     <div className="bg-rose-50/40 rounded-2xl p-4 border border-rose-100/60 shadow-sm relative overflow-hidden">
                                         <div className="absolute top-0 right-0 w-16 h-16 bg-rose-100/50 rounded-full -mr-8 -mt-8"></div>
                                         <p className="text-[10px] font-black text-rose-400/80 tracking-[0.15em] mb-1 relative z-10">Total Deductions</p>
-                                        <p className="text-xl font-bold text-rose-600 tracking-tight relative z-10">- ₹{reportData.report.totalSalaryDeduction?.toFixed(2) || '0.00'}</p>
+                                        <p className="text-xl font-bold text-rose-600 tracking-tight relative z-10">- ₹{((reportData.report.totalSalaryDeduction || 0) + (reportData.totalFinesAmount || 0) + (reportData.totalUnauthorizedPenalty || 0) + (deductionView ? (reportData.taskPenalty || 0) : 0)).toFixed(2)}</p>
                                     </div>
 
-                                    {/* Net Base Salary */}
+                                    {/* Net Salary */}
                                     <div className="bg-emerald-50/40 rounded-2xl p-4 border border-emerald-100/60 shadow-sm relative overflow-hidden">
                                         <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-100/50 rounded-full -mr-8 -mt-8"></div>
-                                        <p className="text-[10px] font-black text-emerald-600/70 tracking-[0.15em] mb-1 relative z-10">Net Base Salary</p>
-                                        <p className="text-xl font-bold text-emerald-700 tracking-tight relative z-10">₹{reportData.report.summary.netBaseSalary?.toFixed(2) || '0.00'}</p>
+                                        <p className="text-[10px] font-black text-emerald-600/70 tracking-[0.15em] mb-1 relative z-10">Net Salary</p>
+                                        <p className="text-xl font-bold text-emerald-700 tracking-tight relative z-10">₹{Math.max(0, (reportData.payableSalary !== undefined ? reportData.payableSalary : (reportData.finalSalaryWithFines || 0)) - (deductionView ? (reportData.taskPenalty || 0) : 0)).toFixed(2)}</p>
                                     </div>
                                 </div>
 
@@ -3170,8 +3223,20 @@ const SalaryManagement = () => {
                                         </div>
                                         <div className="space-y-2 text-xs">
                                             <div className="flex justify-between items-center text-slate-600">
-                                                <span>Absent Deductions</span>
-                                                <span className="font-bold text-rose-500">- ₹{(reportData.report.summary.absentDeduction || 0).toFixed(2)}</span>
+                                                <div>
+                                                    <span>Unauthorized Leave Deductions</span>
+                                                    {reportData.totalUnauthorizedPenalty > 0 && (
+                                                        <span className="text-[10px] text-rose-500 font-bold ml-1.5">
+                                                            ({reportData.unauthorizedAbsencePenalties?.[0]?.penaltyFactor || 2}X)
+                                                        </span>
+                                                    )}
+                                                    {reportData.unauthorizedAbsencePenalties?.length > 0 && (
+                                                        <span className="text-[9px] text-slate-400 block">{reportData.unauthorizedAbsencePenalties.length} day(s)</span>
+                                                    )}
+                                                </div>
+                                                <span className="font-bold text-rose-500">
+                                                    - ₹{((reportData.report.summary.absentDeduction || 0) + (reportData.totalUnauthorizedPenalty || 0)).toFixed(2)}
+                                                </span>
                                             </div>
                                             <div className="flex justify-between items-center text-slate-600">
                                                 <span>Leave Deductions</span>
@@ -3185,15 +3250,6 @@ const SalaryManagement = () => {
                                                 <div className="flex justify-between items-center text-rose-600 font-medium pt-1 border-t border-slate-50">
                                                     <span>Disciplinary Fines</span>
                                                     <span className="font-bold">- ₹{reportData.totalFinesAmount.toFixed(2)}</span>
-                                                </div>
-                                            )}
-                                            {reportData.totalUnauthorizedPenalty > 0 && (
-                                                <div className="flex justify-between items-center text-orange-600 font-medium pt-1 border-t border-slate-50">
-                                                    <div>
-                                                        <span>⚠ Unauthorized Absence (5X)</span>
-                                                        <span className="text-[9px] text-orange-400 block">{reportData.unauthorizedAbsencePenalties?.length || 0} day(s)</span>
-                                                    </div>
-                                                    <span className="font-bold">- ₹{reportData.totalUnauthorizedPenalty.toFixed(2)}</span>
                                                 </div>
                                             )}
                                         </div>
@@ -3556,14 +3612,14 @@ const SalaryManagement = () => {
                                                 {[
                                                     { label: 'Total Days', value: reportData.report.summary.totalDaysInPeriod },
                                                     { label: 'Working Days', value: reportData.report.summary.totalWorkingDaysInPeriod },
-                                                    { label: 'Absent Days', value: reportData.report.summary.totalAbsentDays },
+                                                    { label: 'Unauth. Leave Days', value: reportData.report.summary.totalAbsentDays },
                                                     { label: 'Leave Days', value: reportData.report.summary.totalLeaveDays },
                                                     { label: 'Holidays', value: reportData.report.summary.totalHolidaysInPeriod },
                                                     { label: 'Sundays', value: reportData.report.summary.totalSundaysInPeriod },
                                                     { label: 'Actual Worked', value: reportData.report.summary.actualWorkingDays },
                                                     { label: 'Working Hours', value: `${(reportData.report.totalWorkingHours || 0).toFixed(2)}h` },
                                                     { label: 'Permission Time', value: `${reportData.report.totalPermissionTime || 0}m` },
-                                                    { label: 'Absent Deduction', value: `₹${reportData.report.summary.absentDeduction?.toFixed(2)}`, color: 'text-rose-500' },
+                                                    { label: `Unauth. Leave Ded. ${reportData.totalUnauthorizedPenalty > 0 ? `(${reportData.unauthorizedAbsencePenalties?.[0]?.penaltyFactor || 2}X)` : ''}`, value: `₹${((reportData.report.summary.absentDeduction || 0) + (reportData.totalUnauthorizedPenalty || 0)).toFixed(2)}`, color: 'text-rose-500' },
                                                     { label: 'Leave Deduction', value: `₹${reportData.report.summary.leaveDeduction?.toFixed(2)}`, color: 'text-rose-500' },
                                                     { label: 'Permission Ded.', value: `₹${reportData.report.summary.permissionDeduction?.toFixed(2)}`, color: 'text-rose-500' },
                                                     { label: 'Total Deductions', value: `₹${reportData.report.totalSalaryDeduction?.toFixed(2)}`, color: 'text-rose-500' },
@@ -3585,7 +3641,7 @@ const SalaryManagement = () => {
                                                 )}
                                                 {reportData.report.summary.penalizedAbsentDays > 0 && (
                                                     <div>
-                                                        <p className="text-[10px] font-bold text-rose-400 tracking-wider mb-1 text-rose-500">Extra Absences (2X)</p>
+                                                        <p className="text-[10px] font-bold text-rose-400 tracking-wider mb-1 text-rose-500">Extra Unauth. Leaves (2X)</p>
                                                         <p className="text-sm font-bold text-rose-600">{reportData.report.summary.penalizedAbsentDays} Days (₹{reportData.report.summary.penalizedAbsentDeduction.toFixed(2)})</p>
                                                     </div>
                                                 )}

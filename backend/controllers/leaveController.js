@@ -181,7 +181,7 @@ const getLeaves = asyncHandler(async (req, res) => {
   } else if (me === '0') { // '0' means admin is fetching all leaves for the subdomain
     const user = await Admin.findById(req.user._id);
     if (user) {
-      leaves = await Leave.find({ subdomain })
+      leaves = await Leave.find({ subdomain: new RegExp(`^${subdomain}$`, 'i') })
         .populate('worker', 'name department')
         .sort({ createdAt: -1 });
     } else {
@@ -379,7 +379,9 @@ const getLeavesByStatus = asyncHandler(async (req, res) => {
   const query = status && status !== 'all' ? { status } : {};
 
   // Also filter by subdomain for security
-  query.subdomain = req.user.subdomain;
+  if (req.user.subdomain) {
+    query.subdomain = new RegExp(`^${req.user.subdomain}$`, 'i');
+  }
 
   const leaves = await Leave.find(query)
     .populate('worker', 'name department')
@@ -421,7 +423,7 @@ const getLeavesByDateRange = asyncHandler(async (req, res) => {
   }
 
   const leaves = await Leave.find({
-    subdomain: req.user.subdomain, // Filter by subdomain
+    subdomain: new RegExp(`^${req.user.subdomain}$`, 'i'), // Filter by subdomain
     $or: [
       { startDate: { $gte: new Date(startDate), $lte: new Date(endDate) } },
       { endDate: { $gte: new Date(startDate), $lte: new Date(endDate) } }
@@ -438,7 +440,7 @@ const getLeavesByDateRange = asyncHandler(async (req, res) => {
 // @access  Private/Admin
 const markLeavesAsViewedByAdmin = asyncHandler(async (req, res) => {
   await Leave.updateMany(
-    { subdomain: req.user.subdomain, workerViewed: false },
+    { subdomain: new RegExp(`^${req.user.subdomain}$`, 'i'), workerViewed: false },
     { $set: { workerViewed: true } }
   );
   res.status(200).json({ message: 'All leaves marked as viewed by admin' });

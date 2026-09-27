@@ -39,6 +39,7 @@ import { useAuth } from '../../hooks/useAuth';
 import api from '../../services/api';
 import { getAuthToken } from '../../utils/authUtils';
 import { getCurrentPosition } from '../../services/geolocationService';
+import { getGowhatsConfig } from '../../services/gowhatsService';
 
 const Settings = () => {
     const [loading, setLoading] = useState(true);
@@ -54,6 +55,7 @@ const Settings = () => {
     // Profile tab local state
     const [profileName, setProfileName] = useState('');
     const [profilePhone, setProfilePhone] = useState('');
+    const [gowhatsAdminNumbers, setGowhatsAdminNumbers] = useState([]);
 
     useEffect(() => {
         if (user) {
@@ -302,6 +304,16 @@ const Settings = () => {
 
             setSettings(finalSettings);
             setOriginalSettings(finalSettings);
+
+            // Fetch GoWhats admin WhatsApp numbers configured for leave requests
+            try {
+                const gowhatsData = await getGowhatsConfig();
+                if (gowhatsData && Array.isArray(gowhatsData.adminWhatsappNumbers)) {
+                    setGowhatsAdminNumbers(gowhatsData.adminWhatsappNumbers);
+                }
+            } catch (gwErr) {
+                console.log('GoWhats config fetch note:', gwErr);
+            }
             setHasChanges(false);
         } catch (error) {
             if (error.response?.status === 404) {
@@ -509,22 +521,23 @@ const Settings = () => {
     };
 
     const [testingDispatch, setTestingDispatch] = useState(false);
+    const [lastDispatchResult, setLastDispatchResult] = useState(null);
 
     const handleTestSalaryDispatch = async () => {
         const phoneNumbers = settings.autoSalaryWhatsappConfig?.phoneNumbers;
-        if (!phoneNumbers) {
-            toast.error('Please enter recipient WhatsApp phone number(s) first.');
-            return;
-        }
 
         setTestingDispatch(true);
         toast.info('🚀 Triggering test dispatch of salary PDF & XLSX to WhatsApp...');
+
+        const targetSubdomain = (subdomain && subdomain !== 'main' && subdomain !== 'undefined') 
+            ? subdomain 
+            : (user?.subdomain || localStorage.getItem('subdomain') || 'tech-vaseegrah');
 
         try {
             const token = getAuthToken();
             const response = await api.post(
                 '/salary/send-whatsapp-salary-report',
-                { subdomain, phoneNumbers },
+                { subdomain: targetSubdomain, phoneNumbers: phoneNumbers || undefined },
                 {
                     headers: {
                         'Content-Type': 'application/json',
@@ -534,6 +547,7 @@ const Settings = () => {
             );
 
             if (response.data && response.data.success) {
+                setLastDispatchResult(response.data);
                 toast.success(`✅ ${response.data.message}`);
             } else {
                 toast.error(response.data?.error || 'Failed to dispatch WhatsApp salary reports');
@@ -1766,129 +1780,290 @@ const Settings = () => {
                             </div>
                         </section>
 
-                        {/* SECTION 8.5: AUTOMATED WHATSAPP SALARY REPORT DISPATCH */}
+                        {/* SECTION 8.5: WHATSAPP SALARY REPORT DISPATCH (OPTION 1 & OPTION 2) */}
                         <section id="section-whatsappSalary" className="scroll-mt-36 lg:scroll-mt-36">
                             <div className="mb-4 sm:mb-5 pb-3 border-b border-slate-100">
                                 <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
                                     <FiSend className="text-[#006666] h-4.5 w-4.5 sm:h-5 sm:w-5" />
-                                    Automated WhatsApp Salary Report Dispatch
+                                    WhatsApp Salary Report Dispatch (2 Options)
                                 </h2>
                                 <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
-                                    Automatically generate and send monthly All-Employees Salary PDF and Bank Statement XLSX directly to WhatsApp
+                                    Deliver consolidated multi-page employee salary PDFs and Corporate Bank NEFT XLSX sheets directly to WhatsApp
                                 </p>
                             </div>
 
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between gap-3 p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl min-w-0">
-                                    <div className="min-w-0 flex-1">
-                                        <label className="text-xs font-bold text-slate-900 block">Enable Automatic Salary Dispatch to WhatsApp</label>
-                                        <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 leading-tight">
-                                            Sends PDF report (1 page per employee) and Bank Statement XLSX sheet to configured WhatsApp numbers
+                            {/* Connected Admin Recipients Status Banner */}
+                            <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl mb-4">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                            <FiPhone className="text-teal-600 w-3.5 h-3.5" />
+                                            Active WhatsApp Admin Recipients
+                                        </label>
+                                        <p className="text-[11px] text-slate-500 mt-0.5">
+                                            Salary reports are delivered to the same admin numbers configured for leave requests.
                                         </p>
                                     </div>
-                                    <div className="flex-shrink-0 shrink-0">
-                                        <CustomToggle
-                                            checked={settings.autoSalaryWhatsappConfig?.enabled ?? false}
-                                            onChange={() => handleAutoSalaryWhatsappChange('enabled', !(settings.autoSalaryWhatsappConfig?.enabled ?? false))}
-                                        />
-                                    </div>
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-teal-700 bg-teal-50 border border-teal-200 px-2.5 py-1 rounded-lg self-start sm:self-auto">
+                                        <FiCheckCircle className="w-3 h-3 text-teal-600" />
+                                        Auto-Synced from GoWhats Leave Config
+                                    </span>
                                 </div>
 
-                                {settings.autoSalaryWhatsappConfig?.enabled && (
-                                    <div className="space-y-4 bg-white p-4 sm:p-5 rounded-xl border border-slate-200/80">
+                                {gowhatsAdminNumbers.length > 0 ? (
+                                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                                        {gowhatsAdminNumbers.map((num, idx) => (
+                                            <div key={idx} className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 shadow-2xs">
+                                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                <span>+{num}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="mt-3 space-y-2">
+                                        <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3 font-medium">
+                                            ⚠️ No GoWhats admin numbers configured in database yet. You can enter recipient WhatsApp numbers below or configure <a href="/admin/gowhats" className="font-bold underline text-amber-900">GoWhats Integration</a>.
+                                        </div>
                                         <div>
-                                            <label className="block text-[11px] sm:text-xs font-bold text-slate-700 tracking-wider mb-1 uppercase">
-                                                WhatsApp Recipient Phone Number(s)
+                                            <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                                Recipient WhatsApp Numbers (with country code, e.g. 919876543210, 919876543211)
                                             </label>
                                             <input
                                                 type="text"
-                                                placeholder="e.g. 919876543210, 919876543211"
-                                                value={settings.autoSalaryWhatsappConfig?.phoneNumbers ?? ''}
+                                                placeholder="e.g. 919717219353, 916381541229"
+                                                value={settings.autoSalaryWhatsappConfig?.phoneNumbers || ''}
                                                 onChange={(e) => handleAutoSalaryWhatsappChange('phoneNumbers', e.target.value)}
-                                                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
                                             />
-                                            <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1">
-                                                Include country code without '+' sign (e.g. 91 for India). Separate multiple numbers with commas.
-                                            </p>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div>
-                                                <label className="block text-[11px] sm:text-xs font-bold text-slate-700 tracking-wider mb-1 uppercase">
-                                                    Schedule Mode
-                                                </label>
-                                                <select
-                                                    value={settings.autoSalaryWhatsappConfig?.scheduleMode ?? 'end_of_month'}
-                                                    onChange={(e) => handleAutoSalaryWhatsappChange('scheduleMode', e.target.value)}
-                                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
-                                                >
-                                                    <option value="end_of_month">End of Month (12:01 AM)</option>
-                                                    <option value="custom">Custom Day & Time</option>
-                                                </select>
-                                            </div>
-
-                                            {settings.autoSalaryWhatsappConfig?.scheduleMode === 'custom' && (
-                                                <div>
-                                                    <label className="block text-[11px] sm:text-xs font-bold text-slate-700 tracking-wider mb-1 uppercase">
-                                                        Dispatch Day
-                                                    </label>
-                                                    <select
-                                                        value={settings.autoSalaryWhatsappConfig?.customDay ?? 'last_day'}
-                                                        onChange={(e) => handleAutoSalaryWhatsappChange('customDay', e.target.value)}
-                                                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
-                                                    >
-                                                        <option value="last_day">Last Day of Month</option>
-                                                        <option value="1">1st of Month</option>
-                                                        <option value="28">28th of Month</option>
-                                                        <option value="30">30th of Month</option>
-                                                    </select>
-                                                </div>
-                                            )}
-
-                                            <div>
-                                                <label className="block text-[11px] sm:text-xs font-bold text-slate-700 tracking-wider mb-1 uppercase">
-                                                    Dispatch Time (HH:mm)
-                                                </label>
-                                                <input
-                                                    type="time"
-                                                    value={settings.autoSalaryWhatsappConfig?.dispatchTime ?? '00:01'}
-                                                    onChange={(e) => handleAutoSalaryWhatsappChange('dispatchTime', e.target.value)}
-                                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* Included Documents Card & Test Dispatch Button */}
-                                        <div className="pt-2 border-t border-slate-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <span className="text-xs font-bold text-slate-700">Documents Attached:</span>
-                                                <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[11px] font-bold flex items-center gap-1">
-                                                    <FiFileText className="w-3.5 h-3.5" /> All Employees PDF Report
-                                                </span>
-                                                <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[11px] font-bold flex items-center gap-1">
-                                                    📊 Bank Statement XLSX Sheet
-                                                </span>
-                                            </div>
-
-                                            <button
-                                                type="button"
-                                                onClick={handleTestSalaryDispatch}
-                                                disabled={testingDispatch}
-                                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-50"
-                                            >
-                                                {testingDispatch ? (
-                                                    <>
-                                                        <Spinner size="sm" /> Dispatching...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <FiSend className="w-3.5 h-3.5" /> 🚀 Send Now (Test Dispatch)
-                                                    </>
-                                                )}
-                                            </button>
                                         </div>
                                     </div>
                                 )}
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                {/* ─── OPTION 1: AUTOMATIC SCHEDULED DISPATCH ─── */}
+                                <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+                                    <div>
+                                        <div className="flex items-center justify-between gap-3 pb-3 mb-4 border-b border-slate-100">
+                                            <div className="flex items-center gap-2.5">
+                                                <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-xs border border-teal-200">
+                                                    1
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-xs sm:text-sm font-bold text-slate-900">Option 1: Automatic Scheduled Dispatch</h3>
+                                                    <p className="text-[10px] text-slate-500">Dispatches automatically in background on set date</p>
+                                                </div>
+                                            </div>
+                                            <CustomToggle
+                                                checked={settings.autoSalaryWhatsappConfig?.enabled ?? false}
+                                                onChange={() => handleAutoSalaryWhatsappChange('enabled', !(settings.autoSalaryWhatsappConfig?.enabled ?? false))}
+                                            />
+                                        </div>
+
+                                        {settings.autoSalaryWhatsappConfig?.enabled ? (
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                                        Schedule Mode
+                                                    </label>
+                                                    <select
+                                                        value={settings.autoSalaryWhatsappConfig?.scheduleMode ?? 'custom'}
+                                                        onChange={(e) => handleAutoSalaryWhatsappChange('scheduleMode', e.target.value)}
+                                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                    >
+                                                        <option value="custom">📅 Specific Day of Month & Time</option>
+                                                        <option value="end_of_month">🌙 End of Month (Last Day at 12:01 AM)</option>
+                                                    </select>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                    {settings.autoSalaryWhatsappConfig?.scheduleMode !== 'end_of_month' ? (
+                                                        <div>
+                                                            <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                                                Dispatch Day of Month
+                                                            </label>
+                                                            <select
+                                                                value={settings.autoSalaryWhatsappConfig?.customDay ?? '1'}
+                                                                onChange={(e) => handleAutoSalaryWhatsappChange('customDay', e.target.value)}
+                                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                            >
+                                                                <option value="1">1st of Month</option>
+                                                                <option value="2">2nd of Month</option>
+                                                                <option value="3">3rd of Month</option>
+                                                                <option value="4">4th of Month</option>
+                                                                <option value="5">5th of Month</option>
+                                                                <option value="7">7th of Month</option>
+                                                                <option value="10">10th of Month</option>
+                                                                <option value="15">15th of Month</option>
+                                                                <option value="20">20th of Month</option>
+                                                                <option value="25">25th of Month</option>
+                                                                <option value="28">28th of Month</option>
+                                                                <option value="30">30th of Month</option>
+                                                                <option value="31">31st of Month</option>
+                                                                <option value="last_day">Last Day of Month</option>
+                                                                {Array.from({ length: 31 }, (_, i) => i + 1)
+                                                                    .filter(d => ![1, 2, 3, 4, 5, 7, 10, 15, 20, 25, 28, 30, 31].includes(d))
+                                                                    .map(d => (
+                                                                        <option key={d} value={String(d)}>Day {d} of Month</option>
+                                                                    ))}
+                                                            </select>
+                                                        </div>
+                                                    ) : (
+                                                        <div>
+                                                            <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                                                Day
+                                                            </label>
+                                                            <div className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600">
+                                                                Last Day of Month
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    <div>
+                                                        <label className="block text-[10px] sm:text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                                            Dispatch Time (IST)
+                                                        </label>
+                                                        <input
+                                                            type="time"
+                                                            value={settings.autoSalaryWhatsappConfig?.dispatchTime ?? '09:00'}
+                                                            onChange={(e) => handleAutoSalaryWhatsappChange('dispatchTime', e.target.value)}
+                                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                {/* Schedule Summary Banner */}
+                                                <div className="p-3 bg-teal-50/80 border border-teal-200/80 rounded-xl flex items-center gap-2.5 text-xs text-teal-900">
+                                                    <span className="text-base shrink-0">⏰</span>
+                                                    <div>
+                                                        <span className="font-bold">Active Schedule: </span>
+                                                        <span>
+                                                            {settings.autoSalaryWhatsappConfig?.scheduleMode === 'end_of_month'
+                                                                ? 'Runs on the last day / 1st of every month at '
+                                                                : `Runs on the ${settings.autoSalaryWhatsappConfig?.customDay === 'last_day' ? 'Last Day' : `${settings.autoSalaryWhatsappConfig?.customDay ?? '1'}${['1', '21', '31'].includes(String(settings.autoSalaryWhatsappConfig?.customDay)) ? 'st' : ['2', '22'].includes(String(settings.autoSalaryWhatsappConfig?.customDay)) ? 'nd' : ['3', '23'].includes(String(settings.autoSalaryWhatsappConfig?.customDay)) ? 'rd' : 'th'}`} of every month at `}
+                                                            <strong className="font-black text-teal-950">
+                                                                {(() => {
+                                                                    const t = settings.autoSalaryWhatsappConfig?.dispatchTime || '09:00';
+                                                                    const [h, m] = t.split(':').map(Number);
+                                                                    const ampm = h >= 12 ? 'PM' : 'AM';
+                                                                    const dh = h % 12 || 12;
+                                                                    return `${dh}:${String(m || 0).padStart(2, '0')} ${ampm}`;
+                                                                })()} (IST)
+                                                            </strong>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="py-6 text-center text-xs text-slate-400 font-medium">
+                                                Toggle switch above to enable automatic monthly background dispatch.
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+                                        <span>Status: {settings.autoSalaryWhatsappConfig?.enabled ? '🟢 Scheduled Active' : '⚪ Disabled'}</span>
+                                        <button
+                                            type="button"
+                                            onClick={handleSaveSettings}
+                                            disabled={saving}
+                                            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs"
+                                        >
+                                            {saving ? 'Saving...' : 'Save Schedule'}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* ─── OPTION 2: MANUAL REVIEW & ON-DEMAND DISPATCH ─── */}
+                                <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+                                    <div>
+                                        <div className="flex items-center gap-2.5 pb-3 mb-4 border-b border-slate-100">
+                                            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-black text-xs border border-emerald-200">
+                                                2
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xs sm:text-sm font-bold text-slate-900">Option 2: "Review & Send" (Manual On-Demand)</h3>
+                                                <p className="text-[10px] text-slate-500">Inspect attendance & payouts first, then dispatch instantly</p>
+                                            </div>
+                                        </div>
+
+                                        <p className="text-xs text-slate-600 leading-relaxed mb-4">
+                                            Trigger on-demand dispatch at any time. The system calculates all active developer attendance rates, bonuses, deductions, and delivers both files directly to WhatsApp:
+                                        </p>
+
+                                        <div className="space-y-2 mb-4">
+                                            <div className="flex items-center gap-2 p-2.5 bg-amber-50/60 border border-amber-200/80 rounded-xl text-xs text-amber-800 font-bold">
+                                                <FiFileText className="text-amber-600 w-4 h-4 shrink-0" />
+                                                <span>📄 All Employees Single Multi-Page PDF Report</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 p-2.5 bg-emerald-50/60 border border-emerald-200/80 rounded-xl text-xs text-emerald-800 font-bold">
+                                                <span className="text-base shrink-0">📊</span>
+                                                <span>Corporate Bank Bulk NEFT Excel Sheet (XLSX)</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {lastDispatchResult && lastDispatchResult.success && (
+                                        <div className="mt-3 p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-2">
+                                            <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
+                                                <span>✅ Generated & Dispatched Successfully!</span>
+                                                <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-mono">
+                                                    {lastDispatchResult.monthName} {lastDispatchResult.year}
+                                                </span>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                                {lastDispatchResult.pdfUrl && (
+                                                    <a
+                                                        href={lastDispatchResult.pdfUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="px-3 py-2 bg-white hover:bg-amber-50 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-all"
+                                                    >
+                                                        <FiFileText className="text-amber-600 w-3.5 h-3.5 shrink-0" />
+                                                        <span>📄 View Multi-Page PDF</span>
+                                                    </a>
+                                                )}
+                                                {lastDispatchResult.xlsxUrl && (
+                                                    <a
+                                                        href={lastDispatchResult.xlsxUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="px-3 py-2 bg-white hover:bg-emerald-50 text-emerald-900 border border-emerald-300 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-all"
+                                                    >
+                                                        <span className="text-sm shrink-0">📊</span>
+                                                        <span>Download Bank NEFT (.xlsx)</span>
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="pt-4 mt-2 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                                        <a
+                                            href="/admin/salary"
+                                            className="px-3 py-2 text-center text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+                                        >
+                                            Review in Salary Management ➔
+                                        </a>
+
+                                        <button
+                                            type="button"
+                                            onClick={handleTestSalaryDispatch}
+                                            disabled={testingDispatch}
+                                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                        >
+                                            {testingDispatch ? (
+                                                <>
+                                                    <Spinner size="sm" /> Dispatching...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <FiSend className="w-3.5 h-3.5" /> 🚀 Send Now (On-Demand)
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </section>
 

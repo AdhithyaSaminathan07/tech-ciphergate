@@ -1,8 +1,5 @@
-import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useContext } from 'react';
-import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
-import { FiShield, FiX } from 'react-icons/fi';
 import {
   FaUsers, FaTasks, FaCalendarAlt, FaBuilding,
   FaChartBar, FaArrowRight, FaComments, FaMoneyBillWave, FaWallet
@@ -144,21 +141,7 @@ const Dashboard = () => {
   const { subdomain } = useContext(appContext);
   const { user } = useContext(AuthContext);
 
-  const [showBugBountyPopup, setShowBugBountyPopup] = useState(false);
-  const [bugBountyData, setBugBountyData] = useState(null);
 
-  const handleDismissBugBounty = () => {
-    setShowBugBountyPopup(false);
-    const username = user?.username || 'default';
-    localStorage.setItem(`bugBountyPopupLastShown_${username}`, Date.now().toString());
-  };
-
-  const handleViewBugBountyDetails = () => {
-    setShowBugBountyPopup(false);
-    const username = user?.username || 'default';
-    localStorage.setItem(`bugBountyPopupLastShown_${username}`, Date.now().toString());
-    window.open(bugBountyData?.bugReportUrl || 'https://techvaseegrah.com/bug-bounty', '_blank');
-  };
 
   const loadDashboardData = async () => {
     setIsLoading(true);
@@ -195,55 +178,7 @@ const Dashboard = () => {
         }
       }
 
-      // Fetch public settings for bug bounty popup
-      try {
-        if (subdomain && subdomain !== 'main') {
-          const response = await api.get(`/settings/public/${subdomain}`);
-          if (response.data?.bugBountyConfig) {
-            const config = response.data.bugBountyConfig;
-            setBugBountyData(config);
 
-            if (config.popupFrequency && config.popupFrequency !== 'disabled') {
-              const username = user?.username || 'default';
-              const lastShownKey = `bugBountyPopupLastShown_${username}`;
-              const lastShown = localStorage.getItem(lastShownKey);
-
-              let shouldShow = false;
-              if (config.popupFrequency === 'always') {
-                shouldShow = true;
-              } else if (!lastShown) {
-                shouldShow = true;
-              } else {
-                const diffMs = Date.now() - parseInt(lastShown);
-                const hours = diffMs / (1000 * 60 * 60);
-
-                const lastUpdatedTime = config.lastUpdated ? new Date(config.lastUpdated).getTime() : 0;
-                const lastShownTime = parseInt(lastShown);
-
-                if (lastUpdatedTime > lastShownTime) {
-                  shouldShow = true;
-                } else if (config.popupFrequency === 'every_day') {
-                  const lastDate = new Date(parseInt(lastShown)).toDateString();
-                  const currentDate = new Date().toDateString();
-                  shouldShow = lastDate !== currentDate;
-                } else if (config.popupFrequency === 'every_week') {
-                  shouldShow = hours >= 7 * 24;
-                } else if (config.popupFrequency === 'every_month') {
-                  shouldShow = hours >= 30 * 24;
-                } else if (config.popupFrequency === 'once') {
-                  shouldShow = false;
-                }
-              }
-
-              if (shouldShow) {
-                setShowBugBountyPopup(true);
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching settings for bug bounty:', err);
-      }
     } catch (err) {
       console.error('Dashboard load error:', err);
     } finally {
@@ -584,78 +519,7 @@ const Dashboard = () => {
           <StatCard title="Meals Requested" value={stats.foodRequests} icon={FaUsers} />
         </div>
 
-        {/* Bug Bounty Program Popup */}
-        {createPortal(
-          <AnimatePresence>
-            {showBugBountyPopup && (
-              <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-                {/* Backdrop */}
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={handleDismissBugBounty}
-                  className="fixed inset-0 bg-slate-900/60 backdrop-blur-md"
-                />
-                {/* Modal Card */}
-                <motion.div
-                  initial={{ scale: 0.9, opacity: 0, y: 20 }}
-                  animate={{ scale: 1, opacity: 1, y: 0 }}
-                  exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                  transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-                  className="relative bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-100 z-10"
-                >
-                  {/* Header */}
-                  <div className="p-6 pb-4 flex justify-between items-start border-b border-slate-50">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-[#0d9488]">
-                        <FiShield size={20} className="stroke-[2.5]" />
-                      </div>
-                      <div>
-                        <h3 className="text-base font-extrabold text-slate-900 leading-tight">
-                          Bug Bounty Program
-                        </h3>
-                        <p className="text-[10px] text-slate-400 font-semibold tracking-wider mt-0.5">
-                          Responsible Disclosure
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={handleDismissBugBounty}
-                      className="p-1.5 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded-lg transition-colors"
-                    >
-                      <FiX size={16} />
-                    </button>
-                  </div>
 
-                  {/* Message */}
-                  <div className="p-6 py-5">
-                    <p className="text-sm text-slate-600 font-medium leading-relaxed">
-                      {bugBountyData?.disclosureMessage || 'Visit to check the bug bounty to earn for each bug 1000'}
-                    </p>
-                  </div>
-
-                  {/* Footer Buttons */}
-                  <div className="p-6 pt-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-100">
-                    <button
-                      onClick={handleDismissBugBounty}
-                      className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-70 transition-colors"
-                    >
-                      Dismiss
-                    </button>
-                    <button
-                      onClick={handleViewBugBountyDetails}
-                      className="px-5 py-2 text-sm font-bold text-white bg-[#0d9488] hover:bg-[#0f766e] rounded-xl shadow-md shadow-teal-600/10 hover:shadow-lg hover:shadow-teal-600/15 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
-                    >
-                      View Details
-                    </button>
-                  </div>
-                </motion.div>
-              </div>
-            )}
-          </AnimatePresence>,
-          document.body
-        )}
 
       </div>
     </div>

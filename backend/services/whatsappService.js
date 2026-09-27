@@ -50,24 +50,29 @@ exports.sendWhatsApp = async (subdomain, phone, data) => {
     } else if (data.type === 'document') {
       let mediaId = data.mediaId;
 
-      // If local filePath is provided, upload PDF directly to Meta Cloud Media Storage
+      // If local filePath is provided, upload document directly to Meta Cloud Media Storage
       if (!mediaId && data.filePath) {
         try {
           const fs = require('fs');
           const fileBuffer = fs.readFileSync(data.filePath);
+          const filename = data.filename || 'document.pdf';
+          const mimeType = filename.endsWith('.xlsx')
+            ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : (filename.endsWith('.xls') ? 'application/vnd.ms-excel' : 'application/pdf');
+
           const formData = new FormData();
           formData.append('messaging_product', 'whatsapp');
-          formData.append('type', 'application/pdf');
-          formData.append('file', new Blob([fileBuffer], { type: 'application/pdf' }), data.filename || 'invoice.pdf');
+          formData.append('type', mimeType);
+          formData.append('file', new Blob([fileBuffer], { type: mimeType }), filename);
 
           const uploadUrl = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/media`;
-          console.log(`[WhatsApp Service] Uploading PDF media file to Meta (${data.filePath})...`);
+          console.log(`[WhatsApp Service] Uploading media file (${mimeType}) to Meta (${data.filePath})...`);
           const uploadRes = await axios.post(uploadUrl, formData, {
             headers: { 'Authorization': `Bearer ${apiKey}` }
           });
           if (uploadRes.data && uploadRes.data.id) {
             mediaId = uploadRes.data.id;
-            console.log(`[WhatsApp Service] PDF Media uploaded successfully. Media ID: ${mediaId}`);
+            console.log(`[WhatsApp Service] Media uploaded successfully. Media ID: ${mediaId}`);
           }
         } catch (uploadErr) {
           console.error('[WhatsApp Service] Error uploading media to Meta:', uploadErr.response?.data || uploadErr.message);

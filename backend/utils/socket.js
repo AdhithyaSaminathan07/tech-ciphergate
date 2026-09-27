@@ -96,10 +96,11 @@ const init = (server) => {
         console.log(`[Socket] Client connected: ${socket.id} (User: ${userId}, Transport: ${transport})`);
 
         socket.on('join-subdomain', (subdomain) => {
-            // Validate tenant before joining
-            if (subdomain && socket.user && socket.user.subdomain === subdomain) {
+            // Validate tenant before joining (case-insensitive)
+            if (subdomain && socket.user && socket.user.subdomain && socket.user.subdomain.toLowerCase() === subdomain.toLowerCase()) {
                 socket.join(subdomain);
-                console.log(`[Socket] ${socket.id} joined room: ${subdomain}`);
+                socket.join(subdomain.toLowerCase());
+                console.log(`[Socket] ${socket.id} joined room: ${subdomain.toLowerCase()}`);
             } else {
                 console.warn(`[Socket] ${socket.id} attempted to join unauthorized subdomain: ${subdomain}`);
             }

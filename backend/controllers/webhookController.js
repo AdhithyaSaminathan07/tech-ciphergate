@@ -51,7 +51,10 @@ const parseLeaveActionPayload = (payload = '') => {
 const emitLeaveUpdate = (updatedLeave, subdomain) => {
   try {
     const io = getIO();
-    io.to(subdomain).emit('leave:updated', updatedLeave);
+    if (subdomain) {
+      io.to(subdomain).emit('leave:updated', updatedLeave);
+      io.to(subdomain.toLowerCase()).emit('leave:updated', updatedLeave);
+    }
     if (updatedLeave.worker?._id) {
       io.to(updatedLeave.worker._id.toString()).emit('leave:updated', updatedLeave);
     }
@@ -62,7 +65,7 @@ const emitLeaveUpdate = (updatedLeave, subdomain) => {
 
 const applyLeaveAction = async ({ leaveId, action, subdomain, actorNumber, source = 'whatsapp' }) => {
   const query = { _id: leaveId };
-  if (subdomain) query.subdomain = subdomain;
+  if (subdomain) query.subdomain = new RegExp(`^${subdomain}$`, 'i');
 
   const leave = await Leave.findOne(query).populate('worker', 'name perDaySalary');
 
@@ -140,7 +143,7 @@ const sendConfirmationMessage = async (config, recipientNumber, messageText) => 
   try {
     const { apiKey, phoneNumberId } = config;
     const url = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
-    
+
     const headers = {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
@@ -195,24 +198,24 @@ const handleWhatsAppWebhook = asyncHandler(async (req, res) => {
   }
 
   console.log(`[Webhook] Message received from a valid admin of tenant: ${config.subdomain}`);
-  
+
   // Process only if it's a button response with a specific payload
   const payload = getButtonPayload(message);
   if (payload) {
-    
+
     // Check if the button payload is for leave management
     if (payload.startsWith('ACCEPT_LEAVE_') || payload.startsWith('REJECT_LEAVE_')) {
       const isApprove = payload.startsWith('ACCEPT_LEAVE_');
       const action = isApprove ? 'Approved' : 'Rejected';
       const leaveId = payload.replace(isApprove ? 'ACCEPT_LEAVE_' : 'REJECT_LEAVE_', '');
-      
+
       console.log(`[Webhook] Processing action '${action}' for leave ID '${leaveId}'`);
 
       try {
-        // Find the leave application ensuring it belongs to the correct tenant
+        // Find the leave application ensuring it belongs to the correct tenant (case-insensitive)
         const leave = await Leave.findOne({
           _id: leaveId,
-          subdomain: config.subdomain
+          subdomain: new RegExp(`^${config.subdomain}$`, 'i')
         }).populate('worker', 'name perDaySalary');
 
         if (!leave) {
@@ -229,7 +232,7 @@ const handleWhatsAppWebhook = asyncHandler(async (req, res) => {
         }
 
         // Update leave status and log who processed it
-        const updatedLeave = await Leave.findByIdAndUpdate(leaveId, { 
+        const updatedLeave = await Leave.findByIdAndUpdate(leaveId, {
           status: action,
           workerViewed: false, // Notify worker
           processedViaWhatsApp: true,
@@ -252,12 +255,12 @@ const handleWhatsAppWebhook = asyncHandler(async (req, res) => {
               deduction = leave.totalDays * worker.perDaySalary * (leave.deductionFactor || 1);
             }
             const updatedFinalSalary = Math.max(0, worker.finalSalary - deduction);
-            
+
             await Worker.updateOne(
               { _id: leave.worker._id },
               { $set: { finalSalary: updatedFinalSalary } }
             );
-            
+
             console.log(`[Webhook] Salary updated for worker ${worker.name}: deducted ${deduction}`);
           }
         }
@@ -265,6 +268,7 @@ const handleWhatsAppWebhook = asyncHandler(async (req, res) => {
         try {
           const io = getIO();
           io.to(config.subdomain).emit('leave:updated', updatedLeave);
+          io.to(config.subdomain.toLowerCase()).emit('leave:updated', updatedLeave);
           if (updatedLeave.worker?._id) {
             io.to(updatedLeave.worker._id.toString()).emit('leave:updated', updatedLeave);
           }
@@ -273,14 +277,14 @@ const handleWhatsAppWebhook = asyncHandler(async (req, res) => {
         }
 
         console.log(`[Webhook] Leave ${leaveId} successfully ${action.toLowerCase()} by ${fromNumber} for worker ${leave.worker.name}`);
-        
+
         // Send a detailed confirmation message back to the admin
-        const confirmationMessage = isApprove 
+        const confirmationMessage = isApprove
           ? `✅ Leave request APPROVED for ${leave.worker.name}.\n\nType: ${leave.leaveType}\nDates: ${new Date(leave.startDate).toLocaleDateString()} - ${new Date(leave.endDate).toLocaleDateString()}\nTotal Days: ${leave.totalDays}`
           : `❌ Leave request REJECTED for ${leave.worker.name}.\n\nReason for rejection can be added in the admin panel if needed.`;
-        
+
         await sendConfirmationMessage(config, fromNumber, confirmationMessage);
-        
+
       } catch (error) {
         console.error('[Webhook] CRITICAL ERROR processing leave action:', error.message);
         await sendConfirmationMessage(config, fromNumber, `❌ A server error occurred while processing your request. Please try again or use the admin panel.`);

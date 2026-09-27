@@ -1,9 +1,11 @@
 const path = require('path');
 const fs = require('fs');
 const { jsPDF } = require('jspdf');
-require('jspdf-autotable');
+const autoTableMod = require('jspdf-autotable');
+const autoTable = autoTableMod.default || autoTableMod;
 const ExcelJS = require('exceljs');
 const Settings = require('../models/Settings');
+const GowhatsConfig = require('../models/GowhatsConfig');
 const Worker = require('../models/Worker');
 const Attendance = require('../models/Attendance');
 const Leave = require('../models/Leave');
@@ -70,15 +72,18 @@ const generateAllEmployeesPdfBuffer = async (reportsData, monthName, year) => {
       ]
     ];
 
+    const b = worker.bankDetails || {};
+    const bankSummary = b.accountNumber ? `${b.bankName || 'Bank'}: ${b.accountNumber} (${b.ifscCode || ''})` : 'N/A';
+
     const summaryGridBody = [
       ['Employee Name', name, 'Total Days in Month', String(summary.totalDaysInPeriod || 30)],
-      ['Employee ID', rfid, 'Working Days', String(workingDaysCount)],
+      ['Employee ID / RFID', rfid, 'Working Days', String(workingDaysCount)],
       ['Department', deptName, 'Present Days', String(actualWorked)],
-      ['Gross Base Salary', formatCurr(grossSalary), 'Absent / Leave Days', `${summary.totalAbsentDays || 0} Abs / ${summary.totalLeaveDays || 0} Lve`],
-      ['Per Day Salary Rate', formatCurr(perDaySalary), 'Holidays & Sundays', `${summary.totalHolidaysInPeriod || 0} Hol / ${summary.totalSundaysInPeriod || 0} Sun`],
-      ['Earned Attendance Salary', formatCurr(earnedAttendanceSalary), 'Total Working Hours', `${Number(reportObj.report?.totalWorkingHours || summary.totalWorkingHours || 0).toFixed(2)} hrs`],
-      ['PF / ESI Deductions', 'Rs. 0.00', 'Permission Time Used', `${reportObj.report?.totalPermissionTime || summary.totalPermissionTime || 0} mins`],
-      ['Advance Loan Deduction', 'Rs. 0.00', 'Advance Pending', 'Rs. 0.00'],
+      ['Mobile / Phone', worker.phoneNumber || worker.phone || worker.mobile || 'N/A', 'Absent / Leave Days', `${summary.totalAbsentDays || 0} Abs / ${summary.totalLeaveDays || 0} Lve`],
+      ['Bank Account', bankSummary, 'Holidays & Sundays', `${summary.totalHolidaysInPeriod || 0} Hol / ${summary.totalSundaysInPeriod || 0} Sun`],
+      ['Gross Base Salary', formatCurr(grossSalary), 'Total Working Hours', `${Number(reportObj.report?.totalWorkingHours || summary.totalWorkingHours || 0).toFixed(2)} hrs`],
+      ['Earned Attendance Salary', formatCurr(earnedAttendanceSalary), 'Permission Time Used', `${reportObj.report?.totalPermissionTime || summary.totalPermissionTime || 0} mins`],
+      ['Total Deductions', formatCurr(summary.totalSalaryDeductions || 0), 'Advance Pending', 'Rs. 0.00'],
       [
         { content: 'NET PAYOUT AMOUNT', styles: { fontStyle: 'bold', textColor: [217, 119, 6] } },
         { content: formatCurr(netPayout), styles: { fontStyle: 'bold', textColor: [217, 119, 6] } },
@@ -87,7 +92,7 @@ const generateAllEmployeesPdfBuffer = async (reportsData, monthName, year) => {
       ]
     ];
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: 18,
       head: summaryGridHead,
       body: summaryGridBody,
@@ -102,7 +107,7 @@ const generateAllEmployeesPdfBuffer = async (reportsData, monthName, year) => {
       }
     });
 
-    const summaryEndY = doc.lastAutoTable.finalY || 68;
+    const summaryEndY = doc.lastAutoTable?.finalY || 68;
 
     doc.setFontSize(8.5);
     doc.setFont('helvetica', 'bold');
@@ -134,7 +139,7 @@ const generateAllEmployeesPdfBuffer = async (reportsData, monthName, year) => {
       ];
     });
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: summaryEndY + 6,
       head: breakdownHead,
       body: breakdownBody,
@@ -163,47 +168,72 @@ const generateAllEmployeesPdfBuffer = async (reportsData, monthName, year) => {
 };
 
 /**
- * Helper to generate Bank Statement XLSX Buffer on backend
+ * Helper to generate Standard Corporate Bank Bulk NEFT XLSX Buffer on backend
  */
 const generateBankStatementXlsxBuffer = async (reportsData, monthName, year) => {
   const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet(`Bank Statement ${monthName} ${year}`);
+  const worksheet = workbook.addWorksheet(`Bank_Payment_${monthName}_${year}`);
 
+  // 13 Standard Corporate Bank Bulk NEFT Upload Columns
   worksheet.columns = [
-    { header: 'S.No', key: 'sno', width: 8 },
-    { header: 'Employee Name', key: 'name', width: 25 },
-    { header: 'Employee ID / RFID', key: 'rfid', width: 18 },
-    { header: 'Department', key: 'dept', width: 20 },
-    { header: 'Bank Name', key: 'bankName', width: 22 },
-    { header: 'Account Number', key: 'accountNumber', width: 22 },
-    { header: 'IFSC Code', key: 'ifscCode', width: 15 },
-    { header: 'Net Salary Payable (INR)', key: 'netSalary', width: 22 }
+    { header: 'PYMT_PROD_TYPE_CODE', key: 'pymtProdTypeCode', width: 22 },
+    { header: 'PYMT_MODE', key: 'pymtMode', width: 14 },
+    { header: 'DEBIT_ACC_NO', key: 'debitAccNo', width: 18 },
+    { header: 'BNF_NAME', key: 'bnfName', width: 28 },
+    { header: 'BENE_ACC_NO', key: 'beneAccNo', width: 20 },
+    { header: 'BENE_IFSC', key: 'beneIfsc', width: 16 },
+    { header: 'AMOUNT', key: 'amount', width: 15 },
+    { header: 'CREDIT_NARR', key: 'creditNarr', width: 16 },
+    { header: 'PYMT_DATE', key: 'pymtDate', width: 14 },
+    { header: 'MOBILE_NUM', key: 'mobileNum', width: 16 },
+    { header: 'EMAIL_ID', key: 'emailId', width: 25 },
+    { header: 'REMARK', key: 'remark', width: 16 },
+    { header: 'REF_NO', key: 'refNo', width: 20 }
   ];
 
+  const now = new Date();
+  const indiaDateFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  });
+  const todayParts = indiaDateFormatter.format(now).split('-'); // [YYYY, MM, DD]
+  const formattedToday = `${todayParts[2]}-${todayParts[1]}-${todayParts[0]}`; // DD-MM-YYYY
+  const dateNumStr = `${todayParts[0]}${todayParts[1]}${todayParts[2]}`; // YYYYMMDD
+  const shortMonth = typeof monthName === 'string' ? monthName.substring(0, 3) : 'Sal';
+
   reportsData.forEach((item, index) => {
-    const w = item.worker;
+    const w = item.worker || {};
     const b = w.bankDetails || {};
     const netSalary = item.totalFinalSalary || item.fullReport?.finalSalaryWithFines || 0;
+    const seq = String(index + 1).padStart(3, '0');
+    const refNo = `SAL${dateNumStr}${seq}`;
+
+    // Prefer employee real name, then bank account holder name
+    const employeeName = (w.name || b.accountHolderName || 'EMPLOYEE').toUpperCase();
+    const bankAccNo = b.accountNumber ? String(b.accountNumber).trim() : '';
+    const ifscCode = b.ifscCode ? String(b.ifscCode).trim().toUpperCase() : '';
+    const phoneNo = w.phoneNumber || w.phone || w.mobile || '';
 
     worksheet.addRow({
-      sno: index + 1,
-      name: w.name || 'N/A',
-      rfid: w.rfid || 'N/A',
-      dept: item.department || 'N/A',
-      bankName: b.bankName || 'N/A',
-      accountNumber: b.accountNumber || 'N/A',
-      ifscCode: b.ifscCode || 'N/A',
-      netSalary: parseFloat(Number(netSalary).toFixed(2))
+      pymtProdTypeCode: 'PAB_VENDOR',
+      pymtMode: 'NEFT',
+      debitAccNo: '612805036053',
+      bnfName: employeeName,
+      beneAccNo: bankAccNo,
+      beneIfsc: ifscCode,
+      amount: parseFloat(Number(netSalary).toFixed(2)),
+      creditNarr: `${shortMonth} Salary`,
+      pymtDate: formattedToday,
+      mobileNum: phoneNo,
+      emailId: w.email || '',
+      remark: '',
+      refNo: refNo
     });
   });
 
   // Style header row
-  worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFF' } };
-  worksheet.getRow(1).fill = {
-    type: 'pattern',
-    pattern: 'solid',
-    fgColor: { argb: '182B49' }
-  };
+  worksheet.getRow(1).font = { bold: true, color: { argb: '000000' } };
+  worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
 
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
@@ -214,20 +244,42 @@ const generateBankStatementXlsxBuffer = async (reportsData, monthName, year) => 
  */
 const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = null) => {
   try {
-    const settings = await Settings.findOne({ subdomain });
+    let tenantSubdomain = (subdomain && subdomain !== 'main' && subdomain !== 'undefined') ? subdomain : null;
+    let settings = null;
+    if (tenantSubdomain) {
+      settings = await Settings.findOne({ subdomain: tenantSubdomain });
+    }
     if (!settings) {
-      throw new Error(`Settings not found for tenant: ${subdomain}`);
+      settings = await Settings.findOne({ subdomain: 'tech-vaseegrah' }) || await Settings.findOne({});
+      if (settings) {
+        tenantSubdomain = settings.subdomain;
+      }
+    }
+    if (!settings) {
+      throw new Error(`Settings not found for tenant: ${subdomain || 'default'}`);
     }
 
     const config = settings.autoSalaryWhatsappConfig || {};
     const recipientPhonesStr = targetPhoneNumbers || config.phoneNumbers || '';
-    const phoneList = recipientPhonesStr
+    let phoneList = recipientPhonesStr
       .split(',')
       .map(p => p.trim())
       .filter(p => p.length > 0);
 
+    // If no numbers specified in salary config, automatically use the Leave Request admin numbers from GowhatsConfig
     if (phoneList.length === 0) {
-      throw new Error('No target WhatsApp phone numbers configured');
+      let gowhatsConfig = await GowhatsConfig.findOne({ subdomain: tenantSubdomain });
+      if (!gowhatsConfig) {
+        gowhatsConfig = await GowhatsConfig.findOne({});
+      }
+      if (gowhatsConfig && Array.isArray(gowhatsConfig.adminWhatsappNumbers) && gowhatsConfig.adminWhatsappNumbers.length > 0) {
+        phoneList = gowhatsConfig.adminWhatsappNumbers.map(p => String(p).trim()).filter(p => p.length > 0);
+        console.log(`ℹ️ [WhatsApp Salary Dispatch] Using ${phoneList.length} leave request admin WhatsApp numbers from GoWhats config.`);
+      }
+    }
+
+    if (phoneList.length === 0) {
+      throw new Error('No WhatsApp admin phone numbers configured. Please add admin numbers in GoWhats Integration or WhatsApp Salary Settings.');
     }
 
     // Determine target month & year (Previous month relative to now)
@@ -248,12 +300,18 @@ const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = nul
     const toDateStr = toDateObj.toISOString().split('T')[0];
 
     // Fetch all active workers
-    const workers = await Worker.find({ subdomain, status: { $ne: 'Relieved' } })
+    let workers = await Worker.find({ subdomain: tenantSubdomain, status: { $ne: 'Relieved' } })
       .populate('department')
       .lean();
 
     if (workers.length === 0) {
-      throw new Error('No workers found to calculate salary report');
+      workers = await Worker.find({ status: { $ne: 'Relieved' } })
+        .populate('department')
+        .lean();
+    }
+
+    if (workers.length === 0) {
+      throw new Error('No active employees found to generate monthly salary report');
     }
 
     // Calculate report data for all workers
@@ -373,34 +431,81 @@ const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = nul
     const xlsxUrl = `${baseUrl}/uploads/reports/${xlsxFilename}`;
 
     const dispatchResults = [];
+    const generatedOnStr = new Date().toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
 
     for (const phone of phoneList) {
-      // 1. Send Text Notification
-      const textMsg = `📊 *MONTHLY SALARY REPORT DISPATCH*\n\n` +
-        `• *Period:* ${monthName} ${targetYear}\n` +
-        `• *Total Employees:* ${reportsData.length}\n` +
-        `• *Generated On:* ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}\n\n` +
-        `Attached below are your **All Employees Single PDF Salary Report** and **Bank Statement XLSX Sheet**.`;
-
-      await sendWhatsApp(subdomain, phone, { type: 'text', text: textMsg });
-
-      // 2. Send PDF Document
-      const pdfRes = await sendWhatsApp(subdomain, phone, {
-        type: 'document',
-        link: pdfUrl,
+      // 1. Attempt sending via Meta Approved Template (monthly_salary_report)
+      const templatePayload = {
+        type: 'template',
+        templateName: 'monthly_salary_report',
+        languageCode: 'en',
+        filePath: pdfPath,
         filename: pdfFilename,
-        caption: `📄 All Employees Salary Report PDF (${monthName} ${targetYear})`
-      });
+        components: [
+          {
+            type: 'header',
+            parameters: [
+              {
+                type: 'document',
+                document: {
+                  filename: pdfFilename
+                }
+              }
+            ]
+          },
+          {
+            type: 'body',
+            parameters: [
+              { type: 'text', text: `${monthName} ${targetYear}` },
+              { type: 'text', text: String(reportsData.length) },
+              { type: 'text', text: generatedOnStr }
+            ]
+          }
+        ]
+      };
 
-      // 3. Send XLSX Document
+      console.log(`[WhatsApp Salary Dispatch] Sending template monthly_salary_report to ${phone}...`);
+      let templateRes = await sendWhatsApp(subdomain, phone, templatePayload);
+
+      // If template fails (e.g. pending review or code mismatch), fallback to direct text + PDF
+      let pdfRes = templateRes;
+      if (!templateRes.success) {
+        console.warn(`[WhatsApp Salary Dispatch] Template send failed (${templateRes.error}). Falling back to direct message & document...`);
+        const textMsg = `📊 *MONTHLY SALARY REPORT DISPATCH*\n\n` +
+          `• *Period:* ${monthName} ${targetYear}\n` +
+          `• *Total Employees:* ${reportsData.length}\n` +
+          `• *Generated On:* ${generatedOnStr}\n\n` +
+          `Attached below are your **All Employees Single PDF Salary Report** and **Bank Statement XLSX Sheet**.`;
+
+        await sendWhatsApp(subdomain, phone, { type: 'text', text: textMsg });
+
+        pdfRes = await sendWhatsApp(subdomain, phone, {
+          type: 'document',
+          link: pdfUrl,
+          filePath: pdfPath,
+          filename: pdfFilename,
+          caption: `📄 All Employees Salary Report PDF (${monthName} ${targetYear})`
+        });
+      }
+
+      // 2. Send XLSX Corporate Bank Statement Document
       const xlsxRes = await sendWhatsApp(subdomain, phone, {
         type: 'document',
         link: xlsxUrl,
+        filePath: xlsxPath,
         filename: xlsxFilename,
         caption: `📊 Bank Statement XLSX Sheet (${monthName} ${targetYear})`
       });
 
-      dispatchResults.push({ phone, pdfRes, xlsxRes });
+      dispatchResults.push({ phone, templateRes, pdfRes, xlsxRes });
     }
 
     // Update settings lastDispatchedAt
