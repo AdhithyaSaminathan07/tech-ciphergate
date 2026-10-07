@@ -2193,19 +2193,19 @@ const Settings = () => {
 
                                                 <div className="p-2 bg-white border border-slate-200/60 rounded-lg space-y-0.5">
                                                     <div className="flex items-center justify-between gap-2">
-                                                        <label className="text-[10px] font-bold text-slate-800">Include Permission</label>
+                                                        <label className="text-[10px] font-bold text-slate-800">Include Permission in Limit</label>
                                                         <div className="flex-shrink-0 shrink-0">
                                                             <CustomToggle
-                                                                checked={settings.advancedLeaveDeduction.enableUnauthorizedPermissionPenalty ?? settings.includePermission ?? false}
+                                                                checked={settings.advancedLeaveDeduction.includePermissionPenalty ?? settings.includePermission ?? false}
                                                                 onChange={() => {
-                                                                    const newVal = !(settings.advancedLeaveDeduction.enableUnauthorizedPermissionPenalty ?? settings.includePermission ?? false);
-                                                                    handleAdvancedSettingsChange('enableUnauthorizedPermissionPenalty', newVal);
+                                                                    const newVal = !(settings.advancedLeaveDeduction.includePermissionPenalty ?? settings.includePermission ?? false);
+                                                                    handleAdvancedSettingsChange('includePermissionPenalty', newVal);
                                                                     handleInputChange({ target: { name: 'includePermission', type: 'checkbox', checked: newVal } });
                                                                 }}
                                                             />
                                                         </div>
                                                     </div>
-                                                    <p className="text-[9px] text-slate-500">Apply {settings.advancedLeaveDeduction.deductionMultiplier}X penalty to permission/late time.</p>
+                                                    <p className="text-[9px] text-slate-500">Apply {settings.advancedLeaveDeduction.deductionMultiplier}X penalty to permission/late time when monthly limit is exceeded.</p>
                                                 </div>
                                             </div>
                                         )}

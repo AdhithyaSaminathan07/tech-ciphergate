@@ -98,6 +98,13 @@ const sendWhatsAppTemplateMessage = async (subdomain, templateName, recipientNum
       message: errorMessage
     });
 
+    // Check if error is due to button mismatch (template does not have button components in Meta)
+    const errorDetailsMsg = error.response?.data?.error?.error_data?.details || '';
+    if (buttonParams && buttonParams.length > 0 && (errorDetailsMsg.includes('button') || errorMessage.includes('button') || error.response?.data?.error?.code === 100)) {
+      console.warn(`[WhatsApp] Template does not contain button components in Meta. Retrying without buttons...`);
+      return await sendWhatsAppTemplateMessage(subdomain, templateName, recipientNumber, headerParams, bodyParams, null);
+    }
+
     // Check specifically for template not found error (code 132001) or other common errors
     if (error.response?.data?.error?.code === 132001 || error.response?.data?.error?.code === 131047 || error.response?.data?.error?.code === 130038) {
       console.warn(`[WhatsApp] Template error (code ${error.response?.data?.error?.code}), falling back to text message`);
@@ -284,7 +291,7 @@ const sendNewLeaveRequestNotification = async (leave) => {
         adminNumber,
         null, // No header parameters
         bodyParameters,
-        buttonParameters
+        buttonParameters // Interactive Quick-Reply Approve/Reject buttons
       );
       console.log(`[WhatsApp] Result for ${adminNumber}:`, result);
       results.push({ number: adminNumber, ...result });

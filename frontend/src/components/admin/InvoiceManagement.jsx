@@ -4,9 +4,9 @@ import * as XLSX from 'xlsx';
 import Card from '../common/Card';
 import AdvancedInvoice from './AdvancedInvoice';
 import InvoiceHistory from './InvoiceHistory';
-import UnifiedInvoiceHistory from './UnifiedInvoiceHistory';
-import AdminDeleteHistory from './AdminDeleteHistory'; // Add this import
+import AdminDeleteHistory from './AdminDeleteHistory';
 import RenewalModal from './RenewalModal';
+import CustomDateRangePicker from '../common/CustomDateRangePicker';
 import { getInvoices, getAllInvoices, createInvoice, updateInvoice, deleteInvoice, updateAdminLastViewed } from '../../services/invoiceService';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -47,6 +47,7 @@ const InvoiceManagement = () => {
   const [activeTab, setActiveTab] = useState('advanced-invoice');
   const [invoices, setInvoices] = useState([]);
   const [editingInvoice, setEditingInvoice] = useState(null);
+  const [viewingInvoice, setViewingInvoice] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const { user } = useAuth();
@@ -122,14 +123,10 @@ const InvoiceManagement = () => {
     try {
       let response;
 
-      // Check if invoice already exists (by invoiceNo)
-      const existingInvoice = invoices.find(inv => inv.invoiceNo === invoiceData.invoiceNo);
-
-      if (existingInvoice) {
-        // Update existing invoice
-        response = await updateInvoice(existingInvoice._id, invoiceData);
+      // If _id is present, update the specific invoice; otherwise create new invoice
+      if (invoiceData._id) {
+        response = await updateInvoice(invoiceData._id, invoiceData);
       } else {
-        // Create new invoice
         response = await createInvoice(invoiceData);
       }
 
@@ -148,8 +145,15 @@ const InvoiceManagement = () => {
   };
 
   const handleEditInvoice = (invoice) => {
+    setViewingInvoice(null);
     setEditingInvoice(invoice);
     setActiveTab('advanced-invoice');
+  };
+
+  const handleViewInvoice = (invoice) => {
+    setEditingInvoice(null);
+    setViewingInvoice(invoice);
+    setActiveTab('view-invoice');
   };
 
   // Handle delete invoice callback
@@ -309,7 +313,6 @@ const InvoiceManagement = () => {
           {[
             { id: 'advanced-invoice', label: 'Advanced Invoice' },
             { id: 'invoice-history', label: 'Invoice History' },
-            { id: 'unified-history', label: 'All Invoices' },
             { id: 'delete-history', label: 'Delete History' }
           ].map((tab) => (
             <button
@@ -328,7 +331,7 @@ const InvoiceManagement = () => {
 
         {/* Action buttons on the right */}
         <div className="flex gap-3 flex-shrink-0 mb-2 md:mb-0">
-          {(activeTab === 'invoice-history' || activeTab === 'unified-history') && (
+          {activeTab === 'invoice-history' && (
             <button
               onClick={downloadSalesReport}
               className="flex items-center gap-2 bg-[#f0fdf4] text-[#166534] hover:bg-[#dcfce7] font-bold py-2 px-4 rounded-xl border border-[#bbf7d0] transition-all shadow-sm text-sm"
@@ -342,6 +345,7 @@ const InvoiceManagement = () => {
           <button
             onClick={() => {
               setEditingInvoice(null);
+              setViewingInvoice(null);
               setActiveTab('advanced-invoice');
             }}
             className="flex items-center gap-2 bg-[#0d9488] hover:bg-[#0f766e] text-white font-bold py-2.5 px-6 rounded-xl transition-all shadow-md shadow-teal-600/10 hover:shadow-lg hover:shadow-teal-600/15 hover:scale-[1.02] active:scale-[0.98] text-sm animate-in fade-in"
@@ -352,7 +356,7 @@ const InvoiceManagement = () => {
       </div>
 
       {/* Global Filter UI - Only show for history tabs */}
-      {(activeTab === 'invoice-history' || activeTab === 'unified-history') && (
+      {activeTab === 'invoice-history' && (
         <div className="flex flex-wrap items-center justify-end gap-4 animate-in fade-in slide-in-from-top-4">
           {/* GST Filter Dropdown */}
           <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-gray-200 shadow-sm">
@@ -387,27 +391,21 @@ const InvoiceManagement = () => {
           </div>
 
           {filterType === 'custom' && (
-            <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-gray-200 shadow-sm animate-in zoom-in-95">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="bg-transparent border-none text-sm focus:ring-0 px-2 py-1 cursor-pointer"
-              />
-              <span className="text-gray-400 text-xs">to</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="bg-transparent border-none text-sm focus:ring-0 px-2 py-1 cursor-pointer"
-              />
-              <button
-                onClick={applyCustomFilter}
-                className="bg-[#0d9488] text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-[#0f766e] transition-colors shadow-md"
-              >
-                Apply
-              </button>
-            </div>
+            <CustomDateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              onApply={(start, end) => {
+                setStartDate(start);
+                setEndDate(end);
+                fetchInvoices('custom', start, end, gstFilter);
+              }}
+              onClear={() => {
+                setStartDate('');
+                setEndDate('');
+                fetchInvoices('all', '', '', gstFilter);
+                setFilterType('all');
+              }}
+            />
           )}
         </div>
       )}
@@ -440,22 +438,23 @@ const InvoiceManagement = () => {
       <div className="mt-6">
         {activeTab === 'advanced-invoice' && (
           <AdvancedInvoice
+            key={editingInvoice?._id || 'new-invoice'}
             onInvoiceSave={handleInvoiceSave}
             initialData={editingInvoice}
+          />
+        )}
+        {activeTab === 'view-invoice' && viewingInvoice && (
+          <AdvancedInvoice
+            key={viewingInvoice?._id || 'view-invoice'}
+            initialData={viewingInvoice}
+            isPreviewMode={true}
           />
         )}
         {activeTab === 'invoice-history' && !loading && (
           <InvoiceHistory
             invoices={invoices}
             onEditInvoice={handleEditInvoice}
-            onDeleteInvoice={handleDeleteInvoice}
-            onStatusUpdate={handleStatusUpdate}
-          />
-        )}
-        {activeTab === 'unified-history' && !loading && (
-          <UnifiedInvoiceHistory
-            invoices={invoices}
-            onEditInvoice={handleEditInvoice}
+            onViewInvoice={handleViewInvoice}
             onDeleteInvoice={handleDeleteInvoice}
             onStatusUpdate={handleStatusUpdate}
           />

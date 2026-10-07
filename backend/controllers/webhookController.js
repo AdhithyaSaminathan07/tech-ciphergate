@@ -203,26 +203,39 @@ const handleWhatsAppWebhook = asyncHandler(async (req, res) => {
   const payload = getButtonPayload(message);
   if (payload) {
 
-    // Check if the button payload is for leave management
-    if (payload.startsWith('ACCEPT_LEAVE_') || payload.startsWith('REJECT_LEAVE_')) {
-      const isApprove = payload.startsWith('ACCEPT_LEAVE_');
-      const action = isApprove ? 'Approved' : 'Rejected';
-      const leaveId = payload.replace(isApprove ? 'ACCEPT_LEAVE_' : 'REJECT_LEAVE_', '');
+    // Check if the button payload or title is for leave management
+    const lowerPayload = payload.trim().toLowerCase();
+    const isApprove = payload.startsWith('ACCEPT_LEAVE_') || lowerPayload === 'approve' || lowerPayload === 'accept';
+    const isReject = payload.startsWith('REJECT_LEAVE_') || lowerPayload === 'reject';
 
-      console.log(`[Webhook] Processing action '${action}' for leave ID '${leaveId}'`);
+    if (isApprove || isReject) {
+      const action = isApprove ? 'Approved' : 'Rejected';
+      let leaveId = payload.startsWith('ACCEPT_LEAVE_') || payload.startsWith('REJECT_LEAVE_')
+        ? payload.replace(isApprove ? 'ACCEPT_LEAVE_' : 'REJECT_LEAVE_', '')
+        : null;
+
+      console.log(`[Webhook] Processing action '${action}' for leave ID '${leaveId || 'latest'}'`);
 
       try {
+        let query = { subdomain: new RegExp(`^${config.subdomain}$`, 'i') };
+        if (leaveId) {
+          query._id = leaveId;
+        } else {
+          query.status = 'Pending';
+        }
+
         // Find the leave application ensuring it belongs to the correct tenant (case-insensitive)
-        const leave = await Leave.findOne({
-          _id: leaveId,
-          subdomain: new RegExp(`^${config.subdomain}$`, 'i')
-        }).populate('worker', 'name perDaySalary');
+        let leave = leaveId
+          ? await Leave.findOne(query).populate('worker', 'name perDaySalary')
+          : await Leave.findOne(query).sort({ createdAt: -1 }).populate('worker', 'name perDaySalary');
 
         if (!leave) {
-          console.error(`[Webhook] Leave not found: ${leaveId} for tenant: ${config.subdomain}`);
-          await sendConfirmationMessage(config, fromNumber, `❌ Leave application not found or it does not belong to your organization.`);
+          console.error(`[Webhook] Leave not found: ${leaveId || 'Pending'} for tenant: ${config.subdomain}`);
+          await sendConfirmationMessage(config, fromNumber, `❌ No pending leave application found for your organization.`);
           return res.status(200).json({ status: 'ok' });
         }
+
+        leaveId = leave._id;
 
         // Prevent re-processing a leave request
         if (leave.status !== 'Pending') {

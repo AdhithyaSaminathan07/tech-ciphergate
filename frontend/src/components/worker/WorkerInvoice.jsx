@@ -5,6 +5,7 @@ import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 import appContext from '../../context/AppContext';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 // Helper to normalize any date string to DD/MM/YYYY
 const normalizeInvoiceDate = (dateStr) => {
@@ -85,7 +86,7 @@ const WorkerInvoice = ({ onInvoiceSave, initialData }) => {
     gstEnabled: initialData?.gstEnabled || false,
     saleType: initialData?.saleType || 'Intrastate', // Intrastate or Interstate
     customerGst: initialData?.customerGst || '',
-    invoiceType: initialData?.invoiceType || 'INVOICE' // INVOICE, PROFORMA INVOICE, TAX INVOICE
+    invoiceType: initialData?.invoiceType || 'PROFORMA INVOICE' // INVOICE, PROFORMA INVOICE, TAX INVOICE
   });
 
   // Checkbox states for including fields in PDF
@@ -152,7 +153,7 @@ const WorkerInvoice = ({ onInvoiceSave, initialData }) => {
         gstEnabled: initialData.gstEnabled || false,
         saleType: initialData.saleType || 'Intrastate',
         customerGst: initialData.customerGst || '',
-        invoiceType: initialData.invoiceType || 'INVOICE'
+        invoiceType: (initialData.paymentDetails && ((Array.isArray(initialData.paymentDetails.proofs) && initialData.paymentDetails.proofs.length > 0) || initialData.paymentDetails.proof)) ? 'TAX INVOICE' : (initialData.invoiceType || 'PROFORMA INVOICE')
       });
     }
   }, [initialData]);
@@ -279,14 +280,9 @@ const WorkerInvoice = ({ onInvoiceSave, initialData }) => {
           [name]: checked
         };
         
-        // If GST is enabled, automatically set invoice type to TAX INVOICE
-        if (name === 'gstEnabled' && checked) {
-          updatedData.invoiceType = 'TAX INVOICE';
-        }
         // If GST is disabled, reset saleType to default
         if (name === 'gstEnabled' && !checked) {
           updatedData.saleType = 'Intrastate';
-          updatedData.invoiceType = 'INVOICE'; // Reset invoice type if GST is unchecked
         }
         
         return updatedData;
@@ -696,7 +692,7 @@ const WorkerInvoice = ({ onInvoiceSave, initialData }) => {
       pdf.setFillColor(255, 255, 255); // White background
       pdf.rect(labelX - 5, summaryStartY - 5, (valueX - labelX) + 10, 7, 'F');
       pdf.text('Sub Total :', labelX, summaryStartY);
-      pdf.text(`₹${totals.subtotal.toFixed(2)}`, valueX, summaryStartY, { align: 'right' });
+      pdf.text(`Rs. ${totals.subtotal.toFixed(2)}`, valueX, summaryStartY, { align: 'right' });
       
       let summaryY = summaryStartY + 7;
       
@@ -707,21 +703,21 @@ const WorkerInvoice = ({ onInvoiceSave, initialData }) => {
           pdf.setFillColor(255, 255, 255); // White background
           pdf.rect(labelX - 5, summaryY - 5, (valueX - labelX) + 10, 7, 'F');
           pdf.text('CGST Total :', labelX, summaryY);
-          pdf.text(`₹${totals.cgstTotal.toFixed(2)}`, valueX, summaryY, { align: 'right' });
+          pdf.text(`Rs. ${totals.cgstTotal.toFixed(2)}`, valueX, summaryY, { align: 'right' });
           summaryY += 7;
           
           // Draw background for SGST row (white background, black text)
           pdf.setFillColor(255, 255, 255); // White background
           pdf.rect(labelX - 5, summaryY - 5, (valueX - labelX) + 10, 7, 'F');
           pdf.text('SGST Total :', labelX, summaryY);
-          pdf.text(`₹${totals.sgstTotal.toFixed(2)}`, valueX, summaryY, { align: 'right' });
+          pdf.text(`Rs. ${totals.sgstTotal.toFixed(2)}`, valueX, summaryY, { align: 'right' });
           summaryY += 7;
         } else if (invoiceData.saleType === 'Interstate') {
           // Draw background for IGST row (white background, black text)
           pdf.setFillColor(255, 255, 255); // White background
           pdf.rect(labelX - 5, summaryY - 5, (valueX - labelX) + 10, 7, 'F');
           pdf.text('IGST Total :', labelX, summaryY);
-          pdf.text(`₹${totals.igstTotal.toFixed(2)}`, valueX, summaryY, { align: 'right' });
+          pdf.text(`Rs. ${totals.igstTotal.toFixed(2)}`, valueX, summaryY, { align: 'right' });
           summaryY += 7;
         }
       }
@@ -736,7 +732,7 @@ const WorkerInvoice = ({ onInvoiceSave, initialData }) => {
       pdf.rect(labelX - 5, summaryY - 5, grandTotalWidth, 7, 'F');
       pdf.setTextColor(255, 255, 255); // White text
       pdf.text('Grand Total :', labelX, summaryY);
-      pdf.text(`₹${totals.grandTotal.toFixed(2)}`, valueX, summaryY, { align: 'right' });
+      pdf.text(`Rs. ${totals.grandTotal.toFixed(2)}`, valueX, summaryY, { align: 'right' });
       pdf.setTextColor(51, 51, 51); // Reset to default color
       pdf.setFont(undefined, 'normal');
       
@@ -1420,12 +1416,9 @@ support period.`;
     }, 500);
   };
 
-  // Get the display title based on invoice type and GST status
+  // Get the display title based on invoice type
   const getDisplayTitle = () => {
-    if (invoiceData.gstEnabled) {
-      return 'TAX INVOICE';
-    }
-    return invoiceData.invoiceType;
+    return invoiceData.invoiceType || 'PROFORMA INVOICE';
   };
 
   return (
@@ -1712,12 +1705,14 @@ support period.`;
                 <label className="font-bold text-gray-700 mr-2">Invoice Date:</label>
               </div>
               <div className="ml-6 text-right">
-                <input
-                  type="date"
-                  name="invoiceDate"
+                <CustomDatePicker
                   value={invoiceData.invoiceDate}
-                  onChange={handleInputChange}
-                  className="w-full px-1 py-0.5 border-b border-gray-300 focus:outline-none focus:border-green-500 text-sm font-normal"
+                  onChange={(val) => handleInputChange({ target: { name: 'invoiceDate', value: val } })}
+                  format="DMY"
+                  placeholder="DD/MM/YYYY"
+                  className="w-full"
+                  inputClassName="w-full px-1 py-0.5 border-0 border-b border-gray-300 focus:outline-none focus:border-green-500 text-sm font-normal rounded-none shadow-none bg-transparent"
+                  showIcon={false}
                 />
               </div>
             </div>

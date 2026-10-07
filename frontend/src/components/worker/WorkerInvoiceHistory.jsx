@@ -42,7 +42,15 @@ const STAGES = ['Invoice', 'Payment Received', 'Work completion', 'Closure agree
 const WorkerInvoiceHistory = ({ invoices, onEditInvoice, onDeleteInvoice, onStatusUpdate }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState(null);
-  const [localInvoices, setLocalInvoices] = useState(invoices);
+  // Search & Filter states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [minPrice, setMinPrice] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
+  const [customerFilter, setCustomerFilter] = useState('');
+  const [startDateFilter, setStartDateFilter] = useState('');
+  const [endDateFilter, setEndDateFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
 
   // Stage proof modal state
   const [isStageModalOpen, setIsStageModalOpen] = useState(false);
@@ -60,6 +68,12 @@ const WorkerInvoiceHistory = ({ invoices, onEditInvoice, onDeleteInvoice, onStat
     return [];
   };
 
+  const getEffectiveInvoiceType = (invoice) => {
+    if (!invoice) return 'PROFORMA INVOICE';
+    const paymentProofs = getProofs(invoice.paymentDetails);
+    return (paymentProofs.length > 0 || invoice.invoiceType === 'TAX INVOICE') ? 'TAX INVOICE' : 'PROFORMA INVOICE';
+  };
+
   const openGallery = (images, title) => {
     if (images.length > 0) {
       setPreviewGallery({ images, currentIndex: 0, title });
@@ -71,6 +85,16 @@ const WorkerInvoiceHistory = ({ invoices, onEditInvoice, onDeleteInvoice, onStat
     setLocalInvoices(invoices);
   }, [invoices]);
 
+  // Get unique customer names for filter dropdown
+  const uniqueCustomers = useMemo(() => {
+    const names = localInvoices
+      .map(inv => inv.customerName)
+      .filter(name => name && name.trim() !== '')
+      .filter((name, index, self) => self.indexOf(name) === index)
+      .sort();
+    return names;
+  }, [localInvoices]);
+
   // Format date for display
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -80,6 +104,26 @@ const WorkerInvoiceHistory = ({ invoices, onEditInvoice, onDeleteInvoice, onStat
       month: '2-digit',
       year: 'numeric'
     });
+  };
+
+  // Helper to parse invoice date to a comparable Date object
+  const getInvoiceDateObj = (invoice) => {
+    if (invoice.actualDate) return new Date(invoice.actualDate);
+    if (invoice.invoiceDate) {
+      const str = String(invoice.invoiceDate).trim();
+      const dmy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+      if (dmy) {
+        return new Date(parseInt(dmy[3], 10), parseInt(dmy[2], 10) - 1, parseInt(dmy[1], 10));
+      }
+      const ymd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+      if (ymd) {
+        return new Date(parseInt(ymd[1], 10), parseInt(ymd[2], 10) - 1, parseInt(ymd[3], 10));
+      }
+      const parsed = new Date(str);
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
+    if (invoice.createdAt) return new Date(invoice.createdAt);
+    return new Date();
   };
 
   // Calculate total amount for an invoice
@@ -93,6 +137,88 @@ const WorkerInvoiceHistory = ({ invoices, onEditInvoice, onDeleteInvoice, onStat
     
     return subtotal + gstTotal;
   };
+
+  // Filtered invoices based on search, date, customer, price, and status
+  const filteredInvoices = useMemo(() => {
+    return localInvoices.filter(invoice => {
+      // Search query filter (invoice number, customer name, customer contact)
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase().trim();
+        const matchesInvoiceNo = invoice.invoiceNo?.toLowerCase().includes(query);
+        const matchesCustomer = invoice.customerName?.toLowerCase().includes(query);
+        const matchesContact = invoice.customerContact?.toLowerCase().includes(query);
+        if (!matchesInvoiceNo && !matchesCustomer && !matchesContact) return false;
+      }
+
+      // Customer filter
+      if (customerFilter && invoice.customerName !== customerFilter) {
+        return false;
+      }
+
+      // Status filter
+      if (statusFilter && (invoice.status || 'Invoice') !== statusFilter) {
+        return false;
+      }
+
+      // Date range filter
+      if (startDateFilter || endDateFilter) {
+        const invDate = getInvoiceDateObj(invoice);
+        if (startDateFilter) {
+          const start = new Date(startDateFilter);
+          start.setHours(0, 0, 0, 0);
+          if (invDate < start) return false;
+        }
+        if (endDateFilter) {
+          const end = new Date(endDateFilter);
+          end.setHours(23, 59, 59, 999);
+          if (invDate > end) return false;
+        }
+      }
+
+      // Price range filter
+      const total = calculateTotal(invoice);
+      if (minPrice !== '' && total < parseFloat(minPrice)) return false;
+      if (maxPrice !== '' && total > parseFloat(maxPrice)) return false;
+
+      return true;
+    });
+  }, [localInvoices, searchQuery, customerFilter, statusFilter, startDateFilter, endDateFilter, minPrice, maxPrice]);
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setMinPrice('');
+    setMaxPrice('');
+    setCustomerFilter('');
+    setStartDateFilter('');
+    setEndDateFilter('');
+    setStatusFilter('');
+  };
+
+  const applyQuickDate = (preset) => {
+    const now = new Date();
+    if (preset === 'today') {
+      const d = now.toISOString().split('T')[0];
+      setStartDateFilter(d);
+      setEndDateFilter(d);
+    } else if (preset === 'week') {
+      const start = new Date(now);
+      start.setDate(now.getDate() - now.getDay());
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      setStartDateFilter(start.toISOString().split('T')[0]);
+      setEndDateFilter(end.toISOString().split('T')[0]);
+    } else if (preset === 'month') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      setStartDateFilter(start.toISOString().split('T')[0]);
+      setEndDateFilter(end.toISOString().split('T')[0]);
+    } else {
+      setStartDateFilter('');
+      setEndDateFilter('');
+    }
+  };
+
+  const hasActiveFilters = searchQuery || minPrice || maxPrice || customerFilter || startDateFilter || endDateFilter || statusFilter;
 
   // Handle delete invoice - show confirmation modal
   const handleDeleteClick = (invoiceId) => {
@@ -204,10 +330,14 @@ const WorkerInvoiceHistory = ({ invoices, onEditInvoice, onDeleteInvoice, onStat
       }
     }
 
+    const paymentInfo = targetStage === 'Payment Received' ? newStageData : selectedInvoiceForStage.paymentDetails;
+    const hasPaymentProof = !!(paymentInfo && ((Array.isArray(paymentInfo.proofs) && paymentInfo.proofs.length > 0) || paymentInfo.proof));
+
     // New proof replaces old one entirely
     const updateData = {
       status: newStatus,
-      [stageFieldMap[targetStage]]: newStageData
+      [stageFieldMap[targetStage]]: newStageData,
+      invoiceType: hasPaymentProof ? 'TAX INVOICE' : (selectedInvoiceForStage.invoiceType || 'PROFORMA INVOICE')
     };
 
     const success = await performStatusUpdate(selectedInvoiceForStage._id, updateData);
@@ -226,9 +356,209 @@ const WorkerInvoiceHistory = ({ invoices, onEditInvoice, onDeleteInvoice, onStat
 
   return (
     <div className="w-full bg-white font-sans">
-      <h1 className="text-xl font-bold text-gray-800 mb-6">Invoice History</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+        <h1 className="text-xl font-bold text-gray-800">Invoice History</h1>
+      </div>
+
+      {/* Search & Filter Bar */}
+      <div className="mb-4 space-y-3">
+        {/* Search row */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by invoice number, customer name, or contact..."
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-all bg-gray-50/50"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all whitespace-nowrap ${
+              showFilters || hasActiveFilters
+                ? 'bg-teal-50 text-[#0d9488] border-teal-200'
+                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            Filters
+            {hasActiveFilters && (
+              <span className="w-2 h-2 bg-[#0d9488] rounded-full"></span>
+            )}
+          </button>
+        </div>
+
+        {/* Expandable filter drawer */}
+        {showFilters && (
+          <div className="p-4 bg-gray-50/90 rounded-2xl border border-gray-200/80 shadow-inner space-y-3.5 animate-in slide-in-from-top-2 duration-200">
+            {/* Quick date presets */}
+            <div className="flex flex-wrap items-center gap-2 pb-2 border-b border-gray-200/60">
+              <span className="text-xs font-bold text-gray-500 mr-1">Quick Date:</span>
+              {[
+                { id: 'all', label: 'All Time' },
+                { id: 'today', label: 'Today' },
+                { id: 'week', label: 'This Week' },
+                { id: 'month', label: 'This Month' }
+              ].map(preset => (
+                <button
+                  key={preset.id}
+                  onClick={() => applyQuickDate(preset.id)}
+                  className="px-3 py-1 bg-white hover:bg-teal-50 hover:text-teal-700 text-xs font-semibold text-gray-600 rounded-lg border border-gray-200 transition-colors shadow-xs"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              {/* Date range */}
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-gray-600">Date Range</label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="date"
+                    value={startDateFilter}
+                    onChange={(e) => setStartDateFilter(e.target.value)}
+                    className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
+                  />
+                  <span className="text-gray-400 text-xs">to</span>
+                  <input
+                    type="date"
+                    value={endDateFilter}
+                    onChange={(e) => setEndDateFilter(e.target.value)}
+                    className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Customer filter */}
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-gray-600">Customer</label>
+                <select
+                  value={customerFilter}
+                  onChange={(e) => setCustomerFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
+                >
+                  <option value="">All Customers ({uniqueCustomers.length})</option>
+                  {uniqueCustomers.map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Price range */}
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-gray-600">Price Range (₹)</label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    value={minPrice}
+                    onChange={(e) => setMinPrice(e.target.value)}
+                    placeholder="Min ₹"
+                    className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
+                  />
+                  <span className="text-gray-400 text-xs">to</span>
+                  <input
+                    type="number"
+                    value={maxPrice}
+                    onChange={(e) => setMaxPrice(e.target.value)}
+                    placeholder="Max ₹"
+                    className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Status / Stage Filter */}
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-gray-600">Stage / Status</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
+                >
+                  <option value="">All Stages</option>
+                  {STAGES.map(st => (
+                    <option key={st} value={st}>{st}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Clear filters row */}
+            {hasActiveFilters && (
+              <div className="flex items-center justify-between pt-2 border-t border-gray-200/60">
+                <div className="flex flex-wrap gap-1.5 items-center text-xs">
+                  <span className="text-gray-400 font-medium mr-1">Active:</span>
+                  {searchQuery && (
+                    <span className="inline-flex items-center gap-1 bg-teal-50 text-teal-700 px-2 py-0.5 rounded-md font-medium text-[11px] border border-teal-200">
+                      Query: "{searchQuery}"
+                      <button onClick={() => setSearchQuery('')} className="hover:text-teal-900 ml-0.5">×</button>
+                    </span>
+                  )}
+                  {customerFilter && (
+                    <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-medium text-[11px] border border-blue-200">
+                      Customer: {customerFilter}
+                      <button onClick={() => setCustomerFilter('')} className="hover:text-blue-900 ml-0.5">×</button>
+                    </span>
+                  )}
+                  {(startDateFilter || endDateFilter) && (
+                    <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 px-2 py-0.5 rounded-md font-medium text-[11px] border border-purple-200">
+                      Date: {startDateFilter || '...'} to {endDateFilter || '...'}
+                      <button onClick={() => { setStartDateFilter(''); setEndDateFilter(''); }} className="hover:text-purple-900 ml-0.5">×</button>
+                    </span>
+                  )}
+                  {(minPrice || maxPrice) && (
+                    <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md font-medium text-[11px] border border-amber-200">
+                      Price: ₹{minPrice || '0'} - ₹{maxPrice || '∞'}
+                      <button onClick={() => { setMinPrice(''); setMaxPrice(''); }} className="hover:text-amber-900 ml-0.5">×</button>
+                    </span>
+                  )}
+                  {statusFilter && (
+                    <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md font-medium text-[11px] border border-emerald-200">
+                      Stage: {statusFilter}
+                      <button onClick={() => setStatusFilter('')} className="hover:text-emerald-900 ml-0.5">×</button>
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={clearFilters}
+                  className="text-xs font-bold text-red-600 hover:text-red-800 hover:underline transition-colors flex items-center gap-1 flex-shrink-0 ml-auto"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Clear All Filters
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Results count */}
+        {hasActiveFilters && (
+          <div className="text-xs text-gray-500 font-medium">
+            Showing {filteredInvoices.length} of {localInvoices.length} invoices
+          </div>
+        )}
+      </div>
       
-      {localInvoices.length === 0 ? (
+      {filteredInvoices.length === 0 ? (
         <Card className="p-12 text-center border-dashed border-2 border-gray-200">
           <div className="flex flex-col items-center">
             <div className="bg-gray-100 p-4 rounded-full mb-4">
@@ -236,8 +566,17 @@ const WorkerInvoiceHistory = ({ invoices, onEditInvoice, onDeleteInvoice, onStat
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-1">No invoices found</h3>
-            <p className="text-gray-500">Create your first invoice to see it here.</p>
+            <h3 className="text-lg font-medium text-gray-900 mb-1">
+              {hasActiveFilters ? 'No invoices match your filters' : 'No invoices found'}
+            </h3>
+            <p className="text-gray-500">
+              {hasActiveFilters ? 'Try adjusting your search or filter criteria.' : 'Create your first invoice to see it here.'}
+            </p>
+            {hasActiveFilters && (
+              <button onClick={clearFilters} className="mt-3 text-sm text-[#0d9488] font-semibold hover:underline">
+                Clear all filters
+              </button>
+            )}
           </div>
         </Card>
       ) : (
@@ -264,7 +603,7 @@ const WorkerInvoiceHistory = ({ invoices, onEditInvoice, onDeleteInvoice, onStat
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {localInvoices.map((invoice) => (
+              {filteredInvoices.map((invoice) => (
                 <tr key={invoice._id} className="hover:bg-teal-50/20 transition-colors">
                   <td className="py-3.5 px-4 text-sm font-semibold text-gray-900 truncate">{invoice.invoiceNo}</td>
                   <td className="py-3.5 px-4 text-sm text-gray-500">{normalizeInvoiceDate(invoice.invoiceDate) || formatDate(invoice.createdAt)}</td>
@@ -273,8 +612,12 @@ const WorkerInvoiceHistory = ({ invoices, onEditInvoice, onDeleteInvoice, onStat
                     {invoice.customerContact && <div className="text-xs text-gray-400 truncate">{invoice.customerContact}</div>}
                   </td>
                   <td className="py-3.5 px-4 text-center">
-                    <span className={`inline-block px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${ invoice.invoiceType === 'TAX INVOICE' ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-teal-50 text-[#0d9488] border border-teal-100' }`}>
-                      {invoice.invoiceType}
+                    <span className={`inline-block px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                      getEffectiveInvoiceType(invoice) === 'TAX INVOICE'
+                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                        : 'bg-sky-50 text-sky-700 border border-sky-200'
+                    }`}>
+                      {getEffectiveInvoiceType(invoice)}
                     </span>
                   </td>
                   <td className="py-3.5 px-4 text-sm font-bold text-gray-900 text-right whitespace-nowrap">

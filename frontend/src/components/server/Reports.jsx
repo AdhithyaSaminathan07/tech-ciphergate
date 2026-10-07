@@ -4,6 +4,7 @@ import {
   FiDownload, FiFileText, FiDatabase, FiCalendar,
   FiCheckCircle, FiLoader, FiAlertCircle, FiGrid
 } from 'react-icons/fi';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const REPORT_TEMPLATES = [
   {
@@ -117,20 +118,20 @@ const Reports = () => {
         <div className="flex flex-col md:flex-row gap-4 items-end">
           <div className="space-y-1.5 flex-1">
             <label className="text-[10px] text-slate-400 font-bold tracking-wider">Report Start Date</label>
-            <input
-              type="date"
+            <CustomDatePicker
               value={dateRange.start}
-              onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-              className="w-full px-4 py-2.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 bg-slate-50"
+              onChange={val => setDateRange(prev => ({ ...prev, start: val }))}
+              className="w-full"
+              inputClassName="w-full px-4 py-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50"
             />
           </div>
           <div className="space-y-1.5 flex-1">
             <label className="text-[10px] text-slate-400 font-bold tracking-wider">Report End Date</label>
-            <input
-              type="date"
+            <CustomDatePicker
               value={dateRange.end}
-              onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-              className="w-full px-4 py-2.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 bg-slate-50"
+              onChange={val => setDateRange(prev => ({ ...prev, end: val }))}
+              className="w-full"
+              inputClassName="w-full px-4 py-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50"
             />
           </div>
           <div className="flex gap-2">

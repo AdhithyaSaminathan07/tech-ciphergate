@@ -10,6 +10,7 @@ import Table from '../common/Table';
 import Modal from '../common/Modal';
 import Spinner from '../common/Spinner';
 import appContext from '../../context/AppContext';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const TaskManagement = () => {
   const [tasks, setTasks] = useState([]);
@@ -240,21 +241,21 @@ const TaskManagement = () => {
             </select>
           </div>
           <div>
-            <input
-              type="date"
-              className="form-input"
+            <CustomDatePicker
+              className="w-full"
+              inputClassName="w-full form-input"
               placeholder="From Date"
               value={filterDateFrom}
-              onChange={(e) => setFilterDateFrom(e.target.value)}
+              onChange={(val) => setFilterDateFrom(val)}
             />
           </div>
           <div>
-            <input
-              type="date"
-              className="form-input"
+            <CustomDatePicker
+              className="w-full"
+              inputClassName="w-full form-input"
               placeholder="To Date"
               value={filterDateTo}
-              onChange={(e) => setFilterDateTo(e.target.value)}
+              onChange={(val) => setFilterDateTo(val)}
             />
           </div>
         </div>

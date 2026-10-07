@@ -65,6 +65,10 @@ const createInvoice = async (req, res) => {
     // Determine the creator model based on user role
     const createdByModel = req.user.role === 'admin' ? 'Admin' : 'Worker';
 
+    // Determine initial invoice type: TAX INVOICE if payment proof exists, otherwise PROFORMA INVOICE
+    const hasCreatePaymentProof = !!(req.body.paymentDetails && ((Array.isArray(req.body.paymentDetails.proofs) && req.body.paymentDetails.proofs.length > 0) || (req.body.paymentDetails.proof && String(req.body.paymentDetails.proof).trim().length > 0)));
+    const initialInvoiceType = hasCreatePaymentProof ? 'TAX INVOICE' : (invoiceType || 'PROFORMA INVOICE');
+
     // Create new invoice
     const invoice = new Invoice({
       invoiceNo,
@@ -82,7 +86,7 @@ const createInvoice = async (req, res) => {
       gstEnabled: true,
       saleType: saleType || 'Intrastate',
       customerGst: customerGst || '',
-      invoiceType: invoiceType || 'INVOICE',
+      invoiceType: initialInvoiceType,
       createdBy: req.user._id,
       createdByModel,
       workerInfo: workerInfo || {},
@@ -120,8 +124,9 @@ const updateInvoice = async (req, res) => {
     delete updateData.createdBy;
     delete updateData.createdByModel;
 
-    // Add updatedAt timestamp
+    // Add updatedAt timestamp and mark as edited
     updateData.updatedAt = new Date();
+    updateData.isEdited = true;
 
     if (updateData.invoiceDate) {
       updateData.actualDate = parseInvoiceDate(updateData.invoiceDate);
@@ -129,45 +134,60 @@ const updateInvoice = async (req, res) => {
 
     // Handle multi-proof appending for stage details
     const stageFields = ['paymentDetails', 'workDetails', 'closureDetails'];
-    let needsProofAppend = false;
-    let existingInvoice = null;
+    let existingInvoice = await Invoice.findById(id);
 
-    for (const field of stageFields) {
-      if (updateData[field] && updateData[field].proof) {
-        needsProofAppend = true;
-        break;
+    if (!existingInvoice) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invoice not found'
+      });
+    }
+
+    // Check if new invoiceNo is already used by another invoice
+    if (updateData.invoiceNo && updateData.invoiceNo !== existingInvoice.invoiceNo) {
+      const duplicate = await Invoice.findOne({ invoiceNo: updateData.invoiceNo, _id: { $ne: id } });
+      if (duplicate) {
+        return res.status(400).json({
+          success: false,
+          message: `Invoice number "${updateData.invoiceNo}" is already in use by another invoice.`
+        });
       }
     }
 
-    if (needsProofAppend) {
-      existingInvoice = await Invoice.findById(id);
-      if (!existingInvoice) {
-        return res.status(404).json({ success: false, message: 'Invoice not found' });
-      }
-
-      for (const field of stageFields) {
-        if (updateData[field] && updateData[field].proof) {
-          // Get existing proofs array (handle legacy single proof too)
-          const existingProofs = (existingInvoice[field] && existingInvoice[field].proofs) 
-            ? [...existingInvoice[field].proofs] 
+    for (const field of stageFields) {
+      if (updateData[field]) {
+        if (Array.isArray(updateData[field].proofs)) {
+          // Frontend provided the proofs array directly - save as is without duplicating
+          const proofsArr = updateData[field].proofs;
+          updateData[field].proof = updateData[field].proof || (proofsArr.length > 0 ? (proofsArr[0]?.url || proofsArr[0]?.proof || proofsArr[0]) : null);
+        } else if (updateData[field].proof) {
+          // Legacy single proof string from old clients
+          const existingProofs = (existingInvoice[field] && Array.isArray(existingInvoice[field].proofs))
+            ? [...existingInvoice[field].proofs]
             : [];
-          
-          // If there's a legacy single proof and proofs array is empty, include it
+
           if (existingProofs.length === 0 && existingInvoice[field] && existingInvoice[field].proof) {
             existingProofs.push({ date: existingInvoice[field].date || existingInvoice.createdAt, url: existingInvoice[field].proof });
           }
 
-          // Append the new proof
           existingProofs.push({ date: updateData[field].date || new Date(), url: updateData[field].proof });
 
-          // Replace updateData field with proofs array (keep date, remove single proof)
           updateData[field] = {
             date: updateData[field].date || new Date(),
-            proof: updateData[field].proof,  // Keep latest single proof for backward compat
+            proof: updateData[field].proof,
             proofs: existingProofs
           };
         }
       }
+    }
+
+    const finalPayment = updateData.paymentDetails !== undefined ? updateData.paymentDetails : existingInvoice.paymentDetails;
+    const hasPaymentProof = !!(finalPayment && ((Array.isArray(finalPayment.proofs) && finalPayment.proofs.length > 0) || (finalPayment.proof && String(finalPayment.proof).trim().length > 0)));
+
+    if (hasPaymentProof) {
+      updateData.invoiceType = 'TAX INVOICE';
+    } else if (!updateData.invoiceType) {
+      updateData.invoiceType = existingInvoice.invoiceType || 'PROFORMA INVOICE';
     }
 
     const invoice = await Invoice.findByIdAndUpdate(
@@ -652,36 +672,44 @@ const getDeletedInvoiceById = async (req, res) => {
 // Get the next available invoice number (auto-increment from highest TV* number)
 const getNextInvoiceNo = async (req, res) => {
   try {
-    // Find all invoices with TV-prefixed numbers
-    const lastInvoice = await Invoice.findOne(
-      { invoiceNo: { $regex: /^TV\d+$/ } },
-      { invoiceNo: 1 }
-    ).sort({ invoiceNo: -1 });
+    const existingInvoices = await Invoice.find({}, 'invoiceNo').lean();
+    const deletedInvoices = await DeleteHistory.find({}, 'invoiceNo').lean();
 
-    let nextNumber = 1;
-    if (lastInvoice && lastInvoice.invoiceNo) {
-      const match = lastInvoice.invoiceNo.match(/^TV(\d+)$/);
-      if (match) {
-        nextNumber = parseInt(match[1], 10) + 1;
+    let maxNum = 0;
+
+    const extractNumber = (invNo) => {
+      if (!invNo || typeof invNo !== 'string') return 0;
+      const tvMatch = invNo.match(/^TV(\d+)$/i);
+      if (tvMatch) {
+        return parseInt(tvMatch[1], 10) || 0;
       }
+      const anyNumMatch = invNo.match(/\d+/);
+      if (anyNumMatch) {
+        return parseInt(anyNumMatch[0], 10) || 0;
+      }
+      return 0;
+    };
+
+    for (const inv of existingInvoices) {
+      const num = extractNumber(inv.invoiceNo);
+      if (num > maxNum) maxNum = num;
     }
 
-    // Also check delete history to avoid reusing deleted invoice numbers
-    const lastDeleted = await DeleteHistory.findOne(
-      { invoiceNo: { $regex: /^TV\d+$/ } },
-      { invoiceNo: 1 }
-    ).sort({ invoiceNo: -1 });
-
-    if (lastDeleted && lastDeleted.invoiceNo) {
-      const match = lastDeleted.invoiceNo.match(/^TV(\d+)$/);
-      if (match) {
-        const deletedNum = parseInt(match[1], 10) + 1;
-        if (deletedNum > nextNumber) nextNumber = deletedNum;
-      }
+    for (const del of deletedInvoices) {
+      const num = extractNumber(del.invoiceNo);
+      if (num > maxNum) maxNum = num;
     }
 
-    const padded = String(nextNumber).padStart(6, '0');
-    const nextInvoiceNo = `TV${padded}`;
+    let nextNumber = maxNum + 1;
+    let padded = String(nextNumber).padStart(6, '0');
+    let nextInvoiceNo = `TV${padded}`;
+
+    const existingSet = new Set(existingInvoices.map(i => (i.invoiceNo ? i.invoiceNo.trim().toUpperCase() : '')));
+    while (existingSet.has(nextInvoiceNo.toUpperCase())) {
+      nextNumber++;
+      padded = String(nextNumber).padStart(6, '0');
+      nextInvoiceNo = `TV${padded}`;
+    }
 
     res.status(200).json({
       success: true,
@@ -802,46 +830,16 @@ const sendInvoiceWhatsApp = async (req, res) => {
         ]
       });
       whatsappResult = { templateRes, textRes: templateRes };
-
-      if (!templateRes.success) {
-        return res.status(400).json({
-          success: false,
-          message: templateRes.error || 'WhatsApp Meta API dispatch failed',
-          whatsappResult
-        });
-      }
-    } else {
-      // 1. Send Text Summary Message
-      const textMsg = `📄 *TECH VASEEGRAH INVOICE*\n` +
-        `----------------------------------\n` +
-        `• *Invoice No:* ${invoice.invoiceNo}\n` +
-        `• *Date:* ${invoice.invoiceDate}\n` +
-        `• *Customer Name:* ${invoice.customerName || 'Valued Customer'}\n` +
-        `• *Grand Total:* ₹${grandTotal.toFixed(2)}\n\n` +
-        `Attached below is your complete invoice document.`;
-
-      console.log(`[Invoice WhatsApp] Dispatching text & document to ${phone}...`);
-      const textRes = await sendWhatsApp(req.user?.subdomain || 'tech-vaseegrah', phone, {
-        type: 'text',
-        text: textMsg
-      });
-
-      let docRes = null;
-      if (filePath || pdfUrl) {
-        docRes = await sendWhatsApp(req.user?.subdomain || 'tech-vaseegrah', phone, {
-          type: 'document',
-          filePath: filePath,
-          link: pdfUrl,
-          filename: `invoice-${invoice.invoiceNo}.pdf`,
-          caption: `📄 Invoice ${invoice.invoiceNo} from Tech Vaseegrah`
-        });
-      }
-      whatsappResult = { textRes, docRes };
     }
+
+    const isWhatsAppSent = whatsappResult?.templateRes?.success || whatsappResult?.textRes?.success;
 
     res.status(200).json({
       success: true,
-      message: 'Invoice saved and sent via WhatsApp successfully',
+      whatsappSuccess: !!isWhatsAppSent,
+      message: isWhatsAppSent
+        ? 'Invoice saved and sent via WhatsApp successfully'
+        : (whatsappResult?.templateRes?.error || 'Invoice saved successfully'),
       pdfUrl,
       whatsappResult
     });

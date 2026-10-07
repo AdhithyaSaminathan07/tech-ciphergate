@@ -50,10 +50,12 @@ const imageFileFilter = (req, file, cb) => {
 };
 
 const documentFileFilter = (req, file, cb) => {
-  const allowed = /jpeg|jpg|png|webp|pdf|docx|doc/;
-  const ok = allowed.test(path.extname(file.originalname).toLowerCase()) &&
-              allowed.test(file.mimetype);
-  if (ok) {
+  const ext = path.extname(file.originalname).toLowerCase().replace('.', '');
+  const allowedExts = ['jpeg', 'jpg', 'png', 'webp', 'gif', 'pdf', 'docx', 'doc'];
+  const isAllowedExt = allowedExts.includes(ext);
+  const isAllowedMime = /jpeg|jpg|png|webp|gif|pdf|document|msword|octet-stream/.test((file.mimetype || '').toLowerCase());
+
+  if (isAllowedExt || isAllowedMime) {
     cb(null, true);
   } else {
     cb(new Error('Only images and documents (PDF, DOCX) are allowed'), false);

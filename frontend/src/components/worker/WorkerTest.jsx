@@ -14,6 +14,7 @@ import 'jspdf-autotable';
 // Add html2canvas import
 import html2canvas from 'html2canvas';
 import { getTestDetails } from '../../services/testService';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test state changes
     const { user } = useAuth();
@@ -1303,11 +1304,11 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                             <div className="mb-6">
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Date</label>
                                 <div className="flex space-x-2">
-                                    <input
-                                        type="date"
-                                        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    <CustomDatePicker
+                                        className="w-48"
+                                        placeholder="Select date"
                                         value={selectedDate}
-                                        onChange={(e) => setSelectedDate(e.target.value)}
+                                        onChange={(val) => setSelectedDate(val)}
                                     />
                                     <Button
                                         onClick={() => setSelectedDate('')}
@@ -1702,11 +1703,12 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Date</label>
                                 <div className="flex space-x-2">
-                                    <input
-                                        type="date"
-                                        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 flex-1"
+                                    <CustomDatePicker
+                                        className="flex-1"
+                                        inputClassName="w-full"
+                                        placeholder="Select date"
                                         value={selectedDate}
-                                        onChange={(e) => setSelectedDate(e.target.value)}
+                                        onChange={(val) => setSelectedDate(val)}
                                     />
                                     <Button
                                         onClick={() => setSelectedDate('')}

@@ -11,6 +11,7 @@ import { FaSearch, FaCalendarAlt, FaUser, FaDownload, FaEye, FaFilter, FaChevron
 // Update the import for PDF generation
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const QuestionHistory = () => {
     const { subdomain } = useContext(appContext);
@@ -585,11 +586,11 @@ const QuestionHistory = () => {
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
                                     Date
                                 </label>
-                                <input
-                                    type="date"
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                <CustomDatePicker
+                                    className="w-full"
+                                    inputClassName="w-full"
                                     value={filters.date}
-                                    onChange={(e) => handleFilterChange('date', e.target.value)}
+                                    onChange={(val) => handleFilterChange('date', val)}
                                 />
                             </div>
                             <div className="flex items-end">

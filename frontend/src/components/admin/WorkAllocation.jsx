@@ -26,6 +26,7 @@ import PersonalBrainManager from './PersonalBrainManager';
 import { createRecurringTask, getRecurringTaskById, updateRecurringTask } from '../../services/recurringTaskService';
 import RecurringTaskPanel, { defaultRecurringConfig } from './RecurringTaskPanel';
 import RecurringTaskManager from './RecurringTaskManager';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 // 🔹 Optimized Auto-Expanding Title Input to prevent lag/cursor jump and allow multi-line wrap
 const TitleInput = ({ initialValue, onUpdate }) => {
@@ -2748,29 +2749,27 @@ const WorkAllocation = () => {
                                                             <span className="text-[9.5px] font-extrabold text-slate-500 uppercase tracking-wider">Dates</span>
                                                         </div>
                                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full">
-                                                            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/90 rounded-xl px-3 py-1.5 h-9 focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-500 focus-within:bg-white shadow-2xs">
+                                                            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/90 rounded-xl px-2 py-1 shadow-2xs">
                                                                 <span className="text-[9px] font-black text-slate-400 uppercase shrink-0">Start</span>
-                                                                <input
-                                                                    type="date"
+                                                                <CustomDatePicker
                                                                     value={selectedTicket.startDate || ''}
-                                                                    onChange={(e) => updateSelectedTicket({ startDate: e.target.value })}
-                                                                    onClick={(e) => e.target.showPicker?.()}
-                                                                    className="w-full bg-transparent text-xs font-bold text-slate-700 outline-none cursor-pointer p-0 border-none focus:ring-0"
-                                                                    title="Start Date"
+                                                                    onChange={(val) => updateSelectedTicket({ startDate: val })}
+                                                                    className="flex-1"
+                                                                    inputClassName="w-full bg-transparent text-xs font-bold text-slate-700 border-none p-0 shadow-none"
+                                                                    placeholder="Start date"
                                                                 />
                                                             </div>
-                                                            <div className={`flex items-center gap-2 border rounded-xl px-3 py-1.5 h-9 focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:bg-white shadow-2xs ${isOverdue(selectedTicket.endDate, selectedTicket.status)
+                                                            <div className={`flex items-center gap-2 border rounded-xl px-2 py-1 shadow-2xs ${isOverdue(selectedTicket.endDate, selectedTicket.status)
                                                                 ? 'bg-rose-50 border-rose-200 text-rose-700'
                                                                 : 'bg-slate-50 border-slate-200/90 text-slate-700'
                                                                 }`}>
                                                                 <span className="text-[9px] font-black text-slate-400 uppercase shrink-0">End</span>
-                                                                <input
-                                                                    type="date"
+                                                                <CustomDatePicker
                                                                     value={selectedTicket.endDate || ''}
-                                                                    onChange={(e) => updateSelectedTicket({ endDate: e.target.value })}
-                                                                    onClick={(e) => e.target.showPicker?.()}
-                                                                    className="w-full bg-transparent text-xs font-bold text-slate-700 outline-none cursor-pointer p-0 border-none focus:ring-0"
-                                                                    title="End Date"
+                                                                    onChange={(val) => updateSelectedTicket({ endDate: val })}
+                                                                    className="flex-1"
+                                                                    inputClassName="w-full bg-transparent text-xs font-bold text-slate-700 border-none p-0 shadow-none"
+                                                                    placeholder="End date"
                                                                 />
                                                             </div>
                                                         </div>

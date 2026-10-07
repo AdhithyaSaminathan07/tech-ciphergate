@@ -8,6 +8,7 @@ import Button from '../common/Button';
 import Spinner from '../common/Spinner';
 import appContext from '../../context/AppContext';
 import { FiAlertTriangle, FiInfo, FiActivity, FiUserCheck, FiLayers } from 'react-icons/fi';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const ApplyForLeave = () => {
   const { user } = useAuth();
@@ -346,28 +347,28 @@ const ApplyForLeave = () => {
 
             <div className="form-group mb-0">
               <label htmlFor="startDate" className="form-label text-xs sm:text-sm">Start Date</label>
-              <input
-                type="date"
+              <CustomDatePicker
                 id="startDate"
                 name="startDate"
-                className="form-input text-xs sm:text-sm p-2 sm:p-2.5"
+                className="w-full"
+                inputClassName="text-xs sm:text-sm p-2 sm:p-2.5"
                 value={formData.startDate}
-                onChange={handleChange}
-                min={new Date().toISOString().split('T')[0]}
+                onChange={(val) => handleChange({ target: { name: 'startDate', value: val } })}
+                minDate={new Date()}
                 required
               />
             </div>
 
             <div className="form-group mb-0">
               <label htmlFor="endDate" className="form-label text-xs sm:text-sm">End Date</label>
-              <input
-                type="date"
+              <CustomDatePicker
                 id="endDate"
                 name="endDate"
-                className="form-input text-xs sm:text-sm p-2 sm:p-2.5"
+                className="w-full"
+                inputClassName="text-xs sm:text-sm p-2 sm:p-2.5"
                 value={formData.endDate}
-                onChange={handleChange}
-                min={formData.startDate || new Date().toISOString().split('T')[0]}
+                onChange={(val) => handleChange({ target: { name: 'endDate', value: val } })}
+                minDate={formData.startDate ? new Date(formData.startDate) : new Date()}
                 required
               />
             </div>

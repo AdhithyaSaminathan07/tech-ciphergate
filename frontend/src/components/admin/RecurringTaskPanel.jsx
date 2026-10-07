@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { RefreshCw, Calendar, ChevronDown, ChevronUp, X, Clock, Repeat } from 'lucide-react';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 // ── Day labels ────────────────────────────────────────────────────────────────
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -275,11 +276,12 @@ const RecurringTaskPanel = ({ config = defaultRecurringConfig, onChange }) => {
                             <div className="flex items-center gap-2">
                                 <Calendar className="w-3.5 h-3.5 text-teal-500 shrink-0" />
                                 <span className="text-[10px] font-bold text-slate-500 w-12 shrink-0">Start</span>
-                                <input
-                                    type="date"
+                                <CustomDatePicker
                                     value={localCfg.startDate || ''}
-                                    onChange={e => update({ startDate: e.target.value })}
-                                    className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20 cursor-pointer"
+                                    onChange={val => update({ startDate: val })}
+                                    className="flex-1"
+                                    inputClassName="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700"
+                                    placeholder="Start date"
                                 />
                             </div>
                             <div className="flex items-center gap-2">
@@ -290,12 +292,13 @@ const RecurringTaskPanel = ({ config = defaultRecurringConfig, onChange }) => {
                                         <span className="text-xs font-semibold text-slate-400 italic">No end date</span>
                                     </div>
                                 ) : (
-                                    <input
-                                        type="date"
+                                    <CustomDatePicker
                                         value={localCfg.endDate || ''}
-                                        min={localCfg.startDate || todayISO()}
-                                        onChange={e => update({ endDate: e.target.value })}
-                                        className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20 cursor-pointer"
+                                        minDate={localCfg.startDate ? new Date(localCfg.startDate) : new Date()}
+                                        onChange={val => update({ endDate: val })}
+                                        className="flex-1"
+                                        inputClassName="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700"
+                                        placeholder="End date"
                                     />
                                 )}
                                 <label className="flex items-center gap-1.5 cursor-pointer shrink-0">

@@ -68,6 +68,7 @@
     "ogl": "^1.0.11",
     "qrcode": "^1.5.4",
     "react": "^18.2.0",
+    "react-calendar": "^6.0.1",
     "react-countup": "^6.5.3",
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.71.0",

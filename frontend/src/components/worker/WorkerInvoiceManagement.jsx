@@ -54,14 +54,10 @@ const WorkerInvoiceManagement = () => {
       
       let response;
       
-      // Check if invoice already exists (by invoiceNo)
-      const existingInvoice = invoices.find(inv => inv.invoiceNo === invoiceWithWorkerInfo.invoiceNo);
-      
-      if (existingInvoice) {
-        // Update existing invoice
-        response = await updateInvoice(existingInvoice._id, invoiceWithWorkerInfo);
+      // If _id is present, update the specific invoice; otherwise create new invoice
+      if (invoiceWithWorkerInfo._id) {
+        response = await updateInvoice(invoiceWithWorkerInfo._id, invoiceWithWorkerInfo);
       } else {
-        // Create new invoice
         response = await createInvoice(invoiceWithWorkerInfo);
       }
       
@@ -153,6 +149,7 @@ const WorkerInvoiceManagement = () => {
       <div className="mt-6">
         {activeTab === 'advanced-invoice' && (
           <AdvancedInvoice 
+            key={editingInvoice?._id || 'new-invoice'}
             onInvoiceSave={handleInvoiceSaveWithWorkerInfo} 
             initialData={editingInvoice}
           />

@@ -6,6 +6,7 @@ import appContext from '../../context/AppContext';
 import Button from '../common/Button';
 import Table from '../common/Table';
 import { FaTrophy, FaUser, FaCalendarAlt, FaDownload, FaBuilding, FaCheckCircle, FaTimesCircle, FaPercent } from 'react-icons/fa';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const EmployeeScores = () => {
     const { subdomain } = useContext(appContext);
@@ -231,11 +232,11 @@ const EmployeeScores = () => {
                             <FaCalendarAlt className="mr-2 text-gray-500" size={14} />
                             Date
                         </label>
-                        <input
-                            type="date"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        <CustomDatePicker
+                            className="w-full"
+                            inputClassName="w-full"
                             value={selectedDate}
-                            onChange={(e) => setSelectedDate(e.target.value)}
+                            onChange={(val) => setSelectedDate(val)}
                         />
                     </div>
                     <div className="flex items-end">

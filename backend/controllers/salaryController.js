@@ -202,7 +202,7 @@ const calculateDailyAttendancePenalties = async (subdomain, fromDate, toDate, wo
   const companyVal = thresh.company?.value ?? thresh.company ?? 80;
   const deptVal = thresh.department?.value ?? thresh.department ?? 80;
 
-  const allCompanyWorkers = await Worker.find({ subdomain, status: { $ne: 'Relieved' } })
+  const allCompanyWorkers = await Worker.find({ subdomain, status: { $nin: ['Relieved', 'Deleted', 'relieved', 'deleted'] } })
     .select('_id department')
     .lean();
   const totalCompanyWorkers = allCompanyWorkers.length;
@@ -397,7 +397,7 @@ const resetSalary = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Subdomain is required' });
   }
 
-  const workers = await Worker.find({ subdomain });
+  const workers = await Worker.find({ subdomain, status: { $nin: ['Relieved', 'Deleted', 'relieved', 'deleted'] } });
 
   if (workers.length === 0) {
     return res.status(404).json({ message: 'No workers found for this subdomain' });
@@ -986,7 +986,7 @@ const getCompensationReport = asyncHandler(async (req, res) => {
   const { employeeType, class: classFilter } = req.query;
 
   try {
-    let query = { subdomain };
+    let query = { subdomain, status: { $nin: ['Relieved', 'Deleted', 'relieved', 'deleted'] } };
     if (employeeType) query.employeeType = employeeType;
     if (classFilter) query.class = classFilter;
 
@@ -1491,7 +1491,7 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
     const isExport = req.query.isExport === 'true';
     const { searchTerm, filterDepartment, filterMinSalary, filterMaxSalary, filterFineStatus, filterBankStatus, sortBy } = req.query;
 
-    const query = { subdomain, status: { $ne: 'Relieved' } };
+    const query = { subdomain, status: { $nin: ['Relieved', 'Deleted', 'relieved', 'deleted'] } };
 
     // 1. Search Term (name, rfid, or department name)
     if (searchTerm) {
@@ -2089,7 +2089,7 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
     const calcFromDate = `${prevYear}-${String(prevMonthNum).padStart(2, '0')}-01`;
     const calcToDate = new Date(prevYear, prevMonthNum, 0).toLocaleDateString('en-CA');
 
-    const workers = await Worker.find({ subdomain, status: { $ne: 'Relieved' } }).populate('department').select('+fines');
+    const workers = await Worker.find({ subdomain, status: { $nin: ['Relieved', 'Deleted', 'relieved', 'deleted'] } }).populate('department').select('+fines');
     const holidays = await Holiday.find({});
     const settings = await Settings.findOne({ subdomain });
     const batches = settings ? settings.batches : [];
@@ -2703,7 +2703,7 @@ const getDashboardSalaryStats = asyncHandler(async (req, res) => {
     // and wait for the admin to generate a bulk report.
     // However, to ensure they see SOMETHING if it's missing, let's just do a basic fallback or call the heavy logic.
     // Actually, we can just use the fast approximation for totalNetPayout based on active workers base salary!
-    const workers = await Worker.find({ subdomain, status: { $ne: 'Relieved' } }).populate('department');
+    const workers = await Worker.find({ subdomain, status: { $nin: ['Relieved', 'Deleted', 'relieved', 'deleted'] } }).populate('department');
 
     const teamEarnings = {};
     let totalNetPayout = 0;
@@ -2740,7 +2740,7 @@ const getWalletBalances = asyncHandler(async (req, res) => {
   const { subdomain } = req.query;
   if (!subdomain) return res.status(400).json({ message: 'Subdomain is required' });
 
-  const workers = await Worker.find({ subdomain, status: { $ne: 'Deleted' } })
+  const workers = await Worker.find({ subdomain, status: { $nin: ['Relieved', 'Deleted', 'relieved', 'deleted'] } })
     .select('name rfid department walletBalance status')
     .populate('department', 'name');
 

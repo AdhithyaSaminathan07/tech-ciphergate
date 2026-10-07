@@ -4,6 +4,7 @@ import appContext from '../../context/AppContext';
 import Card from '../common/Card';
 import Spinner from '../common/Spinner';
 import { readNotification } from '../../services/notificationService';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const Notifications = () => {
   const { subdomain } = useContext(appContext);
@@ -38,11 +39,11 @@ const Notifications = () => {
       <h2 className="text-2xl font-bold mb-4">Your Notifications</h2>
 
       <div className="mb-4 flex justify-end">
-        <input
-          type="date"
-          className="form-input w-48"
+        <CustomDatePicker
+          placeholder="Filter by date"
+          className="w-48"
           value={filterDate}
-          onChange={(e) => setFilterDate(e.target.value)}
+          onChange={(val) => setFilterDate(val)}
         />
       </div>
 

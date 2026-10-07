@@ -14,6 +14,7 @@ import appContext from '../../context/AppContext';
 import { getTickets } from '../../services/ticketService';
 import { getWorkers } from '../../services/workerService';
 import Spinner from '../common/Spinner';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const COLORS = {
     Todo: '#94a3b8',
@@ -286,22 +287,21 @@ const KpiManagement = () => {
                         ))}
                     </select>
 
-                    <div className="flex flex-col sm:flex-row sm:items-center bg-white border border-slate-200 rounded-xl shadow-sm p-2 sm:p-1 gap-2 sm:gap-1 w-full sm:w-auto">
-                        <div className="hidden sm:block p-1.5 text-slate-400 border-r border-slate-100 px-2">
-                            <Calendar className="w-4 h-4" />
-                        </div>
-                        <input
-                            type="date"
+                    <div className="flex flex-col sm:flex-row sm:items-center bg-white border border-slate-200 rounded-xl shadow-sm p-1.5 gap-1.5 w-full sm:w-auto">
+                        <CustomDatePicker
                             value={dateRange.start}
-                            onChange={e => setDateRange({ ...dateRange, start: e.target.value })}
-                            className="w-full sm:w-auto bg-slate-50 sm:bg-transparent border border-slate-100 sm:border-none rounded-lg sm:rounded-none text-xs font-black py-2 sm:py-1 px-3 sm:px-1 focus:ring-0 text-slate-700 outline-none"
+                            onChange={val => setDateRange(prev => ({ ...prev, start: val }))}
+                            className="w-full sm:w-36"
+                            inputClassName="py-1 px-2 text-xs font-semibold border-0 bg-transparent"
+                            placeholder="Start date"
                         />
-                        <span className="text-slate-300 mx-1 text-xs font-black hidden sm:inline">~</span>
-                        <input
-                            type="date"
+                        <span className="text-slate-300 mx-0.5 text-xs font-black hidden sm:inline">~</span>
+                        <CustomDatePicker
                             value={dateRange.end}
-                            onChange={e => setDateRange({ ...dateRange, end: e.target.value })}
-                            className="w-full sm:w-auto bg-slate-50 sm:bg-transparent border border-slate-100 sm:border-none rounded-lg sm:rounded-none text-xs font-black py-2 sm:py-1 px-3 sm:px-1 focus:ring-0 text-slate-700 outline-none"
+                            onChange={val => setDateRange(prev => ({ ...prev, end: val }))}
+                            className="w-full sm:w-36"
+                            inputClassName="py-1 px-2 text-xs font-semibold border-0 bg-transparent"
+                            placeholder="End date"
                         />
                     </div>
                 </div>

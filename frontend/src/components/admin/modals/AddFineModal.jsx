@@ -5,6 +5,7 @@ import Button from '../../common/Button';
 import { getWorkers } from '../../../services/workerService';
 import { addFine } from '../../../services/fineService';
 import appContext from '../../../context/AppContext';
+import CustomDatePicker from '../../common/CustomDatePicker';
 
 const AddFineModal = ({ isOpen, onClose, onFineAdded, preloadedWorkers = null }) => {
     const [workers, setWorkers] = useState([]);
@@ -186,13 +187,13 @@ const AddFineModal = ({ isOpen, onClose, onFineAdded, preloadedWorkers = null })
 
                     <div className="form-group">
                         <label htmlFor="date" className="form-label">Date</label>
-                        <input
-                            type="date"
+                        <CustomDatePicker
                             id="date"
                             name="date"
-                            className="form-input"
+                            className="w-full"
+                            inputClassName="w-full form-input"
                             value={formData.date}
-                            onChange={handleChange}
+                            onChange={(val) => handleChange({ target: { name: 'date', value: val } })}
                             required
                         />
                     </div>

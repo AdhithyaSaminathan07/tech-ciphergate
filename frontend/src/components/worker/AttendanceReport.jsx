@@ -7,6 +7,7 @@ import { toast } from 'react-toastify';
 import appContext from '../../context/AppContext';
 import { FaDownload } from 'react-icons/fa';
 import Button from '../common/Button';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const AttendanceReport = () => {
     const { user } = useAuth();
@@ -345,12 +346,12 @@ function processAttendanceByDay(attendanceData) {
                 value={filterDepartment}
                 onChange={e => setFilterDepartment(e.target.value)}
               />
-              <input
-                type="date"
-                className="form-input w-full"
+              <CustomDatePicker
+                className="w-full"
+                inputClassName="w-full py-2"
                 placeholder="Filter by date..."
                 value={filterDate}
-                onChange={e => setFilterDate(e.target.value)}
+                onChange={val => setFilterDate(val)}
               />
             </div>
 

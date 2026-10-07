@@ -9,6 +9,7 @@ import Modal from '../common/Modal';
 import Button from '../common/Button';
 import AddFineModal from './modals/AddFineModal';
 import appContext from '../../context/AppContext';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const CommunityFund = () => {
     const [wallet, setWallet] = useState(null);
@@ -420,13 +421,13 @@ const CommunityFund = () => {
 
                     <div className="form-group">
                         <label htmlFor="debit-date" className="form-label">Date</label>
-                        <input
-                            type="date"
+                        <CustomDatePicker
                             id="debit-date"
                             name="date"
-                            className="form-input"
+                            className="w-full"
+                            inputClassName="w-full form-input"
                             value={debitFormData.date}
-                            onChange={handleDebitChange}
+                            onChange={(val) => handleDebitChange({ target: { name: 'date', value: val } })}
                             required
                         />
                     </div>
@@ -493,13 +494,13 @@ const CommunityFund = () => {
 
                     <div className="form-group">
                         <label htmlFor="edit-date" className="form-label">Date</label>
-                        <input
-                            type="date"
+                        <CustomDatePicker
                             id="edit-date"
                             name="date"
-                            className="form-input"
+                            className="w-full"
+                            inputClassName="w-full form-input"
                             value={editFormData.date}
-                            onChange={handleEditChange}
+                            onChange={(val) => handleEditChange({ target: { name: 'date', value: val } })}
                             required
                         />
                     </div>

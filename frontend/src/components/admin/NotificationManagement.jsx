@@ -13,6 +13,7 @@ import {
   deleteNotification
 } from '../../services/notificationService';
 import { getWorkers } from '../../services/workerService';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const NotificationManagement = () => {
   const messageInputRef = useRef(null);
@@ -158,11 +159,11 @@ const NotificationManagement = () => {
       </div>
 
       <div className="mb-4 flex justify-end flex-wrap gap-4">
-        <input
-          type="date"
-          className="form-input w-48"
+        <CustomDatePicker
+          placeholder="Filter date"
+          className="w-48"
           value={filterStartDate}
-          onChange={(e) => setFilterStartDate(e.target.value)}
+          onChange={(val) => setFilterStartDate(val)}
         />
       </div>
 

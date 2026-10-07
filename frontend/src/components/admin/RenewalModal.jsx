@@ -23,6 +23,7 @@ import {
   Zap
 } from 'lucide-react';
 import renewalService from '../../services/renewalService';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 dayjs.extend(relativeTime);
 
@@ -297,12 +298,13 @@ const RenewalModal = ({
                 </div>
                 <div className="space-y-1.5">
                   <label className={labelClasses}>Registry Expiry</label>
-                  <input
-                    type="date"
-                    name="domain_expiry_date"
+                  <CustomDatePicker
                     value={formData.domain_expiry_date}
-                    onChange={handleChange}
-                    className={inputClasses}
+                    onChange={(val) => handleChange({ target: { name: 'domain_expiry_date', value: val } })}
+                    format="YMD"
+                    placeholder="Select expiry date"
+                    className="w-full"
+                    inputClassName={inputClasses}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -362,12 +364,13 @@ const RenewalModal = ({
                 </div>
                 <div className="space-y-1.5">
                   <label className={labelClasses}>Instance Expiry</label>
-                  <input
-                    type="date"
-                    name="server_expiry_date"
+                  <CustomDatePicker
                     value={formData.server_expiry_date}
-                    onChange={handleChange}
-                    className={inputClasses}
+                    onChange={(val) => handleChange({ target: { name: 'server_expiry_date', value: val } })}
+                    format="YMD"
+                    placeholder="Select expiry date"
+                    className="w-full"
+                    inputClassName={inputClasses}
                   />
                 </div>
                 <div className="space-y-1.5">

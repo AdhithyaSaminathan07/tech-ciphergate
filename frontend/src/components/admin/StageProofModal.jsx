@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import uploadUtils from '../../utils/uploadUtils';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage, existingDetails }) => {
   const [file, setFile] = useState(null);
@@ -202,56 +203,78 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage, existin
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1.5">{config.label}</label>
-            <input
-              type="date"
+            <CustomDatePicker
               value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0d9488] focus:outline-none transition-all"
-              required
+              onChange={(newDate) => setDate(newDate)}
+              className="w-full"
+              inputClassName="w-full py-2.5 px-4 rounded-xl border border-gray-300"
             />
           </div>
 
           {/* Existing Proofs List */}
+          {/* Existing Proofs List */}
           {existingProofs.length > 0 && (
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-1.5">Currently Uploaded Proofs</label>
-              <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100 mb-2 max-h-36 overflow-y-auto pr-1">
-                {existingProofs.map((p, idx) => (
-                  <div key={idx} className="relative group rounded-lg border border-slate-200 overflow-hidden bg-white flex items-center justify-center h-20 shadow-sm">
-                    <img 
-                      src={p.url || p.proof} 
-                      alt="Uploaded proof" 
-                      className="w-full h-full object-cover cursor-zoom-in hover:scale-105 transition-transform" 
-                      onClick={() => setPreviewImage({ url: p.url || p.proof, name: `Proof ${idx + 1}` })}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveExistingProof(idx)}
-                      className="absolute top-1 right-1 p-1 bg-rose-50 text-rose-600 rounded-md hover:bg-rose-100 transition-colors shadow-sm"
-                      title="Delete Proof"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
+              <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100 mb-2 max-h-40 overflow-y-auto pr-1">
+                {existingProofs.map((p, idx) => {
+                  const proofUrl = p.url || p.proof || '';
+                  const isPdf = proofUrl.toLowerCase().endsWith('.pdf') || proofUrl.includes('.pdf');
+                  return (
+                    <div key={idx} className="relative group rounded-lg border border-slate-200 overflow-hidden bg-white flex items-center justify-center h-20 shadow-sm">
+                      {isPdf ? (
+                        <div 
+                          className="w-full h-full flex flex-col items-center justify-center p-2 bg-rose-50/60 cursor-pointer hover:bg-rose-100/60 transition-colors"
+                          onClick={() => setPreviewImage({ url: proofUrl, name: `PDF Proof ${idx + 1}` })}
+                        >
+                          <svg className="w-7 h-7 text-rose-600 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                          </svg>
+                          <span className="text-[10px] font-bold text-rose-700 truncate max-w-[90%]">PDF Document</span>
+                        </div>
+                      ) : (
+                        <img 
+                          src={proofUrl} 
+                          alt="Uploaded proof" 
+                          className="w-full h-full object-cover cursor-zoom-in hover:scale-105 transition-transform" 
+                          onClick={() => setPreviewImage({ url: proofUrl, name: `Proof ${idx + 1}` })}
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveExistingProof(idx)}
+                        className="absolute top-1 right-1 p-1 bg-white/90 text-rose-600 rounded-md hover:bg-rose-100 transition-colors shadow-sm"
+                        title="Delete Proof"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
           
           <div>
-            <label className="block text-sm font-bold text-gray-700 mb-1.5">Upload Additional Proof</label>
+            <label className="block text-sm font-bold text-gray-700 mb-1.5">Upload Additional Proof (Image or PDF)</label>
             {file ? (
               <div className="flex flex-col items-center justify-center p-4 border border-gray-200 bg-gray-50 rounded-xl">
                 <div className="flex items-center gap-3 w-full">
                   <div className="p-2 bg-white rounded-lg border border-gray-150 text-gray-400 w-12 h-12 flex items-center justify-center overflow-hidden shrink-0">
-                    <img 
-                      src={URL.createObjectURL(file)} 
-                      alt={file.name} 
-                      className="w-full h-full object-cover cursor-zoom-in hover:scale-105 transition-transform" 
-                      onClick={() => setPreviewImage({ url: URL.createObjectURL(file), name: file.name })}
-                    />
+                    {file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf') ? (
+                      <svg className="w-7 h-7 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                    ) : (
+                      <img 
+                        src={URL.createObjectURL(file)} 
+                        alt={file.name} 
+                        className="w-full h-full object-cover cursor-zoom-in hover:scale-105 transition-transform" 
+                        onClick={() => setPreviewImage({ url: URL.createObjectURL(file), name: file.name })}
+                      />
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-gray-700 truncate">{file.name}</p>
@@ -275,15 +298,15 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage, existin
                   <input
                     type="file"
                     onChange={(e) => setFile(e.target.files[0])}
-                    accept="image/*"
+                    accept="image/*,.pdf,application/pdf"
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   />
                   <svg className="h-8 w-8 text-gray-400 group-hover:text-[#0d9488] transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                   </svg>
                   <div>
-                    <p className="text-xs font-bold text-gray-700">Upload Image</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Click or drag & drop</p>
+                    <p className="text-xs font-bold text-gray-700">Upload File</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Image or PDF (Click/Drag)</p>
                   </div>
                 </div>
 
@@ -340,18 +363,31 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage, existin
         </form>
       </div>
 
-      {/* Image Preview Overlay Modal (Lightbox) */}
+      {/* Proof Preview Overlay Modal (Lightbox: supports Image & PDF) */}
       {previewImage && (
         <div 
           className="fixed inset-0 bg-black/85 z-[800] flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-200"
           onClick={() => setPreviewImage(null)}
         >
           <div 
-            className="relative max-w-4xl w-full max-h-[85vh] flex flex-col bg-transparent animate-in zoom-in-95 duration-200"
+            className="relative max-w-4xl w-full max-h-[88vh] flex flex-col bg-transparent animate-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="absolute top-4 right-4 flex gap-2 z-[810]">
+            <div className="absolute top-4 right-4 flex items-center gap-2 z-[810]">
+              {previewImage.url && (previewImage.url.toLowerCase().endsWith('.pdf') || previewImage.url.includes('.pdf')) && (
+                <a
+                  href={previewImage.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-semibold backdrop-blur-sm transition-colors flex items-center gap-1.5 shadow-lg"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  Open in Tab
+                </a>
+              )}
               <button
                 type="button"
                 onClick={() => setPreviewImage(null)}
@@ -364,16 +400,26 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage, existin
               </button>
             </div>
 
-            {/* Image Container */}
+            {/* Content Container */}
             <div className="w-full h-full flex items-center justify-center overflow-hidden rounded-xl bg-gray-950/40 p-2 shadow-2xl">
-              <img 
-                src={previewImage.url} 
-                alt={previewImage.name} 
-                className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-xl"
-              />
+              {previewImage.url && (previewImage.url.toLowerCase().endsWith('.pdf') || previewImage.url.includes('.pdf')) ? (
+                <div className="w-full h-[75vh] flex flex-col bg-white rounded-lg overflow-hidden">
+                  <iframe 
+                    src={previewImage.url} 
+                    title={previewImage.name} 
+                    className="w-full h-full border-none"
+                  />
+                </div>
+              ) : (
+                <img 
+                  src={previewImage.url} 
+                  alt={previewImage.name} 
+                  className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-xl"
+                />
+              )}
             </div>
 
-            {/* Image Title */}
+            {/* Title */}
             <div className="mt-3 text-center text-white/90 font-medium text-sm drop-shadow-md truncate px-6">
               {previewImage.name}
             </div>

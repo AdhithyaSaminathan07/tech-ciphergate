@@ -2263,7 +2263,7 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
     perMinuteSalary = perDaySalary / standardWorkingMinutes;
   }
 
-  const configuredMultiplier = settings?.advancedLeaveDeduction?.deductionMultiplier || 5;
+  const configuredMultiplier = 5;
 
   // Iterate every day in the report range
   const d = new Date(fromDateObj);

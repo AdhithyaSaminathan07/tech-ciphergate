@@ -6,6 +6,7 @@ import Table from '../common/Table';
 import { FaTrophy, FaUser, FaUsers, FaDownload, FaMedal, FaAward, FaCalendarAlt, FaFilter } from 'react-icons/fa';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const GlobalScoreboard = () => {
     const [scores, setScores] = useState([]);
@@ -298,11 +299,11 @@ const GlobalScoreboard = () => {
                                     <FaCalendarAlt className="inline mr-2" />
                                     Date Filter
                                 </label>
-                                <input
-                                    type="date"
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                <CustomDatePicker
+                                    className="w-full"
+                                    inputClassName="w-full"
                                     value={dateFilter}
-                                    onChange={(e) => setDateFilter(e.target.value)}
+                                    onChange={(val) => setDateFilter(val)}
                                 />
                             </div>
                             <div className="flex items-end">

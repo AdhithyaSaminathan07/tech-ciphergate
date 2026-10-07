@@ -13,6 +13,7 @@ import Button from '../common/Button';
 import Card from '../common/Card';
 import Spinner from '../common/Spinner';
 import WalletManagementModal from './modals/WalletManagementModal';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const MONTHS = [
   '', 'January', 'February', 'March', 'April', 'May', 'June',
@@ -400,21 +401,21 @@ const SalaryProjectManagement = () => {
             </div>
             <div>
               <label className="form-label">Start Date *</label>
-              <input
-                type="date"
-                className="form-input"
+              <CustomDatePicker
+                className="w-full"
+                inputClassName="w-full form-input"
                 value={form.startDate}
-                onChange={e => setForm(p => ({ ...p, startDate: e.target.value }))}
+                onChange={val => setForm(p => ({ ...p, startDate: val }))}
                 required
               />
             </div>
             <div>
               <label className="form-label">End Date *</label>
-              <input
-                type="date"
-                className="form-input"
+              <CustomDatePicker
+                className="w-full"
+                inputClassName="w-full form-input"
                 value={form.endDate}
-                onChange={e => setForm(p => ({ ...p, endDate: e.target.value }))}
+                onChange={val => setForm(p => ({ ...p, endDate: val }))}
                 required
               />
             </div>

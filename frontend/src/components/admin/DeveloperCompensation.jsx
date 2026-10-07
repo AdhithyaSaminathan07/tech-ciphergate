@@ -9,6 +9,7 @@ import Table from '../common/Table';
 import Modal from '../common/Modal';
 import Spinner from '../common/Spinner';
 import appContext from '../../context/AppContext';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const DeveloperCompensation = () => {
   const [workers, setWorkers] = useState([]);
@@ -498,13 +499,13 @@ const DeveloperCompensation = () => {
 
             <div>
               <label htmlFor="projectDate" className="form-label">Project Date</label>
-              <input
-                type="date"
+              <CustomDatePicker
                 id="projectDate"
                 name="projectDate"
-                className="form-input"
+                className="w-full"
+                inputClassName="w-full form-input"
                 value={projectForm.projectDate}
-                onChange={handleFormChange}
+                onChange={(val) => handleFormChange({ target: { name: 'projectDate', value: val } })}
                 required
               />
             </div>

@@ -27,6 +27,7 @@ import QRCode from 'qrcode';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import FaceCapture from './FaceCapture';
 import RelieveEmployeeModal from './modals/RelieveEmployeeModal';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const WorkerManagement = () => {
   const location = useLocation();
@@ -1386,12 +1387,12 @@ const WorkerManagement = () => {
 
             <div className="form-group">
               <label className="form-label">Joining Date *</label>
-              <input
-                type="date"
+              <CustomDatePicker
                 name="joiningDate"
-                className="form-input"
+                className="w-full"
+                inputClassName="w-full form-input"
                 value={formData.joiningDate}
-                onChange={handleChange}
+                onChange={(val) => handleChange({ target: { name: 'joiningDate', value: val } })}
                 required
               />
             </div>
@@ -1698,12 +1699,12 @@ const WorkerManagement = () => {
 
             <div className="form-group">
               <label className="form-label">Joining Date *</label>
-              <input
-                type="date"
+              <CustomDatePicker
                 name="joiningDate"
-                className="form-input"
+                className="w-full"
+                inputClassName="w-full form-input"
                 value={formData.joiningDate}
-                onChange={handleChange}
+                onChange={(val) => handleChange({ target: { name: 'joiningDate', value: val } })}
                 required
               />
             </div>

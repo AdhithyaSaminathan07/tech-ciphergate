@@ -11,6 +11,7 @@ import {
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import appContext from '../../context/AppContext';
 import { AuthContext } from '../../context/AuthContext';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 // --- UI Components from Template ---
 
@@ -955,12 +956,24 @@ const GenerateQuestions = () => {
                          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                             <h4 className="font-semibold text-blue-800 mb-3 flex items-center"><Calendar className="mr-2" size={18} />Select Date Range for Topics</h4>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <label className="block text-sm font-medium text-blue-700 mb-1">Start Date
-                                    <input type="date" value={dateRange.startDate} onChange={e => setDateRange(prev => ({...prev, startDate: e.target.value}))} className="w-full mt-1 p-3 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                                </label>
-                                <label className="block text-sm font-medium text-blue-700 mb-1">End Date
-                                    <input type="date" value={dateRange.endDate} onChange={e => setDateRange(prev => ({...prev, endDate: e.target.value}))} className="w-full mt-1 p-3 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                                </label>
+                                <div>
+                                    <label className="block text-sm font-medium text-blue-700 mb-1">Start Date</label>
+                                    <CustomDatePicker
+                                        value={dateRange.startDate}
+                                        onChange={val => setDateRange(prev => ({...prev, startDate: val}))}
+                                        className="w-full"
+                                        inputClassName="w-full p-2.5 border-blue-300 rounded-lg"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-blue-700 mb-1">End Date</label>
+                                    <CustomDatePicker
+                                        value={dateRange.endDate}
+                                        onChange={val => setDateRange(prev => ({...prev, endDate: val}))}
+                                        className="w-full"
+                                        inputClassName="w-full p-2.5 border-blue-300 rounded-lg"
+                                    />
+                                </div>
                             </div>
                             <p className="text-sm text-blue-700 mt-3 bg-blue-100 p-2 rounded-md flex items-center">
                                 {loadingTopics ? (

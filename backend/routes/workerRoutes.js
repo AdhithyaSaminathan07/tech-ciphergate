@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { uploadImage, verifyMagicBytes } = require('../utils/uploadConfig');
+const { uploadDocument, verifyMagicBytes } = require('../utils/uploadConfig');
 
-// ─── Multer config: save to backend/uploads/workers/ ─────────────────────────
-const upload = uploadImage('uploads/workers');
+// ─── Multer config: save to backend/uploads/workers/ (supports images and PDFs) ──
+const upload = uploadDocument('uploads/workers');
 // ─────────────────────────────────────────────────────────────────────────────
 
 const { 

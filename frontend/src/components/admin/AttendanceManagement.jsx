@@ -13,6 +13,7 @@ import FaceAttendance from './FaceAttendance';
 import api from '../../services/api';
 import BottomSheet from '../common/BottomSheet';
 import { Filter, Search, RotateCcw, Plus, Camera, Download, AlertTriangle, ChevronDown, Hash, Building2 } from 'lucide-react';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const AttendanceManagement = () => {
     const [worker, setWorker] = useState({ rfid: "" });
@@ -646,12 +647,12 @@ const AttendanceManagement = () => {
                             onChange={(e) => setFilterDepartment(e.target.value)}
                         />
                     </div>
-                    <input
-                        type="date"
-                        className="form-input h-10 text-sm border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    <CustomDatePicker
+                        className="w-full"
+                        inputClassName="w-full h-10 text-sm border-slate-200 rounded-xl"
                         placeholder="Filter by date..."
                         value={filterDate}
-                        onChange={(e) => setFilterDate(e.target.value)}
+                        onChange={(val) => setFilterDate(val)}
                     />
                 </div>
 
@@ -706,11 +707,11 @@ const AttendanceManagement = () => {
                     </div>
                     <div>
                         <label className="admin-mobile-label block mb-2">Date</label>
-                        <input
-                            type="date"
-                            className="form-input h-12"
+                        <CustomDatePicker
+                            className="w-full"
+                            inputClassName="w-full h-12"
                             value={filterDate}
-                            onChange={(e) => setFilterDate(e.target.value)}
+                            onChange={(val) => setFilterDate(val)}
                         />
                     </div>
 

@@ -5,6 +5,7 @@ import Card from '../common/Card';
 import Button from '../common/Button';
 import { toast } from 'react-toastify';
 import { FaCalendarAlt, FaFilter, FaExclamationCircle } from 'react-icons/fa';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const MyFines = ({ noCard = false }) => {
     const [fines, setFines] = useState([]);
@@ -66,22 +67,22 @@ const MyFines = ({ noCard = false }) => {
                     <label className="block text-[10px] font-bold text-slate-400 mb-1 tracking-wider ml-0.5 flex items-center gap-1">
                         <FaCalendarAlt size={10} className="text-slate-400" /> From Date
                     </label>
-                    <input
-                        type="date"
+                    <CustomDatePicker
                         value={fromDate}
-                        onChange={(e) => setFromDate(e.target.value)}
-                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all"
+                        onChange={(val) => setFromDate(val)}
+                        className="w-full"
+                        inputClassName="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700"
                     />
                 </div>
                 <div className="sm:col-span-5">
                     <label className="block text-[10px] font-bold text-slate-400 mb-1 tracking-wider ml-0.5 flex items-center gap-1">
                         <FaCalendarAlt size={10} className="text-slate-400" /> To Date
                     </label>
-                    <input
-                        type="date"
+                    <CustomDatePicker
                         value={toDate}
-                        onChange={(e) => setToDate(e.target.value)}
-                        className="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all"
+                        onChange={(val) => setToDate(val)}
+                        className="w-full"
+                        inputClassName="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700"
                     />
                 </div>
                 <div className="sm:col-span-2">

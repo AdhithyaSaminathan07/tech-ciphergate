@@ -14,16 +14,16 @@ exports.sendWhatsApp = async (subdomain, phone, data) => {
       cleanPhone = '91' + cleanPhone;
     }
     phone = cleanPhone;
-    let apiKey = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN;
-    let phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-
-    if ((!apiKey || !phoneNumberId) && subdomain) {
-      const config = await GowhatsConfig.findOne({ subdomain });
-      if (config && config.apiKey && config.phoneNumberId) {
-        apiKey = config.apiKey;
-        phoneNumberId = config.phoneNumberId;
-      }
+    let config = null;
+    if (subdomain) {
+      config = await GowhatsConfig.findOne({ subdomain: new RegExp(`^${subdomain}$`, 'i') });
     }
+    if (!config) {
+      config = await GowhatsConfig.findOne({});
+    }
+
+    let apiKey = config?.apiKey || process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN;
+    let phoneNumberId = config?.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
 
     if (!apiKey || !phoneNumberId) {
       console.error('[WhatsApp Service] WhatsApp credentials missing');
@@ -105,24 +105,29 @@ exports.sendWhatsApp = async (subdomain, phone, data) => {
     } else if (data.type === 'template') {
       let components = data.components || [];
 
-      // If local filePath is provided, upload PDF directly to Meta Cloud Media Storage to get mediaId
+      // If local filePath is provided, upload document/PDF/XLSX directly to Meta Cloud Media Storage to get mediaId
       if (data.filePath) {
         try {
           const fs = require('fs');
           const fileBuffer = fs.readFileSync(data.filePath);
+          const filename = data.filename || 'document.pdf';
+          const mimeType = filename.endsWith('.xlsx')
+            ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : (filename.endsWith('.xls') ? 'application/vnd.ms-excel' : 'application/pdf');
+
           const formData = new FormData();
           formData.append('messaging_product', 'whatsapp');
-          formData.append('type', 'application/pdf');
-          formData.append('file', new Blob([fileBuffer], { type: 'application/pdf' }), data.filename || 'invoice.pdf');
+          formData.append('type', mimeType);
+          formData.append('file', new Blob([fileBuffer], { type: mimeType }), filename);
 
           const uploadUrl = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/media`;
-          console.log(`[WhatsApp Service] Uploading PDF media file to Meta for Template (${data.filePath})...`);
+          console.log(`[WhatsApp Service] Uploading media file (${mimeType}) to Meta for Template (${data.filePath})...`);
           const uploadRes = await axios.post(uploadUrl, formData, {
             headers: { 'Authorization': `Bearer ${apiKey}` }
           });
           if (uploadRes.data && uploadRes.data.id) {
             const mediaId = uploadRes.data.id;
-            console.log(`[WhatsApp Service] Template PDF Media uploaded successfully. Media ID: ${mediaId}`);
+            console.log(`[WhatsApp Service] Template Media uploaded successfully. Media ID: ${mediaId}`);
             
             // Replace document link with uploaded mediaId in header component
             components = components.map(comp => {
@@ -135,7 +140,7 @@ exports.sendWhatsApp = async (subdomain, phone, data) => {
                         type: 'document',
                         document: {
                           id: mediaId,
-                          filename: param.document?.filename || data.filename || 'invoice.pdf'
+                          filename: param.document?.filename || data.filename || filename
                         }
                       };
                     }

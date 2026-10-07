@@ -27,7 +27,7 @@ const invoiceSchema = new mongoose.Schema({
   gstEnabled: { type: Boolean, default: true },
   saleType: { type: String, enum: ['Intrastate', 'Interstate'], default: 'Intrastate' },
   customerGst: { type: String, default: '' },
-  invoiceType: { type: String, enum: ['INVOICE', 'PROFORMA INVOICE', 'TAX INVOICE'], default: 'INVOICE' },
+  invoiceType: { type: String, enum: ['INVOICE', 'PROFORMA INVOICE', 'TAX INVOICE'], default: 'PROFORMA INVOICE' },
   createdBy: { 
     type: mongoose.Schema.Types.ObjectId, 
     required: true,
@@ -78,8 +78,39 @@ const invoiceSchema = new mongoose.Schema({
     dateReceived: { type: String },
     transactionId: { type: String }
   }],
+  isEdited: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
+});
+
+// Pre-save hook to ensure invoiceType reflects payment proof status
+invoiceSchema.pre('save', function(next) {
+  const hasPayment = !!(this.paymentDetails && ((Array.isArray(this.paymentDetails.proofs) && this.paymentDetails.proofs.length > 0) || (this.paymentDetails.proof && String(this.paymentDetails.proof).trim().length > 0)));
+  if (hasPayment) {
+    this.invoiceType = 'TAX INVOICE';
+  } else if (!this.invoiceType) {
+    this.invoiceType = 'PROFORMA INVOICE';
+  }
+  next();
+});
+
+// Getter / toObject / toJSON transforms
+invoiceSchema.set('toJSON', {
+  virtuals: true,
+  transform: function(doc, ret) {
+    const hasPayment = !!(ret.paymentDetails && ((Array.isArray(ret.paymentDetails.proofs) && ret.paymentDetails.proofs.length > 0) || (ret.paymentDetails.proof && String(ret.paymentDetails.proof).trim().length > 0)));
+    ret.invoiceType = hasPayment ? 'TAX INVOICE' : (ret.invoiceType || 'PROFORMA INVOICE');
+    return ret;
+  }
+});
+
+invoiceSchema.set('toObject', {
+  virtuals: true,
+  transform: function(doc, ret) {
+    const hasPayment = !!(ret.paymentDetails && ((Array.isArray(ret.paymentDetails.proofs) && ret.paymentDetails.proofs.length > 0) || (ret.paymentDetails.proof && String(ret.paymentDetails.proof).trim().length > 0)));
+    ret.invoiceType = hasPayment ? 'TAX INVOICE' : (ret.invoiceType || 'PROFORMA INVOICE');
+    return ret;
+  }
 });
 
 module.exports = mongoose.model('Invoice', invoiceSchema);

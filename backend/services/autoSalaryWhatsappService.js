@@ -416,8 +416,8 @@ const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = nul
     }
 
     const timestamp = Date.now();
-    const pdfFilename = `All_Employees_Salary_Report_${monthName}_${targetYear}_${timestamp}.pdf`;
-    const xlsxFilename = `Bank_Statement_${monthName}_${targetYear}_${timestamp}.xlsx`;
+    const xlsxFilename = `Bank_Statement_NEFT_${monthName}_${targetYear}.xlsx`;
+    const pdfFilename = `All_Employees_Salary_Report_${monthName}_${targetYear}.pdf`;
 
     const pdfPath = path.join(reportsDir, pdfFilename);
     const xlsxPath = path.join(reportsDir, xlsxFilename);
@@ -442,13 +442,13 @@ const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = nul
     });
 
     for (const phone of phoneList) {
-      // 1. Attempt sending via Meta Approved Template (monthly_salary_report)
+      // 1. Send Bank NEFT Statement (XLSX) attached directly with the Meta Approved Template
       const templatePayload = {
         type: 'template',
         templateName: 'monthly_salary_report',
         languageCode: 'en',
-        filePath: pdfPath,
-        filename: pdfFilename,
+        filePath: xlsxPath,
+        filename: xlsxFilename,
         components: [
           {
             type: 'header',
@@ -456,7 +456,7 @@ const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = nul
               {
                 type: 'document',
                 document: {
-                  filename: pdfFilename
+                  filename: xlsxFilename
                 }
               }
             ]
@@ -472,40 +472,40 @@ const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = nul
         ]
       };
 
-      console.log(`[WhatsApp Salary Dispatch] Sending template monthly_salary_report to ${phone}...`);
+      console.log(`[WhatsApp Salary Dispatch] Sending template monthly_salary_report (Bank NEFT Statement) to ${phone}...`);
       let templateRes = await sendWhatsApp(subdomain, phone, templatePayload);
 
-      // If template fails (e.g. pending review or code mismatch), fallback to direct text + PDF
-      let pdfRes = templateRes;
+      // If template fails (e.g. template review or param mismatch), fallback to direct text + XLSX & PDF
+      let xlsxRes = templateRes;
       if (!templateRes.success) {
-        console.warn(`[WhatsApp Salary Dispatch] Template send failed (${templateRes.error}). Falling back to direct message & document...`);
-        const textMsg = `📊 *MONTHLY SALARY REPORT DISPATCH*\n\n` +
+        console.warn(`[WhatsApp Salary Dispatch] Template send failed (${templateRes.error}). Falling back to direct message & documents...`);
+        const textMsg = `📊 *MONTHLY SALARY REPORT & BANK NEFT STATEMENT*\n\n` +
           `• *Period:* ${monthName} ${targetYear}\n` +
           `• *Total Employees:* ${reportsData.length}\n` +
           `• *Generated On:* ${generatedOnStr}\n\n` +
-          `Attached below are your **All Employees Single PDF Salary Report** and **Bank Statement XLSX Sheet**.`;
+          `Attached below are your **Corporate Bank NEFT Upload Statement (XLSX)** and **All Employees Salary Report PDF**.`;
 
         await sendWhatsApp(subdomain, phone, { type: 'text', text: textMsg });
 
-        pdfRes = await sendWhatsApp(subdomain, phone, {
+        xlsxRes = await sendWhatsApp(subdomain, phone, {
           type: 'document',
-          link: pdfUrl,
-          filePath: pdfPath,
-          filename: pdfFilename,
-          caption: `📄 All Employees Salary Report PDF (${monthName} ${targetYear})`
+          link: xlsxUrl,
+          filePath: xlsxPath,
+          filename: xlsxFilename,
+          caption: `📊 Bank NEFT Statement XLSX (${monthName} ${targetYear})`
         });
       }
 
-      // 2. Send XLSX Corporate Bank Statement Document
-      const xlsxRes = await sendWhatsApp(subdomain, phone, {
+      // 2. Also Send All Employees Single PDF Salary Report Document
+      const pdfRes = await sendWhatsApp(subdomain, phone, {
         type: 'document',
-        link: xlsxUrl,
-        filePath: xlsxPath,
-        filename: xlsxFilename,
-        caption: `📊 Bank Statement XLSX Sheet (${monthName} ${targetYear})`
+        link: pdfUrl,
+        filePath: pdfPath,
+        filename: pdfFilename,
+        caption: `📄 All Employees Salary Report PDF (${monthName} ${targetYear})`
       });
 
-      dispatchResults.push({ phone, templateRes, pdfRes, xlsxRes });
+      dispatchResults.push({ phone, templateRes, xlsxRes, pdfRes });
     }
 
     // Update settings lastDispatchedAt

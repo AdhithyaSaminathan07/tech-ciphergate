@@ -8,6 +8,7 @@ import Button from '../common/Button';
 import appContext from '../../context/AppContext';
 import { FaCalendarAlt, FaFilter, FaTimes, FaCheck, FaClock, FaTimesCircle } from 'react-icons/fa';
 import { FiDollarSign } from 'react-icons/fi';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const LeaveRequests = () => {
   const [leaves, setLeaves] = useState([]);
@@ -239,37 +240,29 @@ const LeaveRequests = () => {
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
               <div className="col-span-1">
-                <div className="relative rounded-md shadow-sm">
-                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                    <span className="text-gray-400 text-[10px] sm:text-xs">From</span>
-                  </div>
-                  <input
-                    type="date"
-                    value={dateRange.start}
-                    onChange={(e) => {
-                      setDateRange(prev => ({ ...prev, start: e.target.value }));
-                      setIsThisMonthActive(false);
-                    }}
-                    className="w-full pl-11 pr-1.5 py-1.5 sm:py-2 border border-gray-200 rounded-md text-[11px] sm:text-sm focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
+                <CustomDatePicker
+                  placeholder="From date"
+                  value={dateRange.start}
+                  onChange={(val) => {
+                    setDateRange(prev => ({ ...prev, start: val }));
+                    setIsThisMonthActive(false);
+                  }}
+                  className="w-full"
+                  inputClassName="w-full py-1.5 sm:py-2 border-gray-200 text-[11px] sm:text-sm"
+                />
               </div>
 
               <div className="col-span-1">
-                <div className="relative rounded-md shadow-sm">
-                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                    <span className="text-gray-400 text-[10px] sm:text-xs">To</span>
-                  </div>
-                  <input
-                    type="date"
-                    value={dateRange.end}
-                    onChange={(e) => {
-                      setDateRange(prev => ({ ...prev, end: e.target.value }));
-                      setIsThisMonthActive(false);
-                    }}
-                    className="w-full pl-7 pr-1.5 py-1.5 sm:py-2 border border-gray-200 rounded-md text-[11px] sm:text-sm focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
+                <CustomDatePicker
+                  placeholder="To date"
+                  value={dateRange.end}
+                  onChange={(val) => {
+                    setDateRange(prev => ({ ...prev, end: val }));
+                    setIsThisMonthActive(false);
+                  }}
+                  className="w-full"
+                  inputClassName="w-full py-1.5 sm:py-2 border-gray-200 text-[11px] sm:text-sm"
+                />
               </div>
 
               <div className="col-span-2 flex gap-1.5 sm:gap-2">

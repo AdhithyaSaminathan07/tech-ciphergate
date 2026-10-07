@@ -9,6 +9,7 @@ import Table from '../common/Table';
 import TaskSpinner from '../common/Spinner';
 import { GrPowerReset } from "react-icons/gr";
 import { getWorkerById } from '../../services/workerService';
+import CustomDatePicker from '../common/CustomDatePicker';
 
 const WorkerAttendance = () => {
     const { id } = useParams();
@@ -161,22 +162,20 @@ const WorkerAttendance = () => {
             <div className="flex justify-end space-x-4 items-center mb-6">
                 <div className="flex items-center space-x-2">
                     <label className="text-sm font-medium text-gray-700">From:</label>
-                    <input
-                        type="date"
-                        className="form-input w-40"
+                    <CustomDatePicker
+                        className="w-40"
                         placeholder="From date..."
                         value={fromDate}
-                        onChange={handleFromDateChange}
+                        onChange={(val) => handleFromDateChange({ target: { value: val } })}
                     />
                 </div>
                 <div className="flex items-center space-x-2">
                     <label className="text-sm font-medium text-gray-700">To:</label>
-                    <input
-                        type="date"
-                        className="form-input w-40"
+                    <CustomDatePicker
+                        className="w-40"
                         placeholder="To date..."
                         value={toDate}
-                        onChange={handleToDateChange}
+                        onChange={(val) => handleToDateChange({ target: { value: val } })}
                     />
                 </div>
             </div>
