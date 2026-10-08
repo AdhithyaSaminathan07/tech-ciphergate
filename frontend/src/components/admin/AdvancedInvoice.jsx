@@ -67,7 +67,7 @@ const getFreshInvoiceData = (formattedDate = '') => ({
     {
       id: Date.now(),
       description: '',
-      hsn: '998314',
+      hsn: '',
       gst: 18,
       qty: 1,
       rate: 0,
@@ -128,11 +128,11 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
         ? data.items.map((it, idx) => ({
           ...it,
           id: it._id || it.id || Date.now() + idx,
-          hsn: it.hsn || '998314',
+          hsn: it.hsn ?? '',
           gst: it.gst !== undefined ? it.gst : 18
         }))
         : [
-          { id: Date.now(), description: '', hsn: '998314', gst: 18, qty: 1, rate: 0, total: 0, isTotalOverridden: false }
+          { id: Date.now(), description: '', hsn: '', gst: 18, qty: 1, rate: 0, total: 0, isTotalOverridden: false }
         ],
       bankName: data.bankName || 'ICICI Bank',
       accountName: data.accountName || 'TECH VASEEGRAH',
@@ -350,7 +350,7 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
     const newItem = {
       id: Date.now(),
       description: '',
-      hsn: '998314',
+      hsn: '',
       gst: 18,
       qty: 1,
       rate: 0,
@@ -560,7 +560,7 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
       const tableRows = invoiceData.items.map((item, idx) => [
         (idx + 1).toString(),
         item.description || '',
-        item.hsn || '998314',
+        item.hsn || '',
         Number(item.gst || 0).toFixed(2),
         item.qty.toString(),
         Number(item.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }),
@@ -1207,7 +1207,7 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
                   <tr style="background: ${index % 2 === 0 ? '#ffffff' : '#f9fafb'};">
                     <td style="text-align: center; font-weight: 500;">${index + 1}</td>
                     <td style="font-weight: 500;">${item.description || '-'}</td>
-                    <td style="text-align: center; color: #6b7280;">${item.hsn || '998314'}</td>
+                    <td style="text-align: center; color: #6b7280;">${item.hsn || ''}</td>
                     <td style="text-align: center;">${Number(item.gst || 0).toFixed(2)}</td>
                     <td style="text-align: center;">${item.qty}</td>
                     <td style="text-align: right;">${Number(item.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
@@ -1664,9 +1664,9 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
                       <td className="py-2.5 px-3 text-center">
                         <input
                           type="text"
-                          value={item.hsn || '998314'}
+                          value={item.hsn ?? ''}
                           onChange={(e) => handleItemChange(item.id, 'hsn', e.target.value)}
-                          placeholder="HSN"
+                          placeholder="HSN/SAC"
                           className="w-full text-center bg-transparent border-0 focus:ring-1 focus:ring-emerald-500 rounded p-1 text-xs text-gray-600 font-mono"
                         />
                       </td>
