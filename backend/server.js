@@ -276,7 +276,7 @@ const app = express();
       console.log(`🔌 Socket.io: Initialized`);
     });
   } catch (error) {
-    console.error('❌ Failed to start server due to database connection error:', error.message);
+    console.error('❌ Failed to start server error:', error.stack || error);
     console.error('🔧 Troubleshooting steps:');
     console.error('1. Verify your MongoDB Atlas credentials in the .env file');
     console.error('2. Check if your IP is whitelisted in MongoDB Atlas Network Access');

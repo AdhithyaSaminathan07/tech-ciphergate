@@ -120,9 +120,7 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage, existin
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!file && existingProofs.length === 0) {
-      const confirmRevert = window.confirm("You have removed all proofs. This will reset the progress of this stage. Do you want to continue?");
-      if (!confirmRevert) return;
-      onConfirm(null);
+      alert(`${stage || 'Payment'} proof is required. Please upload or paste a proof document/screenshot before proceeding.`);
       return;
     }
 
@@ -258,7 +256,9 @@ const StageProofModal = ({ isOpen, onClose, onConfirm, invoiceNo, stage, existin
           )}
           
           <div>
-            <label className="block text-sm font-bold text-gray-700 mb-1.5">Upload Additional Proof (Image or PDF)</label>
+            <label className="block text-sm font-bold text-gray-700 mb-1.5">
+              Upload Proof (Image or PDF) <span className="text-rose-500 font-bold ml-1 text-xs">* Required</span>
+            </label>
             {file ? (
               <div className="flex flex-col items-center justify-center p-4 border border-gray-200 bg-gray-50 rounded-xl">
                 <div className="flex items-center gap-3 w-full">

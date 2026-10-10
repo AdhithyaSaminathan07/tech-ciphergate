@@ -5,20 +5,21 @@ const DeleteHistory = require('../models/DeleteHistory'); // Add this line
 const mongoose = require('mongoose');
 const { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parse, format } = require('date-fns');
 
-// Helper to parse DD-MM-YYYY or DD/MM/YYYY to Date object
+// Helper to parse DD-MM-YYYY, YYYY-MM-DD or DD/MM/YYYY to Date object
 const parseInvoiceDate = (dateStr) => {
   if (!dateStr) return new Date();
-  const parts = dateStr.includes('-') ? dateStr.split('-') : dateStr.split('/');
-  if (parts.length === 3) {
-    // Expects DD-MM-YYYY or DD/MM/YYYY
-    const day = parseInt(parts[0], 10);
-    const month = parseInt(parts[1], 10) - 1;
-    const year = parseInt(parts[2], 10);
-    if (year > 1000) {
-      return new Date(year, month, day);
-    }
+  if (dateStr instanceof Date) return dateStr;
+  const str = String(dateStr).trim();
+  const ymdMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (ymdMatch) {
+    return new Date(parseInt(ymdMatch[1], 10), parseInt(ymdMatch[2], 10) - 1, parseInt(ymdMatch[3], 10));
   }
-  return new Date(dateStr);
+  const dmyMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (dmyMatch) {
+    return new Date(parseInt(dmyMatch[3], 10), parseInt(dmyMatch[2], 10) - 1, parseInt(dmyMatch[1], 10));
+  }
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? new Date() : d;
 };
 
 // Create a new invoice
@@ -37,6 +38,7 @@ const createInvoice = async (req, res) => {
       accountNumber,
       ifscCode,
       upiId,
+      upiNumber,
       gstEnabled,
       saleType,
       customerGst,
@@ -69,6 +71,11 @@ const createInvoice = async (req, res) => {
     const hasCreatePaymentProof = !!(req.body.paymentDetails && ((Array.isArray(req.body.paymentDetails.proofs) && req.body.paymentDetails.proofs.length > 0) || (req.body.paymentDetails.proof && String(req.body.paymentDetails.proof).trim().length > 0)));
     const initialInvoiceType = hasCreatePaymentProof ? 'TAX INVOICE' : (invoiceType || 'PROFORMA INVOICE');
 
+    // Determine initial status: Payment Received if payment proof exists or TAX INVOICE, otherwise default
+    const initialStatus = (hasCreatePaymentProof || initialInvoiceType === 'TAX INVOICE' || req.body.isPaid)
+      ? 'Payment Received'
+      : (req.body.status || 'Invoice');
+
     // Create new invoice
     const invoice = new Invoice({
       invoiceNo,
@@ -83,10 +90,14 @@ const createInvoice = async (req, res) => {
       accountNumber: accountNumber || '',
       ifscCode: ifscCode || '',
       upiId: upiId || '',
+      upiNumber: upiNumber || '',
       gstEnabled: true,
       saleType: saleType || 'Intrastate',
       customerGst: customerGst || '',
       invoiceType: initialInvoiceType,
+      status: initialStatus,
+      isPaid: req.body.isPaid || false,
+      paymentRecords: req.body.paymentRecords || [],
       createdBy: req.user._id,
       createdByModel,
       workerInfo: workerInfo || {},
@@ -186,6 +197,11 @@ const updateInvoice = async (req, res) => {
 
     if (hasPaymentProof) {
       updateData.invoiceType = 'TAX INVOICE';
+      if (!updateData.status || updateData.status === 'Invoice') {
+        if (!existingInvoice.status || existingInvoice.status === 'Invoice') {
+          updateData.status = 'Payment Received';
+        }
+      }
     } else if (!updateData.invoiceType) {
       updateData.invoiceType = existingInvoice.invoiceType || 'PROFORMA INVOICE';
     }
@@ -673,30 +689,21 @@ const getDeletedInvoiceById = async (req, res) => {
 const getNextInvoiceNo = async (req, res) => {
   try {
     const existingInvoices = await Invoice.find({}, 'invoiceNo').lean();
-    const deletedInvoices = await DeleteHistory.find({}, 'invoiceNo').lean();
 
     let maxNum = 0;
 
     const extractNumber = (invNo) => {
       if (!invNo || typeof invNo !== 'string') return 0;
-      const tvMatch = invNo.match(/^TV(\d+)$/i);
+      const tvMatch = invNo.trim().match(/^TV(\d+)$/i);
       if (tvMatch) {
-        return parseInt(tvMatch[1], 10) || 0;
-      }
-      const anyNumMatch = invNo.match(/\d+/);
-      if (anyNumMatch) {
-        return parseInt(anyNumMatch[0], 10) || 0;
+        const num = parseInt(tvMatch[1], 10) || 0;
+        if (num < 50000) return num;
       }
       return 0;
     };
 
     for (const inv of existingInvoices) {
       const num = extractNumber(inv.invoiceNo);
-      if (num > maxNum) maxNum = num;
-    }
-
-    for (const del of deletedInvoices) {
-      const num = extractNumber(del.invoiceNo);
       if (num > maxNum) maxNum = num;
     }
 
@@ -853,6 +860,79 @@ const sendInvoiceWhatsApp = async (req, res) => {
   }
 };
 
+// Renumber invoices sequentially based on sorting
+const renumberInvoices = async (req, res) => {
+  try {
+    const { prefix = 'TV', startNumber = 1, padding = 6, sortBy = 'invoiceDate', sortOrder = 'asc', invoiceIds } = req.body;
+    
+    let query = {};
+    if (Array.isArray(invoiceIds) && invoiceIds.length > 0) {
+      query._id = { $in: invoiceIds };
+    }
+
+    let invoices = await Invoice.find(query);
+
+    if (!invoices || invoices.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No invoices found to renumber'
+      });
+    }
+
+    // Sort invoices
+    invoices.sort((a, b) => {
+      let dateA, dateB;
+      if (sortBy === 'invoiceDate') {
+        dateA = a.actualDate ? new Date(a.actualDate).getTime() : parseInvoiceDate(a.invoiceDate).getTime();
+        dateB = b.actualDate ? new Date(b.actualDate).getTime() : parseInvoiceDate(b.invoiceDate).getTime();
+      } else {
+        dateA = new Date(a.createdAt).getTime();
+        dateB = new Date(b.createdAt).getTime();
+      }
+      return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+    });
+
+    const padLen = Math.max(1, Math.min(10, parseInt(padding, 10) || 6));
+    const startNum = parseInt(startNumber, 10) || 1;
+    const cleanPrefix = (prefix || 'TV').trim().toUpperCase();
+
+    const updates = [];
+    for (let i = 0; i < invoices.length; i++) {
+      const inv = invoices[i];
+      const paddedNum = String(startNum + i).padStart(padLen, '0');
+      const newInvoiceNo = `${cleanPrefix}${paddedNum}`;
+      updates.push({
+        id: inv._id,
+        oldInvoiceNo: inv.invoiceNo,
+        newInvoiceNo
+      });
+    }
+
+    // Step 1: assign temporary unique values to avoid unique index conflict
+    for (const u of updates) {
+      await Invoice.findByIdAndUpdate(u.id, { invoiceNo: `TEMP_RENUM_${Date.now()}_${u.id}` });
+    }
+
+    // Step 2: assign final sequential invoice numbers
+    for (const u of updates) {
+      await Invoice.findByIdAndUpdate(u.id, { invoiceNo: u.newInvoiceNo });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully renumbered ${updates.length} invoices sequentially.`,
+      data: updates
+    });
+  } catch (error) {
+    console.error('Error renumbering invoices:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to renumber invoices',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   createInvoice,
   updateInvoice,
@@ -868,5 +948,6 @@ module.exports = {
   getDeleteHistoryForWorker,
   getDeletedInvoiceById,
   getNextInvoiceNo,
-  sendInvoiceWhatsApp
+  sendInvoiceWhatsApp,
+  renumberInvoices
 };

@@ -71,15 +71,18 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, on
 
   const getProofs = (details) => {
     if (!details) return [];
-    if (details.proofs && details.proofs.length > 0) return details.proofs;
-    if (details.proof) return [{ date: details.date, url: details.proof }];
+    if (details.proofs && details.proofs.length > 0) return details.proofs.filter(p => (p.url || p.proof || (typeof p === 'string' && p.trim() !== '')));
+    if (details.proof && String(details.proof).trim().length > 0) return [{ date: details.date, url: details.proof }];
     return [];
   };
 
   const getEffectiveInvoiceType = (invoice) => {
     if (!invoice) return 'PROFORMA INVOICE';
     const paymentProofs = getProofs(invoice.paymentDetails);
-    return (paymentProofs.length > 0 || invoice.invoiceType === 'TAX INVOICE') ? 'TAX INVOICE' : 'PROFORMA INVOICE';
+    if (paymentProofs.length > 0 || invoice.invoiceType === 'TAX INVOICE' || invoice.isPaid) {
+      return 'TAX INVOICE';
+    }
+    return invoice.invoiceType || 'PROFORMA INVOICE';
   };
 
   const openGallery = (images, title) => {
@@ -257,8 +260,32 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, on
     }
   };
 
-  const getStatusIndex = (status) => {
-    const index = STAGES.indexOf(status);
+  const getEffectiveStatus = (invoice) => {
+    if (!invoice) return 'Invoice';
+    const status = invoice.status || 'Invoice';
+    const explicitIdx = STAGES.indexOf(status);
+
+    const hasClosure = !!(invoice.closureDetails && (getProofs(invoice.closureDetails).length > 0 || invoice.closureDetails.proof));
+    if (hasClosure || explicitIdx >= 3) return 'Closure agreement';
+
+    const hasWork = !!(invoice.workDetails && (getProofs(invoice.workDetails).length > 0 || invoice.workDetails.proof));
+    if (hasWork || explicitIdx >= 2) return 'Work completion';
+
+    // Payment proof or legacy paid/TAX INVOICE status for old records
+    const paymentProofs = getProofs(invoice.paymentDetails);
+    const hasPayment = paymentProofs.length > 0;
+    const isLegacyPaid = invoice.invoiceType === 'TAX INVOICE' || invoice.status === 'Payment Received' || invoice.isPaid || explicitIdx >= 1;
+    if (hasPayment || isLegacyPaid) return 'Payment Received';
+
+    return 'Invoice';
+  };
+
+  const getStatusIndex = (statusOrInvoice) => {
+    if (typeof statusOrInvoice === 'object' && statusOrInvoice !== null) {
+      const effectiveStatus = getEffectiveStatus(statusOrInvoice);
+      return STAGES.indexOf(effectiveStatus);
+    }
+    const index = STAGES.indexOf(statusOrInvoice);
     return index === -1 ? 0 : index;
   };
 
@@ -273,7 +300,8 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, on
 
   // Stage progress component
   const StageProgress = ({ invoice }) => {
-    const currentIdx = getStatusIndex(invoice.status || 'Invoice');
+    const effectiveStatus = getEffectiveStatus(invoice);
+    const currentIdx = getStatusIndex(effectiveStatus);
     return (
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-0">
@@ -296,7 +324,7 @@ const UnifiedInvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, on
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-bold text-[#0d9488] tracking-wider leading-none">
-            {invoice.status || 'Invoice'}
+            {effectiveStatus}
           </span>
           <ProofIcons invoice={invoice} />
         </div>

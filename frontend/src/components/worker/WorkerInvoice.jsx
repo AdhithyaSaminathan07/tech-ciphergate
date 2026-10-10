@@ -800,10 +800,10 @@ const WorkerInvoice = ({ onInvoiceSave, initialData }) => {
           const sealImg = new Image();
           sealImg.src = sealToUse;
           // Position the seal on the right side
-          const sealWidth = 40;  // 40mm wide to match UI
-          const sealHeight = 20; // 20mm high to match UI
+          const sealWidth = 40;  // 40mm wide
+          const sealHeight = 40; // 40mm high
           const sealX = pageWidth - marginRight - sealWidth;
-          pdf.addImage(sealImg, 'PNG', sealX, footerY - 25, sealWidth, sealHeight);
+          pdf.addImage(sealImg, 'PNG', sealX, footerY - 45, sealWidth, sealHeight);
         } catch (error) {
           console.error('Error adding seal to PDF:', error);
         }
@@ -1238,6 +1238,8 @@ support period.`;
             }
             .seal-image {
               height: 35mm;
+              width: 35mm;
+              object-fit: contain;
               margin: 0 auto;
             }
             .seal-label {
@@ -2197,7 +2199,7 @@ support period.`;
               <img 
                 src={sealPreview || '/stamp.png'} 
                 alt="Company Seal" 
-                className="h-20 mx-auto" 
+                className="h-36 w-36 md:h-40 md:w-40 object-contain mx-auto" 
                 onError={(e) => {
                   // If stamp.png doesn't exist, show placeholder
                   e.target.src = '/placeholder-seal.png';

@@ -2758,7 +2758,9 @@ const SalaryManagement = () => {
                                     { label: 'Absent Days', value: selectedIndividualWorker?.totalAbsentDays, sub: 'Deductions Applied', icon: <Calendar size={14} />, color: 'text-rose-400' },
                                     { label: 'Base Earnings', value: `₹${individualReportData?.report?.summary?.netBaseSalary?.toLocaleString('en-IN', { minimumFractionDigits: 0 })}`, sub: 'After Attendance', icon: <Coins size={14} />, color: 'text-white' },
                                     { label: 'Final Settlement', value: `₹${(() => {
-                                        const rawUnauth = (individualReportData?.report?.summary?.absentDeduction || 0) + (individualReportData?.totalUnauthorizedPenalty || 0);
+                                        const rawUnauth = individualReportData?.totalUnauthorizedPenalty > 0
+                                            ? individualReportData.totalUnauthorizedPenalty
+                                            : (individualReportData?.report?.summary?.absentDeduction || 0);
                                         const rawLeave = individualReportData?.report?.summary?.leaveDeduction || 0;
                                         const rawPerm = individualReportData?.report?.summary?.permissionDeduction || 0;
                                         const rawFines = individualReportData?.totalFinesAmount || 0;
@@ -2867,7 +2869,9 @@ const SalaryManagement = () => {
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             {/* Daily Breakdown */}
                                             {(() => {
-                                                const indRawUnauth = (individualReportData.report?.summary?.absentDeduction || 0) + (individualReportData.totalUnauthorizedPenalty || 0);
+                                                const indRawUnauth = individualReportData?.totalUnauthorizedPenalty > 0
+                                                    ? individualReportData.totalUnauthorizedPenalty
+                                                    : (individualReportData.report?.summary?.absentDeduction || 0);
                                                 const indRawLeave = individualReportData.report?.summary?.leaveDeduction || 0;
                                                 const indRawPerm = individualReportData.report?.summary?.permissionDeduction || 0;
                                                 const indRawFines = individualReportData.totalFinesAmount || 0;
@@ -3401,7 +3405,9 @@ const SalaryManagement = () => {
                         </div>
                     )}
                     {reportData && (() => {
-                        const rawUnauthorized = (reportData.report?.summary?.absentDeduction || 0) + (reportData.totalUnauthorizedPenalty || 0);
+                        const rawUnauthorized = reportData.totalUnauthorizedPenalty > 0
+                            ? reportData.totalUnauthorizedPenalty
+                            : (reportData.report?.summary?.absentDeduction || 0);
                         const rawLeave = reportData.report?.summary?.leaveDeduction || 0;
                         const rawPermission = reportData.report?.summary?.permissionDeduction || 0;
                         const rawFines = reportData.totalFinesAmount || 0;
@@ -3897,7 +3903,7 @@ const SalaryManagement = () => {
                                                     { label: 'Actual Worked', value: reportData.report.summary.actualWorkingDays },
                                                     { label: 'Working Hours', value: `${(reportData.report.totalWorkingHours || 0).toFixed(2)}h` },
                                                     { label: 'Permission Time', value: `${reportData.report.totalPermissionTime || 0}m` },
-                                                    { label: `Unauth. Leave Ded. ${reportData.totalUnauthorizedPenalty > 0 ? `(${reportData.unauthorizedAbsencePenalties?.[0]?.penaltyFactor || 2}X)` : ''}`, value: `₹${((reportData.report.summary.absentDeduction || 0) + (reportData.totalUnauthorizedPenalty || 0)).toFixed(2)}`, color: 'text-rose-500' },
+                                                    { label: `Unauth. Leave Ded. ${reportData.totalUnauthorizedPenalty > 0 ? `(${reportData.unauthorizedAbsencePenalties?.[0]?.penaltyFactor || 2}X)` : ''}`, value: `₹${(reportData.totalUnauthorizedPenalty > 0 ? reportData.totalUnauthorizedPenalty : (reportData.report.summary.absentDeduction || 0)).toFixed(2)}`, color: 'text-rose-500' },
                                                     { label: 'Leave Deduction', value: `₹${reportData.report.summary.leaveDeduction?.toFixed(2)}`, color: 'text-rose-500' },
                                                     { label: 'Permission Ded.', value: `₹${reportData.report.summary.permissionDeduction?.toFixed(2)}`, color: 'text-rose-500' },
                                                     { label: 'Total Deductions', value: `₹${reportData.report.totalSalaryDeduction?.toFixed(2)}`, color: 'text-rose-500' },

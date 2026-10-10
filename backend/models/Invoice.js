@@ -24,6 +24,7 @@ const invoiceSchema = new mongoose.Schema({
   accountNumber: { type: String, default: '' },
   ifscCode: { type: String, default: '' },
   upiId: { type: String, default: '' },
+  upiNumber: { type: String, default: '' },
   gstEnabled: { type: Boolean, default: true },
   saleType: { type: String, enum: ['Intrastate', 'Interstate'], default: 'Intrastate' },
   customerGst: { type: String, default: '' },
@@ -83,13 +84,14 @@ const invoiceSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
-// Pre-save hook to ensure invoiceType reflects payment proof status
+// Pre-save hook to ensure invoiceType and status reflect payment proof presence or existing state
 invoiceSchema.pre('save', function(next) {
-  const hasPayment = !!(this.paymentDetails && ((Array.isArray(this.paymentDetails.proofs) && this.paymentDetails.proofs.length > 0) || (this.paymentDetails.proof && String(this.paymentDetails.proof).trim().length > 0)));
+  const hasPayment = !!(this.paymentDetails && ((Array.isArray(this.paymentDetails.proofs) && this.paymentDetails.proofs.some(p => (p.url || p.proof || (typeof p === 'string' && p.trim() !== '')))) || (this.paymentDetails.proof && String(this.paymentDetails.proof).trim().length > 0)));
   if (hasPayment) {
     this.invoiceType = 'TAX INVOICE';
-  } else if (!this.invoiceType) {
-    this.invoiceType = 'PROFORMA INVOICE';
+    if (!this.status || this.status === 'Invoice') {
+      this.status = 'Payment Received';
+    }
   }
   next();
 });
@@ -98,8 +100,13 @@ invoiceSchema.pre('save', function(next) {
 invoiceSchema.set('toJSON', {
   virtuals: true,
   transform: function(doc, ret) {
-    const hasPayment = !!(ret.paymentDetails && ((Array.isArray(ret.paymentDetails.proofs) && ret.paymentDetails.proofs.length > 0) || (ret.paymentDetails.proof && String(ret.paymentDetails.proof).trim().length > 0)));
-    ret.invoiceType = hasPayment ? 'TAX INVOICE' : (ret.invoiceType || 'PROFORMA INVOICE');
+    const hasPayment = !!(ret.paymentDetails && ((Array.isArray(ret.paymentDetails.proofs) && ret.paymentDetails.proofs.some(p => (p.url || p.proof || (typeof p === 'string' && p.trim() !== '')))) || (ret.paymentDetails.proof && String(ret.paymentDetails.proof).trim().length > 0)));
+    if (hasPayment) {
+      ret.invoiceType = 'TAX INVOICE';
+      if (!ret.status || ret.status === 'Invoice') {
+        ret.status = 'Payment Received';
+      }
+    }
     return ret;
   }
 });
@@ -107,8 +114,13 @@ invoiceSchema.set('toJSON', {
 invoiceSchema.set('toObject', {
   virtuals: true,
   transform: function(doc, ret) {
-    const hasPayment = !!(ret.paymentDetails && ((Array.isArray(ret.paymentDetails.proofs) && ret.paymentDetails.proofs.length > 0) || (ret.paymentDetails.proof && String(ret.paymentDetails.proof).trim().length > 0)));
-    ret.invoiceType = hasPayment ? 'TAX INVOICE' : (ret.invoiceType || 'PROFORMA INVOICE');
+    const hasPayment = !!(ret.paymentDetails && ((Array.isArray(ret.paymentDetails.proofs) && ret.paymentDetails.proofs.some(p => (p.url || p.proof || (typeof p === 'string' && p.trim() !== '')))) || (ret.paymentDetails.proof && String(ret.paymentDetails.proof).trim().length > 0)));
+    if (hasPayment) {
+      ret.invoiceType = 'TAX INVOICE';
+      if (!ret.status || ret.status === 'Invoice') {
+        ret.status = 'Payment Received';
+      }
+    }
     return ret;
   }
 });

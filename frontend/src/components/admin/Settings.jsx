@@ -1,5 +1,6 @@
 import { useState, useEffect, useContext } from 'react';
 import { toast } from 'react-toastify';
+import QRCode from 'qrcode';
 import {
     FiSun,
     FiSunrise,
@@ -27,6 +28,8 @@ import {
     FiMessageCircle,
     FiSend,
     FiFileText,
+    FiCreditCard,
+    FiZap,
     FiLogOut,
     FiUpload,
     FiCheckCircle
@@ -65,6 +68,7 @@ const Settings = () => {
     }, [user]);
 
     const [originalSettings, setOriginalSettings] = useState({});
+    const [upiQrPreviewUrl, setUpiQrPreviewUrl] = useState('');
 
     const [settings, setSettings] = useState({
         breakfastEnabled: false,
@@ -142,10 +146,11 @@ const Settings = () => {
         },
         includePermission: false,
         paymentDetails: {
-            bankName: 'ICICI',
+            bankName: 'ICICI Bank',
             accountNumber: '612805036053',
             ifscCode: 'ICIC0006128',
             upiId: 'techvaseegrah.ibz@icici',
+            upiNumber: '7667792779',
             companyName: 'TECH VASEEGRAH'
         },
         paidLeaveConfig: {
@@ -294,10 +299,11 @@ const Settings = () => {
                     matchingThreshold: fetchedSettings.faceRecognition?.matchingThreshold ?? 0.50
                 },
                 paymentDetails: {
-                    bankName: fetchedSettings.paymentDetails?.bankName ?? 'ICICI',
+                    bankName: fetchedSettings.paymentDetails?.bankName ?? 'ICICI Bank',
                     accountNumber: fetchedSettings.paymentDetails?.accountNumber ?? '612805036053',
                     ifscCode: fetchedSettings.paymentDetails?.ifscCode ?? 'ICIC0006128',
                     upiId: fetchedSettings.paymentDetails?.upiId ?? 'techvaseegrah.ibz@icici',
+                    upiNumber: fetchedSettings.paymentDetails?.upiNumber ?? '7667792779',
                     companyName: fetchedSettings.paymentDetails?.companyName ?? 'TECH VASEEGRAH'
                 }
             };
@@ -329,6 +335,34 @@ const Settings = () => {
     useEffect(() => {
         fetchSettings();
     }, [subdomain]);
+
+    // Live generation of Dynamic UPI QR code preview in Settings
+    useEffect(() => {
+        const generatePreviewQr = async () => {
+            const upiId = (settings.paymentDetails?.upiId || '').trim();
+            if (!upiId) {
+                setUpiQrPreviewUrl('');
+                return;
+            }
+            const company = settings.paymentDetails?.companyName || 'TECH VASEEGRAH';
+            const sampleAmount = '1000.00';
+            const upiUri = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(company)}&am=${sampleAmount}&cu=INR&tn=${encodeURIComponent('Invoice Demo Payment')}`;
+            try {
+                const url = await QRCode.toDataURL(upiUri, {
+                    margin: 1,
+                    width: 200,
+                    color: {
+                        dark: '#000000',
+                        light: '#ffffff'
+                    }
+                });
+                setUpiQrPreviewUrl(url);
+            } catch (err) {
+                console.error('Error generating preview QR:', err);
+            }
+        };
+        generatePreviewQr();
+    }, [settings.paymentDetails?.upiId, settings.paymentDetails?.companyName]);
 
     const handleInputChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -748,7 +782,7 @@ const Settings = () => {
             }
         );
 
-        const sectionIds = ['profile', 'meal', 'batches', 'intervals', 'location', 'face', 'access', 'whatsapp', 'whatsappSalary', 'advanced', 'ai', 'bounty'];
+        const sectionIds = ['profile', 'paymentDetails', 'meal', 'batches', 'intervals', 'location', 'face', 'access', 'whatsapp', 'whatsappSalary', 'advanced', 'ai', 'bounty'];
         sectionIds.forEach((id) => {
             const el = document.getElementById(`section-${id}`);
             if (el) observer.observe(el);
@@ -776,7 +810,7 @@ const Settings = () => {
 
     const navItems = [
         { id: 'profile', label: 'Profile', icon: FiUser },
-        { id: 'paymentDetails', label: 'Payment Details', icon: FiFileText },
+        { id: 'paymentDetails', label: 'Invoice Payment & Dynamic UPI QR', icon: FiCreditCard },
         { id: 'meal', label: 'Meal Service', icon: FiSunrise },
         { id: 'batches', label: 'Work Batches', icon: FiClock },
         { id: 'intervals', label: 'Break Intervals', icon: FiSliders },
@@ -1073,122 +1107,207 @@ const Settings = () => {
                             </div>
                         </section>
 
-                        {/* SECTION: PAYMENT & BANK DETAILS CONFIGURATION */}
+                        {/* SECTION: INVOICE PAYMENT & DYNAMIC UPI QR SETTINGS */}
                         <section id="section-paymentDetails" className="scroll-mt-36 lg:scroll-mt-36">
-                            <div className="mb-4 sm:mb-5 pb-3 border-b border-slate-100 flex items-center justify-between">
+                            <div className="mb-4 sm:mb-5 pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                 <div>
                                     <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
-                                        <FiFileText className="text-[#006666] h-4.5 w-4.5 sm:h-5 sm:w-5" />
-                                        Payment & Bank Details Settings
+                                        <FiCreditCard className="text-[#006666] h-5 w-5" />
+                                        Invoice Payment & Dynamic UPI QR Settings
                                     </h2>
                                     <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
-                                        Configure your company bank credentials and UPI ID for automatically pre-filling invoices
+                                        Configure default company bank credentials, UPI ID, and live dynamic QR code generation used across all invoices
                                     </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] sm:text-xs font-bold px-2.5 py-1 rounded-full shadow-2xs">
+                                        <FiZap className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+                                        Auto Dynamic QR
+                                    </span>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 max-w-4xl bg-slate-50/50 p-4 sm:p-6 rounded-2xl border border-slate-200/80">
-                                <div>
-                                    <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                                        Bank Name
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={settings.paymentDetails?.bankName || ''}
-                                        onChange={(e) => {
-                                            const updated = {
-                                                ...settings,
-                                                paymentDetails: { ...(settings.paymentDetails || {}), bankName: e.target.value }
-                                            };
-                                            setSettings(updated);
-                                            checkForChanges(updated);
-                                        }}
-                                        className="w-full px-4 py-2 sm:py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
-                                        placeholder="e.g. ICICI Bank"
-                                    />
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 max-w-5xl items-start">
+                                {/* Left/Main Form Fields (8 cols) */}
+                                <div className="lg:col-span-7 bg-slate-50/70 p-4 sm:p-5 rounded-2xl border border-slate-200/80 space-y-4">
+                                    {/* Prominent UPI ID Card */}
+                                    <div className="bg-gradient-to-br from-emerald-50 via-teal-50/60 to-white p-3.5 sm:p-4 rounded-xl border border-emerald-200 shadow-2xs">
+                                        <label className="block text-[11px] sm:text-xs font-extrabold text-[#006666] uppercase tracking-wider mb-1 flex items-center justify-between">
+                                            <span>UPI ID / VPA (Generates Dynamic QR)</span>
+                                            <span className="text-[10px] font-semibold text-emerald-600 lowercase">e.g. name@icici</span>
+                                        </label>
+                                        <div className="relative mt-1">
+                                            <input
+                                                type="text"
+                                                value={settings.paymentDetails?.upiId || ''}
+                                                onChange={(e) => {
+                                                    const updated = {
+                                                        ...settings,
+                                                        paymentDetails: { ...(settings.paymentDetails || {}), upiId: e.target.value }
+                                                    };
+                                                    setSettings(updated);
+                                                    checkForChanges(updated);
+                                                }}
+                                                className="w-full font-mono font-bold text-xs sm:text-sm text-slate-900 bg-white border border-emerald-300 rounded-xl px-3.5 py-2.5 shadow-2xs focus:ring-2 focus:ring-[#006666]/30 focus:border-[#006666] focus:outline-none transition-all"
+                                                placeholder="e.g. techvaseegrah.ibz@icici or 9717219353@paytm"
+                                            />
+                                        </div>
+                                        <p className="text-[10px] sm:text-[11px] text-emerald-800/80 mt-1.5 font-medium leading-relaxed">
+                                            ⚡ Entering your UPI ID here automatically creates an instant dynamic UPI QR code on newly generated invoices with the client's exact bill grand total.
+                                        </p>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                        <div>
+                                            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                                UPI Phone / Number
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={settings.paymentDetails?.upiNumber || ''}
+                                                onChange={(e) => {
+                                                    const updated = {
+                                                        ...settings,
+                                                        paymentDetails: { ...(settings.paymentDetails || {}), upiNumber: e.target.value }
+                                                    };
+                                                    setSettings(updated);
+                                                    checkForChanges(updated);
+                                                }}
+                                                className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                placeholder="e.g. 7667792779"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                                Company / Payee Name
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={settings.paymentDetails?.companyName || ''}
+                                                onChange={(e) => {
+                                                    const updated = {
+                                                        ...settings,
+                                                        paymentDetails: { ...(settings.paymentDetails || {}), companyName: e.target.value }
+                                                    };
+                                                    setSettings(updated);
+                                                    checkForChanges(updated);
+                                                }}
+                                                className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                placeholder="e.g. TECH VASEEGRAH"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                                Bank Name
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={settings.paymentDetails?.bankName || ''}
+                                                onChange={(e) => {
+                                                    const updated = {
+                                                        ...settings,
+                                                        paymentDetails: { ...(settings.paymentDetails || {}), bankName: e.target.value }
+                                                    };
+                                                    setSettings(updated);
+                                                    checkForChanges(updated);
+                                                }}
+                                                className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                placeholder="e.g. ICICI Bank"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                                Account Number
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={settings.paymentDetails?.accountNumber || ''}
+                                                onChange={(e) => {
+                                                    const updated = {
+                                                        ...settings,
+                                                        paymentDetails: { ...(settings.paymentDetails || {}), accountNumber: e.target.value }
+                                                    };
+                                                    setSettings(updated);
+                                                    checkForChanges(updated);
+                                                }}
+                                                className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                placeholder="e.g. 612805036053"
+                                            />
+                                        </div>
+
+                                        <div className="sm:col-span-2">
+                                            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                                IFSC Code
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={settings.paymentDetails?.ifscCode || ''}
+                                                onChange={(e) => {
+                                                    const updated = {
+                                                        ...settings,
+                                                        paymentDetails: { ...(settings.paymentDetails || {}), ifscCode: e.target.value.toUpperCase() }
+                                                    };
+                                                    setSettings(updated);
+                                                    checkForChanges(updated);
+                                                }}
+                                                className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 uppercase focus:outline-none focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                placeholder="e.g. ICIC0006128"
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
 
-                                <div>
-                                    <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                                        Account Number
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={settings.paymentDetails?.accountNumber || ''}
-                                        onChange={(e) => {
-                                            const updated = {
-                                                ...settings,
-                                                paymentDetails: { ...(settings.paymentDetails || {}), accountNumber: e.target.value }
-                                            };
-                                            setSettings(updated);
-                                            checkForChanges(updated);
-                                        }}
-                                        className="w-full px-4 py-2 sm:py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
-                                        placeholder="e.g. 612805036053"
-                                    />
-                                </div>
+                                {/* Right Dynamic Live QR Preview Card (5 cols) */}
+                                <div className="lg:col-span-5 bg-gradient-to-b from-white to-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center text-center">
+                                    <div className="w-full flex items-center justify-between pb-2 mb-3 border-b border-slate-100">
+                                        <div className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
+                                            Live Dynamic QR Preview
+                                        </div>
+                                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                            <FiCheckCircle className="w-3 h-3 text-emerald-600" /> Live Sync
+                                        </span>
+                                    </div>
 
-                                <div>
-                                    <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                                        IFSC Code
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={settings.paymentDetails?.ifscCode || ''}
-                                        onChange={(e) => {
-                                            const updated = {
-                                                ...settings,
-                                                paymentDetails: { ...(settings.paymentDetails || {}), ifscCode: e.target.value }
-                                            };
-                                            setSettings(updated);
-                                            checkForChanges(updated);
-                                        }}
-                                        className="w-full px-4 py-2 sm:py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
-                                        placeholder="e.g. ICIC0006128"
-                                    />
-                                </div>
+                                    {/* QR Display Container */}
+                                    <div className="p-3 bg-white rounded-xl border-2 border-slate-200/90 shadow-sm my-2">
+                                        {upiQrPreviewUrl ? (
+                                            <img
+                                                src={upiQrPreviewUrl}
+                                                alt="Dynamic UPI QR Preview"
+                                                className="w-36 h-36 sm:w-40 sm:h-40 object-contain mx-auto"
+                                            />
+                                        ) : (
+                                            <div className="w-36 h-36 sm:w-40 sm:h-40 flex flex-col items-center justify-center text-slate-400 bg-slate-50 rounded-lg p-2 text-xs">
+                                                <FiCreditCard className="w-8 h-8 mb-2 text-slate-300" />
+                                                <span>Enter UPI ID to generate live QR</span>
+                                            </div>
+                                        )}
+                                    </div>
 
-                                <div>
-                                    <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                                        UPI ID (VPA)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={settings.paymentDetails?.upiId || ''}
-                                        onChange={(e) => {
-                                            const updated = {
-                                                ...settings,
-                                                paymentDetails: { ...(settings.paymentDetails || {}), upiId: e.target.value }
-                                            };
-                                            setSettings(updated);
-                                            checkForChanges(updated);
-                                        }}
-                                        className="w-full px-4 py-2 sm:py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
-                                        placeholder="e.g. techvaseegrah.ibz@icici"
-                                    />
-                                </div>
+                                    <div className="mt-2 text-xs font-bold text-slate-900 truncate max-w-full">
+                                        {settings.paymentDetails?.companyName || 'TECH VASEEGRAH'}
+                                    </div>
+                                    <div className="text-[11px] font-mono text-[#006666] font-semibold mt-0.5 truncate max-w-full px-2 bg-[#006666]/5 rounded-md py-0.5">
+                                        UPI: {settings.paymentDetails?.upiId || 'Not Configured'}
+                                    </div>
 
-                                <div className="md:col-span-2">
-                                    <label className="block text-[11px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                                        Company / Payee Name
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={settings.paymentDetails?.companyName || ''}
-                                        onChange={(e) => {
-                                            const updated = {
-                                                ...settings,
-                                                paymentDetails: { ...(settings.paymentDetails || {}), companyName: e.target.value }
-                                            };
-                                            setSettings(updated);
-                                            checkForChanges(updated);
-                                        }}
-                                        className="w-full px-4 py-2 sm:py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
-                                        placeholder="e.g. TECH VASEEGRAH"
-                                    />
-                                    <p className="text-[11px] text-slate-500 mt-1 font-medium">
-                                        These bank credentials and UPI ID will be saved to database and used on all newly created invoices and payment QR codes.
-                                    </p>
+                                    <div className="w-full mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-500 space-y-1 text-left bg-slate-50/80 p-2.5 rounded-lg">
+                                        <div className="flex items-center justify-between font-semibold text-slate-700">
+                                            <span>Scan Supported:</span>
+                                            <span className="text-emerald-700 font-bold">GPay • PhonePe • Paytm • BHIM</span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-slate-600">
+                                            <span>Bank:</span>
+                                            <span className="font-medium">{settings.paymentDetails?.bankName || 'ICICI Bank'}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-slate-600">
+                                            <span>A/C:</span>
+                                            <span className="font-mono">{settings.paymentDetails?.accountNumber || '612805036053'}</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </section>

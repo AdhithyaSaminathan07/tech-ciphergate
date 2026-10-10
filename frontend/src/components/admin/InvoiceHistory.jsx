@@ -3,6 +3,8 @@ import Card from '../common/Card';
 import { deleteInvoice, updateInvoice } from '../../services/invoiceService';
 import { toast } from 'react-toastify';
 import StageProofModal from './StageProofModal';
+import SequentialRenumberModal from './SequentialRenumberModal';
+import EditInvoiceNoModal from './EditInvoiceNoModal';
 
 // Helper to normalize any date string to DD/MM/YYYY
 const normalizeInvoiceDate = (dateStr) => {
@@ -60,10 +62,12 @@ const isInvoiceEdited = (invoice) => {
   return updated - created > 2000;
 };
 
-const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteInvoice, onStatusUpdate }) => {
+const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteInvoice, onStatusUpdate, onRefresh }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState(null);
   const [localInvoices, setLocalInvoices] = useState(invoices);
+  const [isRenumberModalOpen, setIsRenumberModalOpen] = useState(false);
+  const [invoiceForNoEdit, setInvoiceForNoEdit] = useState(null);
 
   // Search & Filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -86,16 +90,19 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteI
   // Helper: get all proofs from a stage detail field
   const getProofs = (details) => {
     if (!details) return [];
-    if (details.proofs && details.proofs.length > 0) return details.proofs;
-    if (details.proof) return [{ date: details.date, url: details.proof }];
+    if (details.proofs && details.proofs.length > 0) return details.proofs.filter(p => (p.url || p.proof || (typeof p === 'string' && p.trim() !== '')));
+    if (details.proof && String(details.proof).trim().length > 0) return [{ date: details.date, url: details.proof }];
     return [];
   };
 
-  // Helper: determine effective invoice type based strictly on payment proof presence
+  // Helper: determine effective invoice type (proof for new ones, preserves TAX INVOICE for old ones)
   const getEffectiveInvoiceType = (invoice) => {
     if (!invoice) return 'PROFORMA INVOICE';
     const paymentProofs = getProofs(invoice.paymentDetails);
-    return (paymentProofs.length > 0 || invoice.invoiceType === 'TAX INVOICE') ? 'TAX INVOICE' : 'PROFORMA INVOICE';
+    if (paymentProofs.length > 0 || invoice.invoiceType === 'TAX INVOICE' || invoice.isPaid) {
+      return 'TAX INVOICE';
+    }
+    return invoice.invoiceType || 'PROFORMA INVOICE';
   };
 
   const openGallery = (images, title) => {
@@ -180,7 +187,7 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteI
       }
 
       // Status filter
-      if (statusFilter && (invoice.status || 'Invoice') !== statusFilter) {
+      if (statusFilter && getEffectiveStatus(invoice) !== statusFilter) {
         return false;
       }
 
@@ -324,8 +331,32 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteI
     }
   };
 
-  const getStatusIndex = (status) => {
-    const index = STAGES.indexOf(status);
+  const getEffectiveStatus = (invoice) => {
+    if (!invoice) return 'Invoice';
+    const status = invoice.status || 'Invoice';
+    const explicitIdx = STAGES.indexOf(status);
+
+    const hasClosure = !!(invoice.closureDetails && (getProofs(invoice.closureDetails).length > 0 || invoice.closureDetails.proof));
+    if (hasClosure || explicitIdx >= 3) return 'Closure agreement';
+
+    const hasWork = !!(invoice.workDetails && (getProofs(invoice.workDetails).length > 0 || invoice.workDetails.proof));
+    if (hasWork || explicitIdx >= 2) return 'Work completion';
+
+    // Payment proof or legacy paid/TAX INVOICE status for old records
+    const paymentProofs = getProofs(invoice.paymentDetails);
+    const hasPayment = paymentProofs.length > 0;
+    const isLegacyPaid = invoice.invoiceType === 'TAX INVOICE' || invoice.status === 'Payment Received' || invoice.isPaid || explicitIdx >= 1;
+    if (hasPayment || isLegacyPaid) return 'Payment Received';
+
+    return 'Invoice';
+  };
+
+  const getStatusIndex = (statusOrInvoice) => {
+    if (typeof statusOrInvoice === 'object' && statusOrInvoice !== null) {
+      const effectiveStatus = getEffectiveStatus(statusOrInvoice);
+      return STAGES.indexOf(effectiveStatus);
+    }
+    const index = STAGES.indexOf(statusOrInvoice);
     return index === -1 ? 0 : index;
   };
 
@@ -367,7 +398,8 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteI
 
   // Stage progress component (shared between table and card views)
   const StageProgress = ({ invoice }) => {
-    const currentIdx = getStatusIndex(invoice.status || 'Invoice');
+    const effectiveStatus = getEffectiveStatus(invoice);
+    const currentIdx = getStatusIndex(effectiveStatus);
     return (
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-0">
@@ -390,7 +422,7 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteI
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-bold text-[#0d9488] tracking-wider leading-none">
-            {invoice.status || 'Invoice'}
+            {effectiveStatus}
           </span>
           <ProofIcons invoice={invoice} />
         </div>
@@ -480,6 +512,14 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteI
               </button>
             )}
           </div>
+          <button
+            onClick={() => setIsRenumberModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-sm font-bold bg-[#f0fdf4] text-[#166534] hover:bg-[#dcfce7] border border-[#bbf7d0] transition-all shadow-xs whitespace-nowrap"
+            title="Batch Sequential Renumber Invoices"
+          >
+            <span className="text-base leading-none">🔢</span>
+            Sequential Renumber
+          </button>
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all whitespace-nowrap ${
@@ -701,9 +741,18 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteI
               <tbody className="divide-y divide-gray-100">
                 {filteredInvoices.map((invoice) => (
                   <tr key={invoice._id} className="hover:bg-teal-50/20 transition-colors">
-                    <td className="py-3.5 px-4 text-sm font-semibold text-gray-900">
+                    <td className="py-3.5 px-4 text-sm font-semibold text-gray-900 group">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="truncate">{invoice.invoiceNo}</span>
+                        <button
+                          onClick={() => setInvoiceForNoEdit(invoice)}
+                          className="opacity-0 group-hover:opacity-100 hover:!opacity-100 text-gray-400 hover:text-[#0d9488] transition-opacity p-0.5 rounded"
+                          title="Change this invoice number"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
                         {isInvoiceEdited(invoice) && (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 shadow-sm" title={`Edited on ${invoice.updatedAt ? new Date(invoice.updatedAt).toLocaleString('en-IN') : 'Unknown'}`}>
                             <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -782,6 +831,15 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteI
                 <div className="flex items-center justify-between px-4 py-3 bg-gray-50/80 border-b border-gray-100">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-bold text-gray-900">{invoice.invoiceNo}</span>
+                    <button
+                      onClick={() => setInvoiceForNoEdit(invoice)}
+                      className="text-gray-400 hover:text-[#0d9488] p-0.5 rounded"
+                      title="Change invoice number"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
                     {isInvoiceEdited(invoice) && (
                       <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
                         Edited
@@ -990,6 +1048,21 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteI
           </div>
         </div>
       )}
+      {/* Sequential Renumber Modal */}
+      <SequentialRenumberModal
+        isOpen={isRenumberModalOpen}
+        onClose={() => setIsRenumberModalOpen(false)}
+        invoices={localInvoices}
+        onSuccess={onRefresh}
+      />
+
+      {/* Quick Edit Single Invoice Number Modal */}
+      <EditInvoiceNoModal
+        isOpen={!!invoiceForNoEdit}
+        onClose={() => setInvoiceForNoEdit(null)}
+        invoice={invoiceForNoEdit}
+        onSuccess={onRefresh}
+      />
     </div>
   );
 };

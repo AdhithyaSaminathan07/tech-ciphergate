@@ -7,6 +7,26 @@ import api from '../../services/api';
 import appContext from '../../context/AppContext';
 import { getNextInvoiceNo, sendInvoiceWhatsApp, createInvoice, updateInvoice } from '../../services/invoiceService';
 import CustomDatePicker from '../common/CustomDatePicker';
+import {
+  FaFileAlt,
+  FaCreditCard,
+  FaCheckCircle,
+  FaFileInvoiceDollar,
+  FaHeadset,
+  FaEdit,
+  FaShieldAlt,
+  FaRocket,
+  FaUsers,
+  FaHeart,
+  FaFileInvoice,
+  FaCalendarAlt,
+  FaClock,
+  FaPhoneAlt,
+  FaEnvelope,
+  FaGlobe,
+  FaUser,
+  FaMapMarkerAlt
+} from 'react-icons/fa';
 
 // Helper to normalize any date string to DD/MM/YYYY
 const normalizeInvoiceDate = (dateStr) => {
@@ -59,7 +79,7 @@ const getFreshInvoiceData = (formattedDate = '') => ({
     addressLine2: 'REDDIPALAYAM ROAD,',
     addressLine3: 'SRINIVASAPURAM,',
     cityZip: 'THANJAVUR - 613009',
-    mobile: '7667792779',
+    mobile: '9047484484',
     email: 'techvaseegrah@gmail.com',
     gstin: '33KYGPS1983E1Z1'
   },
@@ -258,10 +278,9 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
     }
   }, [initialData]);
 
-  // Fetch tenant Payment & Bank Details from Settings if creating new
+  // Fetch tenant Payment & Bank Details from Settings
   useEffect(() => {
     const fetchPaymentSettings = async () => {
-      if (initialData?._id) return;
       try {
         const targetSubdomain = contextSubdomain || localStorage.getItem('subdomain') || 'tech-vaseegrah';
         let res;
@@ -271,14 +290,15 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
           res = await api.get(`/settings/public/${targetSubdomain}`);
         }
         if (res.data && res.data.paymentDetails) {
-          const { bankName, accountNumber, ifscCode, upiId, companyName } = res.data.paymentDetails;
+          const { bankName, accountNumber, ifscCode, upiId, upiNumber, companyName } = res.data.paymentDetails;
           setInvoiceData(prev => ({
             ...prev,
-            bankName: bankName || prev.bankName,
-            accountName: companyName || prev.accountName,
-            accountNumber: accountNumber || prev.accountNumber,
-            ifscCode: ifscCode || prev.ifscCode,
-            upiId: upiId || prev.upiId
+            bankName: (!initialData?._id ? bankName : prev.bankName) || bankName || prev.bankName,
+            accountName: (!initialData?._id ? companyName : prev.accountName) || companyName || prev.accountName,
+            accountNumber: (!initialData?._id ? accountNumber : prev.accountNumber) || accountNumber || prev.accountNumber,
+            ifscCode: (!initialData?._id ? ifscCode : prev.ifscCode) || ifscCode || prev.ifscCode,
+            upiId: (!initialData?._id ? upiId : (prev.upiId || upiId)) || upiId || prev.upiId,
+            upiNumber: (!initialData?._id ? upiNumber : (prev.upiNumber || upiNumber)) || upiNumber || prev.upiNumber
           }));
         }
       } catch (err) {
@@ -292,19 +312,30 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
   useEffect(() => {
     const generateUpiQr = async () => {
       try {
-        const upiId = invoiceData.upiId || 'techvaseegrah.ibz@icici';
+        const upiId = (invoiceData.upiId || '').trim();
+        if (!upiId) {
+          setUpiQrCodeUrl('');
+          return;
+        }
         const companyName = invoiceData.accountName || invoiceData.fromSection?.company || 'TECH VASEEGRAH';
-        const amount = totals.grandTotal ? totals.grandTotal.toFixed(2) : '0.00';
+        const amount = totals.grandTotal ? Number(totals.grandTotal).toFixed(2) : '0.00';
         const note = `Invoice ${invoiceData.invoiceNo || ''}`;
-        const upiString = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(companyName)}&am=${amount}&cu=INR&tn=${encodeURIComponent(note)}`;
-        const qrUrl = await QRCode.toDataURL(upiString, { margin: 1, width: 150 });
+        const upiString = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(companyName)}&am=${amount}&cu=INR&tn=${encodeURIComponent(note)}`;
+        const qrUrl = await QRCode.toDataURL(upiString, {
+          margin: 1,
+          width: 200,
+          color: {
+            dark: '#000000',
+            light: '#ffffff'
+          }
+        });
         setUpiQrCodeUrl(qrUrl);
       } catch (err) {
         console.error('Error generating UPI QR code:', err);
       }
     };
     generateUpiQr();
-  }, [invoiceData.upiId, invoiceData.accountName, invoiceData.invoiceNo, invoiceData.items, invoiceData.gstEnabled, invoiceData.saleType]);
+  }, [invoiceData.upiId, invoiceData.accountName, invoiceData.fromSection?.company, invoiceData.invoiceNo, totals.grandTotal]);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -457,109 +488,280 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
         pdf.text("Technology. Solutions. Growth.", marginLeft, marginTop + 14);
       }
 
-      // PROFORMA INVOICE Title (Right)
+      // PROFORMA INVOICE Title (Right - Flush with right margin matching UI)
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(22);
       pdf.setTextColor(11, 102, 59);
-      const titleText = invoiceData.invoiceType || "PROFORMA INVOICE";
-      const titleWidth = pdf.getTextWidth(titleText);
-      pdf.text(titleText, pageWidth - marginRight - titleWidth, marginTop + 12);
+      const titleText = (invoiceData.invoiceType || "PROFORMA INVOICE").toUpperCase();
+      pdf.text(titleText, pageWidth - marginRight, marginTop + 10, { align: 'right' });
 
       if (invoiceData.isPaid) {
-        pdf.setFontSize(12);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(10);
         pdf.setTextColor(16, 185, 129);
-        pdf.text("PAID", pageWidth - marginRight - titleWidth - 18, marginTop + 12);
+        pdf.text("● PAID", pageWidth - marginRight, marginTop + 16, { align: 'right' });
       }
 
       let yPos = marginTop + 26;
 
+      // Vector Icon Drawing Helpers for Crisp, Native PDF Rendering
+      const drawUserBadge = (x, y) => {
+        pdf.setFillColor(11, 102, 59);
+        pdf.circle(x + 2.2, y - 1.2, 2.3, 'F');
+        pdf.setFillColor(255, 255, 255);
+        pdf.circle(x + 2.2, y - 2.0, 0.75, 'F');
+        pdf.ellipse(x + 2.2, y - 0.3, 1.3, 0.75, 'F');
+      };
+
+      const drawPinBadge = (x, y) => {
+        pdf.setFillColor(11, 102, 59);
+        pdf.circle(x + 2.2, y - 1.2, 2.3, 'F');
+        pdf.setFillColor(255, 255, 255);
+        pdf.circle(x + 2.2, y - 1.8, 0.85, 'F');
+        pdf.triangle(x + 1.45, y - 1.5, x + 2.95, y - 1.5, x + 2.2, y + 0.4, 'F');
+        pdf.setFillColor(11, 102, 59);
+        pdf.circle(x + 2.2, y - 1.8, 0.35, 'F');
+      };
+
+      const drawFramedIcon = (x, y, type) => {
+        pdf.setFillColor(236, 253, 245);
+        pdf.setDrawColor(167, 243, 208);
+        pdf.setLineWidth(0.3);
+        pdf.roundedRect(x, y - 3.8, 7.5, 7.5, 1.2, 1.2, 'FD');
+
+        if (type === 'invoice') {
+          pdf.setDrawColor(11, 102, 59);
+          pdf.setFillColor(255, 255, 255);
+          pdf.setLineWidth(0.35);
+          pdf.rect(x + 1.8, y - 2.4, 3.9, 4.8, 'FD');
+          pdf.line(x + 2.6, y - 1.0, x + 4.8, y - 1.0);
+          pdf.line(x + 2.6, y + 0.4, x + 4.8, y + 0.4);
+          pdf.line(x + 2.6, y + 1.4, x + 4.2, y + 1.4);
+        } else if (type === 'calendar') {
+          pdf.setDrawColor(11, 102, 59);
+          pdf.setFillColor(255, 255, 255);
+          pdf.setLineWidth(0.35);
+          pdf.rect(x + 1.6, y - 2.0, 4.3, 4.3, 'FD');
+          pdf.setFillColor(11, 102, 59);
+          pdf.rect(x + 1.6, y - 2.0, 4.3, 1.4, 'F');
+          pdf.line(x + 2.5, y - 2.7, x + 2.5, y - 2.0);
+          pdf.line(x + 5.0, y - 2.7, x + 5.0, y - 2.0);
+        } else if (type === 'clock') {
+          pdf.setDrawColor(11, 102, 59);
+          pdf.setLineWidth(0.4);
+          pdf.circle(x + 3.75, y, 2.3, 'S');
+          pdf.line(x + 3.75, y, x + 3.75, y - 1.4);
+          pdf.line(x + 3.75, y, x + 4.9, y);
+        }
+      };
+
+      const drawPhoneIcon = (x, y) => {
+        const cx = x + 1.2;
+        const cy = y - 1.2;
+        pdf.setFillColor(11, 102, 59);
+        pdf.setDrawColor(11, 102, 59);
+        pdf.roundedRect(cx - 0.9, cy - 1.3, 1.8, 2.6, 0.35, 0.35, 'F');
+        pdf.setFillColor(255, 255, 255);
+        pdf.rect(cx - 0.6, cy - 0.8, 1.2, 1.5, 'F');
+        pdf.circle(cx, cy + 0.95, 0.12, 'F');
+      };
+
+      const drawEmailIcon = (x, y) => {
+        const cx = x + 1.2;
+        const cy = y - 1.2;
+        pdf.setDrawColor(11, 102, 59);
+        pdf.setFillColor(255, 255, 255);
+        pdf.setLineWidth(0.35);
+        pdf.roundedRect(cx - 1.4, cy - 1.0, 2.8, 2.0, 0.3, 0.3, 'FD');
+        pdf.line(cx - 1.4, cy - 1.0, cx, cy + 0.05);
+        pdf.line(cx + 1.4, cy - 1.0, cx, cy + 0.05);
+      };
+
+      const drawGlobeIcon = (x, y) => {
+        const cx = x + 1.2;
+        const cy = y - 1.2;
+        pdf.setDrawColor(11, 102, 59);
+        pdf.setLineWidth(0.35);
+        pdf.circle(cx, cy, 1.2, 'S');
+        pdf.line(cx - 1.2, cy, cx + 1.2, cy);
+        pdf.line(cx, cy - 1.2, cx, cy + 1.2);
+        pdf.ellipse(cx, cy, 0.55, 1.2, 'S');
+      };
+
+      const drawDocIconWhite = (x, y) => {
+        pdf.setFillColor(255, 255, 255);
+        pdf.setDrawColor(255, 255, 255);
+        pdf.roundedRect(x, y - 2.2, 3.0, 3.8, 0.3, 0.3, 'F');
+        pdf.setFillColor(11, 102, 59);
+        pdf.rect(x + 0.6, y - 1.4, 1.8, 0.4, 'F');
+        pdf.rect(x + 0.6, y - 0.4, 1.8, 0.4, 'F');
+        pdf.rect(x + 0.6, y + 0.5, 1.2, 0.4, 'F');
+      };
+
+      const drawCardIconWhite = (x, y) => {
+        pdf.setFillColor(255, 255, 255);
+        pdf.roundedRect(x, y - 2.0, 3.8, 2.8, 0.4, 0.4, 'F');
+        pdf.setFillColor(11, 102, 59);
+        pdf.rect(x, y - 1.2, 3.8, 0.7, 'F');
+      };
+
+      const drawNoteIconGreen = (x, y) => {
+        pdf.setDrawColor(11, 102, 59);
+        pdf.setFillColor(255, 255, 255);
+        pdf.setLineWidth(0.35);
+        pdf.roundedRect(x, y - 2.2, 3.0, 3.8, 0.3, 0.3, 'FD');
+        pdf.setFillColor(11, 102, 59);
+        pdf.rect(x + 0.6, y - 1.3, 1.8, 0.4, 'F');
+        pdf.rect(x + 0.6, y - 0.4, 1.8, 0.4, 'F');
+        pdf.rect(x + 0.6, y + 0.5, 1.2, 0.4, 'F');
+      };
+
       // 3-Column Info Section
       const col1X = marginLeft;
-      const col2X = marginLeft + 65;
-      const col3X = marginLeft + 120;
+      const col2X = marginLeft + 62;
+      const col3X = marginLeft + 118;
 
       // Column 1: BILL TO & ADDRESS
+      drawUserBadge(col1X, yPos);
       pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(9);
+      pdf.setFontSize(8.5);
       pdf.setTextColor(11, 102, 59);
-      pdf.text("BILL TO", col1X, yPos);
+      pdf.text("BILL TO", col1X + 6.2, yPos);
 
-      pdf.setFontSize(10);
+      pdf.setFontSize(9.5);
       pdf.setTextColor(17, 24, 39);
       pdf.text(invoiceData.customerName || 'Customer Name', col1X, yPos + 5);
 
-      pdf.setFontSize(9);
-      pdf.setTextColor(11, 102, 59);
-      pdf.text("ADDRESS", col1X, yPos + 12);
+      let currentC1Y = yPos + 9;
+      if (invoiceData.customerContact) {
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(7.8);
+        pdf.setTextColor(75, 85, 99);
+        pdf.text(invoiceData.customerContact, col1X, currentC1Y);
+        currentC1Y += 3.8;
+      }
+      if (invoiceData.customerGst) {
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(7.8);
+        pdf.setTextColor(11, 102, 59);
+        pdf.text(`GSTIN: ${invoiceData.customerGst}`, col1X, currentC1Y);
+        currentC1Y += 4.2;
+      }
 
-      pdf.setFont("helvetica", "normal");
+      let addrY = Math.max(currentC1Y + 1, yPos + 14);
+      drawPinBadge(col1X, addrY);
+      pdf.setFont("helvetica", "bold");
       pdf.setFontSize(8.5);
+      pdf.setTextColor(11, 102, 59);
+      pdf.text("ADDRESS", col1X + 6.2, addrY);
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8);
       pdf.setTextColor(55, 65, 81);
-      const addrLines = pdf.splitTextToSize(invoiceData.customerAddress || 'Customer Address', 55);
-      pdf.text(addrLines, col1X, yPos + 16);
+      const addrLines = pdf.splitTextToSize(invoiceData.customerAddress || 'Customer full address (Street, City, State, Pin code)', 52);
+      pdf.text(addrLines, col1X, addrY + 4.5);
 
-      // Column 2: INVOICE DETAILS
+      // Column 2: INVOICE DETAILS (With crisp framed icons matching UI)
+      drawFramedIcon(col2X, yPos + 1.2, 'invoice');
       pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(8);
+      pdf.setFontSize(7.5);
       pdf.setTextColor(107, 114, 128);
-      pdf.text("Invoice No.", col2X, yPos);
+      pdf.text("Invoice No.", col2X + 9.5, yPos);
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(9);
       pdf.setTextColor(17, 24, 39);
-      pdf.text(invoiceData.invoiceNo || 'TV000', col2X, yPos + 4.5);
+      pdf.text(invoiceData.invoiceNo || 'TV000', col2X + 9.5, yPos + 4.5);
 
+      drawFramedIcon(col2X, yPos + 12.2, 'calendar');
       pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(8);
+      pdf.setFontSize(7.5);
       pdf.setTextColor(107, 114, 128);
-      pdf.text("Invoice Date", col2X, yPos + 11);
+      pdf.text("Invoice Date", col2X + 9.5, yPos + 11);
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(9);
       pdf.setTextColor(17, 24, 39);
-      pdf.text(invoiceData.invoiceDate || formattedDate, col2X, yPos + 15.5);
+      pdf.text(invoiceData.invoiceDate || formattedDate, col2X + 9.5, yPos + 15.5);
 
+      drawFramedIcon(col2X, yPos + 23.2, 'clock');
       pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(8);
+      pdf.setFontSize(7.5);
       pdf.setTextColor(107, 114, 128);
-      pdf.text("Due Date", col2X, yPos + 22);
+      pdf.text("Due Date", col2X + 9.5, yPos + 22);
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(9);
       pdf.setTextColor(17, 24, 39);
-      pdf.text(invoiceData.dueDate || invoiceData.invoiceDate || formattedDate, col2X, yPos + 26.5);
+      pdf.text(invoiceData.dueDate || invoiceData.invoiceDate || formattedDate, col2X + 9.5, yPos + 26.5);
 
-      // Column 3: FROM Details
+      // Column 3: FROM Details (Clean, elegant typography matching UI)
       pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(9);
+      pdf.setFontSize(8.5);
       pdf.setTextColor(11, 102, 59);
       pdf.text("FROM", col3X, yPos);
 
       pdf.setFontSize(9.5);
       pdf.setTextColor(17, 24, 39);
-      pdf.text(invoiceData.fromSection?.company || "TECH VASEEGRAH", col3X, yPos + 4.5);
+      pdf.text(invoiceData.fromSection?.company || "TECH VASEEGRAH", col3X, yPos + 5.2);
 
       pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(8);
+      pdf.setFontSize(7.8);
       pdf.setTextColor(55, 65, 81);
-      const fromLines = [
-        `${invoiceData.fromSection?.addressLine1 || ''} ${invoiceData.fromSection?.addressLine2 || ''}`,
-        `${invoiceData.fromSection?.addressLine3 || ''} ${invoiceData.fromSection?.cityZip || ''}`,
-        `Tel: ${invoiceData.fromSection?.mobile || '7667792779'}`,
-        `Email: ${invoiceData.fromSection?.email || 'techvaseegrah@gmail.com'}`,
-        `GSTIN: ${invoiceData.fromSection?.gstin || '33KYGPS1983E1Z1'}`
-      ];
-      let fromY = yPos + 8.5;
-      fromLines.forEach(fl => {
-        if (fl.trim()) {
-          pdf.text(fl, col3X, fromY);
-          fromY += 4;
-        }
-      });
+
+      // Clean address segments to prevent duplicate commas (e.g. ',,')
+      const cleanAddr = (str) => String(str || '').trim().replace(/,\s*$/, '');
+      const addrPart1 = cleanAddr(invoiceData.fromSection?.addressLine1);
+      const addrPart2 = cleanAddr(invoiceData.fromSection?.addressLine2);
+      const addrPart3 = cleanAddr(invoiceData.fromSection?.addressLine3);
+      const addrPart4 = cleanAddr(invoiceData.fromSection?.cityZip);
+
+      const fromLine1 = [addrPart1, addrPart2].filter(Boolean).join(', ');
+      const fromLine2 = [addrPart3, addrPart4].filter(Boolean).join(', ');
+      const fromAddressLines = [fromLine1, fromLine2].filter(Boolean);
+
+      let fromCurrY = yPos + 9.5;
+      if (fromAddressLines.length > 0) {
+        fromAddressLines.forEach(lineText => {
+          const splitLines = pdf.splitTextToSize(lineText, 58);
+          pdf.text(splitLines, col3X, fromCurrY);
+          fromCurrY += (splitLines.length * 3.7);
+        });
+        fromCurrY += 1.8;
+      } else {
+        const defaultLines = pdf.splitTextToSize('No.11, VIJAYANAGAR, REDDIPALAYAM ROAD, SRINIVASAPURAM, THANJAVUR - 613009', 58);
+        pdf.text(defaultLines, col3X, fromCurrY);
+        fromCurrY += (defaultLines.length * 3.7) + 1.8;
+      }
+
+      // Phone (Icon + number aligned)
+      drawPhoneIcon(col3X, fromCurrY);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(7.8);
+      pdf.setTextColor(55, 65, 81);
+      pdf.text(invoiceData.fromSection?.mobile || '9047484484', col3X + 3.8, fromCurrY);
+      fromCurrY += 4.4;
+
+      // Email (Icon + email aligned)
+      drawEmailIcon(col3X, fromCurrY);
+      pdf.text(invoiceData.fromSection?.email || 'techvaseegrah@gmail.com', col3X + 3.8, fromCurrY);
+      fromCurrY += 4.4;
+
+      // GSTIN (Icon + GSTIN aligned)
+      drawGlobeIcon(col3X, fromCurrY);
+      pdf.text(`GSTIN: ${invoiceData.fromSection?.gstin || '33KYGPS1983E1Z1'}`, col3X + 3.8, fromCurrY);
+      fromCurrY += 4.2;
 
       // Table of Items
-      const tableStartY = Math.max(yPos + 32, fromY + 4);
+      const tableStartY = Math.max(yPos + 34, fromCurrY + 4, addrY + (addrLines.length * 4) + 5);
+
+      // Vertical subtle dividers matching UI
+      pdf.setDrawColor(229, 231, 235);
+      pdf.setLineWidth(0.3);
+      pdf.line(col2X - 4, yPos - 2, col2X - 4, tableStartY - 3);
+      pdf.line(col3X - 4, yPos - 2, col3X - 4, tableStartY - 3);
+
       const tableColumns = ['NO', 'DESCRIPTION', 'HSN/SAC', 'GST (%)', 'QTY', 'PRICE (Rs.)', 'TOTAL (Rs.)'];
       const tableRows = invoiceData.items.map((item, idx) => [
         (idx + 1).toString(),
-        item.description || '',
+        item.description || 'Item or service description',
         item.hsn || '',
         Number(item.gst || 0).toFixed(2),
         item.qty.toString(),
@@ -572,8 +774,8 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
         body: tableRows,
         startY: tableStartY,
         theme: 'grid',
-        margin: { left: marginLeft, right: marginRight, bottom: 15 },
-        styles: { fontSize: 8.5, cellPadding: 2.5, overflow: 'linebreak' },
+        margin: { left: marginLeft, right: marginRight, bottom: 20 },
+        styles: { fontSize: 8.5, cellPadding: 3.2, overflow: 'linebreak' },
         headStyles: {
           fillColor: [11, 102, 59],
           textColor: [255, 255, 255],
@@ -594,13 +796,14 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
 
       let currentY = pdf.lastAutoTable.finalY + 5;
 
-      // Totals & Amount In Words Section
+      // Totals & Amount In Words Section (with doc icon)
       pdf.setFillColor(11, 102, 59);
-      pdf.roundedRect(marginLeft, currentY, 44, 6.5, 1.5, 1.5, 'F');
+      pdf.roundedRect(marginLeft, currentY, 46, 6.5, 1.5, 1.5, 'F');
+      drawDocIconWhite(marginLeft + 2.5, currentY + 3.5);
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(8);
       pdf.setTextColor(255, 255, 255);
-      pdf.text("AMOUNT IN WORDS", marginLeft + 4, currentY + 4.5);
+      pdf.text("AMOUNT IN WORDS", marginLeft + 7.5, currentY + 4.5);
 
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(8.5);
@@ -608,35 +811,43 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
       const wordsLines = pdf.splitTextToSize(totals.totalInWords, 90);
       pdf.text(wordsLines, marginLeft, currentY + 11.5);
 
-      // Right Totals Table
+      // Right Totals Container (Matching UI preview card)
       const totalsRightX = pageWidth - marginRight;
-      const boxWidth = 78;
+      const boxWidth = 80;
       const boxLeft = totalsRightX - boxWidth;
-      const labelEndX = totalsRightX - 38;
-      const colonX = totalsRightX - 35;
+      const colonX = totalsRightX - 31;
       const valueEndX = totalsRightX - 4;
-      let totY = currentY;
+      
+      const gstRowsCount = invoiceData.gstEnabled ? (invoiceData.saleType === 'Intrastate' ? 2 : 1) : 0;
+      const cardHeight = 15 + (gstRowsCount * 5.5) + 11;
+      
+      pdf.setFillColor(249, 250, 251);
+      pdf.setDrawColor(229, 231, 235);
+      pdf.setLineWidth(0.3);
+      pdf.roundedRect(boxLeft, currentY, boxWidth, cardHeight, 2, 2, 'FD');
+
+      let totY = currentY + 4.5;
 
       const printTotRow = (lbl, val, isGrand = false) => {
         const formattedVal = `Rs. ${Number(val).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
         if (isGrand) {
           pdf.setFillColor(11, 102, 59);
-          pdf.roundedRect(boxLeft, totY - 1, boxWidth, 8, 1.5, 1.5, 'F');
+          pdf.roundedRect(boxLeft + 2, totY, boxWidth - 4, 7.5, 1.5, 1.5, 'F');
           pdf.setFont("helvetica", "bold");
-          pdf.setFontSize(9.5);
+          pdf.setFontSize(8.5);
           pdf.setTextColor(255, 255, 255);
-          pdf.text(lbl, labelEndX, totY + 4.5, { align: 'right' });
-          pdf.text(':', colonX, totY + 4.5);
-          pdf.text(formattedVal, valueEndX, totY + 4.5, { align: 'right' });
+          pdf.text(lbl, boxLeft + 4, totY + 4.8);
+          pdf.text(':', colonX, totY + 4.8);
+          pdf.text(formattedVal, valueEndX - 2, totY + 4.8, { align: 'right' });
         } else {
           pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(8.5);
+          pdf.setFontSize(8);
           pdf.setTextColor(75, 85, 99);
-          pdf.text(lbl, labelEndX, totY + 3.5, { align: 'right' });
+          pdf.text(lbl, boxLeft + 4, totY + 3.5);
           pdf.text(':', colonX, totY + 3.5);
           pdf.setFont("helvetica", "bold");
           pdf.setTextColor(17, 24, 39);
-          pdf.text(formattedVal, valueEndX, totY + 3.5, { align: 'right' });
+          pdf.text(formattedVal, valueEndX - 2, totY + 3.5, { align: 'right' });
           totY += 5.5;
         }
       };
@@ -650,161 +861,302 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
           printTotRow(`IGST (${totals.fullGst}%)`, totals.igstTotal.toFixed(2));
         }
       }
-      totY += 1;
+      totY += 1.5;
       printTotRow("GRAND TOTAL", totals.grandTotal.toFixed(2), true);
 
-      // Payment Details & QR Code & Features Section
-      currentY = Math.max(currentY + 20, totY + 12);
-      if (currentY > pageHeight - 75) {
+      // Section Positioning: Dynamic full-page fill ensuring NO blank bottom void
+      const totalsBottomY = currentY + cardHeight;
+      const targetFooterY = pageHeight - 21;
+      const targetTaglineY = pageHeight - 12;
+
+      // Check if content fits in 1 page or requires next page
+      let payStartY;
+      if (totalsBottomY + 85 <= targetFooterY) {
+        // Comfortably fits in single page - distribute proportionally to fill page
+        payStartY = Math.max(totalsBottomY + 7, (totalsBottomY + targetFooterY - 78) / 2);
+      } else if (totalsBottomY + 75 > pageHeight - 20) {
         pdf.addPage();
-        currentY = marginTop + 5;
+        payStartY = marginTop + 6;
+      } else {
+        payStartY = totalsBottomY + 5;
       }
 
       // Dotted Divider
       pdf.setDrawColor(209, 213, 219);
       pdf.setLineDashPattern([1, 1], 0);
-      pdf.line(marginLeft, currentY, pageWidth - marginRight, currentY);
+      pdf.line(marginLeft, payStartY, pageWidth - marginRight, payStartY);
       pdf.setLineDashPattern([], 0);
-      currentY += 6;
 
-      // 3 Columns in Payment Row:
-      pdf.setFillColor(11, 102, 59);
-      pdf.roundedRect(marginLeft, currentY, 44, 6.5, 1.5, 1.5, 'F');
+      const paymentY = payStartY + 5;
+
+      // Helper Icons for Payment & Bullets
+      const drawCardBadge = (x, y) => {
+        pdf.setFillColor(11, 102, 59);
+        pdf.circle(x + 2.2, y - 1.2, 2.3, 'F');
+        pdf.setFillColor(255, 255, 255);
+        pdf.roundedRect(x + 0.5, y - 2.2, 3.4, 2.4, 0.3, 0.3, 'F');
+        pdf.setFillColor(11, 102, 59);
+        pdf.rect(x + 0.5, y - 1.5, 3.4, 0.6, 'F');
+      };
+
+      const drawReceiptIcon = (x, y) => {
+        pdf.setDrawColor(11, 102, 59);
+        pdf.setFillColor(255, 255, 255);
+        pdf.setLineWidth(0.4);
+        pdf.roundedRect(x - 1.8, y - 3.2, 3.8, 5.0, 0.4, 0.4, 'FD');
+        pdf.setFillColor(11, 102, 59);
+        pdf.rect(x - 1.1, y - 2.0, 2.4, 0.4, 'F');
+        pdf.rect(x - 1.1, y - 0.9, 2.4, 0.4, 'F');
+        pdf.rect(x - 1.1, y + 0.2, 1.6, 0.4, 'F');
+      };
+
+      const drawHeadsetIcon = (x, y) => {
+        const cx = x + 1.2;
+        const cy = y - 1.1;
+        pdf.setDrawColor(11, 102, 59);
+        pdf.setFillColor(11, 102, 59);
+        pdf.setLineWidth(0.4);
+        // Headband arc
+        pdf.circle(cx, cy - 0.2, 1.8, 'S');
+        // Clear lower half
+        pdf.setFillColor(255, 255, 255);
+        pdf.rect(cx - 2.5, cy - 0.2, 5.0, 2.5, 'F');
+        // Earcups
+        pdf.setFillColor(11, 102, 59);
+        pdf.roundedRect(cx - 2.0, cy - 0.8, 0.9, 1.8, 0.3, 0.3, 'F');
+        pdf.roundedRect(cx + 1.1, cy - 0.8, 0.9, 1.8, 0.3, 0.3, 'F');
+        // Mic boom
+        pdf.setLineWidth(0.3);
+        pdf.line(cx + 1.1, cy + 0.6, cx + 0.3, cy + 1.2);
+        pdf.circle(cx + 0.2, cy + 1.2, 0.25, 'F');
+      };
+
+      // 3 Columns in Payment Row
+      const qrColX = marginLeft + 68;
+      const bulletsDividerX = marginLeft + 114;
+      const bulletsX = marginLeft + 121;
+
+      // Vertical dividers between the 3 payment columns
+      pdf.setDrawColor(229, 231, 235);
+      pdf.setLineWidth(0.3);
+      pdf.line(qrColX - 3, paymentY - 2, qrColX - 3, paymentY + 36);
+      pdf.line(bulletsDividerX, paymentY - 2, bulletsDividerX, paymentY + 36);
+
+      // Column 1: Payment Method (Green Circle + Bold Green Text)
+      drawCardBadge(marginLeft, paymentY);
       pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(8);
-      pdf.setTextColor(255, 255, 255);
-      pdf.text("PAYMENT METHOD", marginLeft + 4, currentY + 4.5);
+      pdf.setFontSize(8.5);
+      pdf.setTextColor(11, 102, 59);
+      pdf.text("PAYMENT METHOD", marginLeft + 6.2, paymentY);
 
-      let bankY = currentY + 11;
+      let bankY = paymentY + 5.5;
+      const displayUpiId = (invoiceData.upiId || '').trim() || 'techvaseegrah.ibz@icici';
+
       const bankDetails = [
         ['Bank Name', invoiceData.bankName || 'ICICI Bank'],
         ['Account Name', invoiceData.accountName || 'TECH VASEEGRAH'],
         ['Account Number', invoiceData.accountNumber || '612805036053'],
-        ['IFSC Code', invoiceData.ifscCode || 'ICIC0006128'],
-        ['UPI Number', invoiceData.upiNumber || '7667792779']
+        ['IFSC Code', invoiceData.ifscCode || 'ICIC0006128']
       ];
+
+      const col1LabelWidth = 24;
+      const col1ValX = marginLeft + col1LabelWidth + 3;
 
       bankDetails.forEach(([bLabel, bVal]) => {
         pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(8);
+        pdf.setFontSize(7.8);
         pdf.setTextColor(75, 85, 99);
         pdf.text(bLabel, marginLeft, bankY);
-        pdf.text(":", marginLeft + 26, bankY);
-        pdf.setFont("helvetica", bLabel === 'UPI Number' ? "bold" : "normal");
-        pdf.setTextColor(bLabel === 'UPI Number' ? 11 : 17, bLabel === 'UPI Number' ? 102 : 24, bLabel === 'UPI Number' ? 59 : 39);
-        pdf.text(bVal, marginLeft + 29, bankY);
-        bankY += 4.5;
+        pdf.text(":", marginLeft + col1LabelWidth, bankY);
+        pdf.setFont("helvetica", "bold");
+        pdf.setTextColor(17, 24, 39);
+        pdf.text(bVal, col1ValX, bankY);
+        bankY += 4.8;
       });
 
-      // Column B: QR Code
-      const qrColX = marginLeft + 68;
+      // Column 2: QR Code (Framed in emerald border with centered labels)
+      const qrCenter = qrColX + 20;
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(8.5);
       pdf.setTextColor(11, 102, 59);
-      pdf.text("SCAN & PAY", qrColX + 10, currentY + 3, { align: 'center' });
+      pdf.text("SCAN & PAY", qrCenter, paymentY, { align: 'center' });
+
       pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(7);
+      pdf.setFontSize(6.8);
       pdf.setTextColor(107, 114, 128);
-      pdf.text("UPI / ICICI / Any UPI App", qrColX + 10, currentY + 6.5, { align: 'center' });
+      pdf.text("UPI / ICICI / Any UPI App", qrCenter, paymentY + 3.8, { align: 'center' });
+
+      // Emerald rounded border around QR Code
+      const qrBoxSize = 25;
+      const qrBoxX = qrCenter - (qrBoxSize / 2);
+      const qrBoxY = paymentY + 5.5;
+      pdf.setFillColor(255, 255, 255);
+      pdf.setDrawColor(16, 185, 129);
+      pdf.setLineWidth(0.5);
+      pdf.roundedRect(qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, 1.8, 1.8, 'FD');
 
       if (upiQrCodeUrl) {
         try {
-          pdf.addImage(upiQrCodeUrl, "PNG", qrColX - 2, currentY + 8, 24, 24);
+          pdf.addImage(upiQrCodeUrl, "PNG", qrBoxX + 1.2, qrBoxY + 1.2, qrBoxSize - 2.4, qrBoxSize - 2.4);
         } catch (e) {
           console.error("QR Code add error:", e);
         }
       }
-      pdf.setFontSize(6.5);
+
+      // UPI ID below QR Code - Bold, prominent, and high-contrast
+      const upiIdLabel = `UPI ID: ${displayUpiId}`;
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(7.8);
+      const upiTextW = pdf.getTextWidth(upiIdLabel);
+
+      // Light rounded pill behind text for crisp readability
+      pdf.setFillColor(243, 244, 246);
+      pdf.roundedRect(qrCenter - (upiTextW / 2) - 2, qrBoxY + qrBoxSize + 1.8, upiTextW + 4, 4.6, 1.2, 1.2, 'F');
+
+      pdf.setTextColor(11, 102, 59);
+      pdf.text(upiIdLabel, qrCenter, qrBoxY + qrBoxSize + 5.2, { align: 'center' });
+
+      // Column 3: Security & Help Bullets (Positioned with comfortable rightward padding)
+      let bulletY = paymentY + 1.5;
+
+      // Bullet 1: Checkmark
+      pdf.setFillColor(11, 102, 59);
+      pdf.circle(bulletsX + 2, bulletY + 1.5, 2.2, 'F');
+      pdf.setDrawColor(255, 255, 255);
+      pdf.setLineWidth(0.45);
+      pdf.line(bulletsX + 1.0, bulletY + 1.5, bulletsX + 1.7, bulletY + 2.2);
+      pdf.line(bulletsX + 1.7, bulletY + 2.2, bulletsX + 2.9, bulletY + 0.8);
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(7.5);
       pdf.setTextColor(55, 65, 81);
-      pdf.text(`UPI ID: ${invoiceData.upiId || 'techvaseegrah.ibz@icici'}`, qrColX + 10, currentY + 34.5, { align: 'center' });
+      pdf.text("Make payments securely", bulletsX + 7, bulletY + 0.5);
+      pdf.setFont("helvetica", "normal");
+      pdf.text("using any UPI App", bulletsX + 7, bulletY + 3.8);
 
-      // Column C: Security & Help Bullets
-      const bulletsX = marginLeft + 120;
-      let bulletY = currentY + 6;
-      const bullets = [
-        "Make payments securely using any UPI App",
-        "Please share payment screenshot after payment",
-        "For any queries +91 76677 92779"
-      ];
-      bullets.forEach(b => {
-        pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(7.5);
-        pdf.setTextColor(11, 102, 59);
-        pdf.text("✓", bulletsX, bulletY);
-        pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(7.5);
-        pdf.setTextColor(55, 65, 81);
-        const bLines = pdf.splitTextToSize(b, 55);
-        pdf.text(bLines, bulletsX + 4, bulletY);
-        bulletY += bLines.length * 3.8 + 2;
-      });
+      // Bullet 2: Receipt Icon
+      bulletY += 10.5;
+      drawReceiptIcon(bulletsX + 2, bulletY + 1.5);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(55, 65, 81);
+      pdf.text("Please share payment", bulletsX + 7, bulletY + 0.5);
+      pdf.setFont("helvetica", "normal");
+      pdf.text("screenshot after payment", bulletsX + 7, bulletY + 3.8);
 
-      // Notes & Signature Section
-      let notesY = currentY + 38;
-      if (notesY > pageHeight - 35) {
-        pdf.addPage();
-        notesY = marginTop + 5;
-      }
+      // Bullet 3: Headset Support Icon
+      bulletY += 10.5;
+      drawHeadsetIcon(bulletsX + 2, bulletY + 1.5);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(55, 65, 81);
+      pdf.text("For any queries", bulletsX + 7, bulletY + 0.5);
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(11, 102, 59);
+      pdf.text(`+91 ${invoiceData.fromSection?.mobile || '7667792779'}`, bulletsX + 7, bulletY + 3.8);
 
-      // Notes Box
-      pdf.setDrawColor(229, 231, 235);
-      pdf.setFillColor(249, 250, 251);
-      pdf.roundedRect(marginLeft, notesY, 80, 22, 2, 2, 'FD');
+      // Notes & Big Company Seal Section (Positioned directly above footer to eliminate empty bottom space)
+      const footerY = Math.max(paymentY + 42, targetFooterY);
+      const notesHeight = 24;
+      const notesY = footerY - notesHeight - 5;
 
+      // Notes Box (Light subtle mint background matching UI)
+      const notesWidth = 92;
+      pdf.setDrawColor(209, 250, 229);
+      pdf.setFillColor(244, 251, 247);
+      pdf.roundedRect(marginLeft, notesY, notesWidth, notesHeight, 2, 2, 'FD');
+
+      drawNoteIconGreen(marginLeft + 3.5, notesY + 4.2);
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(8);
       pdf.setTextColor(11, 102, 59);
-      pdf.text("NOTES", marginLeft + 4, notesY + 5);
+      pdf.text("NOTES", marginLeft + 8, notesY + 4.5);
 
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(7.5);
       pdf.setTextColor(75, 85, 99);
-      const noteLines = pdf.splitTextToSize(invoiceData.notes || 'Thank you for your business.\nWe appreciate your trust in us.', 72);
-      pdf.text(noteLines, marginLeft + 4, notesY + 10);
+      const noteLines = pdf.splitTextToSize(invoiceData.notes || 'Thank you for your business.\nWe appreciate your trust in us.', 84);
+      pdf.text(noteLines, marginLeft + 4, notesY + 9);
 
-      // Seal and Signature (Right)
-      const sigX = pageWidth - marginRight - 40;
+      // Prominent Big Company Seal (Right - flush right above footer)
+      const sealSize = 48;
+      const sealX = pageWidth - marginRight - sealSize - 2;
+      const sealY = footerY - sealSize - 2;
       try {
         const sealImg = sealPreview || '/stamp.png';
         if (sealImg) {
-          pdf.addImage(sealImg, "PNG", sigX - 25, notesY - 4, 24, 24);
+          pdf.addImage(sealImg, "PNG", sealX, sealY, sealSize, sealSize);
         }
       } catch (e) {
         console.error("Seal embed error:", e);
       }
 
-      if (signaturePreview) {
-        try {
-          pdf.addImage(signaturePreview, "PNG", sigX - 2, notesY - 2, 34, 15);
-        } catch (e) {
-          console.error("Signature embed error:", e);
-        }
-      }
-
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(8);
-      pdf.setTextColor(17, 24, 39);
-      pdf.text("Authorized Signature", sigX + 15, notesY + 15, { align: 'center' });
-      pdf.setFontSize(8);
-      pdf.setTextColor(11, 102, 59);
-      pdf.text(invoiceData.fromSection?.company || "TECH VASEEGRAH", sigX + 15, notesY + 19, { align: 'center' });
-
-      // Footer Banner
-      const footerY = pageHeight - 16;
+      // Footer Banner directly at the bottom of the page
+      const footerWidth = pageWidth - marginLeft - marginRight;
       pdf.setFillColor(11, 102, 59);
-      pdf.rect(marginLeft, footerY, pageWidth - marginLeft - marginRight, 6, 'F');
+      pdf.roundedRect(marginLeft, footerY, footerWidth, 6.5, 1, 1, 'F');
+
+      // Thin dividers inside footer banner
+      pdf.setDrawColor(255, 255, 255);
+      pdf.setLineWidth(0.2);
+      pdf.line(marginLeft + (footerWidth / 3), footerY + 1, marginLeft + (footerWidth / 3), footerY + 5.5);
+      pdf.line(marginLeft + (2 * footerWidth / 3), footerY + 1, marginLeft + (2 * footerWidth / 3), footerY + 5.5);
+
+      // Helper vector shapes for footer
+      const drawShield = (x, y) => {
+        pdf.setDrawColor(255, 255, 255);
+        pdf.setLineWidth(0.4);
+        pdf.line(x - 1.2, y - 1.5, x + 1.2, y - 1.5);
+        pdf.line(x + 1.2, y - 1.5, x + 1.2, y - 0.3);
+        pdf.line(x + 1.2, y - 0.3, x, y + 1.3);
+        pdf.line(x, y + 1.3, x - 1.2, y - 0.3);
+        pdf.line(x - 1.2, y - 0.3, x - 1.2, y - 1.5);
+      };
+
+      const drawRocket = (x, y) => {
+        pdf.setDrawColor(255, 255, 255);
+        pdf.setFillColor(255, 255, 255);
+        pdf.setLineWidth(0.35);
+        pdf.line(x - 0.8, y + 1.2, x + 0.8, y - 1.2);
+        pdf.triangle(x + 0.4, y - 1.4, x + 1.4, y - 0.4, x + 1.6, y - 1.6, 'F');
+      };
+
+      const drawUsers = (x, y) => {
+        pdf.setFillColor(255, 255, 255);
+        pdf.circle(x - 0.8, y - 0.8, 0.55, 'F');
+        pdf.ellipse(x - 0.8, y + 0.6, 1.0, 0.55, 'F');
+        pdf.circle(x + 0.8, y - 0.8, 0.55, 'F');
+        pdf.ellipse(x + 0.8, y + 0.6, 1.0, 0.55, 'F');
+      };
+
+      const drawHeartIcon = (hx, hy) => {
+        pdf.setFillColor(11, 102, 59);
+        pdf.circle(hx - 0.7, hy - 0.3, 0.75, 'F');
+        pdf.circle(hx + 0.7, hy - 0.3, 0.75, 'F');
+        pdf.triangle(hx - 1.35, hy - 0.1, hx + 1.35, hy - 0.1, hx, hy + 1.5, 'F');
+      };
+
+      const colW = footerWidth / 3;
+      drawShield(marginLeft + 10, footerY + 3.4);
+      drawRocket(marginLeft + colW + 10, footerY + 3.4);
+      drawUsers(marginLeft + (2 * colW) + 10, footerY + 3.4);
 
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(7.5);
       pdf.setTextColor(255, 255, 255);
-      pdf.text("✔  Reliable Solutions", marginLeft + 15, footerY + 4);
-      pdf.text("⚡  On-time Delivery", marginLeft + 75, footerY + 4);
-      pdf.text("👥  Dedicated Support", marginLeft + 135, footerY + 4);
+      pdf.text("Reliable Solutions", marginLeft + 14, footerY + 4.2);
+      pdf.text("On-time Delivery", marginLeft + colW + 14, footerY + 4.2);
+      pdf.text("Dedicated Support", marginLeft + (2 * colW) + 14, footerY + 4.2);
 
-      pdf.setFont("helvetica", "normal");
+      pdf.setFont("helvetica", "bold");
       pdf.setFontSize(7.5);
       pdf.setTextColor(11, 102, 59);
-      pdf.text("Thank you for choosing TECH VASEEGRAH!", pageWidth / 2, pageHeight - 6, { align: 'center' });
+      const taglineText = "Thank you for choosing TECH VASEEGRAH!";
+      const taglineWidth = pdf.getTextWidth(taglineText);
+      const tagX = (pageWidth - taglineWidth) / 2;
+      const taglineY = footerY + 9.5;
+      pdf.text(taglineText, tagX, taglineY);
+      drawHeartIcon(tagX + taglineWidth + 3, taglineY - 1.5);
 
       return pdf;
     } catch (error) {
@@ -846,6 +1198,16 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
         }
       }
       toast.success('Invoice saved successfully!');
+
+      if (!initialData?._id) {
+        const nextRes = await getNextInvoiceNo().catch(() => null);
+        if (nextRes?.success && nextRes.data?.nextInvoiceNo) {
+          setInvoiceData({
+            ...getFreshInvoiceData(formattedDate),
+            invoiceNo: nextRes.data.nextInvoiceNo
+          });
+        }
+      }
     } catch (err) {
       console.error('Error saving invoice:', err);
       toast.error('Error saving invoice: ' + (err.message || 'Unknown error'));
@@ -1146,13 +1508,12 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
               <!-- Column 1: BILL TO & ADDRESS -->
               <div>
                 <div class="section-label">
-                  <span style="display:inline-block; width:16px; height:16px; background:#e8f5e9; border-radius:50%; text-align:center; line-height:16px; font-size:10px;">👤</span>
                   BILL TO
                 </div>
                 <div class="customer-name">${invoiceData.customerName || 'N/A'}</div>
-                <div style="margin-top: 10px;">
+                ${invoiceData.customerGst ? `<div style="font-size: 11px; color: #0b663b; font-weight: 600; margin-top: 2px;">GSTIN: ${invoiceData.customerGst}</div>` : ''}
+                <div style="margin-top: 8px;">
                   <div class="section-label">
-                    <span style="display:inline-block; width:16px; height:16px; background:#e8f5e9; border-radius:50%; text-align:center; line-height:16px; font-size:10px;">📍</span>
                     ADDRESS
                   </div>
                   <div style="color: #4b5563; font-size: 12px; line-height: 1.45;">${invoiceData.customerAddress || 'N/A'}</div>
@@ -1162,15 +1523,15 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
               <!-- Column 2: INVOICE META -->
               <div>
                 <div class="meta-item">
-                  <div class="meta-lbl">🧾 Invoice No.</div>
+                  <div class="meta-lbl">Invoice No.</div>
                   <div class="meta-val">${invoiceData.invoiceNo}</div>
                 </div>
                 <div class="meta-item">
-                  <div class="meta-lbl">📅 Invoice Date</div>
+                  <div class="meta-lbl">Invoice Date</div>
                   <div class="meta-val">${invoiceData.invoiceDate}</div>
                 </div>
                 <div class="meta-item">
-                  <div class="meta-lbl">⏰ Due Date</div>
+                  <div class="meta-lbl">Due Date</div>
                   <div class="meta-val">${invoiceData.dueDate || invoiceData.invoiceDate}</div>
                 </div>
               </div>
@@ -1182,9 +1543,18 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
                 <div style="color: #4b5563; font-size: 11.5px; line-height: 1.4;">
                   <div>${invoiceData.fromSection?.addressLine1} ${invoiceData.fromSection?.addressLine2}</div>
                   <div>${invoiceData.fromSection?.addressLine3} ${invoiceData.fromSection?.cityZip}</div>
-                  <div style="margin-top: 4px;">📞 ${invoiceData.fromSection?.mobile}</div>
-                  <div>✉ ${invoiceData.fromSection?.email || 'techvaseegrah@gmail.com'}</div>
-                  <div>🌐 GSTIN: ${invoiceData.fromSection?.gstin}</div>
+                  <div style="margin-top: 4px; display: flex; align-items: center; gap: 4px;">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0b663b" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                    <span>${invoiceData.fromSection?.mobile}</span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 4px;">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0b663b" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                    <span>${invoiceData.fromSection?.email || 'techvaseegrah@gmail.com'}</span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 4px;">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0b663b" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                    <span>GSTIN: ${invoiceData.fromSection?.gstin}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1220,7 +1590,10 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
             <!-- Amount in Words & Totals -->
             <div class="totals-section">
               <div style="flex: 1;">
-                <div class="pill-badge">📋 AMOUNT IN WORDS</div>
+                <div class="pill-badge" style="display: inline-flex; align-items: center; gap: 4px;">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                  <span>AMOUNT IN WORDS</span>
+                </div>
                 <div style="font-size: 13px; font-weight: 600; color: #111827; margin-top: 4px; line-height: 1.4;">
                   ${totals.totalInWords}
                 </div>
@@ -1262,13 +1635,15 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
             <div class="payment-grid">
               <!-- Bank Details -->
               <div>
-                <div class="pill-badge">💳 PAYMENT METHOD</div>
+                <div class="pill-badge" style="display: inline-flex; align-items: center; gap: 4px;">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
+                  <span>PAYMENT METHOD</span>
+                </div>
                 <div style="font-size: 11.5px; color: #374151; line-height: 1.6; margin-top: 4px;">
                   <div><span style="color: #6b7280;">Bank Name</span> : <strong>${invoiceData.bankName}</strong></div>
                   <div><span style="color: #6b7280;">Account Name</span> : <strong>${invoiceData.accountName}</strong></div>
                   <div><span style="color: #6b7280;">Account Number</span> : <strong>${invoiceData.accountNumber}</strong></div>
                   <div><span style="color: #6b7280;">IFSC Code</span> : <strong>${invoiceData.ifscCode}</strong></div>
-                  <div><span style="color: #6b7280;">UPI Number</span> : <strong style="color: #0b663b;">${invoiceData.upiNumber}</strong></div>
                 </div>
               </div>
 
@@ -1276,55 +1651,61 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
               <div class="qr-box">
                 <div style="font-size: 11px; font-weight: 700; color: #0b663b;">SCAN & PAY</div>
                 <div style="font-size: 9.5px; color: #9ca3af; margin-bottom: 4px;">UPI / ICICI / Any UPI App</div>
-                ${upiQrCodeUrl ? `<img src="${upiQrCodeUrl}" style="width: 80px; height: 80px; display: inline-block;" />` : ''}
-                <div style="font-size: 9.5px; color: #374151; margin-top: 2px;">UPI ID: ${invoiceData.upiId}</div>
+                ${upiQrCodeUrl ? `<img src="${upiQrCodeUrl}" style="width: 85px; height: 85px; display: inline-block;" />` : ''}
+                <div style="font-size: 10px; font-weight: 700; color: #0b663b; margin-top: 4px;">UPI ID: ${invoiceData.upiId || 'techvaseegrah.ibz@icici'}</div>
               </div>
 
               <!-- Security Points -->
               <div style="display: flex; flex-direction: column; justify-content: center; gap: 8px; font-size: 11px; color: #374151;">
                 <div style="display: flex; align-items: center; gap: 6px;">
-                  <span style="color: #0b663b; font-weight: bold;">✔</span> Make payments securely using any UPI App
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0b663b" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                  <span>Make payments securely using any UPI App</span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 6px;">
-                  <span style="color: #0b663b; font-weight: bold;">✔</span> Please share payment screenshot after payment
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0b663b" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                  <span>Please share payment screenshot after payment</span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 6px;">
-                  <span style="color: #0b663b; font-weight: bold;">✔</span> For any queries +91 76677 92779
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0b663b" stroke-width="2.5"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path></svg>
+                  <span>For any queries +91 ${invoiceData.fromSection?.mobile || '9047484484'}</span>
                 </div>
               </div>
             </div>
 
-            <!-- Notes & Signature -->
+            <!-- Notes & Seal -->
             <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px;">
-              <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 14px; width: 45%;">
-                <div style="font-size: 11px; font-weight: 700; color: #0b663b; margin-bottom: 4px;">📝 NOTES</div>
+              <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 14px; width: 48%;">
+                <div style="font-size: 11px; font-weight: 700; color: #0b663b; margin-bottom: 4px; display: flex; align-items: center; gap: 4px;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0b663b" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                  <span>NOTES</span>
+                </div>
                 <div style="font-size: 11.5px; color: #4b5563; white-space: pre-line;">${invoiceData.notes}</div>
               </div>
 
-              <div style="display: flex; align-items: center; gap: 20px;">
-                ${sealPreview ? `<img src="${sealPreview}" style="height: 65px; object-fit: contain;" />` : ''}
-                <div style="text-align: center;">
-                  ${signaturePreview ? (
-                    `<img src="${signaturePreview}" style="height: 40px; max-width: 110px; object-fit: contain; margin: 0 auto 4px auto; display: block;" />`
-                  ) : (
-                    `<svg width="100" height="30" viewBox="0 0 100 30" fill="none" style="margin: 0 auto;">
-                      <path d="M10 20C25 8 35 25 50 12C60 4 75 16 90 10" stroke="#1e40af" stroke-width="2" stroke-linecap="round"/>
-                      <line x1="15" y1="24" x2="85" y2="24" stroke="#1e40af" stroke-width="1.5" stroke-linecap="round"/>
-                    </svg>`
-                  )}
-                  <div style="font-size: 11px; font-weight: 700; color: #111827;">Authorized Signature</div>
-                  <div style="font-size: 10.5px; font-weight: 700; color: #0b663b;">${invoiceData.fromSection?.company}</div>
-                </div>
+              <div>
+                ${sealPreview ? `<img src="${sealPreview}" style="height: 165px; width: 165px; object-fit: contain; display: block;" />` : ''}
               </div>
             </div>
 
             <!-- Footer Bar -->
             <div class="footer-bar">
-              <div>✔ Reliable Solutions</div>
-              <div>⚡ On-time Delivery</div>
-              <div>👥 Dedicated Support</div>
+              <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                <span>Reliable Solutions</span>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path></svg>
+                <span>On-time Delivery</span>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path></svg>
+                <span>Dedicated Support</span>
+              </div>
             </div>
-            <div class="footer-tagline">Thank you for choosing TECH VASEEGRAH! 💚</div>
+            <div class="footer-tagline" style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+              <span>Thank you for choosing TECH VASEEGRAH!</span>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="#0b663b" stroke="#0b663b"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+            </div>
           </div>
         </body>
       </html>
@@ -1450,7 +1831,9 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
               <div className="space-y-4 pr-5">
                 <div>
                   <div className="flex items-center gap-2 text-[#0b663b] font-bold text-xs uppercase tracking-wider mb-1.5">
-                    <span className="w-6 h-6 rounded-full bg-[#0b663b] text-white flex items-center justify-center text-xs shadow-2xs">👤</span>
+                    <span className="w-6 h-6 rounded-full bg-[#0b663b] text-white flex items-center justify-center text-xs shadow-2xs">
+                      <FaUser className="w-2.5 h-2.5" />
+                    </span>
                     BILL TO
                   </div>
                   <input
@@ -1470,11 +1853,24 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
                     maxLength={10}
                     className="w-full text-xs text-gray-600 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-emerald-400 focus:outline-none mt-1"
                   />
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <span className="text-[11px] font-bold text-gray-500">GSTIN:</span>
+                    <input
+                      type="text"
+                      name="customerGst"
+                      value={invoiceData.customerGst}
+                      onChange={handleInputChange}
+                      placeholder="Customer GST Number (Optional)"
+                      className="w-full text-xs font-semibold text-gray-800 uppercase bg-transparent border-b border-gray-200 hover:border-emerald-400 focus:border-[#0b663b] focus:outline-none"
+                    />
+                  </div>
                 </div>
 
                 <div>
                   <div className="flex items-center gap-2 text-[#0b663b] font-bold text-xs uppercase tracking-wider mb-1.5">
-                    <span className="w-6 h-6 rounded-full bg-[#0b663b] text-white flex items-center justify-center text-xs shadow-2xs">📍</span>
+                    <span className="w-6 h-6 rounded-full bg-[#0b663b] text-white flex items-center justify-center text-xs shadow-2xs">
+                      <FaMapMarkerAlt className="w-2.5 h-2.5" />
+                    </span>
                     ADDRESS
                   </div>
                   <textarea
@@ -1491,8 +1887,8 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
               {/* Column 2: INVOICE DETAILS (Framed icons with vertical divider) */}
               <div className="border-t md:border-t-0 md:border-l border-gray-200 pt-4 md:pt-0 md:pl-6 md:pr-4 space-y-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-base shrink-0">
-                    🧾
+                  <div className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-[#0b663b] shrink-0">
+                    <FaFileInvoice className="w-4 h-4" />
                   </div>
                   <div className="flex-1">
                     <div className="text-[11px] font-medium text-gray-500">Invoice No.</div>
@@ -1507,8 +1903,8 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-base shrink-0">
-                    📅
+                  <div className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-[#0b663b] shrink-0">
+                    <FaCalendarAlt className="w-4 h-4" />
                   </div>
                   <div className="flex-1">
                     <div className="text-[11px] font-medium text-gray-500 mb-0.5">Invoice Date</div>
@@ -1525,8 +1921,8 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-base shrink-0">
-                    ⏰
+                  <div className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-[#0b663b] shrink-0">
+                    <FaClock className="w-4 h-4" />
                   </div>
                   <div className="flex-1">
                     <div className="text-[11px] font-medium text-gray-500 mb-0.5">Due Date</div>
@@ -1598,8 +1994,8 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
                     className="w-full bg-transparent border-b border-transparent hover:border-gray-200 focus:border-emerald-400 focus:outline-none"
                     placeholder="City - Zip"
                   />
-                  <div className="flex items-center gap-1.5 text-gray-700 pt-1.5">
-                    <span className="text-[#0b663b]">📞</span>
+                  <div className="flex items-center gap-2 text-gray-700 pt-1.5">
+                    <FaPhoneAlt className="text-[#0b663b] w-3 h-3 shrink-0" />
                     <input
                       type="text"
                       value={invoiceData.fromSection?.mobile}
@@ -1608,8 +2004,8 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
                       placeholder="Phone"
                     />
                   </div>
-                  <div className="flex items-center gap-1.5 text-gray-700">
-                    <span className="text-[#0b663b]">✉</span>
+                  <div className="flex items-center gap-2 text-gray-700">
+                    <FaEnvelope className="text-[#0b663b] w-3 h-3 shrink-0" />
                     <input
                       type="text"
                       value={invoiceData.fromSection?.email || 'techvaseegrah@gmail.com'}
@@ -1618,8 +2014,8 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
                       placeholder="Email"
                     />
                   </div>
-                  <div className="flex items-center gap-1.5 text-gray-700">
-                    <span className="text-[#0b663b]">🌐</span>
+                  <div className="flex items-center gap-2 text-gray-700">
+                    <FaGlobe className="text-[#0b663b] w-3 h-3 shrink-0" />
                     <span className="font-semibold text-gray-600">GSTIN:</span>
                     <input
                       type="text"
@@ -1740,8 +2136,8 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
             {/* Totals & Amount in Words */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 items-start">
               <div>
-                <div className="inline-flex items-center gap-1.5 bg-[#0b663b] text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-2">
-                  <span>📋</span> AMOUNT IN WORDS
+                <div className="inline-flex items-center gap-2 bg-[#0b663b] text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-2">
+                  <FaFileAlt className="w-3.5 h-3.5 text-white shrink-0" /> AMOUNT IN WORDS
                 </div>
                 <p className="text-sm font-bold text-gray-900 leading-relaxed pl-1">
                   {totals.totalInWords}
@@ -1781,73 +2177,126 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
             {/* Dotted Divider */}
             <div className="border-t-2 border-dashed border-gray-200 my-6"></div>
 
-            {/* Payment Method, QR Code, Security Features (3 columns) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 text-xs text-gray-700 items-start">
+            {/* Payment Method, QR Code, Security Features (3 columns with dividers) */}
+            <div className="grid grid-cols-1 md:grid-cols-[1.35fr_1fr_1.25fr] gap-0 mb-6 text-xs text-gray-700 items-start">
               {/* Column 1: Payment Method */}
-              <div>
-                <div className="inline-flex items-center gap-1.5 bg-[#0b663b] text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-3">
-                  <span>💳</span> PAYMENT METHOD
+              <div className="pr-5">
+                <div className="flex items-center gap-2 text-[#0b663b] font-bold text-xs uppercase tracking-wider mb-2.5">
+                  <span className="w-5 h-5 rounded-full bg-[#0b663b] text-white flex items-center justify-center text-[10px] shadow-2xs">
+                    <FaCreditCard className="w-2.5 h-2.5" />
+                  </span>
+                  PAYMENT METHOD
                 </div>
                 <div className="space-y-1.5 pl-1">
-                  <div className="flex">
-                    <span className="text-gray-500 w-28">Bank Name</span>
-                    <span className="font-bold text-gray-900">: {invoiceData.bankName}</span>
+                  <div className="flex items-center">
+                    <span className="text-gray-500 w-28 shrink-0 font-medium">Bank Name</span>
+                    <span className="text-gray-400 mr-2">:</span>
+                    <input
+                      type="text"
+                      name="bankName"
+                      value={invoiceData.bankName}
+                      onChange={handleInputChange}
+                      className="font-bold text-gray-900 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-emerald-400 focus:outline-none flex-1 py-0.5"
+                    />
                   </div>
-                  <div className="flex">
-                    <span className="text-gray-500 w-28">Account Name</span>
-                    <span className="font-bold text-gray-900">: {invoiceData.accountName}</span>
+                  <div className="flex items-center">
+                    <span className="text-gray-500 w-28 shrink-0 font-medium">Account Name</span>
+                    <span className="text-gray-400 mr-2">:</span>
+                    <input
+                      type="text"
+                      name="accountName"
+                      value={invoiceData.accountName}
+                      onChange={handleInputChange}
+                      className="font-bold text-gray-900 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-emerald-400 focus:outline-none flex-1 py-0.5"
+                    />
                   </div>
-                  <div className="flex">
-                    <span className="text-gray-500 w-28">Account Number</span>
-                    <span className="font-bold text-gray-900">: {invoiceData.accountNumber}</span>
+                  <div className="flex items-center">
+                    <span className="text-gray-500 w-28 shrink-0 font-medium">Account Number</span>
+                    <span className="text-gray-400 mr-2">:</span>
+                    <input
+                      type="text"
+                      name="accountNumber"
+                      value={invoiceData.accountNumber}
+                      onChange={handleInputChange}
+                      className="font-bold text-gray-900 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-emerald-400 focus:outline-none flex-1 py-0.5"
+                    />
                   </div>
-                  <div className="flex">
-                    <span className="text-gray-500 w-28">IFSC Code</span>
-                    <span className="font-bold text-gray-900">: {invoiceData.ifscCode}</span>
-                  </div>
-                  <div className="flex">
-                    <span className="text-gray-500 w-28">UPI Number</span>
-                    <span className="font-bold text-[#0b663b]">: {invoiceData.upiNumber}</span>
+                  <div className="flex items-center">
+                    <span className="text-gray-500 w-28 shrink-0 font-medium">IFSC Code</span>
+                    <span className="text-gray-400 mr-2">:</span>
+                    <input
+                      type="text"
+                      name="ifscCode"
+                      value={invoiceData.ifscCode}
+                      onChange={handleInputChange}
+                      className="font-bold text-gray-900 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-emerald-400 focus:outline-none flex-1 uppercase py-0.5"
+                    />
                   </div>
                 </div>
               </div>
 
-              {/* Column 2: QR Code */}
-              <div className="text-center bg-gray-50/70 p-3 rounded-xl border border-gray-200 flex flex-col items-center justify-center">
-                <div className="text-xs font-bold text-[#0b663b] uppercase">SCAN & PAY</div>
+              {/* Column 2: QR Code (Framed in emerald border with centered labels) */}
+              <div className="border-t md:border-t-0 md:border-l border-gray-200 pt-4 md:pt-0 md:px-5 flex flex-col items-center justify-center text-center">
+                <div className="text-xs font-bold text-[#0b663b] uppercase tracking-wide">SCAN & PAY</div>
                 <div className="text-[10px] text-gray-400 mb-2">UPI / ICICI / Any UPI App</div>
-                {upiQrCodeUrl && (
-                  <img
-                    src={upiQrCodeUrl}
-                    alt="UPI QR"
-                    className="w-24 h-24 bg-white p-1 rounded-lg border border-gray-200 shadow-2xs"
+                <div className="border-2 border-emerald-500 rounded-xl p-1 bg-white shadow-2xs inline-block">
+                  {upiQrCodeUrl ? (
+                    <img
+                      src={upiQrCodeUrl}
+                      alt="UPI QR"
+                      className="w-24 h-24 object-contain"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 bg-gray-50 rounded-lg flex items-center justify-center text-[10px] text-gray-400 text-center px-1">
+                      Enter UPI ID to generate QR
+                    </div>
+                  )}
+                </div>
+                <div className="text-[10px] font-bold text-gray-700 mt-1.5 flex items-center justify-center gap-1 w-full max-w-[200px]">
+                  <span className="shrink-0">UPI ID:</span>
+                  <input
+                    type="text"
+                    name="upiId"
+                    value={invoiceData.upiId || ''}
+                    onChange={handleInputChange}
+                    placeholder="Enter UPI ID"
+                    className="text-[10px] font-bold text-gray-800 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-emerald-400 focus:outline-none text-center w-full"
                   />
-                )}
-                <div className="text-[10px] text-gray-600 font-mono mt-1.5">UPI ID: {invoiceData.upiId}</div>
+                </div>
               </div>
 
-              {/* Column 3: Secure Points */}
-              <div className="space-y-2.5 justify-center flex flex-col pt-2">
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">✓</span>
-                  <span className="text-gray-700 font-medium">Make payments securely using any UPI App</span>
+              {/* Column 3: Secure Points & Support */}
+              <div className="border-t md:border-t-0 md:border-l border-gray-200 pt-4 md:pt-0 md:pl-5 space-y-3 justify-center flex flex-col">
+                <div className="flex items-start gap-2.5">
+                  <FaCheckCircle className="text-[#0b663b] w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="text-gray-800 font-bold text-xs">Make payments securely</div>
+                    <div className="text-gray-500 text-[11px]">using any UPI App</div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">✓</span>
-                  <span className="text-gray-700 font-medium">Please share payment screenshot after payment</span>
+                <div className="flex items-start gap-2.5">
+                  <FaFileInvoiceDollar className="text-[#0b663b] w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="text-gray-800 font-bold text-xs">Please share payment</div>
+                    <div className="text-gray-500 text-[11px]">screenshot after payment</div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">✓</span>
-                  <span className="text-gray-700 font-medium">For any queries +91 76677 92779</span>
+                <div className="flex items-start gap-2.5">
+                  <FaHeadset className="text-[#0b663b] w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="text-gray-800 font-bold text-xs">For any queries</div>
+                    <div className="text-[#0b663b] font-bold text-xs">+91 {invoiceData.fromSection?.mobile || '7667792779'}</div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Notes & Signature Section */}
-            <div className="flex flex-col md:flex-row justify-between items-end gap-6 mb-6">
-              <div className="w-full md:w-1/2 bg-gray-50/70 p-3 rounded-xl border border-gray-200">
-                <div className="flex items-center gap-1 text-xs font-bold text-[#0b663b] mb-1">
-                  <span>📝</span> NOTES
+            {/* Notes & Big Company Seal Section */}
+            <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-6">
+              {/* Notes Box */}
+              <div className="flex-1 w-full bg-emerald-50/30 p-3.5 rounded-xl border border-emerald-100">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#0b663b] mb-1.5">
+                  <FaEdit className="w-3.5 h-3.5 shrink-0" /> NOTES
                 </div>
                 <textarea
                   name="notes"
@@ -1858,138 +2307,116 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
                 />
               </div>
 
-              <div className="flex items-center gap-6">
+              {/* Big Company Seal */}
+              <div className="flex items-center justify-end shrink-0">
                 <img
                   src={sealPreview || '/stamp.png'}
                   alt="Seal"
-                  className="h-16 object-contain"
+                  className="h-44 w-44 md:h-48 md:w-48 object-contain shrink-0 drop-shadow-sm"
                   onError={(e) => { e.target.style.display = 'none'; }}
                 />
-                <div className="text-center min-w-[120px]">
-                  {signaturePreview ? (
-                    <img
-                      src={signaturePreview}
-                      alt="Signature"
-                      className="h-12 max-w-[140px] object-contain mx-auto mb-1"
-                    />
-                  ) : (
-                    <svg width="100" height="30" viewBox="0 0 100 30" fill="none" className="mx-auto mb-1">
-                      <path d="M10 20C25 8 35 25 50 12C60 4 75 16 90 10" stroke="#1e40af" strokeWidth="2" strokeLinecap="round" />
-                      <line x1="15" y1="24" x2="85" y2="24" stroke="#1e40af" strokeWidth="1.5" strokeLinecap="round" />
-                    </svg>
-                  )}
-                  <div className="text-xs font-bold text-gray-800">Authorized Signature</div>
-                  <div className="text-xs font-bold text-[#0b663b]">{invoiceData.fromSection?.company}</div>
-                </div>
               </div>
             </div>
 
-            {/* Branded Footer Bar */}
-            <div className="bg-[#0b663b] text-white py-2 px-4 rounded-lg flex justify-around text-xs font-semibold tracking-wide mb-2 shadow-xs">
-              <div className="flex items-center gap-1.5"><span>✔</span> Reliable Solutions</div>
-              <div className="flex items-center gap-1.5"><span>⚡</span> On-time Delivery</div>
-              <div className="flex items-center gap-1.5"><span>👥</span> Dedicated Support</div>
+            {/* Branded Footer Bar with Divided 3 Columns */}
+            <div className="bg-[#0b663b] text-white py-2 px-4 rounded-lg grid grid-cols-3 divide-x divide-white/20 text-center text-xs font-semibold tracking-wide mb-2 shadow-xs">
+              <div className="flex items-center justify-center gap-2"><FaShieldAlt className="w-3.5 h-3.5" /> Reliable Solutions</div>
+              <div className="flex items-center justify-center gap-2"><FaRocket className="w-3.5 h-3.5" /> On-time Delivery</div>
+              <div className="flex items-center justify-center gap-2"><FaUsers className="w-3.5 h-3.5" /> Dedicated Support</div>
             </div>
-            <div className="text-center text-xs font-bold text-[#0b663b]">
-              Thank you for choosing TECH VASEEGRAH! 💚
+            <div className="text-center text-xs font-bold text-[#0b663b] flex items-center justify-center gap-1">
+              Thank you for choosing TECH VASEEGRAH! <FaHeart className="w-3 h-3 text-[#0b663b] fill-current" />
             </div>
           </div>
         </div>
 
-        {/* Extra Settings & Asset Upload (Seal & Signature) */}
+        {/* Extra Settings & Asset Upload (Seal & Payment Status) */}
         {!isPreviewMode && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-              <h3 className="font-bold text-gray-800 text-sm mb-3">Company Assets (Seal & Signature)</h3>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Upload Company Seal / Stamp</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleSealUpload}
-                    className="w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Upload Authorized Signature</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleSignatureUpload}
-                    className="w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
-                  />
-                  {signaturePreview && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="text-[11px] text-gray-500">Current signature:</span>
-                      <img src={signaturePreview} alt="Signature Preview" className="h-8 object-contain border p-1 rounded bg-gray-50" />
-                    </div>
-                  )}
+          <div className="space-y-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                <h3 className="font-bold text-gray-800 text-sm mb-3">Company Seal</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Upload Company Seal / Stamp</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleSealUpload}
+                      className="w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
+                    />
+                    {sealPreview && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className="text-[11px] text-gray-500">Current seal:</span>
+                        <img src={sealPreview} alt="Seal Preview" className="h-10 w-10 object-contain border p-1 rounded bg-gray-50" />
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-bold text-gray-800 text-sm">Payment Status</h3>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    name="isPaid"
-                    checked={invoiceData.isPaid || false}
-                    onChange={(e) => setInvoiceData(prev => ({ ...prev, isPaid: e.target.checked }))}
-                    className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
-                  />
-                  <span className="text-xs font-bold text-gray-700">Mark as Paid</span>
-                </label>
-              </div>
-
-              {invoiceData.paymentRecords && invoiceData.paymentRecords.length > 0 && (
-                <div className="space-y-2 mb-2">
-                  {invoiceData.paymentRecords.map((rec, idx) => (
-                    <div key={rec._id || rec.tempId || idx} className="flex items-center gap-2 text-xs bg-gray-50 p-2 rounded">
-                      <input
-                        type="number"
-                        placeholder="Amount"
-                        value={rec.amount}
-                        onChange={(e) => updatePaymentRecord(idx, 'amount', e.target.value)}
-                        className="w-20 px-1.5 py-1 border rounded"
-                      />
-                      <CustomDatePicker
-                        value={rec.dateReceived}
-                        onChange={(val) => updatePaymentRecord(idx, 'dateReceived', val)}
-                        format="YMD"
-                        placeholder="Date"
-                        className="w-36"
-                        inputClassName="py-1 px-2 text-xs border rounded bg-white"
-                        showIcon={false}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Txn ID"
-                        value={rec.transactionId}
-                        onChange={(e) => updatePaymentRecord(idx, 'transactionId', e.target.value)}
-                        className="flex-1 px-1.5 py-1 border rounded"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removePaymentRecord(idx)}
-                        className="text-red-500 font-bold px-1"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-gray-800 text-sm">Payment Status</h3>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="isPaid"
+                      checked={invoiceData.isPaid || false}
+                      onChange={(e) => setInvoiceData(prev => ({ ...prev, isPaid: e.target.checked }))}
+                      className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                    />
+                    <span className="text-xs font-bold text-gray-700">Mark as Paid</span>
+                  </label>
                 </div>
-              )}
 
-              <button
-                type="button"
-                onClick={addPaymentRecord}
-                className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
-              >
-                + Add Partial Payment Record
-              </button>
+                {invoiceData.paymentRecords && invoiceData.paymentRecords.length > 0 && (
+                  <div className="space-y-2 mb-2">
+                    {invoiceData.paymentRecords.map((rec, idx) => (
+                      <div key={rec._id || rec.tempId || idx} className="flex items-center gap-2 text-xs bg-gray-50 p-2 rounded">
+                        <input
+                          type="number"
+                          placeholder="Amount"
+                          value={rec.amount}
+                          onChange={(e) => updatePaymentRecord(idx, 'amount', e.target.value)}
+                          className="w-20 px-1.5 py-1 border rounded"
+                        />
+                        <CustomDatePicker
+                          value={rec.dateReceived}
+                          onChange={(val) => updatePaymentRecord(idx, 'dateReceived', val)}
+                          format="YMD"
+                          placeholder="Date"
+                          className="w-36"
+                          inputClassName="py-1 px-2 text-xs border rounded bg-white"
+                          showIcon={false}
+                        />
+                        <input
+                          type="text"
+                          placeholder="Txn ID"
+                          value={rec.transactionId}
+                          onChange={(e) => updatePaymentRecord(idx, 'transactionId', e.target.value)}
+                          className="flex-1 px-1.5 py-1 border rounded"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removePaymentRecord(idx)}
+                          className="text-red-500 font-bold px-1"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={addPaymentRecord}
+                  className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
+                >
+                  + Add Partial Payment Record
+                </button>
+              </div>
             </div>
           </div>
         )}

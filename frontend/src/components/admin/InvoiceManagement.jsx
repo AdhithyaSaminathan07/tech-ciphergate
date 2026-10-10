@@ -457,6 +457,7 @@ const InvoiceManagement = () => {
             onViewInvoice={handleViewInvoice}
             onDeleteInvoice={handleDeleteInvoice}
             onStatusUpdate={handleStatusUpdate}
+            onRefresh={() => fetchInvoices()}
           />
         )}
         {activeTab === 'delete-history' && (

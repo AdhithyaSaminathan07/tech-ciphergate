@@ -73,10 +73,11 @@ const getSettingsPublic = async (req, res) => {
       attendanceAccessControl: settings.attendanceAccessControl,
       faceRecognition: settings.faceRecognition,
       paymentDetails: settings.paymentDetails || {
-        bankName: 'ICICI',
+        bankName: 'ICICI Bank',
         accountNumber: '612805036053',
         ifscCode: 'ICIC0006128',
         upiId: 'techvaseegrah.ibz@icici',
+        upiNumber: '7667792779',
         companyName: 'TECH VASEEGRAH'
       },
       bugBountyConfig: settings.bugBountyConfig || {

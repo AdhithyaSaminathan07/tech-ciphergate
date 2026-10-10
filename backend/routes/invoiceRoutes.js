@@ -37,6 +37,10 @@ router.route('/delete-history/:id')
 router.route('/next-number')
   .get(adminOrWorker, invoiceController.getNextInvoiceNo);
 
+// Route to renumber invoices sequentially (admin only)
+router.route('/renumber')
+  .post(adminOnly, invoiceController.renumberInvoices);
+
 // Send invoice via WhatsApp
 router.route('/:id/send-whatsapp')
   .post(adminOrWorker, invoiceController.sendInvoiceWhatsApp);

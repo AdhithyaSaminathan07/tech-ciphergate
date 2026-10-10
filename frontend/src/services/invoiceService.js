@@ -152,3 +152,13 @@ export const sendInvoiceWhatsApp = async (id, pdfBase64, recipientPhone) => {
     throw error.response?.data || { message: 'Error sending invoice via WhatsApp' };
   }
 };
+
+// Batch renumber invoices sequentially (admin only)
+export const renumberInvoices = async (options) => {
+  try {
+    const response = await api.post('/invoices/renumber', options);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: 'Error renumbering invoices' };
+  }
+};

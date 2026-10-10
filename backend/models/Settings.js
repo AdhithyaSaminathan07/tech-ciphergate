@@ -506,7 +506,7 @@ const settingsSchema = mongoose.Schema({
   paymentDetails: {
     bankName: {
       type: String,
-      default: 'ICICI'
+      default: 'ICICI Bank'
     },
     accountNumber: {
       type: String,
@@ -519,6 +519,10 @@ const settingsSchema = mongoose.Schema({
     upiId: {
       type: String,
       default: 'techvaseegrah.ibz@icici'
+    },
+    upiNumber: {
+      type: String,
+      default: '7667792779'
     },
     companyName: {
       type: String,
