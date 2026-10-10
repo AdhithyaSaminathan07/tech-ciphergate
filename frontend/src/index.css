@@ -41,7 +41,7 @@ h3 {
   }
 
   .btn-primary {
-    @apply bg-[#0d9488] text-white hover:bg-[#0f766e] shadow-sm hover:shadow;
+    @apply bg-[#087443] text-white hover:bg-[#065F37] shadow-sm hover:shadow transition-all;
   }
 
   .btn-secondary {
@@ -53,15 +53,15 @@ h3 {
   }
 
   .btn-outline {
-    @apply border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 shadow-sm;
+    @apply border border-[#E2ECE5] bg-white text-slate-700 hover:border-emerald-300 hover:bg-emerald-50/50 shadow-sm;
   }
 
   .card {
-    @apply bg-white rounded-2xl shadow-sm p-4 md:p-5 mb-5 md:mb-6 w-full border border-slate-200/80 transition-all duration-300;
+    @apply bg-white rounded-2xl shadow-sm p-4 md:p-5 mb-5 md:mb-6 w-full border border-[#E2ECE5] transition-all duration-300;
   }
 
   .card:hover {
-    @apply shadow-md border-slate-300/80;
+    @apply shadow-md border-emerald-200;
   }
 
   .form-group {
@@ -69,7 +69,7 @@ h3 {
   }
 
   .form-input {
-    @apply w-full px-3 py-2 bg-white border border-slate-200 rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#0d9488]/20 focus:border-[#0d9488] transition-all text-sm text-slate-800 placeholder:text-slate-400 shadow-sm;
+    @apply w-full px-3 py-2 bg-white border border-[#E2ECE5] rounded-[10px] focus:outline-none focus:ring-2 focus:ring-[#087443]/20 focus:border-[#087443] transition-all text-sm text-slate-800 placeholder:text-slate-400 shadow-sm;
   }
 
   .form-label {
@@ -77,7 +77,7 @@ h3 {
   }
 
   .table-container {
-    @apply overflow-x-auto w-full rounded-xl border border-slate-100 bg-white shadow-sm;
+    @apply overflow-x-auto w-full rounded-xl border border-[#E2ECE5] bg-white shadow-sm;
   }
 
   .table {
@@ -85,11 +85,11 @@ h3 {
   }
 
   .table th {
-    @apply px-4 py-3 bg-slate-50 border-b border-slate-100 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider;
+    @apply px-4 py-3 bg-[#F6F9F7] border-b border-[#E2ECE5] text-left text-xs font-semibold text-slate-600 uppercase tracking-wider;
   }
 
   .table td {
-    @apply px-4 py-4 border-b border-slate-50 text-sm text-slate-600 align-middle;
+    @apply px-4 py-3.5 border-b border-[#E2ECE5]/60 text-sm text-slate-700 align-middle;
   }
 
   .table tr {
@@ -97,16 +97,16 @@ h3 {
   }
 
   .table tr:hover {
-    @apply bg-slate-50/50;
+    @apply bg-[#F0FAF4]/50;
   }
 
   /* Premium Dashboard Utilities */
   .dash-card {
-    @apply bg-white rounded-[20px] shadow-[0_10px_40px_rgba(0,0,0,0.03)] border border-transparent transition-all duration-300;
+    @apply bg-white rounded-xl shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-[#E2ECE5] transition-all duration-200;
   }
 
   .dash-card:hover {
-    @apply shadow-[0_20px_50px_rgba(0,0,0,0.06)];
+    @apply shadow-md border-emerald-300;
   }
 
   .dash-title {
@@ -114,11 +114,11 @@ h3 {
   }
 
   .dash-label {
-    @apply text-[12px] font-medium text-dash-muted uppercase tracking-wider;
+    @apply text-[12px] font-semibold text-dash-muted uppercase tracking-wider;
   }
 
   .dash-value {
-    @apply text-[28px] font-display font-bold text-dash-text leading-none tracking-tight;
+    @apply text-[26px] font-display font-black text-dash-text leading-none tracking-tight;
   }
 }
 

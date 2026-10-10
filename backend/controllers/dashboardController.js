@@ -68,7 +68,28 @@ exports.getAdminDashboard = async (req, res) => {
     // Workers & Salary
     const activeWorkersCount = workers.length;
     const monthlyBaseSalary = workers.reduce((acc, w) => acc + (Number(w.salary) || 0), 0);
-    const totalNetPayout = cachedSalaryStats?.totalNetPayout || monthlyBaseSalary;
+
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+
+    let totalNetPayout = monthlyBaseSalary;
+
+    if (activeWorkersCount === 0) {
+      totalNetPayout = 0;
+    } else if (
+      cachedSalaryStats &&
+      cachedSalaryStats.month === currentMonth &&
+      cachedSalaryStats.year === currentYear &&
+      cachedSalaryStats.isCohortComplete &&
+      cachedSalaryStats.status === 'Finalized'
+    ) {
+      // Verified complete current-month payroll (supports legitimate finalized ₹0.00 or exact positive payout)
+      totalNetPayout = Math.max(0, Math.round(Number(cachedSalaryStats.totalNetPayout || 0) * 100) / 100);
+    } else {
+      // Safe baseline fallback for uncalculated, incomplete, partial, stale, or legacy cache
+      totalNetPayout = monthlyBaseSalary;
+    }
 
     // Food requests
     const foodRequestsCount = mealsTotal.reduce((sum, req) => sum + (req.breakfast || 0) + (req.lunch || 0) + (req.dinner || 0) + (req.snacks || 0) + (req.guestMeals?.length || 0), 0);

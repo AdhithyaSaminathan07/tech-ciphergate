@@ -205,7 +205,7 @@ const AdminLogin = () => {
                             transition={{ duration: 0.5, delay: 0.3 }}
                         >
                             <label htmlFor="username" className="text-black flex items-center text-sm font-medium mb-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-[#0d9488]" viewBox="0 0 20 20" fill="currentColor">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-[#087443]" viewBox="0 0 20 20" fill="currentColor">
                                     <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
                                 </svg>
                                 Username
@@ -214,7 +214,7 @@ const AdminLogin = () => {
                                 type="text"
                                 id="username"
                                 name="username"
-                                className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0d9488] focus:border-transparent text-black"
+                                className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#087443] focus:border-transparent text-black"
                                 value={credentials.username}
                                 onChange={handleChange}
                                 placeholder="Enter your username"
@@ -229,7 +229,7 @@ const AdminLogin = () => {
                             transition={{ duration: 0.5, delay: 0.4 }}
                         >
                             <label htmlFor="password" className="text-black flex items-center text-sm font-medium mb-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-[#0d9488]" viewBox="0 0 20 20" fill="currentColor">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-[#087443]" viewBox="0 0 20 20" fill="currentColor">
                                     <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                                 </svg>
                                 Password
@@ -239,7 +239,7 @@ const AdminLogin = () => {
                                     type={showPassword ? 'text' : 'password'}
                                     id="password"
                                     name="password"
-                                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0d9488] focus:border-transparent text-black pr-10"
+                                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#087443] focus:border-transparent text-black pr-10"
                                     value={credentials.password}
                                     onChange={handleChange}
                                     placeholder="Enter your password"
@@ -247,7 +247,7 @@ const AdminLogin = () => {
                                 />
                                 <button
                                     type="button"
-                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-600 hover:text-[#0d9488] focus:outline-none"
+                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-600 hover:text-[#087443] focus:outline-none"
                                     onClick={() => setShowPassword(!showPassword)}
                                     aria-label={showPassword ? "Hide password" : "Show password"}
                                 >
@@ -279,7 +279,7 @@ const AdminLogin = () => {
                                 delay: 0.5,
                                 stiffness: 120
                             }}
-                            className="w-full py-3 bg-[#0d9488] text-white rounded-lg hover:bg-white hover:text-[#0d9488] border-2 border-[#0d9488] transition-colors disabled:opacity-70 font-medium"
+                            className="w-full py-3 bg-[#087443] text-white rounded-lg hover:bg-white hover:text-[#087443] border-2 border-[#087443] transition-colors disabled:opacity-70 font-medium"
                         >
                             {isLoading ? <Spinner size="sm" /> : 'Sign In'}
                         </motion.button>

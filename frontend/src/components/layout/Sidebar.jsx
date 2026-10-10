@@ -1,8 +1,7 @@
 import { useContext, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { FaChevronDown, FaChevronRight, FaRegQuestionCircle } from 'react-icons/fa';
+import { FaChevronDown, FaChevronRight } from 'react-icons/fa';
 import { FiLogOut, FiMenu, FiX } from 'react-icons/fi';
-import appContext from '../../context/AppContext';
 import ShatteredLogo from '../common/ShatteredLogo';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getFullFileUrl } from '../../utils/fileUtils';
@@ -14,7 +13,12 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
   
   const [expandedDropdowns, setExpandedDropdowns] = useState({});
   const [expandedSubHeaders, setExpandedSubHeaders] = useState({});
+  const [avatarError, setAvatarError] = useState(false);
   const location = useLocation();
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [user?.photo]);
 
   useEffect(() => {
     const newExpanded = {};
@@ -32,8 +36,6 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
     setExpandedDropdowns(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const isChildActive = children => children?.some(c => location.pathname === c.to);
-
   return (
     <>
       {/* Mobile Menu Toggle - Only show if not controlled externally */}
@@ -41,7 +43,7 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="md:hidden fixed top-4 left-4 z-50 p-2.5 rounded-xl bg-white/90 backdrop-blur-md shadow-sm border border-slate-200 text-slate-700 hover:text-slate-900 transition-all"
+          className="md:hidden fixed top-4 left-4 z-50 p-2.5 rounded-xl bg-[#064E3B] shadow-md border border-[#043B2C] text-white hover:bg-[#075A3B] transition-all"
         >
           <FiMenu size={20} />
         </button>
@@ -54,38 +56,45 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[400] md:hidden"
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[400] md:hidden"
             onClick={() => setIsOpen(false)}
           />
         )}
       </AnimatePresence>
 
-      {/* Premium White Layout-Attached Sidebar */}
+      {/* Reference-Inspired Forest Green Sidebar */}
       <aside
         onMouseLeave={() => setExpandedDropdowns({})}
-        className={`group/sidebar z-[500] bg-white text-slate-900 shadow-[4px_0_24px_rgba(0,0,0,0.02)] border-r border-slate-100 transition-all duration-[300ms] ease-[cubic-bezier(0.4,0,0.2,1)] flex flex-col overflow-hidden md:overflow-visible flex-shrink-0 fixed inset-y-0 left-0 md:sticky md:top-0 md:h-screen ${isOpen ? 'translate-x-0 w-[280px] shadow-2xl' : '-translate-x-full md:translate-x-0 md:w-[72px] hover:md:w-[240px]'} md:flex`}
+        className={`group/sidebar z-[500] bg-[#064E3B] text-white shadow-[4px_0_24px_rgba(0,0,0,0.06)] border-r border-[#043B2C] transition-all duration-[300ms] ease-[cubic-bezier(0.4,0,0.2,1)] flex flex-col overflow-hidden md:overflow-visible flex-shrink-0 fixed inset-y-0 left-0 md:sticky md:top-0 md:h-screen ${
+          isOpen ? 'translate-x-0 w-[270px] shadow-2xl' : '-translate-x-full md:translate-x-0 md:w-[72px] hover:md:w-[240px]'
+        } md:flex`}
       >
-        {/* Inner Wrapper maintains 240px so text doesn't wrap during width transition */}
-        <div className="w-full h-full flex flex-col pt-6">
+        {/* Inner Wrapper */}
+        <div className="w-full h-full flex flex-col pt-5">
           
-          <div className="relative flex items-center px-5 flex-shrink-0 mb-8 pt-2">
+          {/* Logo Section */}
+          <div className="relative flex items-center px-4.5 flex-shrink-0 mb-6 pt-1">
             <Link 
               to={isAdmin ? "/admin" : "/worker"} 
               onClick={() => { if (window.innerWidth < 768) setIsOpen(false); }}
-              className="flex items-center gap-3 w-full"
+              className="flex items-center gap-3 w-full px-2"
             >
-              <div className="w-[36px] h-[32px] flex-shrink-0 flex items-center justify-center rounded-lg">
+              <div className="w-[36px] h-[34px] flex-shrink-0 flex items-center justify-center rounded-lg bg-white/10 p-1 border border-white/15 shadow-sm">
                 <ShatteredLogo
                   src="/logo.png"
                   alt="Logo"
-                  className="w-[90px] h-[85px] object-contain"
+                  className="w-full h-full object-contain"
                 />
               </div>
-              <div className={`flex flex-col justify-center transition-all duration-[200ms] ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap ${isOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2 group-hover/sidebar:opacity-100 group-hover/sidebar:translate-x-0'}`}>
-                <h1 className="text-slate-900 font-bold text-[14px] tracking-tight leading-none">
+              <div className={`flex flex-col justify-center transition-all duration-[200ms] ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap ${
+                isOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2 group-hover/sidebar:opacity-100 group-hover/sidebar:translate-x-0'
+              }`}>
+                <h1 className="text-white font-bold text-[14px] tracking-tight leading-none">
                   {logoText}
                 </h1>
-                <span className="text-teal-600 text-[8px] font-black tracking-[0.2em] mt-1">Enterprise</span>
+                <span className="text-emerald-300 text-[9px] font-bold tracking-[0.18em] mt-1 uppercase">
+                  CipherGate
+                </span>
               </div>
             </Link>
           </div>
@@ -95,8 +104,15 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
             {links.map((link, index) => {
               if (link.isHeader) {
                 return (
-                  <div key={`header-${index}`} className={`pt-6 pb-2 px-4 transition-opacity duration-[200ms] whitespace-nowrap ${isOpen ? 'opacity-100' : 'opacity-0 group-hover/sidebar:opacity-100'}`}>
-                    <p className="text-[10px] font-black text-slate-400 tracking-[0.2em]">{link.label}</p>
+                  <div
+                    key={`header-${index}`}
+                    className={`pt-5 pb-1.5 px-3 transition-opacity duration-[200ms] whitespace-nowrap ${
+                      isOpen ? 'opacity-100' : 'opacity-0 group-hover/sidebar:opacity-100'
+                    }`}
+                  >
+                    <p className="text-[10px] font-bold text-emerald-300/60 uppercase tracking-[0.18em]">
+                      {link.label}
+                    </p>
                   </div>
                 );
               }
@@ -108,43 +124,52 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
                     <Link
                       to={link.to}
                       onClick={() => { if (window.innerWidth < 768) setIsOpen(false); }}
-                      className={`relative flex items-center h-[46px] rounded-lg transition-all duration-200 ${isActive ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900'}`}
+                      className={`relative flex items-center h-[42px] rounded-lg transition-all duration-200 ${
+                        isActive
+                          ? 'bg-[#C9F5D9] text-[#064E3B] font-bold shadow-sm'
+                          : 'text-emerald-100/80 hover:text-white hover:bg-white/10 font-medium'
+                      }`}
                     >
                       <div className="flex items-center w-full">
                         <div className="w-[48px] flex-shrink-0 flex items-center justify-center">
-                          <span className={`text-[18px] transition-colors duration-200 ${isActive ? 'text-emerald-700' : 'text-slate-400 group-hover/link:text-slate-900'}`}>
+                          <span
+                            className={`text-[17px] transition-colors duration-200 ${
+                              isActive ? 'text-[#064E3B]' : 'text-emerald-300/80 group-hover/link:text-white'
+                            }`}
+                          >
                             {link.icon}
                           </span>
                         </div>
 
-                        <div className={`flex-1 flex items-center justify-between transition-all duration-[200ms] ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap pr-4 ${isOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2 group-hover/sidebar:opacity-100 group-hover/sidebar:translate-x-0'}`}>
-                          <span className={`text-[14.5px] tracking-tight ${isActive ? 'font-bold' : 'font-semibold'}`}>
+                        <div className={`flex-1 flex items-center justify-between transition-all duration-[200ms] ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap pr-3 ${
+                          isOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2 group-hover/sidebar:opacity-100 group-hover/sidebar:translate-x-0'
+                        }`}>
+                          <span className="text-[13.5px] tracking-tight">
                             {link.label}
                           </span>
                           
                           {link.badge && (
-                            <div className="flex items-center gap-1.5">
-                              {link.label === 'Schedules' && (
-                                <span className="w-[18px] h-[18px] flex items-center justify-center rounded-full border border-slate-200 text-slate-400 text-[12px] font-bold bg-white shadow-sm">+</span>
-                              )}
-                              <span className={`text-[11px] font-bold rounded-md px-2 py-0.5 ${link.label === 'Posts' ? 'bg-emerald-100 text-emerald-800' : link.label === 'Schedules' ? 'bg-orange-100 text-orange-800' : 'bg-slate-200 text-slate-700'}`}>
-                                {link.badge}
-                              </span>
-                            </div>
+                            <span className={`text-[10px] font-bold rounded-md px-1.5 py-0.5 ${
+                              isActive
+                                ? 'bg-[#064E3B] text-white'
+                                : 'bg-emerald-900/60 text-emerald-200 border border-emerald-700/50'
+                            }`}>
+                              {link.badge}
+                            </span>
                           )}
                         </div>
                       </div>
                     </Link>
 
-                    {/* Desktop Tooltip */}
-                    <div className="hidden md:block absolute left-[64px] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-slate-900 text-white text-[11px] font-bold rounded-lg opacity-0 pointer-events-none group-hover/link:opacity-100 group-hover/sidebar:!opacity-0 translate-x-[-10px] group-hover/link:translate-x-0 transition-all duration-200 whitespace-nowrap z-50 shadow-xl">
+                    {/* Desktop Tooltip for collapsed state */}
+                    <div className="hidden md:block absolute left-[64px] top-1/2 -translate-y-1/2 px-2.5 py-1 bg-slate-900 text-white text-[11px] font-semibold rounded-md opacity-0 pointer-events-none group-hover/link:opacity-100 group-hover/sidebar:!opacity-0 translate-x-[-8px] group-hover/link:translate-x-0 transition-all duration-200 whitespace-nowrap z-50 shadow-xl border border-slate-700">
                       {link.label}
                     </div>
                   </div>
                 );
               }
 
-              // Dropdown
+              // Dropdown parent
               const key = `dropdown-${index}`;
               const isExpanded = !!expandedDropdowns[key];
               const isChildActive = children => children?.some(c => location.pathname === c.to);
@@ -154,33 +179,45 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
                 <div key={key} className="space-y-1 relative group/link">
                   <button
                     onClick={() => toggleDropdown(key)}
-                    className={`relative flex items-center w-full h-[46px] rounded-lg transition-all duration-200 ${isExpanded || hasActive ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900'}`}
+                    className={`relative flex items-center w-full h-[42px] rounded-lg transition-all duration-200 ${
+                      hasActive
+                        ? 'bg-white/15 text-white font-bold'
+                        : isExpanded
+                        ? 'bg-white/10 text-white font-medium'
+                        : 'text-emerald-100/80 hover:text-white hover:bg-white/10 font-medium'
+                    }`}
                   >
                     <div className="flex items-center w-full">
                       <div className="w-[48px] flex-shrink-0 flex items-center justify-center">
-                        <span className={`text-[18px] transition-colors duration-200 ${isExpanded || hasActive ? 'text-emerald-700' : 'text-slate-400 group-hover/link:text-slate-900'}`}>
+                        <span
+                          className={`text-[17px] transition-colors duration-200 ${
+                            hasActive || isExpanded ? 'text-emerald-200' : 'text-emerald-300/80 group-hover/link:text-white'
+                          }`}
+                        >
                           {link.icon}
                         </span>
                       </div>
 
-                      <div className={`flex-1 flex items-center justify-between transition-all duration-[200ms] ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap pr-4 ${isOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2 group-hover/sidebar:opacity-100 group-hover/sidebar:translate-x-0'}`}>
-                        <span className={`text-[14.5px] tracking-tight ${hasActive || isExpanded ? 'font-bold' : 'font-semibold'}`}>
+                      <div className={`flex-1 flex items-center justify-between transition-all duration-[200ms] ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap pr-3 ${
+                        isOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2 group-hover/sidebar:opacity-100 group-hover/sidebar:translate-x-0'
+                      }`}>
+                        <span className="text-[13.5px] tracking-tight">
                           {link.label}
                         </span>
                         
                         <motion.span
                           animate={{ rotate: isExpanded ? 180 : 0 }}
                           transition={{ duration: 0.2 }}
-                          className={`${isExpanded || hasActive ? 'text-emerald-700' : 'text-slate-400'}`}
+                          className="text-emerald-300/80"
                         >
-                          <FaChevronDown size={10} />
+                          <FaChevronDown size={9} />
                         </motion.span>
                       </div>
                     </div>
                   </button>
 
-                  {/* Desktop Tooltip */}
-                  <div className="hidden md:block absolute left-[64px] top-2 px-3 py-1.5 bg-slate-900 text-white text-[11px] font-bold rounded-lg opacity-0 pointer-events-none group-hover/link:opacity-100 group-hover/sidebar:!opacity-0 translate-x-[-10px] group-hover/link:translate-x-0 transition-all duration-200 whitespace-nowrap z-50 shadow-xl">
+                  {/* Desktop Tooltip for collapsed state */}
+                  <div className="hidden md:block absolute left-[64px] top-2 px-2.5 py-1 bg-slate-900 text-white text-[11px] font-semibold rounded-md opacity-0 pointer-events-none group-hover/link:opacity-100 group-hover/sidebar:!opacity-0 translate-x-[-8px] group-hover/link:translate-x-0 transition-all duration-200 whitespace-nowrap z-50 shadow-xl border border-slate-700">
                     {link.label}
                   </div>
 
@@ -193,9 +230,8 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                       >
-                        <div className="ml-[28px] pl-3 border-l border-slate-100 space-y-1.5 mt-1 mb-2">
+                        <div className="ml-[24px] pl-2.5 border-l border-emerald-700/60 space-y-1 mt-1 mb-1.5">
                           {(() => {
-                            // Group child links by sub-headers dynamically
                             const sections = [];
                             let currentSection = null;
 
@@ -220,7 +256,6 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
 
                             return sections.map((sec, secIdx) => {
                               const headerKey = `${link.label}-${sec.header?.label || 'default'}-${secIdx}`;
-                              // Section starts expanded if it has no header, or if an item inside is active, or if user expanded it
                               const hasActiveChild = sec.items.some(c => location.pathname === c.to);
                               const isSecExpanded = expandedSubHeaders[headerKey] !== undefined
                                 ? expandedSubHeaders[headerKey]
@@ -240,13 +275,13 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
                                     <button
                                       type="button"
                                       onClick={toggleSec}
-                                      className="flex items-center justify-between w-full pt-3 pb-1 pl-2 pr-2 hover:bg-slate-50 rounded-lg text-left transition-colors select-none group/sub"
+                                      className="flex items-center justify-between w-full pt-2 pb-1 pl-2 pr-2 hover:bg-white/10 rounded-md text-left transition-colors select-none"
                                     >
-                                      <span className="text-[9px] font-black text-slate-400 group-hover/sub:text-slate-600 tracking-[0.12em] transition-colors">
+                                      <span className="text-[9px] font-bold text-emerald-300/70 uppercase tracking-[0.12em]">
                                         {sec.header.label}
                                       </span>
-                                      <span className="text-slate-400 group-hover/sub:text-slate-600 transition-colors">
-                                        {isSecExpanded ? <FaChevronDown size={8} /> : <FaChevronRight size={8} />}
+                                      <span className="text-emerald-300/70">
+                                        {isSecExpanded ? <FaChevronDown size={7} /> : <FaChevronRight size={7} />}
                                       </span>
                                     </button>
                                   )}
@@ -268,9 +303,13 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
                                               onClick={() => {
                                                 if (window.innerWidth < 768) setIsOpen(false);
                                               }}
-                                              className={`flex items-center justify-between w-full h-[38px] rounded-lg transition-all duration-200 px-3 ${active ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900'}`}
+                                              className={`flex items-center justify-between w-full h-[34px] rounded-md transition-all duration-150 px-2.5 ${
+                                                active
+                                                  ? 'bg-[#C9F5D9] text-[#064E3B] font-bold shadow-sm'
+                                                  : 'text-emerald-100/75 hover:text-white hover:bg-white/10 font-medium'
+                                              }`}
                                             >
-                                              <span className={`text-[13px] tracking-tight ${active ? 'font-bold' : 'font-medium'}`}>
+                                              <span className="text-[12.5px] tracking-tight">
                                                 {child.label}
                                               </span>
                                             </Link>
@@ -293,35 +332,46 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
           </nav>
 
           {/* User Profile Footer */}
-          <div className="mt-auto px-4 pb-6 pt-4 border-t border-slate-100">
+          <div className="mt-auto px-3.5 pb-5 pt-3 border-t border-[#043B2C] bg-[#05442A]">
             {user && (
               <div className="flex items-center justify-between w-full">
                 <div className="flex items-center flex-1 min-w-0">
-                  <div className="w-[32px] h-[32px] flex-shrink-0 rounded-lg overflow-hidden relative border border-slate-100">
-                    <img
-                      className="w-full h-full object-cover"
-                      src={user.photo ? getFullFileUrl(user.photo) : `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || user.username)}&background=0D9488&color=ffffff&bold=true`}
-                      alt="User"
-                    />
+                  <div className="w-[30px] h-[30px] flex-shrink-0 rounded-lg overflow-hidden relative border border-emerald-400/40 bg-[#087443] flex items-center justify-center">
+                    {user.photo && !avatarError ? (
+                      <img
+                        className="w-full h-full object-cover"
+                        src={getFullFileUrl(user.photo)}
+                        alt={user.name || 'User'}
+                        onError={() => setAvatarError(true)}
+                      />
+                    ) : (
+                      <span className="text-white font-black text-xs uppercase select-none">
+                        {(user.displayName || user.name || user.username || 'A').charAt(0).toUpperCase()}
+                      </span>
+                    )}
                   </div>
                   
-                  <div className={`ml-3 flex-1 min-w-0 transition-all duration-[200ms] ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap pt-0.5 ${isOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2 group-hover/sidebar:opacity-100 group-hover/sidebar:translate-x-0'}`}>
-                    <p className="text-[13px] font-bold text-slate-900 truncate tracking-tight">
+                  <div className={`ml-2.5 flex-1 min-w-0 transition-all duration-[200ms] ease-[cubic-bezier(0.4,0,0.2,1)] whitespace-nowrap pt-0.5 ${
+                    isOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2 group-hover/sidebar:opacity-100 group-hover/sidebar:translate-x-0'
+                  }`}>
+                    <p className="text-[12.5px] font-bold text-white truncate tracking-tight">
                       {user.displayName || user.name || user.username}
                     </p>
-                    <p className="text-[9px] text-teal-600 font-black tracking-widest mt-0.5">
+                    <p className="text-[9px] text-emerald-300 font-bold tracking-wider mt-0.5 uppercase">
                       {user.role || 'Admin'}
                     </p>
                   </div>
                 </div>
                 
-                <div className={`transition-all duration-[200ms] ${isOpen ? 'opacity-100' : 'opacity-0 group-hover/sidebar:opacity-100'}`}>
+                <div className={`transition-all duration-[200ms] ${
+                  isOpen ? 'opacity-100' : 'opacity-0 group-hover/sidebar:opacity-100'
+                }`}>
                   <button
                     onClick={() => {
                       setIsOpen(false);
                       onLogout();
                     }}
-                    className="w-[32px] h-[32px] flex items-center justify-center rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-all"
+                    className="w-[30px] h-[30px] flex items-center justify-center rounded-lg hover:bg-rose-500/20 text-emerald-200 hover:text-rose-300 transition-all"
                     title="Logout"
                   >
                     <FiLogOut size={14} />

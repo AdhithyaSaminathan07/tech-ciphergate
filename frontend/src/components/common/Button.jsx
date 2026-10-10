@@ -8,32 +8,31 @@ const Button = ({
     fullWidth = false,
     className = ''
   }) => {
-    // Base classes matching the admin Download Report button
-    const baseClasses = 'rounded-xl font-medium shadow-md transition-colors duration-200 focus:outline-none';
+    // Base classes matching enterprise design system
+    const baseClasses = 'rounded-xl font-semibold shadow-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 active:scale-[0.98] inline-flex items-center justify-center gap-1.5';
     
-    // Updated variant classes to match admin Download Report button styling
+    // Variant classes using centralized forest-green & semantic palette
     const variantClasses = {
-      primary: 'bg-[#0d9488] hover:bg-[#0f766e] text-white focus:ring-[#0d9488]',
-      secondary: 'bg-[#0d9488] hover:bg-[#0f766e] text-white focus:ring-[#0d9488]',
-      danger: 'bg-[#0d9488] hover:bg-[#0f766e] text-white focus:ring-[#0d9488]',
-      success: 'bg-[#0d9488] hover:bg-[#0f766e] text-white focus:ring-[#0d9488]',
-      outline: 'bg-[#0d9488] hover:bg-[#0f766e] text-white focus:ring-[#0d9488]'
+      primary: 'bg-[#087443] hover:bg-[#065F37] text-white focus:ring-[#087443]/50 shadow-sm hover:shadow',
+      secondary: 'bg-slate-100 hover:bg-slate-200 text-slate-700 focus:ring-slate-300',
+      danger: 'bg-rose-600 hover:bg-rose-700 text-white focus:ring-rose-500/50 shadow-sm',
+      success: 'bg-[#087443] hover:bg-[#065F37] text-white focus:ring-[#087443]/50 shadow-sm',
+      outline: 'border border-[#E2ECE5] bg-white hover:bg-[#F0FAF4] text-slate-700 hover:text-[#087443] hover:border-emerald-300 focus:ring-[#087443]/30'
     };
     
-    // Updated size classes to match admin Download Report button styling
     const sizeClasses = {
-      sm: 'px-3 py-1.5 text-sm',
-      md: 'px-5 py-2 text-sm',
-      lg: 'px-6 py-3 text-lg'
+      sm: 'px-3 py-1.5 text-xs',
+      md: 'px-4 py-2 text-sm',
+      lg: 'px-5 py-2.5 text-base'
     };
     
     const widthClass = fullWidth ? 'w-full' : '';
-    const disabledClass = disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer';
+    const disabledClass = disabled ? 'opacity-50 cursor-not-allowed pointer-events-none' : 'cursor-pointer';
     
     return (
       <button
         type={type}
-        className={`${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${widthClass} ${disabledClass} ${className}`}
+        className={`${baseClasses} ${variantClasses[variant] || variantClasses.primary} ${sizeClasses[size]} ${widthClass} ${disabledClass} ${className}`}
         onClick={onClick}
         disabled={disabled}
       >

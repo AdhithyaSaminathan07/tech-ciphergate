@@ -369,7 +369,7 @@ const AdminLayout = () => {
   const isCommPage = location.pathname === '/admin/communication';
 
   return (
-    <div className="flex h-screen bg-[#F8FAFC] overflow-hidden font-sans">
+    <div className="flex h-screen bg-[#F6F9F7] overflow-hidden font-sans">
       
       {/* Sleek Sidebar */}
       <Sidebar
@@ -399,7 +399,7 @@ const AdminLayout = () => {
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
-            className={isCommPage ? "h-full w-full flex flex-col flex-1 min-h-0" : "h-full w-full max-w-full mx-auto px-2 sm:px-6 md:px-8 pt-4 md:pt-6 pb-6 md:pb-8"}
+            className={isCommPage ? "h-full w-full flex flex-col flex-1 min-h-0" : "h-full w-full max-w-full mx-auto px-3 sm:px-5 md:px-6 pt-3 md:pt-4 pb-6 md:pb-8"}
           >
             <Suspense fallback={<PageLoader />}>
             <Routes>

@@ -1,43 +1,74 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  FaUsers, FaTasks, FaCalendarAlt, FaBuilding,
-  FaChartBar, FaArrowRight, FaComments, FaMoneyBillWave, FaWallet
+  FaUsers,
+  FaTasks,
+  FaCalendarAlt,
+  FaCalendarCheck,
+  FaBuilding,
+  FaChartBar,
+  FaArrowRight,
+  FaComments,
+  FaMoneyBillWave,
+  FaWallet,
+  FaLayerGroup,
+  FaUtensils,
+  FaCheckCircle,
+  FaClock,
+  FaSyncAlt
 } from 'react-icons/fa';
 import { getAdminDashboardSummary } from '../../services/dashboardService';
-import api from '../../services/api';
 import Spinner from '../common/Spinner';
 import appContext from '../../context/AppContext';
 import { AuthContext } from '../../context/AuthContext';
-import WelcomeBanner from './WelcomeBanner';
 import SalesVelocityWidget from './SalesVelocityWidget';
 
 /* ─────────────────────────────────────────
    Circular Progress
 ───────────────────────────────────────── */
 const CircularProgress = ({
-  percentage, size = 80, strokeWidth = 8,
-  color = '#5EB063', showLabel = true
+  percentage,
+  size = 76,
+  strokeWidth = 7,
+  color = '#087443',
+  showLabel = true
 }) => {
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
-  const offset = circumference - (percentage / 100) * circumference;
+  const validPercentage = Math.min(Math.max(Number(percentage) || 0, 0), 100);
+  const offset = circumference - (validPercentage / 100) * circumference;
+
   return (
     <div className="relative inline-flex items-center justify-center flex-shrink-0">
       <svg width={size} height={size} className="transform -rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={radius}
-          stroke="rgba(0,0,0,0.04)" strokeWidth={strokeWidth} fill="none" />
-        <circle cx={size / 2} cy={size / 2} r={radius}
-          stroke={color} strokeWidth={strokeWidth} fill="none"
-          strokeDasharray={circumference} strokeDashoffset={offset}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="#E2ECE5"
+          strokeWidth={strokeWidth}
+          fill="none"
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
           strokeLinecap="round"
-          className="transition-all duration-[1400ms] ease-in-out" />
+          className="transition-all duration-1000 ease-out"
+        />
       </svg>
       {showLabel && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <span style={{ fontSize: size >= 80 ? 16 : size >= 50 ? 12 : 10 }}
-            className="font-bold text-dash-text leading-none">
-            {Math.round(percentage)}%
+          <span
+            style={{ fontSize: size >= 70 ? 15 : size >= 45 ? 12 : 10 }}
+            className="font-black text-[#0F241D] leading-none font-display"
+          >
+            {Math.round(validPercentage)}%
           </span>
         </div>
       )}
@@ -46,85 +77,99 @@ const CircularProgress = ({
 };
 
 /* ─────────────────────────────────────────
-   KPI Calculation
+   Compact KPI Stat Card (Top Row & Summary)
 ───────────────────────────────────────── */
-const calculateKpiStats = (tickets) => {
-  const closedTickets = tickets.filter(t => t.status === 'Done');
-  let totalDays = 0;
-  closedTickets.forEach(t => {
-    const doneStatus = t.statusHistory?.find(h => h.status === 'Done');
-    if (doneStatus)
-      totalDays += (new Date(doneStatus.changedAt) - new Date(t.createdAt)) / 86400000;
-  });
-  const avgCycleTime = closedTickets.length > 0 ? (totalDays / closedTickets.length).toFixed(1) : 0;
-  const oneWeekAgo = new Date();
-  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-  const closedThisWeek = closedTickets.filter(t => {
-    const d = t.statusHistory?.find(h => h.status === 'Done');
-    return d && new Date(d.changedAt) >= oneWeekAgo;
-  }).length;
-  const breached = closedTickets.filter(t => {
-    const d = t.statusHistory?.find(h => h.status === 'Done');
-    if (!d) return false;
-    return (new Date(d.changedAt) - new Date(t.createdAt)) / 86400000 > 7;
-  }).length;
-  const slaBreachRate = closedTickets.length > 0 ? Math.round((breached / closedTickets.length) * 100) : 0;
-  return { avgCycleTime, closedThisWeek, slaBreachRate };
-};
-
-/* ─────────────────────────────────────────
-   Compact Stat Card  (top strip + bottom strip)
-───────────────────────────────────────── */
-const StatCard = ({ title, value, icon: Icon, link }) => {
+const StatCard = ({ title, value, icon: Icon, link, subtitle, alert = false }) => {
   const inner = (
-    <div className="dash-card p-3 md:px-5 md:py-4 flex items-center justify-between gap-2 min-h-[72px] md:min-h-[90px] h-full w-full group cursor-pointer">
-      <div className="min-w-0 flex-1">
-        <p className="dash-label mb-0.5 text-[9px] md:text-[11px] leading-tight">
-          {title}
-        </p>
-        <p className="dash-value text-[14px] md:text-[21px] font-black leading-tight truncate">
-          {value}
-        </p>
+    <div
+      className={`bg-white rounded-xl p-3.5 sm:p-4 border transition-all duration-200 flex items-start justify-between gap-2.5 sm:gap-3 group cursor-pointer h-full ${
+        alert
+          ? 'border-amber-200/90 bg-amber-50/20 hover:border-amber-300 shadow-sm'
+          : 'border-[#E2ECE5] hover:border-emerald-300 hover:shadow-md shadow-sm'
+      }`}
+    >
+      <div className="min-w-0 flex-1 flex flex-col justify-between h-full">
+        <div>
+          <p className="text-[11px] sm:text-xs font-bold text-[#526A5E] uppercase tracking-wider mb-1 leading-snug break-words">
+            {title}
+          </p>
+          <p className="text-lg sm:text-[20px] xl:text-[22px] font-black text-[#0F241D] leading-tight font-display tracking-tight">
+            {value}
+          </p>
+        </div>
+        {subtitle && (
+          <p
+            className={`text-[11px] sm:text-xs font-semibold mt-1.5 leading-snug break-words ${
+              alert ? 'text-amber-600' : 'text-[#087443]'
+            }`}
+          >
+            {subtitle}
+          </p>
+        )}
       </div>
       {Icon && (
-        <div className="w-8 h-8 md:w-12 md:h-12 rounded-[10px] md:rounded-2xl bg-dash-soft-green text-dash-green flex items-center justify-center flex-shrink-0 group-hover:bg-dash-green group-hover:text-white transition-all duration-300">
-          <Icon className="w-4 h-4 md:w-5 md:h-5" />
+        <div
+          className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-200 shadow-sm mt-0.5 ${
+            alert
+              ? 'bg-amber-100 text-amber-700 group-hover:bg-amber-600 group-hover:text-white'
+              : 'bg-[#F0FAF4] text-[#087443] border border-[#E2ECE5] group-hover:bg-[#087443] group-hover:text-white group-hover:border-[#087443]'
+          }`}
+        >
+          <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
         </div>
       )}
     </div>
   );
-  return link ? <Link to={link} className="block w-full h-full">{inner}</Link> : inner;
+
+  return link ? (
+    <Link to={link} className="block w-full h-full">
+      {inner}
+    </Link>
+  ) : (
+    inner
+  );
 };
 
 /* ─────────────────────────────────────────
    Section Header
 ───────────────────────────────────────── */
-const SectionHeader = ({ title, sub, action, actionLink }) => (
-  <div className="flex items-start justify-between mb-2 md:mb-4">
-    <div>
-      <h2 className="dash-title">
-        {title}
-      </h2>
-      {sub && <p className="text-[12px] text-dash-muted font-medium mt-0.5">{sub}</p>}
+const SectionHeader = ({ title, sub, icon: Icon, action, actionLink }) => (
+  <div className="flex items-center justify-between mb-4">
+    <div className="flex items-center gap-2.5">
+      {Icon && (
+        <div className="w-8 h-8 rounded-lg bg-[#F0FAF4] text-[#087443] border border-[#E2ECE5] flex items-center justify-center flex-shrink-0">
+          <Icon size={15} />
+        </div>
+      )}
+      <div>
+        <h2 className="text-base md:text-lg font-bold text-[#0F241D] tracking-tight leading-tight">
+          {title}
+        </h2>
+        {sub && <p className="text-xs text-[#526A5E] font-medium mt-0.5">{sub}</p>}
+      </div>
     </div>
     {action && actionLink && (
-      <Link to={actionLink}
-        className="text-[12px] font-bold text-dash-green hover:opacity-80 flex items-center gap-1 flex-shrink-0 transition-opacity">
-        {action} <FaArrowRight size={10} />
+      <Link
+        to={actionLink}
+        className="text-xs font-semibold text-[#087443] hover:text-[#065F37] bg-[#F0FAF4] hover:bg-[#E0F2E8] px-3 py-1.5 rounded-lg border border-[#E2ECE5] transition-all flex items-center gap-1.5 flex-shrink-0"
+      >
+        <span>{action}</span>
+        <FaArrowRight size={10} />
       </Link>
     )}
   </div>
 );
 
-
-
 /* ─────────────────────────────────────────
-   Main Dashboard
+   Main Dashboard Component
 ───────────────────────────────────────── */
 const Dashboard = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState({
-    workers: 0, tasks: 0, topics: 0, foodRequests: 0,
+    workers: 0,
+    tasks: 0,
+    topics: 0,
+    foodRequests: 0,
     leaves: { total: 0, pending: 0, approved: 0, rejected: 0 },
     comments: { total: 0, unread: 0 },
     tickets: { todo: 0, inProgress: 0, review: 0, done: 0 },
@@ -133,395 +178,564 @@ const Dashboard = () => {
     salary: { base: 0, payout: 0 }
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState(null);
   const [departments, setDepartments] = useState([]);
   const [pendingLeaves, setPendingLeaves] = useState([]);
   const [attendancePercentage, setAttendancePercentage] = useState(0);
   const [tickets, setTickets] = useState([]);
-  const [topTeams, setTopTeams] = useState([]);
   const { subdomain } = useContext(appContext);
   const { user } = useContext(AuthContext);
 
+  const loadDashboardData = useCallback(async (showRefreshing = false) => {
+    if (showRefreshing) setIsRefreshing(true);
+    else setIsLoading(true);
 
-
-  const loadDashboardData = async () => {
-    setIsLoading(true);
     try {
+      setError(null);
       const dashboardData = await getAdminDashboardSummary(subdomain);
-      
-      setStats(dashboardData.stats);
-      setPendingLeaves(dashboardData.pendingLeaves);
-      setDepartments(dashboardData.departments);
-      setAttendancePercentage(dashboardData.attendancePercentage);
-      setTickets(dashboardData.attentionTickets); // Only use attentionTickets to satisfy the UI map logic below (attentionTickets variable)
 
-      // If topTeams is present in cache, use it. Otherwise fetch from salary endpoint.
-      if (dashboardData.topTeams && dashboardData.topTeams.length > 0) {
-        setTopTeams(dashboardData.topTeams);
-      } else {
-        // Trigger computation via salary endpoint (computes prev month, caches result)
-        try {
-          const now = new Date();
-          const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-          const prevYear = prevMonthDate.getFullYear();
-          const prevMonth = prevMonthDate.getMonth() + 1;
-          const fromDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
-          const lastDay = new Date(prevYear, prevMonth, 0).getDate();
-          const toDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-
-          const teamsRes = await api.get('/salary/top-teams-earnings', {
-            params: { subdomain, fromDate, toDate }
-          });
-          setTopTeams(teamsRes.data?.topTeams || []);
-        } catch (teamsErr) {
-          console.error('Failed to load top teams earnings:', teamsErr);
-          setTopTeams([]);
-        }
+      if (dashboardData) {
+        setStats(dashboardData.stats || {});
+        setPendingLeaves(dashboardData.pendingLeaves || []);
+        setDepartments(dashboardData.departments || []);
+        setAttendancePercentage(dashboardData.attendancePercentage || 0);
+        setTickets(dashboardData.attentionTickets || []);
       }
-
-
     } catch (err) {
       console.error('Dashboard load error:', err);
+      setError(err?.response?.data?.message || err?.message || 'Failed to load dashboard overview data');
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
-  };
-
+  }, [subdomain]);
 
   useEffect(() => {
     if (user) {
       loadDashboardData();
     }
-  }, [user, subdomain]);
+  }, [user, loadDashboardData]);
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-screen bg-[#F5F7FA]">
+      <div className="flex justify-center items-center h-[70vh] bg-transparent">
         <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  if (error && !stats.workers && departments.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center bg-white rounded-xl border border-rose-200 shadow-sm">
+        <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center mb-3">
+          <FaSyncAlt size={20} />
+        </div>
+        <h3 className="text-base font-bold text-[#0F241D] mb-1">Unable to Load Dashboard</h3>
+        <p className="text-xs text-[#526A5E] max-w-md mb-4">{error}</p>
+        <button
+          onClick={() => loadDashboardData(false)}
+          className="px-4 py-2 bg-[#087443] hover:bg-[#065F37] text-white text-xs font-bold rounded-lg shadow-sm transition-all"
+        >
+          Try Again
+        </button>
       </div>
     );
   }
 
   const attentionTickets = tickets || [];
 
-  /* ── attendance colour helper ── */
   const deptColor = (pct) =>
-    pct >= 90 ? '#5EB063' :
-      pct >= 70 ? '#3B82F6' :
-        pct >= 40 ? '#FFA756' : '#F43F5E';
-
-  const totalTickets = stats.tickets.todo + stats.tickets.inProgress + stats.tickets.review + stats.tickets.done;
-  const completionRate = totalTickets > 0 ? Math.round((stats.tickets.done / totalTickets) * 100) : 0;
+    pct >= 90 ? '#087443' : pct >= 70 ? '#0284C7' : pct >= 40 ? '#D97706' : '#E11D48';
 
   const today = new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
+    weekday: 'short',
     day: '2-digit',
-    month: 'long',
+    month: 'short',
     year: 'numeric'
   });
 
   return (
-    <div className="bg-dash-bg min-h-screen">
-      <div className="max-w-[1600px] mx-auto flex flex-col gap-4 md:gap-6 pb-10">
+    <div className="w-full flex flex-col gap-5 md:gap-6 pb-8">
 
-        <WelcomeBanner
-          userName={user?.name || user?.username || 'admin21'}
-          pendingReviews={stats.tickets.review}
-          totalTasks={totalTickets}
-          completionRate={completionRate}
-          topTeams={topTeams}
-        />
-
-        {/* ══════════════════════════════════════════
-            ROW 1 — COMPACT STAT STRIP (5 cards)
-        ══════════════════════════════════════════ */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-4">
-          <div className="col-span-2 md:col-span-1">
-            <StatCard title="Total Developers" value={stats.workers} icon={FaUsers} link="/admin/workers" />
+      {/* ══════════════════════════════════════════
+          COMPACT DASHBOARD HEADER TOOLBAR
+      ══════════════════════════════════════════ */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white px-5 py-4 rounded-xl border border-[#E2ECE5] shadow-sm">
+        <div className="flex items-center gap-3.5">
+          <div className="w-3 h-3 rounded-full bg-[#087443] ring-4 ring-emerald-100 animate-pulse" />
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg md:text-xl font-bold text-[#0F241D] tracking-tight leading-none mb-0">
+                Admin Overview
+              </h1>
+              <span className="text-sm font-medium text-slate-300">·</span>
+              <span className="text-sm text-[#526A5E] font-medium">
+                Hi, <strong className="text-[#0F241D] font-bold">{user?.name || user?.username || 'Administrator'}</strong>
+              </span>
+            </div>
+            <p className="text-xs md:text-sm text-[#526A5E] font-medium mt-1">
+              {today} · Live Operations, Financials & Performance Intelligence
+            </p>
           </div>
-          <StatCard title="Active Tasks" value={stats.tasks} icon={FaTasks} link="/admin/work-allocation" />
-          <StatCard title="Topics" value={stats.topics} icon={FaTasks} link="/admin/topics" />
-          <StatCard title="Monthly Base Salary" value={`₹${stats.salary.base.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`} icon={FaMoneyBillWave} />
-          <StatCard title="Total Net Payout" value={`₹${stats.salary.payout.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`} icon={FaWallet} />
         </div>
 
-        {/* ══════════════════════════════════════════
-            ROW 2 — 3-COLUMN MAIN GRID
-            Col A: Work Allocation
-            Col B: Sales Velocity
-            Col C: KPI (top) + Attendance (bottom)
-        ══════════════════════════════════════════ */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+        <div className="flex items-center gap-2.5 self-end sm:self-auto">
+          <button
+            onClick={() => loadDashboardData(true)}
+            disabled={isRefreshing}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs md:text-sm font-semibold text-slate-700 bg-[#F6F9F7] hover:bg-[#E8F3ED] border border-[#E2ECE5] transition-all duration-200 active:scale-95 disabled:opacity-50 shadow-sm"
+            title="Refresh Dashboard Data"
+          >
+            <FaSyncAlt className={`text-xs ${isRefreshing ? 'animate-spin text-[#087443]' : 'text-[#526A5E]'}`} />
+            <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+          </button>
+          <Link
+            to="/admin/work-allocation"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs md:text-sm font-semibold text-white bg-[#087443] hover:bg-[#065F37] shadow-sm hover:shadow transition-all duration-200 active:scale-95"
+          >
+            <FaTasks className="text-xs" />
+            <span>Work Board</span>
+          </Link>
+        </div>
+      </div>
 
-          {/* ── Col A: Work Allocation Board ── */}
-          <div className="dash-card p-4 md:p-6 flex flex-col gap-4">
-            <SectionHeader
-              title="Work Allocation"
-              sub="Task distribution by status"
-              action="View Board"
-              actionLink="/admin/work-allocation"
-            />
+      {/* ══════════════════════════════════════════
+          ROW 1 — TOP CRITICAL KPI ROW (5 Cards)
+      ══════════════════════════════════════════ */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 md:gap-4">
+        <StatCard
+          title="Total Developers"
+          value={stats.workers || 0}
+          icon={FaUsers}
+          link="/admin/workers"
+          subtitle="Active Staff"
+        />
+        <StatCard
+          title="Active Tasks"
+          value={stats.tasks || 0}
+          icon={FaTasks}
+          link="/admin/work-allocation"
+          subtitle={`${stats.tickets?.inProgress || 0} In Progress`}
+        />
+        <StatCard
+          title="Pending Approvals"
+          value={stats.leaves?.pending || 0}
+          icon={FaClock}
+          link="/admin/leaves"
+          subtitle="Leave Requests"
+          alert={(stats.leaves?.pending || 0) > 0}
+        />
+        <StatCard
+          title="Monthly Base Salary"
+          value={`₹${(stats.salary?.base || 0).toLocaleString('en-IN', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+          })}`}
+          icon={FaMoneyBillWave}
+          link="/admin/salary"
+          subtitle="Base Payroll"
+        />
+        <StatCard
+          title="Total Net Payout"
+          value={`₹${(stats.salary?.payout || 0).toLocaleString('en-IN', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+          })}`}
+          icon={FaWallet}
+          link="/admin/salary"
+          subtitle="Disbursement"
+        />
+      </div>
 
-            {/* Needs Attention at the top */}
-            <div className="flex-1 flex flex-col min-h-0">
-              <p className="dash-label mb-3 flex items-center justify-between">
-                Needs Attention
-                {attentionTickets.length > 0 && (
-                  <span className="bg-rose-500 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
-                    {attentionTickets.length}
+      {/* ══════════════════════════════════════════
+          ROW 2 — OPERATIONS & PIPELINE MAIN GRID
+          Left (7 cols on xl): Work Allocation & Operational Queues
+          Right (5 cols on xl): Performance, Attendance & Sales Velocity
+      ══════════════════════════════════════════ */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 md:gap-6">
+
+        {/* ── Left Column (7 cols) ── */}
+        <div className="xl:col-span-7 flex flex-col gap-5 md:gap-6">
+
+          {/* 1. Work Allocation Board (Prominent Card) */}
+          <div className="bg-white rounded-xl p-5 md:p-6 border border-[#E2ECE5] shadow-sm flex flex-col justify-between">
+            <div>
+              <SectionHeader
+                title="Work Allocation"
+                sub="Active task distribution & immediate attention queue"
+                icon={FaTasks}
+                action="View Board"
+                actionLink="/admin/work-allocation"
+              />
+
+              {/* Status breakdown pills */}
+              <div className="grid grid-cols-4 gap-2.5 mb-4">
+                <div className="flex items-center justify-between px-3 py-2 bg-[#F6F9F7] rounded-lg border border-[#E2ECE5]">
+                  <span className="text-xs font-semibold text-[#526A5E]">To Do</span>
+                  <span className="text-sm font-bold text-[#0F241D]">{stats.tickets?.todo || 0}</span>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2 bg-blue-50/70 rounded-lg border border-blue-100">
+                  <span className="text-xs font-semibold text-blue-600">Active</span>
+                  <span className="text-sm font-bold text-blue-700">{stats.tickets?.inProgress || 0}</span>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2 bg-amber-50/70 rounded-lg border border-amber-100">
+                  <span className="text-xs font-semibold text-amber-600">Review</span>
+                  <span className="text-sm font-bold text-amber-700">{stats.tickets?.review || 0}</span>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2 bg-[#F0FAF4] rounded-lg border border-emerald-100">
+                  <span className="text-xs font-semibold text-[#087443]">Done</span>
+                  <span className="text-sm font-bold text-[#087443]">{stats.tickets?.done || 0}</span>
+                </div>
+              </div>
+
+              {/* Tasks Needing Attention List */}
+              <div>
+                <div className="flex items-center justify-between mb-2.5">
+                  <span className="text-xs font-bold text-[#0F241D] uppercase tracking-wider">
+                    Tasks Needing Attention
                   </span>
-                )}
-              </p>
-              <div className="space-y-2 overflow-y-auto max-h-[180px] pr-1 custom-scrollbar">
-                {attentionTickets.slice(0, 6).map(ticket => (
-                  <div key={ticket._id}
-                    onClick={() => navigate('/admin/work-allocation')}
-                    className="flex items-center justify-between px-3 py-2.5 md:px-4 md:py-3 bg-dash-bg/40 rounded-xl md:rounded-2xl border border-dash-border hover:border-dash-green/30 hover:bg-white cursor-pointer transition-all duration-200 group">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[13px] font-bold text-dash-text truncate group-hover:text-dash-green transition-colors">
-                        {ticket.title}
-                      </p>
-                      <p className="text-[10px] font-medium text-dash-muted tracking-wider mt-0.5">
-                        #{ticket._id.substring(ticket._id.length - 4).toUpperCase()}
-                      </p>
-                    </div>
-                    <span className={`ml-3 text-[10px] font-bold px-3 py-1 rounded-full flex-shrink-0 ${ticket.status === 'Review' ? 'bg-dash-soft-orange text-dash-orange' : 'bg-blue-50 text-blue-600' }`}>
-                      {ticket.status}
+                  {attentionTickets.length > 0 && (
+                    <span className="bg-rose-50 text-rose-600 border border-rose-200 text-xs font-bold px-2.5 py-0.5 rounded-full shrink-0">
+                      {attentionTickets.length} tasks
                     </span>
-                  </div>
-                ))}
-                {attentionTickets.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-6 text-center">
-                    <div className="w-10 h-10 rounded-full bg-dash-soft-green flex items-center justify-center text-dash-green mb-2">
-                      <FaTasks size={16} />
+                  )}
+                </div>
+
+                <div className="space-y-2.5 overflow-y-auto max-h-[250px] pr-2 custom-scrollbar">
+                  {attentionTickets.slice(0, 5).map((ticket) => (
+                    <div
+                      key={ticket._id}
+                      onClick={() => navigate('/admin/work-allocation')}
+                      className="flex items-start sm:items-center justify-between gap-3 p-3 sm:p-3.5 bg-[#F6F9F7] hover:bg-[#F0FAF4] rounded-lg border border-[#E2ECE5] hover:border-emerald-300 cursor-pointer transition-all group"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs sm:text-sm font-semibold text-[#0F241D] leading-snug break-words group-hover:text-[#087443] transition-colors">
+                          {ticket.title}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[11px] font-mono font-medium text-[#526A5E]">
+                            #{ticket._id.substring(ticket._id.length - 4).toUpperCase()}
+                          </span>
+                          {ticket.category && (
+                            <>
+                              <span className="text-slate-300">·</span>
+                              <span className="text-[11px] text-[#526A5E] font-medium truncate">
+                                {ticket.category}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <span
+                        className={`text-xs font-bold px-2.5 sm:px-3 py-1 rounded-full shrink-0 whitespace-nowrap border self-start sm:self-center ${
+                          ticket.status === 'Review'
+                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : 'bg-blue-50 text-blue-700 border-blue-200'
+                        }`}
+                      >
+                        {ticket.status}
+                      </span>
                     </div>
-                    <p className="text-[12px] text-dash-muted font-medium">All tasks are currently on track</p>
+                  ))}
+
+                  {attentionTickets.length === 0 && (
+                    <div className="flex items-center justify-center gap-2.5 py-6 text-center rounded-lg bg-[#F6F9F7] border border-dashed border-[#E2ECE5]">
+                      <FaCheckCircle className="text-[#087443] text-sm" />
+                      <span className="text-sm text-[#526A5E] font-medium">
+                        All tasks are currently on track
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Side-by-Side Operational Queues */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 md:gap-6">
+
+            {/* Pending Leaves Queue */}
+            <div className="bg-white rounded-xl p-5 border border-[#E2ECE5] shadow-sm flex flex-col justify-between">
+              <div>
+                <SectionHeader
+                  title="Leave Approvals"
+                  sub={`${stats.leaves?.pending || 0} pending review`}
+                  icon={FaCalendarAlt}
+                  action="Review"
+                  actionLink="/admin/leaves"
+                />
+
+                <div className="space-y-2 mt-2">
+                  {pendingLeaves && pendingLeaves.length > 0 ? (
+                    pendingLeaves.slice(0, 3).map((leave) => (
+                      <div
+                        key={leave._id}
+                        className="flex items-center justify-between px-3 py-2.5 bg-[#F6F9F7] hover:bg-[#F0FAF4] rounded-lg border border-[#E2ECE5] transition-all text-xs"
+                      >
+                        <span className="font-semibold text-[#0F241D] text-sm truncate">
+                          {leave.worker?.name || 'Unknown'}
+                        </span>
+                        <span className="text-xs text-[#526A5E] font-medium ml-2 whitespace-nowrap">
+                          {new Date(leave.startDate).toLocaleDateString('en-IN', {
+                            day: '2-digit',
+                            month: 'short'
+                          })}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-5 text-center text-xs text-[#526A5E] font-medium">
+                      No pending leave requests
+                    </div>
+                  )}
+
+                  {(stats.leaves?.pending || 0) > 3 && (
+                    <Link
+                      to="/admin/leaves"
+                      className="block text-center text-xs font-bold text-[#087443] pt-1.5 hover:underline"
+                    >
+                      +{(stats.leaves?.pending || 0) - 3} more requests
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Service Timelines & System Status */}
+            <div className="bg-white rounded-xl p-5 border border-[#E2ECE5] shadow-sm flex flex-col justify-between">
+              <div>
+                <SectionHeader
+                  title="Service Timelines"
+                  sub="Domains & Servers"
+                  icon={FaCalendarCheck}
+                  action="Manage"
+                  actionLink="/admin/renewals"
+                />
+
+                {/* 3 mini counters */}
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  <div className="flex flex-col items-center py-2 bg-[#F6F9F7] rounded-lg border border-[#E2ECE5]">
+                    <span className="text-[10px] font-semibold text-[#526A5E] uppercase">Total</span>
+                    <span className="text-sm font-bold text-[#0F241D]">{stats.renewals?.total || 0}</span>
                   </div>
-                )}
+                  <div className="flex flex-col items-center py-2 bg-amber-50/60 rounded-lg border border-amber-100">
+                    <span className="text-[10px] font-semibold text-amber-600 uppercase">Expiring</span>
+                    <span className="text-sm font-bold text-amber-700">{stats.renewals?.expiringSoon || 0}</span>
+                  </div>
+                  <div className="flex flex-col items-center py-2 bg-rose-50/60 rounded-lg border border-rose-100">
+                    <span className="text-[10px] font-semibold text-rose-600 uppercase">Expired</span>
+                    <span className="text-sm font-bold text-rose-700">{stats.renewals?.expired || 0}</span>
+                  </div>
+                </div>
+
+                {/* System Status Banner */}
+                <div
+                  className={`rounded-lg px-3 py-2.5 flex items-center justify-between text-xs font-semibold border ${
+                    (stats.renewals?.expired || 0) > 0
+                      ? 'bg-rose-50 text-rose-800 border-rose-200'
+                      : 'bg-[#F0FAF4] text-[#087443] border-emerald-200'
+                  }`}
+                >
+                  <span>
+                    {(stats.renewals?.expired || 0) > 0 ? 'Action Required' : 'All Systems Healthy'}
+                  </span>
+                  <span className="font-bold text-sm">
+                    {(stats.renewals?.expired || 0) > 0 ? '!' : '✓'}
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* Small Task status summary at the bottom */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-4 border-t border-dash-border/50">
-              <div className="flex flex-col items-center py-2 bg-dash-bg/40 rounded-xl border border-dash-border">
-                <span className="text-[9px] font-bold text-dash-muted">To Do</span>
-                <span className="text-[14px] font-bold text-dash-text">{stats.tickets.todo}</span>
-              </div>
-              <div className="flex flex-col items-center py-2 bg-dash-bg/40 rounded-xl border border-dash-border">
-                <span className="text-[9px] font-bold text-dash-muted text-blue-600">Active</span>
-                <span className="text-[14px] font-bold text-blue-600">{stats.tickets.inProgress}</span>
-              </div>
-              <div className="flex flex-col items-center py-2 bg-dash-bg/40 rounded-xl border border-dash-border">
-                <span className="text-[9px] font-bold text-dash-muted text-dash-orange">Review</span>
-                <span className="text-[14px] font-bold text-dash-orange">{stats.tickets.review}</span>
-              </div>
-              <div className="flex flex-col items-center py-2 bg-dash-bg/40 rounded-xl border border-dash-border">
-                <span className="text-[9px] font-bold text-dash-muted text-dash-green">Done</span>
-                <span className="text-[14px] font-bold text-dash-green">{stats.tickets.done}</span>
-              </div>
-            </div>
           </div>
 
-          {/* ── Col B: Sales Velocity ── */}
-          <div className="dash-card overflow-hidden">
-            <SalesVelocityWidget />
-          </div>
+        </div>
 
-          {/* ── Col C: KPI (top) + Attendance (bottom) ── */}
-          <div className="flex flex-col gap-6">
+        {/* ── Right Column (5 cols) ── */}
+        <div className="xl:col-span-5 flex flex-col gap-5 md:gap-6">
+
+          {/* Performance KPI & Attendance in 2 Balanced Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-5">
 
             {/* Performance KPI */}
-            <div className="dash-card p-4 md:p-6 flex flex-col flex-1">
+            <div className="bg-white rounded-xl p-5 border border-[#E2ECE5] shadow-sm flex flex-col justify-between">
               <SectionHeader
                 title="Performance KPI"
-                sub="Core efficiency metrics"
+                sub="Core turnaround & SLA index"
+                icon={FaChartBar}
                 action="Analytics"
                 actionLink="/admin/kpi-management"
               />
-              <div className="grid grid-cols-1 sm:grid-cols-3 pt-2 flex-1 items-center divide-y divide-dash-border/50 sm:divide-y-0 sm:divide-x divide-dash-border/50">
-                {/* Turnaround */}
-                <div className="text-center px-2 flex flex-col items-center pb-3 sm:pb-0">
-                  <p className="dash-label mb-2">Turnaround</p>
-                  <div className="flex items-baseline gap-1">
-                    <span className="dash-value">{stats.kpi.avgCycleTime}</span>
-                    <span className="text-[12px] font-bold text-dash-muted">Days</span>
-                  </div>
+
+              <div className="grid grid-cols-3 gap-2.5 pt-1">
+                <div className="bg-[#F6F9F7] rounded-lg p-3 border border-[#E2ECE5] text-center">
+                  <span className="text-[10px] font-semibold text-[#526A5E] uppercase block mb-1">
+                    Turnaround
+                  </span>
+                  <span className="text-lg font-black text-[#0F241D] font-display">
+                    {stats.kpi?.avgCycleTime || 0}
+                    <span className="text-xs font-normal text-[#526A5E] ml-0.5">d</span>
+                  </span>
                 </div>
-                {/* Closed 7D */}
-                <div className="text-center px-2 flex flex-col items-center py-3 sm:py-0">
-                  <p className="dash-label mb-2">Closed 7D</p>
-                  <span className="dash-value">{stats.kpi.closedThisWeek}</span>
+
+                <div className="bg-[#F6F9F7] rounded-lg p-3 border border-[#E2ECE5] text-center">
+                  <span className="text-[10px] font-semibold text-[#526A5E] uppercase block mb-1">
+                    Closed 7D
+                  </span>
+                  <span className="text-lg font-black text-[#0F241D] font-display">
+                    {stats.kpi?.closedThisWeek || 0}
+                  </span>
                 </div>
-                {/* SLA Index */}
-                <div className="text-center px-2 flex flex-col items-center pt-3 sm:pt-0">
-                  <p className="dash-label mb-2">SLA Index</p>
-                  <span className={`dash-value ${stats.kpi.slaBreachRate > 20 ? 'text-rose-500' : 'text-dash-green' }`}>
-                    {100 - stats.kpi.slaBreachRate}%
+
+                <div className="bg-[#F6F9F7] rounded-lg p-3 border border-[#E2ECE5] text-center">
+                  <span className="text-[10px] font-semibold text-[#526A5E] uppercase block mb-1">
+                    SLA Index
+                  </span>
+                  <span
+                    className={`text-lg font-black font-display ${
+                      (stats.kpi?.slaBreachRate || 0) > 20 ? 'text-rose-600' : 'text-[#087443]'
+                    }`}
+                  >
+                    {100 - (stats.kpi?.slaBreachRate || 0)}%
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Overall Attendance */}
-            <div className="dash-card p-4 md:p-6 flex-1 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex-1 min-w-0 text-center sm:text-left">
-                <SectionHeader title="Attendance" sub="Today's overview" />
-                <div className="flex gap-6 mt-2">
+            {/* Attendance Overview */}
+            <div className="bg-white rounded-xl p-5 border border-[#E2ECE5] shadow-sm flex items-center justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <SectionHeader
+                  title="Attendance"
+                  sub="Today's Headcount"
+                  icon={FaUsers}
+                />
+                <div className="flex items-center gap-5 mt-1.5">
                   <div>
-                    <p className="dash-label mb-1">Status</p>
-                    <p className={`text-[14px] font-bold ${attendancePercentage >= 80 ? 'text-dash-green' : attendancePercentage >= 50 ? 'text-blue-500' : 'text-rose-500' }`}>
-                      {attendancePercentage >= 80 ? 'Healthy' :
-                        attendancePercentage >= 50 ? 'Moderate' : 'Low'}
-                    </p>
+                    <span className="text-[10px] font-semibold text-[#526A5E] uppercase block mb-0.5">Status</span>
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                        attendancePercentage >= 80
+                          ? 'bg-[#F0FAF4] text-[#087443] border-emerald-200'
+                          : attendancePercentage >= 50
+                          ? 'bg-blue-50 text-blue-700 border-blue-200'
+                          : 'bg-rose-50 text-rose-700 border-rose-200'
+                      }`}
+                    >
+                      {attendancePercentage >= 80
+                        ? 'Healthy'
+                        : attendancePercentage >= 50
+                        ? 'Moderate'
+                        : 'Low'}
+                    </span>
                   </div>
                   <div>
-                    <p className="dash-label mb-1">Present</p>
-                    <p className="text-[14px] font-bold text-dash-text">
-                      {Math.round((attendancePercentage / 100) * stats.workers)} Emp
-                    </p>
+                    <span className="text-[10px] font-semibold text-[#526A5E] uppercase block mb-0.5">Present</span>
+                    <span className="text-base font-black text-[#0F241D] font-display">
+                      {Math.round((attendancePercentage / 100) * (stats.workers || 0))} / {stats.workers || 0} Emp
+                    </span>
                   </div>
                 </div>
               </div>
+
               <CircularProgress
                 percentage={attendancePercentage}
-                size={90}
-                strokeWidth={10}
-                color="#5EB063"
+                size={76}
+                strokeWidth={7}
+                color="#087443"
                 showLabel={true}
               />
             </div>
 
           </div>
-        </div>
 
-        {/* ══════════════════════════════════════════
-            ROW 3 — Departments (left) + Renewals (right)
-        ══════════════════════════════════════════ */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-
-          {/* ── Departments ── */}
-          <div className="dash-card p-4 md:p-6 flex flex-col h-full">
-            <SectionHeader title="Departments" sub="Organization attendance overview" />
-            {departments.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-3 pr-1 custom-scrollbar overflow-y-auto max-h-[440px]">
-                {departments.map((dept) => (
-                  <div key={dept._id}
-                    className="flex items-center justify-between px-2 py-2.5 md:px-4 md:py-3.5 bg-dash-bg/40 rounded-xl md:rounded-2xl border border-dash-border hover:border-dash-green/30 hover:bg-white transition-all duration-200 group gap-2 h-[60px] md:h-[75px]">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-white border border-dash-border flex items-center justify-center text-dash-green flex-shrink-0 shadow-sm group-hover:bg-dash-green group-hover:text-white transition-all">
-                        <FaBuilding size={14} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[11px] md:text-[13px] font-bold text-dash-text truncate leading-tight">
-                          {dept.name}
-                        </p>
-                        <p className="text-[9px] md:text-[11px] text-dash-muted font-medium mt-0.5">
-                          {dept.workerCount || 0} Emp
-                        </p>
-                      </div>
-                    </div>
-                    <CircularProgress
-                      percentage={dept.attendancePercentage || 0}
-                      size={36}
-                      strokeWidth={4}
-                      color={deptColor(dept.attendancePercentage || 0)}
-                      showLabel={true}
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-16 rounded-[24px] border-2 border-dashed border-dash-border bg-dash-bg/30">
-                <p className="text-[14px] text-dash-muted font-bold tracking-widest">
-                  No departments found
-                </p>
-              </div>
-            )}
+          {/* Sales Velocity Widget */}
+          <div className="bg-white rounded-xl border border-[#E2ECE5] shadow-sm overflow-hidden">
+            <SalesVelocityWidget />
           </div>
 
-          {/* ── Renewals ── */}
-          <div className="dash-card p-4 md:p-6 flex flex-col h-full">
-            <SectionHeader
-              title="Renewals"
-              sub="Service timelines"
-              action="View All"
-              actionLink="/admin/renewals"
-            />
-
-            {/* 3-stat row */}
-            <div className="grid grid-cols-3 gap-3 mb-6">
-              {[
-                { label: 'Total', value: stats.renewals.total, cls: 'text-dash-text', bg: 'bg-white' },
-                { label: 'Expiring', value: stats.renewals.expiringSoon, cls: 'text-dash-orange', bg: 'bg-dash-soft-orange' },
-                { label: 'Expired', value: stats.renewals.expired, cls: 'text-rose-500', bg: 'bg-rose-50' },
-              ].map(({ label, value, cls, bg }) => (
-                <div key={label} className={`flex flex-col items-center justify-center py-4 ${bg} rounded-2xl border border-dash-border shadow-sm`}>
-                  <p className="dash-label mb-1">{label}</p>
-                  <p className={`text-[18px] md:text-[24px] font-bold leading-none ${cls}`}>{value}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Status banner */}
-            <div className={`rounded-2xl px-5 py-4 flex items-center justify-between ${stats.renewals.expired > 0 ? 'bg-rose-50 border border-rose-100' : 'bg-dash-soft-green border border-dash-green/20' }`}>
-              <div>
-                <p className="dash-label mb-1 opacity-80">
-                  System Status
-                </p>
-                <p className={`text-[15px] font-bold ${stats.renewals.expired > 0 ? 'text-rose-500' : 'text-dash-green' }`}>
-                  {stats.renewals.expired > 0 ? 'Action Required' : 'All Systems Good'}
-                </p>
-              </div>
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-[20px] ${stats.renewals.expired > 0 ? 'bg-rose-100' : 'bg-green-100' }`}>
-                {stats.renewals.expired > 0 ? '⚠' : '✓'}
-              </div>
-            </div>
-
-            {/* Pending leave quick list */}
-            {pendingLeaves.length > 0 && (
-              <div className="mt-6 pt-6 border-t border-dash-border">
-                <p className="dash-label mb-4 flex items-center justify-between">
-                  Pending Leave Requests
-                  <span className="bg-dash-soft-orange text-dash-orange text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    {stats.leaves.pending}
-                  </span>
-                </p>
-                <div className="space-y-2">
-                  {pendingLeaves.map(leave => (
-                    <div key={leave._id}
-                      className="flex items-center justify-between px-4 py-3 bg-white rounded-2xl border border-dash-border hover:shadow-sm transition-all">
-                      <span className="text-[13px] font-bold text-dash-text truncate">
-                        {leave.worker?.name || 'Unknown'}
-                      </span>
-                      <span className="text-[11px] text-dash-muted font-medium whitespace-nowrap ml-3">
-                        {new Date(leave.startDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                      </span>
-                    </div>
-                  ))}
-                  {stats.leaves.pending > 4 && (
-                    <Link to="/admin/leaves"
-                      className="block text-center text-[12px] font-bold text-dash-green mt-3 hover:underline">
-                      +{stats.leaves.pending - 4} more
-                    </Link>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
         </div>
-
-        {/* ══════════════════════════════════════════
-            ROW 4 — BOTTOM SUMMARY STRIP
-        ══════════════════════════════════════════ */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-          <StatCard title="Leaves Pending" value={stats.leaves.pending} icon={FaCalendarAlt} link="/admin/leaves" />
-          <StatCard title="Leaves Approved" value={stats.leaves.approved} icon={FaCalendarAlt} link="/admin/leaves" />
-          <StatCard title="Comments Unread" value={stats.comments.unread} icon={FaComments} link="/admin/comments" />
-          <StatCard title="Meals Requested" value={stats.foodRequests} icon={FaUsers} />
-        </div>
-
-
 
       </div>
+
+      {/* ══════════════════════════════════════════
+          ROW 3 — DEPARTMENTS OVERVIEW (6 cols on lg)
+      ══════════════════════════════════════════ */}
+      <div className="bg-white rounded-xl p-5 md:p-6 border border-[#E2ECE5] shadow-sm">
+        <SectionHeader
+          title="Department Attendance & Headcount"
+          sub="Active team distribution and attendance across units"
+          icon={FaBuilding}
+          action="Manage Departments"
+          actionLink="/admin/departments"
+        />
+
+        {departments && departments.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {departments.map((dept) => (
+              <div
+                key={dept._id}
+                className="flex items-center justify-between p-3 bg-[#F6F9F7] hover:bg-[#F0FAF4] rounded-lg border border-[#E2ECE5] hover:border-emerald-300 transition-all group"
+              >
+                <div className="min-w-0 flex-1 pr-2">
+                  <p className="text-xs md:text-sm font-semibold text-[#0F241D] truncate leading-tight group-hover:text-[#087443] transition-colors">
+                    {dept.name}
+                  </p>
+                  <p className="text-xs text-[#526A5E] font-medium mt-0.5">
+                    {dept.workerCount || 0} Emp
+                  </p>
+                </div>
+                <CircularProgress
+                  percentage={dept.attendancePercentage || 0}
+                  size={36}
+                  strokeWidth={4}
+                  color={deptColor(dept.attendancePercentage || 0)}
+                  showLabel={true}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-6 text-center text-xs text-[#526A5E] font-medium">
+            No departments configured
+          </div>
+        )}
+      </div>
+
+      {/* ══════════════════════════════════════════
+          ROW 4 — COMPACT SECONDARY SUMMARY STRIP (4 Cards)
+      ══════════════════════════════════════════ */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 md:gap-4">
+        <StatCard
+          title="Managed Topics"
+          value={stats.topics || 0}
+          icon={FaLayerGroup}
+          link="/admin/topics"
+          subtitle="Topic Registry"
+        />
+        <StatCard
+          title="Leaves Approved"
+          value={stats.leaves?.approved || 0}
+          icon={FaCalendarCheck}
+          link="/admin/leaves"
+          subtitle="Historical Approvals"
+        />
+        <StatCard
+          title="Unread Comments"
+          value={stats.comments?.unread || 0}
+          icon={FaComments}
+          link="/admin/comments"
+          subtitle="Feedback & Replies"
+        />
+        <StatCard
+          title="Meals Requested"
+          value={stats.foodRequests || 0}
+          icon={FaUtensils}
+          link="/admin/food-requests"
+          subtitle="Catering Queue"
+        />
+      </div>
+
     </div>
   );
 };

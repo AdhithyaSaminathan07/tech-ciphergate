@@ -157,19 +157,6 @@ const calculateProjectAdjustments = async (workerId, subdomain, currentMonth, cu
     const currentEntitlement = entry.paidWorkingDays * project.currentPerDayValue;
     const adjustment = currentEntitlement - entry.paidAmount;
 
-    // Update ledger entry with recalculated values (for audit trail) only if they changed
-    if (
-      entry.currentPerDayValue !== project.currentPerDayValue ||
-      entry.currentEntitlement !== currentEntitlement ||
-      entry.adjustmentAmount !== adjustment
-    ) {
-      entry.currentPerDayValue = project.currentPerDayValue;
-      entry.currentEntitlement = currentEntitlement;
-      entry.adjustmentAmount = adjustment;
-      entry.updatedAt = new Date();
-      await entry.save();
-    }
-
     totalAdjustment += adjustment;
     adjustmentDetails.push({
       projectId: entry.projectId,
@@ -467,7 +454,7 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
       }).populate('adjustments.addedBy', 'name')
     ]);
 
-    const leaveData = allLeavesForPenalty.filter(l => l.status === 'Approved' || l.leaveType === 'Paid Leave');
+    const leaveData = allLeavesForPenalty.filter(l => l.status === 'Approved');
     const batches = settings ? settings.batches : [];
 
     // Calculate Company/Dept Attendance Penalties (Daily rates)
@@ -522,7 +509,7 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
     });
 
     // Check if there are any bonuses for this period
-    const bonusesForPeriod = worker.bonuses.filter(bonus => {
+    const bonusesForPeriod = (worker.bonuses || []).filter(bonus => {
       return (
         (new Date(bonus.fromDate) <= new Date(toDate)) &&
         (new Date(bonus.toDate) >= new Date(fromDate))
@@ -590,23 +577,6 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
       };
     });
 
-    // ─── PROJECT ADJUSTMENT LEDGER: Recalculate past overpayments/underpayments ──
-    // Auto-record if it is a completed past month
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1;
-    const isPastMonth = (currentReportYear < currentYear) || (currentReportYear === currentYear && currentReportMonth < currentMonth);
-    if (isPastMonth) {
-      await autoRecordProjectPaymentsHelper(id, worker.subdomain, currentReportMonth, currentReportYear);
-    }
-
-    const { totalAdjustment: projectAdjustment, adjustmentDetails: projectAdjustmentDetails } = await calculateProjectAdjustments(
-      id, worker.subdomain, currentReportMonth, currentReportYear
-    );
-
-    // Apply project adjustment to final salary (adjustment may be negative for overpayments)
-    const finalSalaryWithAdjustment = Math.max(0, finalSalaryWithFines + projectAdjustment);
-
     // ── 5X Unauthorized Absence Penalty ──
     const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
     const enableUnauthorizedPermissionPenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty === true;
@@ -624,11 +594,17 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
         : { penalties: [], totalUnauthorizedPenalty: 0 };
 
     // Final salary after subtracting unauthorized absence penalty
-    const finalSalaryAfterUnauthorizedPenalty = Math.max(0, finalSalaryWithAdjustment - totalUnauthorizedPenalty);
+    const finalSalaryAfterUnauthorizedPenalty = Math.max(0, finalSalaryWithFines - totalUnauthorizedPenalty);
+
+    // ─── PROJECT ADJUSTMENT LEDGER: Recalculate past overpayments/underpayments ──
+    const { totalAdjustment: projectAdjustment, adjustmentDetails: projectAdjustmentDetails } = await calculateProjectAdjustments(
+      id, worker.subdomain, currentReportMonth, currentReportYear
+    );
+
+    // Apply project adjustment to final salary (adjustment may be negative for overpayments)
+    const finalSalaryWithAdjustment = Math.max(0, finalSalaryAfterUnauthorizedPenalty + projectAdjustment);
 
     // Enterprise Payroll Module: payrollRecord already fetched via Promise.all above
-
-
     let totalAdditions = 0;
     let totalDeductions = 0;
 
@@ -643,14 +619,15 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
 
     const attendanceSalary = payrollRecord && ['Locked', 'Paid'].includes(payrollRecord.status) && payrollRecord.attendanceSalarySnapshot !== null
       ? payrollRecord.attendanceSalarySnapshot
-      : finalSalaryAfterUnauthorizedPenalty;
+      : finalSalaryWithAdjustment;
 
     const payableSalary = Math.max(0, attendanceSalary + totalAdditions - totalDeductions);
+    const finalSalaryCalculated = Math.max(0, finalSalaryWithAdjustment - taskPenalty);
 
     res.status(200).json({
       message: 'Salary report generated successfully',
       baseSalary: worker.salary,
-      finalSalary: finalSalaryAfterUnauthorizedPenalty,
+      finalSalary: finalSalaryCalculated,
       actualEarnedSalary: report.summary.finalSalary || 0,
       totalDeductions: (report.summary.totalSalaryDeduction || 0) + totalFinesAmount,
       report,
@@ -658,7 +635,7 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
       totalBonusAmount: totalBonusAmount,
       totalFinesAmount: totalFinesAmount,
       finalSalaryWithBonus: finalSalaryWithBonus,
-      finalSalaryWithFines: finalSalaryAfterUnauthorizedPenalty, // includes unauthorized penalty deduction
+      finalSalaryWithFines: finalSalaryWithAdjustment, // includes unauthorized penalty and project adjustment
       projectAdjustment,
       projectAdjustmentDetails,
       isCurrentlyViolating,
@@ -736,10 +713,7 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
 
     const leaveData = await Leave.find({
       worker: id,
-      $or: [
-        { status: 'Approved' },
-        { leaveType: 'Paid Leave' }
-      ]
+      status: 'Approved'
     });
 
     // Fetch ALL leaves (all statuses) separately for the 5X unauthorized absence penalty check
@@ -900,26 +874,9 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
       };
     });
 
-    // ─── PROJECT ADJUSTMENT LEDGER: Recalculate past overpayments/underpayments ──
     const startDateObj = new Date(start);
     const currentReportMonth = startDateObj.getMonth() + 1;
     const currentReportYear = startDateObj.getFullYear();
-
-    // Auto-record if it is a completed past month
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1;
-    const isPastMonth = (currentReportYear < currentYear) || (currentReportYear === currentYear && currentReportMonth < currentMonth);
-    if (isPastMonth) {
-      await autoRecordProjectPaymentsHelper(id, worker.subdomain, currentReportMonth, currentReportYear);
-    }
-
-    const { totalAdjustment: projectAdjustment, adjustmentDetails: projectAdjustmentDetails } = await calculateProjectAdjustments(
-      id, worker.subdomain, currentReportMonth, currentReportYear
-    );
-
-    // Apply project adjustment to final salary
-    const finalSalaryWithAdjustment = Math.max(0, finalSalaryWithFines + projectAdjustment);
 
     // ── 5X Unauthorized Absence Penalty (separate from all existing calculations) ──
     const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
@@ -937,12 +894,21 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
         )
         : { penalties: [], totalUnauthorizedPenalty: 0 };
 
-    const finalSalaryAfterUnauthorizedPenalty = Math.max(0, finalSalaryWithAdjustment - totalUnauthorizedPenalty);
+    const finalSalaryAfterUnauthorizedPenalty = Math.max(0, finalSalaryWithFines - totalUnauthorizedPenalty);
+
+    // ─── PROJECT ADJUSTMENT LEDGER: Recalculate past overpayments/underpayments ──
+    const { totalAdjustment: projectAdjustment, adjustmentDetails: projectAdjustmentDetails } = await calculateProjectAdjustments(
+      id, worker.subdomain, currentReportMonth, currentReportYear
+    );
+
+    // Apply project adjustment to final salary
+    const finalSalaryWithAdjustment = Math.max(0, finalSalaryAfterUnauthorizedPenalty + projectAdjustment);
+    const finalSalaryCalculated = Math.max(0, finalSalaryWithAdjustment - taskPenalty);
 
     const responseData = {
       message: 'Salary report generated successfully',
       baseSalary: worker.salary,
-      finalSalary: finalSalaryAfterUnauthorizedPenalty,
+      finalSalary: finalSalaryCalculated,
       actualEarnedSalary: report.summary.finalSalary || 0,
       totalDeductions: (report.summary.totalSalaryDeduction || 0) + totalFinesAmount,
       report,
@@ -950,7 +916,7 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
       totalBonusAmount: totalBonusAmount,
       totalFinesAmount: totalFinesAmount,
       finalSalaryWithBonus: finalSalaryWithBonus,
-      finalSalaryWithFines: finalSalaryAfterUnauthorizedPenalty,
+      finalSalaryWithFines: finalSalaryWithAdjustment,
       projectAdjustment,
       projectAdjustmentDetails,
       isCurrentlyViolating,
@@ -1489,9 +1455,37 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const isExport = req.query.isExport === 'true';
-    const { searchTerm, filterDepartment, filterMinSalary, filterMaxSalary, filterFineStatus, filterBankStatus, sortBy } = req.query;
+    const fromDateObj = new Date(fromDate);
+    const toDateObj = new Date(toDate);
+    toDateObj.setHours(23, 59, 59, 999);
 
-    const query = { subdomain, status: { $nin: ['Relieved', 'Deleted', 'relieved', 'deleted'] } };
+    const query = {
+      subdomain,
+      $and: [
+        {
+          $or: [
+            { joiningDate: { $lte: toDateObj } },
+            {
+              $and: [
+                {
+                  $or: [
+                    { joiningDate: { $exists: false } },
+                    { joiningDate: null }
+                  ]
+                },
+                { createdAt: { $lte: toDateObj } }
+              ]
+            }
+          ]
+        },
+        {
+          $or: [
+            { status: { $nin: ['Relieved', 'Deleted', 'relieved', 'deleted'] } },
+            { relievedAt: { $gte: fromDateObj } }
+          ]
+        }
+      ]
+    };
 
     // 1. Search Term (name, rfid, or department name)
     if (searchTerm) {
@@ -1582,9 +1576,6 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
     }
 
     const workers = await workersQuery;
-    const fromDateObj = new Date(fromDate);
-    const toDateObj = new Date(toDate);
-    toDateObj.setHours(23, 59, 59, 999);
     const reportYear = fromDateObj.getFullYear();
     const bulkFromDate = new Date(fromDate);
     const bulkMonth = bulkFromDate.getMonth() + 1;
@@ -1618,6 +1609,25 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
       ProjectPaymentLedger.find({ subdomain, isSettled: true, $or: [{ year: { $lt: bulkYear } }, { year: bulkYear, month: { $lt: bulkMonth } }] }),
       ProjectPaymentLedger.find({ subdomain, month: bulkMonth, year: bulkYear, isSettled: true }).select('employeeId projectId')
     ]);
+
+    // Fix 2: Preserve existing historical payroll records for workers who were relieved/deleted
+    // but have a valid PayrollRecord for this month/year/subdomain
+    const existingWorkerIds = new Set(workers.map(w => w._id.toString()));
+    const missingRecordedWorkerIds = allPayrollRecords
+      .map(pr => pr.workerId?.toString())
+      .filter(wId => wId && !existingWorkerIds.has(wId));
+
+    if (missingRecordedWorkerIds.length > 0) {
+      const historicalRecordedWorkers = await Worker.find({
+        _id: { $in: missingRecordedWorkerIds },
+        subdomain
+      }).populate('department').select('+fines');
+
+      historicalRecordedWorkers.forEach(hw => {
+        workers.push(hw);
+        existingWorkerIds.add(hw._id.toString());
+      });
+    }
 
     const batches = settings ? settings.batches : [];
     const settledWorkerIds = new Set(currentMonthSettledLedgers.map(l => l.employeeId.toString()));
@@ -1748,11 +1758,11 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
       });
 
       // Bonus
-      const totalBonusAmount = worker.bonuses
+      const totalBonusAmount = (worker.bonuses || [])
         .filter(b => new Date(b.fromDate) <= toDateObj && new Date(b.toDate) >= fromDateObj)
         .reduce((sum, b) => sum + b.amount, 0);
 
-      const bonusesForPeriod = worker.bonuses.filter(bonus => {
+      const bonusesForPeriod = (worker.bonuses || []).filter(bonus => {
         return (
           (new Date(bonus.fromDate) <= toDateObj) &&
           (new Date(bonus.toDate) >= fromDateObj)
@@ -1879,30 +1889,11 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
 
       let totalAdjustment = 0;
       const adjustmentDetails = [];
-      const ledgerUpdates = [];
-
       for (const entry of workerLedgers) {
         const project = projectMap[entry.projectId.toString()];
         if (!project) continue;
         const currentEntitlement = entry.paidWorkingDays * project.currentPerDayValue;
         const adjustment = currentEntitlement - entry.paidAmount;
-
-        // Queue updates ONLY if values have actually changed
-        if (
-          entry.currentPerDayValue !== project.currentPerDayValue ||
-          entry.currentEntitlement !== currentEntitlement ||
-          entry.adjustmentAmount !== adjustment
-        ) {
-          ledgerUpdates.push(ProjectPaymentLedger.updateOne(
-            { _id: entry._id },
-            {
-              currentPerDayValue: project.currentPerDayValue,
-              currentEntitlement,
-              adjustmentAmount: adjustment,
-              updatedAt: new Date()
-            }
-          ));
-        }
 
         totalAdjustment += adjustment;
         adjustmentDetails.push({
@@ -1920,17 +1911,11 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
           currentTotalDays: project.currentTotalWorkingDays
         });
       }
-      if (ledgerUpdates.length > 0) {
-        await Promise.all(ledgerUpdates);
-      }
       return { totalAdjustment, adjustmentDetails };
     };
 
     const adjustedResults = await Promise.all(results.map(async (result) => {
       try {
-        if (isPastMonth && !settledWorkerIds.has(result.workerId)) {
-          await autoRecordProjectPaymentsHelper(result.workerId, result.subdomain || subdomain, bulkMonth, bulkYear);
-        }
         const { totalAdjustment, adjustmentDetails } = await calculateProjectAdjustmentsOptimized(result.workerId);
         const finalSalaryWithAdjustment = Math.max(0, result.totalFinalSalary + totalAdjustment);
 
@@ -1990,34 +1975,6 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         };
       }
     }));
-
-    // Save totalNetPayout and topTeams to DashboardSalaryStat only when page is not present or isExport is true
-    if (isExport || !req.query.page) {
-      const teamEarnings = {};
-      const activeWorkerIds = new Set(workers.map(w => w._id.toString()));
-
-      let totalNetPayout = 0;
-      adjustedResults.forEach(r => {
-        if (activeWorkerIds.has(r.workerId)) {
-          totalNetPayout += (Number(r.grossFinalSalary || r.totalFinalSalary) || 0);
-
-          if (r.department && r.department !== 'N/A') {
-            teamEarnings[r.department] = (teamEarnings[r.department] || 0) + (Number(r.totalFinalSalary) || 0);
-          }
-        }
-      });
-
-      const sortedTeams = Object.entries(teamEarnings)
-        .map(([name, amount]) => ({ name, amount }))
-        .sort((a, b) => b.amount - a.amount)
-        .slice(0, 3);
-
-      await DashboardSalaryStat.findOneAndUpdate(
-        { subdomain },
-        { totalNetPayout, topTeams: sortedTeams, lastCalculated: new Date() },
-        { upsert: true, new: true }
-      );
-    }
 
     if (needsInMemorySort) {
       if (sortBy === 'final-asc') {
@@ -2453,16 +2410,17 @@ const getPayrollRecord = async (req, res) => {
     }).populate('adjustments.addedBy', 'name email').populate('adjustments.deletedBy', 'name email').populate('history.actionBy', 'name email');
 
     if (!record) {
-      record = new PayrollRecord({
+      record = {
         workerId,
         subdomain,
         month: parseInt(month),
         year: parseInt(year),
         status: 'Draft',
+        attendanceSalarySnapshot: null,
         adjustments: [],
-        history: []
-      });
-      await record.save();
+        history: [],
+        isVirtual: true
+      };
     }
 
     res.status(200).json({ success: true, record });
@@ -2722,13 +2680,14 @@ const getDashboardSalaryStats = asyncHandler(async (req, res) => {
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 3);
 
-    const newStat = await DashboardSalaryStat.findOneAndUpdate(
-      { subdomain },
-      { totalNetPayout, topTeams: sortedTeams, lastCalculated: new Date() },
-      { upsert: true, new: true }
-    );
-
-    return res.status(200).json(newStat);
+    // Return in-memory computed snapshot without mutating DB on GET
+    return res.status(200).json({
+      subdomain,
+      totalNetPayout,
+      topTeams: sortedTeams,
+      lastCalculated: new Date(),
+      isReadOnlySnapshot: true
+    });
   } catch (error) {
     console.error('Dashboard salary stats error:', error);
     res.status(500).json({ message: 'Failed to fetch dashboard salary stats' });

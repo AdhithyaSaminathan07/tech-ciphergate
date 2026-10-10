@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Search, ChevronDown, LogOut, User, Settings, LayoutGrid } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+import { getFullFileUrl } from '../../utils/fileUtils';
 
 const AdminMobileMenu = ({ isOpen, onClose, links, user, onLogout }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -58,45 +59,50 @@ const AdminMobileMenu = ({ isOpen, onClose, links, user, onLogout }) => {
             className="fixed inset-y-0 left-0 w-[85%] max-w-[340px] bg-white z-[201] shadow-2xl flex flex-col md:hidden"
           >
             {/* Sidebar Header: Logo & Close */}
-            <div className="p-6 flex items-center justify-between border-b border-slate-50">
+            <div className="p-5 flex items-center justify-between border-b border-[#E2ECE5] bg-[#064E3B] text-white">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0d9488] to-[#0f766e] flex items-center justify-center shadow-lg shadow-teal-100">
-                  <img src="/logo.png" alt="Logo" className="w-6 h-6 object-contain brightness-0 invert" />
+                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20 shadow-sm">
+                  <img src="/logo.png" alt="Logo" className="w-6 h-6 object-contain" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-black text-slate-900 leading-none">CipherGate</h2>
-                  <p className="text-[10px] font-bold text-teal-600 tracking-widest mt-1">Admin Panel</p>
+                  <h2 className="text-lg font-black text-white leading-none">CipherGate</h2>
+                  <p className="text-[10px] font-bold text-emerald-300 tracking-widest mt-1 uppercase">Admin Panel</p>
                 </div>
               </div>
               <button
                 onClick={onClose}
-                className="p-2 rounded-xl bg-slate-50 text-slate-400 hover:text-slate-600 active:scale-95 transition-all"
+                className="p-2 rounded-xl bg-white/10 text-white hover:bg-white/20 active:scale-95 transition-all"
               >
                 <X size={20} />
               </button>
             </div>
 
-            {/* User Profile Summary (Optional but Professional) */}
+            {/* User Profile Summary */}
             {user && (
-              <div className="px-6 py-4 bg-slate-50/50 border-b border-slate-50">
+              <div className="px-5 py-3.5 bg-[#F6F9F7] border-b border-[#E2ECE5]">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-teal-600 font-black text-sm shadow-sm overflow-hidden">
+                  <div className="w-9 h-9 rounded-full bg-[#087443] border border-[#E2ECE5] flex items-center justify-center text-white font-black text-sm shadow-sm overflow-hidden shrink-0">
                     {user.photo ? (
-                      <img src={user.photo} alt={user.name} className="w-full h-full object-cover" />
+                      <img
+                        src={getFullFileUrl(user.photo)}
+                        alt={user.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
                     ) : (
-                      <span>{user.name?.charAt(0).toUpperCase()}</span>
+                      <span>{(user.name || user.username || 'A').charAt(0).toUpperCase()}</span>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-black text-slate-800 truncate">{user.name}</p>
-                    <p className="text-[10px] font-bold text-slate-400 truncate">{user.email}</p>
+                    <p className="text-sm font-bold text-[#0F241D] truncate">{user.displayName || user.name || user.username}</p>
+                    <p className="text-[11px] font-medium text-[#526A5E] truncate">{user.email || user.role || 'Administrator'}</p>
                   </div>
                 </div>
               </div>
             )}
 
             {/* Search Module */}
-            <div className="p-4 px-6">
+            <div className="p-3.5 px-5">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input
@@ -104,18 +110,18 @@ const AdminMobileMenu = ({ isOpen, onClose, links, user, onLogout }) => {
                   placeholder="Search modules..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-100/50 border-none rounded-xl text-sm focus:ring-2 focus:ring-teal-500 transition-all font-medium placeholder:text-slate-400"
+                  className="w-full pl-9 pr-4 py-2 bg-[#F6F9F7] border border-[#E2ECE5] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#087443]/20 focus:border-[#087443] transition-all font-medium placeholder:text-slate-400"
                 />
               </div>
             </div>
 
             {/* Sidebar Body: Scrollable Modules */}
-            <div className="flex-1 overflow-y-auto py-2 custom-scrollbar no-scrollbar">
+            <div className="flex-1 overflow-y-auto py-1.5 custom-scrollbar no-scrollbar">
               {filteredLinks.map((link, idx) => {
                 if (link.isHeader) {
                   return (
-                    <div key={idx} className="px-8 py-3 mt-2">
-                      <span className="text-[10px] font-black tracking-[0.15em] text-slate-400/80">
+                    <div key={idx} className="px-6 py-2.5 mt-1">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#526A5E]">
                         {link.label}
                       </span>
                     </div>
@@ -128,18 +134,15 @@ const AdminMobileMenu = ({ isOpen, onClose, links, user, onLogout }) => {
                     <Link
                       key={link.to || idx}
                       to={link.to}
-                      className={`flex items-center gap-3 px-8 py-3.5 transition-all relative group ${isActive ? 'text-[#0d9488]' : 'text-slate-600 active:bg-slate-50' }`}
+                      className={`flex items-center gap-3 px-6 py-3 transition-all relative group ${isActive ? 'bg-[#F0FAF4] text-[#087443] font-bold' : 'text-slate-700 hover:bg-[#F6F9F7]'}`}
                     >
                       {isActive && (
-                        <motion.div
-                          layoutId="activeTab"
-                          className="absolute left-0 top-0 bottom-0 w-1 bg-[#0d9488] rounded-r-full"
-                        />
+                        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#087443] rounded-r-full" />
                       )}
-                      <span className={`text-xl transition-colors ${isActive ? 'text-[#0d9488]' : 'text-slate-400 group-hover:text-slate-600'}`}>
+                      <span className={`text-lg transition-colors ${isActive ? 'text-[#087443]' : 'text-slate-400 group-hover:text-slate-600'}`}>
                         {link.icon}
                       </span>
-                      <span className={`text-[15px] transition-all ${isActive ? 'font-bold translate-x-1' : 'font-semibold'}`}>
+                      <span className="text-sm">
                         {link.label}
                       </span>
                     </Link>
@@ -151,16 +154,16 @@ const AdminMobileMenu = ({ isOpen, onClose, links, user, onLogout }) => {
                 const hasActiveChild = link.children?.some(c => location.pathname === c.to);
 
                 return (
-                  <div key={link.label || idx} className="mb-1">
+                  <div key={link.label || idx} className="mb-0.5">
                     <button
                       onClick={() => toggleSection(link.label)}
-                      className={`w-full flex items-center justify-between px-8 py-3.5 transition-all group ${hasActiveChild || isExpanded ? 'text-slate-900' : 'text-slate-600 hover:bg-slate-50/50' }`}
+                      className={`w-full flex items-center justify-between px-6 py-3 transition-all group ${hasActiveChild || isExpanded ? 'bg-[#F6F9F7] text-[#0F241D] font-bold' : 'text-slate-700 hover:bg-[#F6F9F7]/60'}`}
                     >
                       <div className="flex items-center gap-3">
-                        <span className={`text-xl transition-colors ${hasActiveChild || isExpanded ? 'text-[#0d9488]' : 'text-slate-400'}`}>
+                        <span className={`text-lg transition-colors ${hasActiveChild || isExpanded ? 'text-[#087443]' : 'text-slate-400'}`}>
                           {link.icon}
                         </span>
-                        <span className={`text-[15px] ${hasActiveChild || isExpanded ? 'font-bold' : 'font-semibold'}`}>
+                        <span className="text-sm">
                           {link.label}
                         </span>
                       </div>
@@ -168,7 +171,7 @@ const AdminMobileMenu = ({ isOpen, onClose, links, user, onLogout }) => {
                         animate={{ rotate: isExpanded ? 180 : 0 }}
                         transition={{ duration: 0.2 }}
                       >
-                        <ChevronDown size={16} className={isExpanded ? 'text-[#0d9488]' : 'text-slate-300'} />
+                        <ChevronDown size={16} className={isExpanded ? 'text-[#087443]' : 'text-slate-400'} />
                       </motion.div>
                     </button>
 
@@ -178,14 +181,14 @@ const AdminMobileMenu = ({ isOpen, onClose, links, user, onLogout }) => {
                           initial={{ height: 0, opacity: 0 }}
                           animate={{ height: 'auto', opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
-                          className="overflow-hidden bg-slate-50/30"
+                          className="overflow-hidden bg-[#F6F9F7]/50"
                         >
                           <div className="py-1">
                             {link.children?.map((child, cIdx) => {
                               if (child.isSubHeader) {
                                 return (
-                                  <div key={cIdx} className="px-16 py-2 mt-2 opacity-40">
-                                    <span className="text-[9px] font-black tracking-widest text-slate-500">
+                                  <div key={cIdx} className="px-12 py-1.5 mt-1">
+                                    <span className="text-[9px] font-bold tracking-wider uppercase text-[#526A5E]">
                                       {child.label}
                                     </span>
                                   </div>
@@ -197,19 +200,14 @@ const AdminMobileMenu = ({ isOpen, onClose, links, user, onLogout }) => {
                                 <Link
                                   key={child.to || cIdx}
                                   to={child.to}
-                                  className={`flex items-center gap-3 pl-16 pr-8 py-3 transition-all relative ${isChildActive ? 'text-[#0d9488]' : 'text-slate-500 hover:text-slate-800 active:text-[#0d9488]' }`}
+                                  className={`flex items-center gap-2.5 pl-12 pr-6 py-2.5 transition-all relative ${isChildActive ? 'bg-[#F0FAF4] text-[#087443] font-bold' : 'text-slate-600 hover:text-[#0F241D]'}`}
                                 >
                                   {isChildActive && (
-                                    <div className="absolute left-[34px] top-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-[#0d9488]" />
+                                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#087443] rounded-r-full" />
                                   )}
-                                  <span className={`text-[14px] ${isChildActive ? 'font-bold' : 'font-medium'}`}>
+                                  <span className="text-xs">
                                     {child.label}
                                   </span>
-                                  {child.badge && (
-                                    <span className="ml-auto bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
-                                      {child.badge}
-                                    </span>
-                                  )}
                                 </Link>
                               );
                             })}
@@ -222,16 +220,16 @@ const AdminMobileMenu = ({ isOpen, onClose, links, user, onLogout }) => {
               })}
             </div>
 
-            {/* Sidebar Footer: Logout */}
-            <div className="p-6 border-t border-slate-50 bg-white">
+            {/* Logout Footer */}
+            <div className="p-4 border-t border-[#E2ECE5] bg-[#F6F9F7]">
               <button
                 onClick={() => {
-                  onLogout();
                   onClose();
+                  onLogout();
                 }}
-                className="w-full flex items-center justify-center gap-3 py-3.5 rounded-2xl bg-rose-50 text-rose-600 font-black text-sm hover:bg-rose-100 active:scale-[0.98] transition-all shadow-sm"
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-white border border-[#E2ECE5] hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 text-slate-700 rounded-xl font-semibold text-xs transition-all shadow-sm"
               >
-                <LogOut size={18} />
+                <LogOut size={15} />
                 <span>Sign Out</span>
               </button>
             </div>

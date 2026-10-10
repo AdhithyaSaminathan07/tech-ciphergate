@@ -145,11 +145,8 @@ const calculateWorkerProductivity = (productivityParameters) => {
     const dateStr = new Date(date).toISOString().split('T')[0];
 
     return leaveData.find(l => {
-      // For Paid Leave type, we include it even if Pending or Rejected for salary calculation
-      // For other types, they MUST be approved
-      if (l.leaveType === 'Paid Leave') {
-        // Include it
-      } else if (l.status !== 'Approved') {
+      // Fix 4: Require Approved status for all leave types before treating as valid leave
+      if (l.status !== 'Approved') {
         return false;
       }
 
@@ -943,20 +940,45 @@ const calculateWorkerProductivity = (productivityParameters) => {
   const allDates = generateDateRange(fromDate, toDate);
   const totalDaysInPeriod = allDates.length;
   const totalSundaysInPeriod = countSundaysInRange(fromDate, toDate);
-
-  // Count holidays that apply to this specific worker
   const totalHolidaysInPeriod = allDates.filter(date => isHolidayForWorker(date, worker._id)).length;
-  // FIXED: Working days should only exclude Sundays, not holidays
+
+  // Working days should only exclude Sundays, not holidays
   // Holidays are paid days but still count as working days for per-day salary calculation
   const totalWorkingDaysInPeriod = totalDaysInPeriod - totalSundaysInPeriod;
-  const perDaySalary = totalWorkingDaysInPeriod > 0 ? originalSalary / totalWorkingDaysInPeriod : 0;
+
+  // Stage 2C: Monthly payroll divisor calculation
+  // For single calendar month periods (including partial ranges), use the full calendar month's working days.
+  // For multi-month ranges, preserve totalWorkingDaysInPeriod divisor.
+  const fromDateObj = new Date(fromDate);
+  const toDateObj = new Date(toDate);
+  const isSameCalendarMonth = !isNaN(fromDateObj.getTime()) && !isNaN(toDateObj.getTime()) &&
+    fromDateObj.getFullYear() === toDateObj.getFullYear() &&
+    fromDateObj.getMonth() === toDateObj.getMonth();
+
+  let salaryDivisorWorkingDays = totalWorkingDaysInPeriod;
+  if (isSameCalendarMonth) {
+    const calYear = fromDateObj.getFullYear();
+    const calMonth = fromDateObj.getMonth();
+    const fullMonthStart = new Date(calYear, calMonth, 1);
+    const fullMonthEnd = new Date(calYear, calMonth + 1, 0);
+    const fullMonthDates = generateDateRange(fullMonthStart, fullMonthEnd);
+    const fullMonthSundays = fullMonthDates.filter(d => isSunday(d)).length;
+    salaryDivisorWorkingDays = fullMonthDates.length - fullMonthSundays;
+  }
+
+  const perDaySalary = salaryDivisorWorkingDays > 0 ? originalSalary / salaryDivisorWorkingDays : 0;
   const perMinuteSalary = standardWorkingMinutes > 0 ? perDaySalary / standardWorkingMinutes : 0;
 
-  // NEW: Calculate expected SAAS Base Salary (SAAS Days Only)
+  const joiningDateStr = worker.joiningDate ? new Date(worker.joiningDate).toISOString().split('T')[0] : null;
+  const relievedDateStr = worker.relievedAt ? new Date(worker.relievedAt).toISOString().split('T')[0] : null;
+
+  // NEW: Calculate expected SAAS Base Salary (SAAS Days Only during active employment)
   let saasWorkingDaysCount = 0;
   let projectWorkingDaysCount = 0;
   allDates.forEach(date => {
-    if (!isSunday(date)) {
+    const dStr = date.toISOString().split('T')[0];
+    const isOutsideEmployment = (joiningDateStr && dStr < joiningDateStr) || (relievedDateStr && dStr > relievedDateStr);
+    if (!isSunday(date) && !isOutsideEmployment) {
       if (getProjectForDate(date)) {
         projectWorkingDaysCount++;
       } else {
@@ -1403,6 +1425,39 @@ const calculateWorkerProductivity = (productivityParameters) => {
     const isSundayDay = isSunday(date);
     // NEW: Check if holiday applies to this specific worker
     const holidayInfo = isHolidayForWorker(date, worker._id);
+
+    // Fix 1: Check if date is before joiningDate or after relievedAt
+    const isPreEmployment = joiningDateStr && dateString < joiningDateStr;
+    const isPostEmployment = relievedDateStr && dateString > relievedDateStr;
+
+    if (isPreEmployment || isPostEmployment) {
+      const statusText = isPreEmployment ? 'Not Employed' : 'Relieved';
+      const dayData = {
+        date: dateString,
+        punchTime: '-',
+        workingMinutes: 0,
+        permissionMinutes: 0,
+        salaryDeduction: 0,
+        issues: [statusText],
+        detailedBreakdown: { intervals: [], deductions: [], permissionDetails: [] }
+      };
+      const reportEntry = {
+        date: formatDate(dateString),
+        outTime: '-',
+        inTime: '-',
+        delayTime: '-',
+        delayType: statusText,
+        deductionAmount: formatCurrency(0),
+        totalSalary: formatCurrency(0),
+        status: statusText,
+        workType: 'SAAS',
+        projectName: null,
+        projectId: null
+      };
+      report.push(reportEntry);
+      dailyBreakdown.push(dayData);
+      return;
+    }
 
     // Hybrid: determine workType for this missed day
     const missedActiveProject = getProjectForDate(date);
@@ -2170,7 +2225,8 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
   });
   const todayStr = indiaDateFormatter.format(now);
 
-  // Compute perDaySalary: salary / working days in period (excluding Sundays)
+  // Compute perDaySalary: for single-calendar-month requests (full or partial), use full calendar month working days.
+  // For multi-month ranges, preserve period working days divisor.
   const fromDateObj = new Date(fromDate);
   const toDateObj = new Date(toDate);
   let workingDays = 0;
@@ -2179,7 +2235,29 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
     if (counter.getDay() !== 0) workingDays++;
     counter.setDate(counter.getDate() + 1);
   }
-  const perDaySalary = workingDays > 0 ? (worker.salary || 0) / workingDays : 0;
+
+  const isSameCalendarMonth = !isNaN(fromDateObj.getTime()) && !isNaN(toDateObj.getTime()) &&
+    fromDateObj.getFullYear() === toDateObj.getFullYear() &&
+    fromDateObj.getMonth() === toDateObj.getMonth();
+
+  let salaryDivisorWorkingDays = workingDays;
+  if (isSameCalendarMonth) {
+    const calYear = fromDateObj.getFullYear();
+    const calMonth = fromDateObj.getMonth();
+    const fullMonthEnd = new Date(calYear, calMonth + 1, 0);
+    let fullMonthWorkingDays = 0;
+    const fullMonthCounter = new Date(calYear, calMonth, 1);
+    while (fullMonthCounter <= fullMonthEnd) {
+      if (fullMonthCounter.getDay() !== 0) fullMonthWorkingDays++;
+      fullMonthCounter.setDate(fullMonthCounter.getDate() + 1);
+    }
+    salaryDivisorWorkingDays = fullMonthWorkingDays;
+  }
+
+  const perDaySalary = salaryDivisorWorkingDays > 0 ? (worker.salary || 0) / salaryDivisorWorkingDays : 0;
+
+  const joiningDateStr = worker.joiningDate ? new Date(worker.joiningDate).toISOString().split('T')[0] : null;
+  const relievedDateStr = worker.relievedAt ? new Date(worker.relievedAt).toISOString().split('T')[0] : null;
 
   // Build a set of dateStrings that have a punch-in (presence === true)
   const punchInDates = new Set();
@@ -2270,6 +2348,12 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
   while (d <= toDateObj) {
     const dateStr = indiaDateFormatter.format(d);
 
+    // ── Fix 1: Skip days outside active employment window ──
+    if ((joiningDateStr && dateStr < joiningDateStr) || (relievedDateStr && dateStr > relievedDateStr)) {
+      d.setDate(d.getDate() + 1);
+      continue;
+    }
+
     // ── Safety Rule: Only evaluate PAST and PRESENT days ──
     if (dateStr > todayStr) {
       d.setDate(d.getDate() + 1);
@@ -2303,7 +2387,7 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
         });
 
         // Safety Rule: Approved leave → normal processing, skip
-        const hasApprovedLeave = fullDayLeavesForDay.some(l => l.status === 'Approved' || l.leaveType === 'Paid Leave');
+        const hasApprovedLeave = fullDayLeavesForDay.some(l => l.status === 'Approved');
 
         if (!hasApprovedLeave) {
           const hasRejectedLeave = fullDayLeavesForDay.some(l => l.status === 'Rejected');

@@ -274,10 +274,10 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                         {/* Center: Search Bar */}
                         <div className="hidden md:flex items-center justify-center flex-1 max-w-xl px-4 h-full">
                             <div
-                                className={`w-full max-w-[560px] flex items-center bg-slate-100/50 border border-transparent rounded-xl px-4 py-2.5 gap-3 cursor-pointer hover:bg-slate-100 transition-all group ${isAdmin ? 'bg-slate-50/80 hover:ring-2 hover:ring-teal-500/10 shadow-sm' : ''}`}
+                                className={`w-full max-w-[560px] flex items-center bg-slate-100/50 border border-transparent rounded-xl px-4 py-2.5 gap-3 cursor-pointer hover:bg-slate-100 transition-all group ${isAdmin ? 'bg-slate-50/80 hover:ring-2 hover:ring-[#087443]/15 shadow-sm' : ''}`}
                                 onClick={() => setIsSearchOpen(true)}
                             >
-                                <Search size={18} className="text-teal-600/80" />
+                                <Search size={18} className="text-[#087443]/80" />
                                 <span className="text-[13px] text-slate-500 font-medium group-hover:text-slate-600 flex-1">
                                     {isAdmin ? "Search everything..." : "Search tasks..."}
                                 </span>
@@ -326,9 +326,9 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                                                         <button
                                                             key={item.path}
                                                             onClick={() => { navigate(item.path); setIs3DotOpen(false); }}
-                                                            className="w-full flex items-center gap-3 px-3 py-2.5 sm:px-4 sm:py-3 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-[#0d9488] rounded-xl transition-all"
+                                                            className="w-full flex items-center gap-3 px-3 py-2.5 sm:px-4 sm:py-3 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-[#087443] rounded-xl transition-all"
                                                         >
-                                                            <span className="text-slate-400 group-hover:text-[#0d9488]">{item.icon}</span>
+                                                            <span className="text-slate-400 group-hover:text-[#087443]">{item.icon}</span>
                                                             <span>{item.label}</span>
                                                         </button>
                                                     ))}
@@ -344,7 +344,7 @@ const Header = ({ user, menuLinks = [], sidebarLinks = [], onLogout, isAdmin = f
                             <div className="relative" ref={dropdownRef}>
                                 <button
                                     onClick={() => setIsOpen(!isOpen)}
-                                    className={`relative p-2.5 rounded-xl transition-all duration-300 ${isOpen ? 'bg-teal-50 text-teal-600 shadow-inner' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100/50'}`}
+                                    className={`relative p-2.5 rounded-xl transition-all duration-300 ${isOpen ? 'bg-[#F0FAF4] text-[#087443] shadow-inner' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100/50'}`}
                                 >
                                     <Bell className={`w-[18px] h-[18px] md:w-[20px] md:h-[20px] ${unreadCount > 0 ? 'animate-wiggle' : ''}`} strokeWidth={isAdmin ? 2.5 : 2} />
                                     {unreadCount > 0 && (

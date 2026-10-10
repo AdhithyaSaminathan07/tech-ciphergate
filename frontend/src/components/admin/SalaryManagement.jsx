@@ -158,6 +158,14 @@ const SalaryManagement = () => {
         return saved === null ? true : saved === 'true';
     });
     const [showDetailedBreakdown, setShowDetailedBreakdown] = useState(false);
+
+    // Stage 2C: Pure helper for effective displayed payout based on deductionView toggle
+    const getEffectivePayableSalary = (record, isDeductionView) => {
+        if (!record) return 0;
+        const base = record.payableSalary !== undefined ? record.payableSalary : (record.totalFinalSalary || 0);
+        const penalty = isDeductionView ? (record.taskPenalty || 0) : 0;
+        return Math.max(0, base - penalty);
+    };
     const [showTaskDeductionBreakdown, setShowTaskDeductionBreakdown] = useState(false);
     const [penaltyExplanation, setPenaltyExplanation] = useState(null);
 
@@ -1267,7 +1275,7 @@ const SalaryManagement = () => {
         doc.text(`Period: ${monthName} ${selectedYear}`, 14, 33);
 
         // Summary Stats
-        const totalPayout = bulkReportData.reduce((sum, r) => sum + Math.max(0, (r.payableSalary !== undefined ? r.payableSalary : r.totalFinalSalary) - (deductionView ? (r.taskPenalty || 0) : 0)), 0);
+        const totalPayout = bulkReportData.reduce((sum, r) => sum + getEffectivePayableSalary(r, deductionView), 0);
 
         doc.setTextColor(255, 255, 255);
         doc.text(`Total Employees: ${bulkReportData.length}`, pageWidth - 60, 25);
@@ -1284,7 +1292,7 @@ const SalaryManagement = () => {
                     r.name,
                     `Rs. ${(r.attendanceSalary || r.totalFinalSalary).toFixed(2)}`,
                     adjsText || 'None',
-                    `Rs. ${(r.payableSalary !== undefined ? r.payableSalary : r.totalFinalSalary).toFixed(2)}`
+                    `Rs. ${getEffectivePayableSalary(r, deductionView).toFixed(2)}`
                 ];
             });
         } else {
@@ -1296,7 +1304,7 @@ const SalaryManagement = () => {
                 `${r.actualWorkingDays} Days`,
                 `${r.totalAbsentDays} Days`,
                 r.projectAdjustment ? `${r.projectAdjustment > 0 ? '+' : ''}Rs. ${r.projectAdjustment.toFixed(2)}` : 'Rs. 0.00',
-                `Rs. ${Math.max(0, (r.payableSalary !== undefined ? r.payableSalary : r.totalFinalSalary) - (deductionView ? (r.taskPenalty || 0) : 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+                `Rs. ${getEffectivePayableSalary(r, deductionView).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
             ]);
         }
 
@@ -1357,8 +1365,8 @@ const SalaryManagement = () => {
                 ['Total Deductions', formatCurrency(reportData.report.totalSalaryDeduction)],
                 ['Bonus Applied', formatCurrency(reportData.totalBonusAmount)],
                 ['Fines Applied', formatCurrency(reportData.totalFinesAmount)],
-                ['Task Penalty', formatCurrency(deductionView ? data.taskPenalty : 0)],
-                ['Net Payout', formatCurrency(Math.max(0, data.totalFinalSalary - (deductionView ? data.taskPenalty : 0)))]
+                ['Task Penalty', formatCurrency(deductionView ? (data.taskPenalty || 0) : 0)],
+                ['Net Payout', formatCurrency(getEffectivePayableSalary(data, deductionView))]
             ];
 
             autoTable(doc, {
@@ -1497,7 +1505,7 @@ const SalaryManagement = () => {
         // Build data rows
         const dataRows = bulkReportData.map((report, index) => {
             const worker = workers.find(w => w._id === report.workerId);
-            const finalSalary = Math.max(0, report.totalFinalSalary - (deductionView ? (report.taskPenalty || 0) : 0));
+            const finalSalary = getEffectivePayableSalary(report, deductionView);
             const refNo = `SAL${selectedYear}${String(selectedMonth).padStart(2, '0')}${String(index + 1).padStart(4, '0')}`;
             return [
                 'PAB_VENDOR',
@@ -1597,7 +1605,7 @@ const SalaryManagement = () => {
                     report.name,
                     (report.attendanceSalary || report.totalFinalSalary).toFixed(2),
                     adjsText || 'None',
-                    (report.payableSalary !== undefined ? report.payableSalary : report.totalFinalSalary).toFixed(2)
+                    getEffectivePayableSalary(report, deductionView).toFixed(2)
                 ];
             });
         } else {
@@ -1609,7 +1617,7 @@ const SalaryManagement = () => {
             rows = bulkReportData.map(report => {
                 const worker = workers.find(w => w._id === report.workerId);
                 const hasBankDetails = worker?.bankDetails?.accountNumber && worker?.bankDetails?.ifscCode;
-                const finalSalary = Math.max(0, (report.payableSalary !== undefined ? report.payableSalary : report.totalFinalSalary) - (deductionView ? (report.taskPenalty || 0) : 0));
+                const finalSalary = getEffectivePayableSalary(report, deductionView);
 
                 return [
                     report.name,
@@ -2327,7 +2335,7 @@ const SalaryManagement = () => {
                                                 <div className="bg-emerald-50 border border-emerald-100 rounded-3xl p-6 shadow-sm">
                                                     <p className="text-[10px] font-black text-emerald-600 tracking-widest mb-1">Total Net Payout</p>
                                                     <p className="text-2xl font-black text-emerald-700">
-                                                        ₹{bulkReportData.reduce((sum, r) => sum + Math.max(0, (r.payableSalary !== undefined ? r.payableSalary : r.totalFinalSalary) - (deductionView ? (r.taskPenalty || 0) : 0)), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                        ₹{bulkReportData.reduce((sum, r) => sum + getEffectivePayableSalary(r, deductionView), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                                     </p>
                                                 </div>
                                                 <div className="bg-slate-50 border border-slate-100 rounded-3xl p-6 shadow-sm">
@@ -2343,7 +2351,7 @@ const SalaryManagement = () => {
                                                 <div className="bg-violet-50 border border-violet-100 rounded-3xl p-6 shadow-sm">
                                                     <p className="text-[10px] font-black text-violet-600 tracking-widest mb-1">Avg Salary / Worker</p>
                                                     <p className="text-2xl font-black text-violet-700">
-                                                        ₹{bulkReportData.length > 0 ? (bulkReportData.reduce((sum, r) => sum + Math.max(0, (r.payableSalary !== undefined ? r.payableSalary : r.totalFinalSalary) - (deductionView ? (r.taskPenalty || 0) : 0)), 0) / bulkReportData.length).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
+                                                        ₹{bulkReportData.length > 0 ? (bulkReportData.reduce((sum, r) => sum + getEffectivePayableSalary(r, deductionView), 0) / bulkReportData.length).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
                                                     </p>
                                                 </div>
                                             </div>
@@ -2498,7 +2506,7 @@ const SalaryManagement = () => {
                                                                                     <p className="font-bold text-slate-700">{report.name}</p>
                                                                                 </td>
                                                                                 <td className="px-4 py-4 font-bold text-slate-600">
-                                                                                    ₹{((report.attendanceSalary || report.totalFinalSalary) - (deductionView ? (report.taskPenalty || 0) : 0)).toFixed(2)}
+                                                                                    ₹{(report.attendanceSalary || report.totalFinalSalary).toFixed(2)}
                                                                                 </td>
                                                                                 <td className="px-4 py-4">
                                                                                     {(() => {
@@ -2542,7 +2550,7 @@ const SalaryManagement = () => {
                                                                                     })()}
                                                                                 </td>
                                                                                 <td className="px-4 py-4 font-black text-emerald-600 text-sm">
-                                                                                    ₹{((report.payableSalary !== undefined ? report.payableSalary : report.totalFinalSalary) - (deductionView ? (report.taskPenalty || 0) : 0)).toFixed(2)}
+                                                                                    ₹{getEffectivePayableSalary(report, deductionView).toFixed(2)}
                                                                                 </td>
                                                                             </>
                                                                         ) : (
@@ -2565,7 +2573,7 @@ const SalaryManagement = () => {
                                                                                     {report.totalAbsentDays} <span className="text-[9px] text-rose-400 font-medium">Days</span>
                                                                                 </td>
                                                                                 <td className="px-4 py-4">
-                                                                                    <p className="font-black text-emerald-600 text-sm">₹{Math.max(0, report.totalFinalSalary - (deductionView ? (report.taskPenalty || 0) : 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                                                                    <p className="font-black text-emerald-600 text-sm">₹{getEffectivePayableSalary(report, deductionView).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                                                                     {report.projectAdjustment !== undefined && report.projectAdjustment !== 0 && (
                                                                                         <span className={`inline-flex items-center px-1.5 py-0.5 mt-1 rounded text-[8px] font-black tracking-wider ${report.projectAdjustment < 0 ? 'bg-rose-50 text-rose-600 border border-rose-100/50' : 'bg-emerald-50 text-emerald-600 border border-emerald-100/50'}`}>
                                                                                             {report.projectAdjustment > 0 ? '+' : ''}₹{report.projectAdjustment.toFixed(2)} Adj

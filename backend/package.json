@@ -10,7 +10,11 @@
         "migrate:holidays": "node migrations/updateHolidaysForEmployeeSpecific.js",
         "test:aws": "node tests/awsConnection.test.js",
         "test:sync": "node tests/syncAws.test.js",
-        "test:organizations": "node tests/awsOrganizationsException.test.js"
+        "test:organizations": "node tests/awsOrganizationsException.test.js",
+        "test:dashboard-salary": "node tests/dashboardSalary.test.js",
+        "test:salary-audit": "node tests/salaryModuleAudit.test.js",
+        "test:read-only-audit": "node tests/readOnlySalaryAudit.test.js",
+        "test": "npm run test:dashboard-salary && npm run test:salary-audit && npm run test:read-only-audit"
     },
     "dependencies": {
         "@aws-sdk/client-athena": "^3.500.0",
