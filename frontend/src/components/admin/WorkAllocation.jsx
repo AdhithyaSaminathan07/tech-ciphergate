@@ -8,7 +8,7 @@ import {
     Search, Plus, Trash2, CheckSquare,
     AlertCircle, Bookmark, Zap, ArrowUp, ArrowDown,
     Minus, X, User, AlignLeft, LayoutDashboard, Flag, List, ListOrdered,
-    Calendar, Clock, Check, Brain, ChevronDown, BarChart2, Users, Info, Eye, Paperclip, CheckCircle2, History, Tag, MessageSquare, Download, Maximize2, FileText, HelpCircle, ImagePlus, Filter, Repeat,
+    Calendar, Clock, Check, Brain, ChevronDown, ChevronLeft, ChevronRight, BarChart2, BarChart3, Users, Info, Eye, Paperclip, CheckCircle2, History, Tag, MessageSquare, Download, Maximize2, FileText, HelpCircle, ImagePlus, Filter, Repeat,
     Cpu, Sparkles
 } from 'lucide-react';
 import { getFullFileUrl } from '../../utils/fileUtils';
@@ -26,7 +26,7 @@ import PersonalBrainManager from './PersonalBrainManager';
 import { createRecurringTask, getRecurringTaskById, updateRecurringTask } from '../../services/recurringTaskService';
 import RecurringTaskPanel, { defaultRecurringConfig } from './RecurringTaskPanel';
 import RecurringTaskManager from './RecurringTaskManager';
-import CustomDatePicker from '../common/CustomDatePicker';
+import CustomDatePicker, { formatDateToYMD } from '../common/CustomDatePicker';
 
 // 🔹 Optimized Auto-Expanding Title Input to prevent lag/cursor jump and allow multi-line wrap
 const TitleInput = ({ initialValue, onUpdate }) => {
@@ -1682,58 +1682,17 @@ const WorkAllocation = () => {
 
     const scrollToTab = (tabId) => {
         setActiveModalTab(tabId);
-        const container = columnsContainerRef.current;
-        if (!container) return;
-        if (window.innerWidth >= 768) return;
-
-        const targetId = `modal-sec-${tabId}`;
-        const targetElement = container.querySelector(`#${targetId}`);
-        if (targetElement) {
-            isScrollingRef.current = true;
-            container.scrollTo({
-                top: targetElement.offsetTop,
-                behavior: 'smooth'
-            });
-            setTimeout(() => {
-                isScrollingRef.current = false;
-            }, 500);
-        }
     };
 
-    const handleModalScroll = (e) => {
-        if (window.innerWidth >= 768) return;
-        if (isScrollingRef.current) return;
-        const container = e.currentTarget;
-        const scrollTop = container.scrollTop;
-
-        const tabIds = ['details', 'assign', 'execution'];
-        let activeTab = 'details';
-        let minDiff = Infinity;
-
-        tabIds.forEach((tabId) => {
-            const el = container.querySelector(`#modal-sec-${tabId}`);
-            if (el) {
-                const diff = Math.abs(el.offsetTop - scrollTop);
-                if (diff < minDiff) {
-                    minDiff = diff;
-                    activeTab = tabId;
-                }
-            }
-        });
-
-        if (activeModalTab !== activeTab) {
-            setActiveModalTab(activeTab);
-        }
-    };
+    const handleModalScroll = () => {};
 
     if (initialLoading) return <Spinner />;
 
 
     return (
-        <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col">
-            {/* Sticky Header Area - Handles Page-level context */}
-            <div className="sticky top-0 z-[100] bg-slate-50/90 backdrop-blur-md pt-2 pb-2 px-2 sm:px-4 md:px-6">
-
+        <div className="h-full w-full flex flex-col min-h-0 bg-[#f8fafc] text-slate-900 overflow-hidden">
+            {/* Header / Filter Toolbar Area */}
+            <div className="flex-shrink-0 bg-white border-b border-slate-200/80 px-2 sm:px-4 md:px-5 py-2 z-20 shadow-2xs">
                 {/* Mobile (<768px) View */}
                 <div className="md:hidden flex flex-col gap-2">
                     {/* Top bar: Search + Actions */}
@@ -1742,27 +1701,28 @@ const WorkAllocation = () => {
                             <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-slate-400" />
                             <input
                                 type="text"
-                                placeholder="Search..."
+                                placeholder="Search tasks..."
                                 value={searchVal}
                                 onChange={(e) => setSearchVal(e.target.value)}
-                                className="w-full pl-8 pr-2 h-9 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-teal-500 shadow-xs"
+                                className="w-full pl-8 pr-2 h-9 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-teal-500 focus:bg-white shadow-2xs transition-all"
                             />
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
                             <button
                                 onClick={() => {
-                                    setInlineCreateStatus(null); setRecurringConfig(defaultRecurringConfig);
+                                    setInlineCreateStatus(null); setRecurringConfig(defaultRecurringConfig); setAssignmentMode('group');
                                     setSelectedTicket({ _id: 'new', title: '', description: '', priority: 'Low', status: 'To Do', issueType: 'Task', storyPoints: 0, labels: [], assignee: null, assignees: [], team: '', startDate: '', endDate: '', checklist: [{ text: '', completed: false }] });
                                     const tempId = Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
                                     setTempTicketId(tempId); setModalFilterTeam(''); setIsModalOpen(true);
                                 }}
-                                className="w-9 h-9 flex items-center justify-center bg-teal-600 hover:bg-teal-700 text-white rounded-lg shadow-xs active:scale-95 transition-all"
+                                className="w-9 h-9 flex items-center justify-center bg-teal-600 hover:bg-teal-700 text-white rounded-xl shadow-xs active:scale-95 transition-all"
+                                title="New Task"
                             >
                                 <Plus className="w-5 h-5" />
                             </button>
                             <button
                                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                                className="w-9 h-9 flex items-center justify-center text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg shadow-xs active:scale-95 transition-all font-bold text-lg leading-none pb-1"
+                                className="w-9 h-9 flex items-center justify-center text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl shadow-2xs active:scale-95 transition-all font-bold text-lg leading-none"
                             >
                                 ⋮
                             </button>
@@ -1779,10 +1739,10 @@ const WorkAllocation = () => {
                     )}
 
                     {/* Filter Chips Horizontal Scroll */}
-                    <div className="flex overflow-x-auto no-scrollbar gap-2 pb-1 items-center">
-                        <div className="shrink-0 w-[135px]">
+                    <div className="flex overflow-x-auto no-scrollbar gap-2 pb-0.5 items-center">
+                        <div className="shrink-0 w-[130px]">
                             <Select value={filterAssignee || "all_assignees"} onValueChange={(val) => setFilterAssignee(val === "all_assignees" ? "" : val)}>
-                                <SelectTrigger className="w-full bg-slate-100 hover:bg-slate-200 border-transparent rounded-full h-8 text-xs text-slate-700 font-medium px-3 shadow-none transition-colors">
+                                <SelectTrigger className="w-full bg-slate-100 hover:bg-slate-200 border-transparent rounded-lg h-8 text-xs text-slate-700 font-medium px-2.5 shadow-none transition-colors">
                                     <SelectValue placeholder="Developer" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1794,9 +1754,9 @@ const WorkAllocation = () => {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="shrink-0 w-[120px]">
+                        <div className="shrink-0 w-[115px]">
                             <Select value={filterTeam || "all_teams"} onValueChange={(val) => setFilterTeam(val === "all_teams" ? "" : val)}>
-                                <SelectTrigger className="w-full bg-slate-100 hover:bg-slate-200 border-transparent rounded-full h-8 text-xs text-slate-700 font-medium px-3 shadow-none transition-colors">
+                                <SelectTrigger className="w-full bg-slate-100 hover:bg-slate-200 border-transparent rounded-lg h-8 text-xs text-slate-700 font-medium px-2.5 shadow-none transition-colors">
                                     <SelectValue placeholder="Team" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1807,9 +1767,9 @@ const WorkAllocation = () => {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="shrink-0 w-[110px]">
+                        <div className="shrink-0 w-[105px]">
                             <Select value={filterPriority || "all_priorities"} onValueChange={(val) => setFilterPriority(val === "all_priorities" ? "" : val)}>
-                                <SelectTrigger className="w-full bg-slate-100 hover:bg-slate-200 border-transparent rounded-full h-8 text-xs text-slate-700 font-medium px-3 shadow-none transition-colors">
+                                <SelectTrigger className="w-full bg-slate-100 hover:bg-slate-200 border-transparent rounded-lg h-8 text-xs text-slate-700 font-medium px-2.5 shadow-none transition-colors">
                                     <SelectValue placeholder="Priority" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1820,9 +1780,9 @@ const WorkAllocation = () => {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="shrink-0 w-[120px]">
+                        <div className="shrink-0 w-[115px]">
                             <Select value={filterMonth || 'all_months'} onValueChange={(val) => setFilterMonth(val === 'all_months' ? '' : val)}>
-                                <SelectTrigger className="w-full bg-slate-100 hover:bg-slate-200 border-transparent rounded-full h-8 text-xs text-slate-700 font-medium px-3 shadow-none transition-colors">
+                                <SelectTrigger className="w-full bg-slate-100 hover:bg-slate-200 border-transparent rounded-lg h-8 text-xs text-slate-700 font-medium px-2.5 shadow-none transition-colors">
                                     <SelectValue placeholder="Month" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1846,7 +1806,7 @@ const WorkAllocation = () => {
                                 onClick={() => {
                                     setFilterAssignee(''); setFilterTeam(''); setFilterPriority(''); setFilterMonth(currentMonthValue);
                                 }}
-                                className="shrink-0 px-3 h-8 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-full text-xs font-semibold transition-colors"
+                                className="shrink-0 px-2.5 h-8 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-lg text-xs font-semibold transition-colors"
                             >
                                 Clear
                             </button>
@@ -1855,26 +1815,26 @@ const WorkAllocation = () => {
                 </div>
 
                 {/* Desktop (≥768px) View */}
-                <div className="hidden md:flex bg-white border border-slate-200/80 p-2 shadow-xs rounded-xl flex-row justify-between items-center gap-3">
-                    {/* Left Side: Search & Filters */}
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                        {/* Search Input */}
-                        <div className="relative w-64 border border-slate-200 rounded-lg bg-white focus-within:border-teal-500 transition-all h-9 flex items-center min-w-0">
-                            <Search className="w-4 h-4 absolute left-3 text-slate-400" />
+                <div className="hidden md:flex flex-row justify-between items-center gap-2.5 w-full">
+                    {/* Left Side: Search & Filter Dropdowns */}
+                    <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap lg:flex-nowrap">
+                        {/* Search Input - responsive min/max so it never squishes to "Searcl" */}
+                        <div className="relative min-w-[150px] w-44 lg:w-56 shrink-0 border border-slate-200 rounded-xl bg-slate-50/70 focus-within:bg-white focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/10 transition-all h-9 flex items-center shadow-2xs">
+                            <Search className="w-4 h-4 absolute left-2.5 text-slate-400 shrink-0" />
                             <input
                                 type="text"
                                 placeholder="Search tasks..."
                                 value={searchVal}
                                 onChange={(e) => setSearchVal(e.target.value)}
-                                className="w-full pl-9 pr-3 py-1.5 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                                className="w-full pl-8 pr-2.5 py-1 bg-transparent text-xs text-slate-900 outline-none placeholder:text-slate-400 font-medium"
                             />
                         </div>
 
                         {/* Filter Dropdowns */}
-                        <div className="flex items-center gap-2">
-                            <div className="w-36">
+                        <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                            <div className="w-32 lg:w-36">
                                 <Select value={filterAssignee || "all_assignees"} onValueChange={(val) => setFilterAssignee(val === "all_assignees" ? "" : val)}>
-                                    <SelectTrigger className="w-full bg-white border-slate-200 rounded-lg h-9 text-xs text-slate-700 font-semibold shadow-xs">
+                                    <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl h-9 text-xs text-slate-700 font-semibold shadow-2xs hover:bg-slate-50 transition-colors">
                                         <SelectValue placeholder="Developer" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1886,9 +1846,10 @@ const WorkAllocation = () => {
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div className="w-32">
+
+                            <div className="w-28 lg:w-32">
                                 <Select value={filterTeam || "all_teams"} onValueChange={(val) => setFilterTeam(val === "all_teams" ? "" : val)}>
-                                    <SelectTrigger className="w-full bg-white border-slate-200 rounded-lg h-9 text-xs text-slate-700 font-semibold shadow-xs">
+                                    <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl h-9 text-xs text-slate-700 font-semibold shadow-2xs hover:bg-slate-50 transition-colors">
                                         <SelectValue placeholder="Team" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1899,9 +1860,10 @@ const WorkAllocation = () => {
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div className="w-28">
+
+                            <div className="w-24 lg:w-28">
                                 <Select value={filterPriority || "all_priorities"} onValueChange={(val) => setFilterPriority(val === "all_priorities" ? "" : val)}>
-                                    <SelectTrigger className="w-full bg-white border-slate-200 rounded-lg h-9 text-xs text-slate-700 font-semibold shadow-xs">
+                                    <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl h-9 text-xs text-slate-700 font-semibold shadow-2xs hover:bg-slate-50 transition-colors">
                                         <SelectValue placeholder="Priority" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1912,9 +1874,10 @@ const WorkAllocation = () => {
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div className="w-32">
+
+                            <div className="w-28 lg:w-32">
                                 <Select value={filterMonth || 'all_months'} onValueChange={(val) => setFilterMonth(val === 'all_months' ? '' : val)}>
-                                    <SelectTrigger className="w-full bg-white border-slate-200 rounded-lg h-9 text-xs text-slate-700 font-semibold shadow-xs">
+                                    <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl h-9 text-xs text-slate-700 font-semibold shadow-2xs hover:bg-slate-50 transition-colors">
                                         <SelectValue placeholder="Month" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1933,12 +1896,13 @@ const WorkAllocation = () => {
                                     </SelectContent>
                                 </Select>
                             </div>
+
                             {(filterAssignee || filterTeam || filterPriority || searchTerm || filterMonth !== currentMonthValue) && (
                                 <button
                                     onClick={() => {
                                         setFilterAssignee(''); setFilterTeam(''); setFilterPriority(''); setSearchVal(''); setSearchTerm(''); setFilterMonth(currentMonthValue);
                                     }}
-                                    className="h-9 px-2 text-xs text-slate-500 hover:text-slate-800 font-semibold transition-colors"
+                                    className="h-9 px-2 text-xs text-slate-500 hover:text-slate-800 font-semibold transition-colors underline decoration-dotted"
                                 >
                                     Clear
                                 </button>
@@ -1947,24 +1911,30 @@ const WorkAllocation = () => {
                     </div>
 
                     {/* Right Side: Action Buttons */}
-                    <div className="flex items-center gap-2 shrink-0 justify-end">
+                    <div className="flex items-center gap-1.5 shrink-0 justify-end">
                         <button
                             onClick={() => setIsStatsModalOpen(true)}
-                            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 h-9 px-3 rounded-lg text-xs font-semibold shadow-xs transition-all"
+                            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 h-9 px-2.5 lg:px-3 rounded-xl text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5"
+                            title="Dashboard"
                         >
-                            Dashboard
+                            <BarChart3 className="w-3.5 h-3.5 text-slate-500" />
+                            <span>Dashboard</span>
                         </button>
                         <button
                             onClick={() => setIsRecurringManagerOpen(true)}
-                            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 h-9 px-3 rounded-lg text-xs font-semibold shadow-xs transition-all"
+                            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 h-9 px-2.5 lg:px-3 rounded-xl text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5"
+                            title="Recurring Rules"
                         >
-                            Recurring Rules
+                            <Repeat className="w-3.5 h-3.5 text-slate-500" />
+                            <span>Recurring Rules</span>
                         </button>
                         <button
                             onClick={() => { fetchDeletedTickets(); setIsDeletedModalOpen(true); }}
-                            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 h-9 px-3 rounded-lg text-xs font-semibold shadow-xs transition-all"
+                            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 h-9 px-2.5 lg:px-3 rounded-xl text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5"
+                            title="Deleted Tasks"
                         >
-                            Deleted Tasks
+                            <Trash2 className="w-3.5 h-3.5 text-slate-500" />
+                            <span>Deleted Tasks</span>
                         </button>
                         <button
                             onClick={() => {
@@ -1973,125 +1943,125 @@ const WorkAllocation = () => {
                                 const tempId = Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
                                 setTempTicketId(tempId); setModalFilterTeam(''); setIsModalOpen(true);
                             }}
-                            className="bg-teal-600 hover:bg-teal-700 text-white font-semibold h-9 px-3.5 rounded-lg text-xs shadow-xs flex items-center transition-all"
+                            className="bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold h-9 px-3.5 rounded-xl text-xs shadow-xs flex items-center gap-1.5 transition-all"
                         >
-                            <Plus className="w-4 h-4 mr-1" /> New Task
+                            <Plus className="w-4 h-4 stroke-[2.5]" />
+                            <span>New Task</span>
                         </button>
                     </div>
                 </div>
             </div>
 
-            {/* ── Stats Summary Row ──────────────────────────────────────── */}
-            <div className="px-2 sm:px-4 md:px-6 pt-2 pb-2">
-                {/* Desktop (≥768px): 5-column grid */}
-                <div className="hidden md:grid grid-cols-5 gap-2.5 p-2 bg-white border border-slate-200/80 rounded-xl shadow-xs w-full mb-1">
-                    {/* Stat: Total Employees */}
-                    <button onClick={() => setDrawerFilter('all')} className="flex items-center gap-2 p-1 rounded hover:bg-slate-50 transition-colors text-left cursor-pointer">
-                        <div className="bg-slate-100/80 rounded-lg p-2.5 shrink-0">
-                            <Users className="w-4 h-4 text-slate-500" />
-                        </div>
-                        <div className="flex flex-col">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-tight">Total</span>
-                            <span className="text-base font-black text-slate-900 leading-tight">{activeWorkers.length}</span>
-                        </div>
-                    </button>
-
-                    {/* Stat: Assigned */}
-                    <button onClick={() => setDrawerFilter('assigned')} className="flex items-center gap-2 p-1 rounded hover:bg-slate-50 transition-colors text-left cursor-pointer border-l border-slate-100 pl-4">
-                        <div className="flex flex-col">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-tight">Assigned</span>
-                            <span className="text-base font-black text-slate-900 leading-tight">{assignedDevelopers.length}</span>
-                        </div>
-                    </button>
-
-                    {/* Stat: Idle */}
-                    <button onClick={() => setDrawerFilter('idle')} className="flex items-center gap-2 p-1 rounded hover:bg-slate-50 transition-colors text-left cursor-pointer border-l border-slate-100 pl-4">
-                        <div className="flex flex-col">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-tight">Idle</span>
-                            <span className="text-base font-black text-slate-900 leading-tight">{idleDevelopers.length}</span>
-                        </div>
-                    </button>
-
-                    {/* Stat: Overloaded */}
-                    <button onClick={() => setDrawerFilter('overloaded')} className={`flex items-center gap-2 p-1 rounded hover:bg-slate-50 transition-colors text-left cursor-pointer border-l border-slate-100 pl-4 ${overloadedDevelopers.length > 0 ? 'bg-rose-50/50' : ''}`}>
-                        <div className="flex flex-col w-full">
-                            <div className="flex justify-between items-center w-full">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-tight">Overload</span>
-                                {overloadedDevelopers.length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>}
-                            </div>
-                            <span className={`text-base font-black leading-tight ${overloadedDevelopers.length > 0 ? 'text-rose-700' : 'text-slate-900'}`}>{overloadedDevelopers.length}</span>
-                        </div>
-                    </button>
-
-                    {/* Stat: Available Now */}
-                    {idleDevelopers.length > 0 ? (
-                        <button onClick={() => setDrawerFilter('idle')} className="flex items-center gap-2 p-1 rounded hover:bg-slate-50 transition-colors text-left cursor-pointer border-l border-slate-100 pl-4">
-                            <div className="flex flex-col justify-center h-full">
-                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-tight mb-1">Available</div>
-                                <div className="flex items-center">
-                                    <div className="flex -space-x-1.5">
-                                        {idleDevelopers.slice(0, 3).map((w, i) => (
-                                            <div key={w._id} className="w-6 h-6 rounded-full border-[1.5px] border-white bg-slate-100 flex items-center justify-center text-[9px] font-black text-slate-700 z-[4]" style={{ zIndex: 4 - i }}>
-                                                {w.name.charAt(0).toUpperCase()}
-                                            </div>
-                                        ))}
-                                    </div>
-                                    {idleDevelopers.length > 3 && (
-                                        <span className="ml-1.5 bg-teal-50 text-teal-700 text-[10px] font-black px-1.5 py-0.5 rounded-md">
-                                            +{idleDevelopers.length - 3} avail
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
+            {/* ── Stats Summary Bar (Slim & Clean) ─────────────────────────────────── */}
+            <div className="flex-shrink-0 px-2 sm:px-4 md:px-5 py-1.5">
+                {/* Desktop View: Compact status ribbon */}
+                <div className="hidden md:flex items-center justify-between gap-3 px-3 py-1.5 bg-white border border-slate-200/80 rounded-xl shadow-2xs text-xs">
+                    <div className="flex items-center gap-4">
+                        {/* Total */}
+                        <button
+                            onClick={() => setDrawerFilter('all')}
+                            className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer group"
+                        >
+                            <Users className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600" />
+                            <span className="font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Total:</span>
+                            <span className="font-black text-slate-900">{activeWorkers.length}</span>
                         </button>
-                    ) : (
-                        <div className="flex items-center gap-2 p-1 border-l border-slate-100 pl-4 opacity-50">
-                            <div className="flex flex-col">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-tight">Available</span>
-                                <span className="text-sm font-semibold text-slate-400">None</span>
-                            </div>
-                        </div>
-                    )}
+
+                        <div className="h-3 w-px bg-slate-200"></div>
+
+                        {/* Assigned */}
+                        <button
+                            onClick={() => setDrawerFilter('assigned')}
+                            className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
+                        >
+                            <span className="font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Assigned:</span>
+                            <span className="font-black text-slate-900">{assignedDevelopers.length}</span>
+                        </button>
+
+                        <div className="h-3 w-px bg-slate-200"></div>
+
+                        {/* Idle */}
+                        <button
+                            onClick={() => setDrawerFilter('idle')}
+                            className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
+                        >
+                            <span className="font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Idle:</span>
+                            <span className="font-black text-slate-900">{idleDevelopers.length}</span>
+                        </button>
+
+                        <div className="h-3 w-px bg-slate-200"></div>
+
+                        {/* Overloaded */}
+                        <button
+                            onClick={() => setDrawerFilter('overloaded')}
+                            className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                                overloadedDevelopers.length > 0 ? 'bg-rose-50 text-rose-700 font-bold' : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                        >
+                            <span className={`font-semibold text-[11px] uppercase tracking-wider ${overloadedDevelopers.length > 0 ? 'text-rose-600' : 'text-slate-500'}`}>Overload:</span>
+                            <span className={`font-black ${overloadedDevelopers.length > 0 ? 'text-rose-700' : 'text-slate-900'}`}>{overloadedDevelopers.length}</span>
+                            {overloadedDevelopers.length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>}
+                        </button>
+                    </div>
+
+                    {/* Available Now */}
+                    <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-500 text-[11px] uppercase tracking-wider">Available:</span>
+                        {idleDevelopers.length > 0 ? (
+                            <button
+                                onClick={() => setDrawerFilter('idle')}
+                                className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+                                title="View idle developers"
+                            >
+                                <div className="flex -space-x-1.5 items-center">
+                                    {idleDevelopers.slice(0, 3).map((w, i) => (
+                                        <div
+                                            key={w._id}
+                                            className="w-5 h-5 rounded-full border border-white bg-slate-200 flex items-center justify-center text-[9px] font-bold text-slate-700 shadow-2xs"
+                                            style={{ zIndex: 3 - i }}
+                                            title={w.name}
+                                        >
+                                            {w.name.charAt(0).toUpperCase()}
+                                        </div>
+                                    ))}
+                                </div>
+                                {idleDevelopers.length > 3 && (
+                                    <span className="bg-teal-50 text-teal-700 text-[10px] font-bold px-1.5 py-0.5 rounded-md border border-teal-100">
+                                        +{idleDevelopers.length - 3} more
+                                    </span>
+                                )}
+                            </button>
+                        ) : (
+                            <span className="text-slate-400 font-medium text-[11px]">None</span>
+                        )}
+                    </div>
                 </div>
 
-                {/* Mobile (<768px): Horizontally scrollable strip */}
-                <div className="md:hidden flex overflow-x-auto gap-2 no-scrollbar py-1">
-                    <button onClick={() => setDrawerFilter('all')} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200/80 rounded-full shadow-xs shrink-0 active:scale-95 transition-transform">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total:</span>
+                {/* Mobile View: Scrollable status pills */}
+                <div className="md:hidden flex overflow-x-auto gap-1.5 no-scrollbar py-0.5">
+                    <button onClick={() => setDrawerFilter('all')} className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200/80 rounded-full shadow-2xs shrink-0 active:scale-95 transition-transform">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">Total:</span>
                         <span className="text-[11px] font-black text-slate-900">{activeWorkers.length}</span>
                     </button>
-                    <button onClick={() => setDrawerFilter('assigned')} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200/80 rounded-full shadow-xs shrink-0 active:scale-95 transition-transform">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Assigned:</span>
+                    <button onClick={() => setDrawerFilter('assigned')} className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200/80 rounded-full shadow-2xs shrink-0 active:scale-95 transition-transform">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">Assigned:</span>
                         <span className="text-[11px] font-black text-slate-900">{assignedDevelopers.length}</span>
                     </button>
-                    <button onClick={() => setDrawerFilter('idle')} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200/80 rounded-full shadow-xs shrink-0 active:scale-95 transition-transform">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Idle:</span>
+                    <button onClick={() => setDrawerFilter('idle')} className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200/80 rounded-full shadow-2xs shrink-0 active:scale-95 transition-transform">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">Idle:</span>
                         <span className="text-[11px] font-black text-slate-900">{idleDevelopers.length}</span>
                     </button>
-                    <button onClick={() => setDrawerFilter('overloaded')} className={`flex items-center gap-1.5 px-3 py-1.5 bg-white border rounded-full shadow-xs shrink-0 active:scale-95 transition-transform ${overloadedDevelopers.length > 0 ? 'border-rose-200 bg-rose-50/50' : 'border-slate-200/80'}`}>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Overload:</span>
+                    <button onClick={() => setDrawerFilter('overloaded')} className={`flex items-center gap-1.5 px-2.5 py-1 bg-white border rounded-full shadow-2xs shrink-0 active:scale-95 transition-transform ${overloadedDevelopers.length > 0 ? 'border-rose-200 bg-rose-50/50' : 'border-slate-200/80'}`}>
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">Overload:</span>
                         <span className={`text-[11px] font-black ${overloadedDevelopers.length > 0 ? 'text-rose-700' : 'text-slate-900'}`}>{overloadedDevelopers.length}</span>
-                    </button>
-                    <button onClick={() => setDrawerFilter('idle')} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200/80 rounded-full shadow-xs shrink-0 active:scale-95 transition-transform">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Available:</span>
-                        <div className="flex -space-x-1.5 items-center">
-                            {idleDevelopers.slice(0, 2).map((w, i) => (
-                                <div key={w._id} className="w-4 h-4 rounded-full border border-white bg-slate-200 flex items-center justify-center text-[7px] font-black text-slate-700 z-[4]" style={{ zIndex: 4 - i }}>
-                                    {w.name.charAt(0).toUpperCase()}
-                                </div>
-                            ))}
-                            {idleDevelopers.length > 2 && (
-                                <span className="ml-1 text-[9px] font-bold text-slate-600">+{idleDevelopers.length - 2}</span>
-                            )}
-                        </div>
                     </button>
                 </div>
             </div>
 
-            {/* Kanban Board Area - Grid layout for true equal-width columns */}
-            <div className="flex-1 p-2.5 lg:p-4 pt-2.5 scroll-smooth overflow-x-hidden">
-                {/* Mobile Status Tabs — 4-column grid, no horizontal scroll */}
-                <div className="md:hidden grid grid-cols-4 gap-0.5 p-0.5 bg-slate-100 rounded-lg mb-2">
+            {/* Kanban Board Area */}
+            <div className="flex-1 min-h-0 px-2 sm:px-4 md:px-5 py-2 overflow-hidden flex flex-col">
+                {/* Mobile Status Tabs — 4-column grid */}
+                <div className="md:hidden grid grid-cols-4 gap-1 p-1 bg-slate-200/70 rounded-xl mb-2 shrink-0">
                     {columns.map(status => {
                         const count = filteredTickets.filter(t => t.status === status).length;
                         const isActive = activeMobileTab === status;
@@ -2099,21 +2069,23 @@ const WorkAllocation = () => {
                             <button
                                 key={status}
                                 onClick={() => setActiveMobileTab(status)}
-                                className={`flex flex-col items-center justify-center gap-0 py-1.5 rounded-md text-[9px] font-bold transition-all duration-200 border ${isActive
-                                    ? 'bg-white text-slate-800 shadow-sm border-slate-200'
-                                    : 'bg-transparent text-slate-500 border-transparent hover:bg-slate-200/50'
-                                    }`}
+                                className={`flex flex-col items-center justify-center py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                                    isActive
+                                        ? 'bg-white text-slate-900 shadow-xs'
+                                        : 'text-slate-600 hover:bg-slate-200/60'
+                                }`}
                             >
                                 <span className="leading-tight truncate w-full text-center px-0.5">{status === 'In Progress' ? 'In Prog.' : status}</span>
-                                <span className={`text-[8px] mt-0.5 px-1.5 py-0.5 rounded-full ${isActive ? 'bg-slate-100 text-slate-600' : 'bg-slate-200 text-slate-500'}`}>{count}</span>
+                                <span className={`text-[9px] mt-0.5 px-1.5 py-0.2 rounded-full font-black ${isActive ? 'bg-teal-50 text-teal-700' : 'bg-slate-200 text-slate-500'}`}>{count}</span>
                             </button>
                         );
                     })}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 min-h-[calc(100vh-280px)] pb-6 w-full relative">
+                {/* 4-Column Board Grid */}
+                <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-3.5 w-full h-full relative">
                     {loading && (
-                        <div className="absolute inset-0 bg-slate-50/60 backdrop-blur-[1px] flex items-center justify-center z-[50] rounded-2xl transition-all duration-200">
+                        <div className="absolute inset-0 bg-slate-50/70 backdrop-blur-[2px] flex items-center justify-center z-[50] rounded-2xl transition-all">
                             <Spinner size="lg" />
                         </div>
                     )}
@@ -2122,30 +2094,31 @@ const WorkAllocation = () => {
                         <div
                             key={status}
                             data-status={status}
-                            className={`flex flex-col min-w-0 bg-slate-100/80 rounded-2xl border border-slate-200/50 transition-all duration-300 group/column ${activeMobileTab === status ? 'flex' : 'hidden md:flex'} ${dragOverCol === status ? 'bg-slate-200/80 ring-2 ring-teal-500/30' : ''}`}
+                            className={`flex flex-col min-w-0 h-full max-h-full bg-slate-100/70 rounded-2xl border border-slate-200/80 shadow-2xs transition-all duration-200 group/column overflow-hidden ${
+                                activeMobileTab === status ? 'flex' : 'hidden md:flex'
+                            } ${dragOverCol === status ? 'bg-slate-200/90 ring-2 ring-teal-500/40' : ''}`}
                             onDragOver={(e) => handleDragOver(e, status)}
                             onDragLeave={(e) => handleDragLeave(e, status)}
                             onDrop={(e) => handleDrop(e, status)}
                         >
-                            {/* Column Header - Premium SaaS Style */}
-                            <div className="flex-shrink-0 px-4 py-3 flex justify-between items-center sticky top-0 z-30 border-b border-slate-200/50">
-                                <div className="flex items-center gap-2.5">
-                                    <div className={`w-2 h-2 rounded-full ${status === 'Done' ? 'bg-emerald-400' : status === 'Review' ? 'bg-amber-400' : status === 'In Progress' ? 'bg-blue-400' : 'bg-slate-400'}`}></div>
+                            {/* Column Header - Permanently Pinned at Top */}
+                            <div className="flex-shrink-0 px-3.5 py-2.5 flex justify-between items-center bg-white/95 backdrop-blur-xs border-b border-slate-200/80 rounded-t-2xl">
+                                <div className="flex items-center gap-2">
+                                    <div className={`w-2 h-2 rounded-full ring-2 ${
+                                        status === 'Done' ? 'bg-emerald-500 ring-emerald-100' :
+                                        status === 'Review' ? 'bg-amber-500 ring-amber-100' :
+                                        status === 'In Progress' ? 'bg-blue-500 ring-blue-100' :
+                                        'bg-slate-400 ring-slate-100'
+                                    }`}></div>
                                     <h2 className="text-xs font-bold text-slate-800 tracking-tight">{status}</h2>
-                                    <span className="text-[11px] font-bold bg-slate-200/70 text-slate-700 px-2 py-0.5 rounded-full">
+                                    <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200/70">
                                         {filteredTickets.filter(t => t.status === status).length}
                                     </span>
                                 </div>
-                                <button
-                                    onClick={() => setInlineCreateStatus(status)}
-                                    className="p-1.5 hover:bg-white hover:shadow-sm rounded-md text-slate-400 hover:text-slate-700 transition-all opacity-0 group-hover/column:opacity-100"
-                                >
-                                    <Plus className="w-4 h-4" />
-                                </button>
                             </div>
 
-                            {/* Column Content - Scrollable area for cards */}
-                            <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5 custom-scrollbar min-h-0">
+                            {/* Scrollable Card Area */}
+                            <div className="flex-1 min-h-0 overflow-y-auto p-2.5 space-y-2.5 custom-scrollbar">
                                 {filteredTickets.filter(t => t.status === status).map(ticket => (
                                     <div
                                         key={ticket._id}
@@ -2177,59 +2150,68 @@ const WorkAllocation = () => {
                                             setModalFilterTeam(ticket.team || '');
                                             setIsModalOpen(true);
                                         }}
-                                        className={`p-3 rounded-xl border cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group active:scale-[0.98] bg-white relative flex flex-col gap-2.5
-                                            ${isOverdue(ticket.endDate, ticket.status) ? 'border-rose-200 shadow-sm' : 'border-slate-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.02)]'} 
-                                            `}
+                                        className={`p-3 rounded-xl border cursor-pointer hover:shadow-md hover:border-slate-300 transition-all duration-150 group active:scale-[0.99] bg-white relative flex flex-col gap-2 shrink-0 ${
+                                            isOverdue(ticket.endDate, ticket.status)
+                                                ? 'border-rose-200 shadow-2xs bg-rose-50/20'
+                                                : 'border-slate-200/70 shadow-2xs'
+                                        }`}
                                     >
                                         {/* Top Meta Row */}
-                                        <div className="flex justify-between items-center mb-1">
-                                            <div className="flex flex-wrap gap-1.5 items-center">
+                                        <div className="flex justify-between items-center gap-1.5">
+                                            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                                                 {ticket.endDate && (
-                                                    <span className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded tracking-wider shrink-0 uppercase">
+                                                    <span className="flex items-center gap-1 text-[10px] font-semibold text-slate-600 bg-slate-50 border border-slate-200/80 px-1.5 py-0.5 rounded-md tracking-wider shrink-0 uppercase">
                                                         <Clock className="w-2.5 h-2.5 text-slate-400" />
                                                         {new Date(ticket.endDate).getDate()} {new Date(ticket.endDate).toLocaleString('default', { month: 'short' })}
                                                     </span>
                                                 )}
 
-                                                <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded border tracking-wider shrink-0 ${status === 'Done' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
-                                                        status === 'Review' ? 'bg-amber-50 text-amber-700 border-amber-100' :
-                                                            isOverdue(ticket.endDate, ticket.status) ? 'bg-rose-50 text-rose-700 border-rose-100' :
-                                                                'bg-teal-50 text-teal-700 border-teal-100'
-                                                    }`}>
+                                                <span className={`px-1.5 py-0.5 text-[9px] font-black uppercase rounded-md border tracking-wide shrink-0 ${
+                                                    status === 'Done' ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80' :
+                                                    status === 'Review' ? 'bg-amber-50 text-amber-700 border-amber-200/80' :
+                                                    isOverdue(ticket.endDate, ticket.status) ? 'bg-rose-50 text-rose-700 border-rose-200/80' :
+                                                    'bg-teal-50 text-teal-700 border-teal-200/80'
+                                                }`}>
                                                     {status === 'Done' ? 'APPROVED' :
-                                                        status === 'Review' ? 'SUBMITTED' :
-                                                            isOverdue(ticket.endDate, ticket.status) ? 'OVERDUE' : 'ON TRACK'}
+                                                     status === 'Review' ? 'SUBMITTED' :
+                                                     isOverdue(ticket.endDate, ticket.status) ? 'OVERDUE' : 'ON TRACK'}
                                                 </span>
 
                                                 {ticket.recurringTaskId && (
-                                                    <span className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold uppercase bg-slate-100 text-slate-500 rounded tracking-wider shrink-0">
-                                                        <Repeat className="w-2.5 h-2.5" />
+                                                    <span className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold uppercase bg-slate-100 text-slate-600 border border-slate-200/80 rounded-md tracking-wide shrink-0" title="Recurring Task">
+                                                        <Repeat className="w-2.5 h-2.5 text-slate-500" />
                                                         <span>Recurring</span>
                                                     </span>
                                                 )}
+                                            </div>
+
+                                            <div className="flex items-center gap-1 shrink-0 ml-auto">
                                                 {ticket.priority && (
-                                                    <span className={`px-1.5 py-0.5 text-[9px] font-semibold uppercase rounded tracking-wider shrink-0
-                                                        ${ticket.priority === 'High' ? 'bg-rose-50 text-rose-700' :
-                                                            ticket.priority === 'Medium' ? 'bg-amber-50 text-amber-700' :
-                                                                'bg-slate-50 text-slate-500'}`}>
+                                                    <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded-md tracking-wider ${
+                                                        ticket.priority === 'High' ? 'bg-rose-50 text-rose-700 border border-rose-200/80' :
+                                                        ticket.priority === 'Medium' ? 'bg-amber-50 text-amber-700 border border-amber-200/80' :
+                                                        'bg-slate-50 text-slate-600 border border-slate-200/80'
+                                                    }`}>
                                                         {ticket.priority}
                                                     </span>
                                                 )}
+
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDeleteTicket(ticket);
+                                                    }}
+                                                    className="p-1 hover:bg-rose-50 rounded-md text-slate-300 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100 shrink-0"
+                                                    title="Delete Task"
+                                                >
+                                                    <Trash2 className="w-3 h-3" />
+                                                </button>
                                             </div>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleDeleteTicket(ticket);
-                                                }}
-                                                className="p-1 hover:bg-rose-50 rounded-md text-slate-300 hover:text-rose-500 transition-all shrink-0 opacity-0 group-hover:opacity-100"
-                                            >
-                                                <Trash2 className="w-3 h-3" />
-                                            </button>
                                         </div>
 
                                         {/* Developer Query Badge */}
                                         {ticket.workerQuery && (
-                                            <div className="flex items-center gap-1.5 text-[10px] font-semibold px-2 py-1 bg-amber-500/10 text-amber-700 border border-amber-500/30 rounded-md animate-pulse my-1">
+                                            <div className="flex items-center gap-1.5 text-[10px] font-semibold px-2 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg">
                                                 <HelpCircle className="w-3 h-3 text-amber-600 shrink-0" />
                                                 <span className="truncate">Query: {ticket.workerQuery}</span>
                                             </div>
@@ -2237,25 +2219,27 @@ const WorkAllocation = () => {
 
                                         {/* Title */}
                                         <div>
-                                            <div className="text-xs font-semibold text-slate-900 leading-tight line-clamp-2 my-1">
+                                            <div className="text-xs font-bold text-slate-800 leading-snug line-clamp-2">
                                                 {ticket.title}
                                             </div>
                                         </div>
 
                                         {/* Progress Section */}
                                         {(ticket.checklist?.length > 0 || status !== 'To Do') && (
-                                            <div>
-                                                <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
-                                                    <div
-                                                        className="bg-teal-500 h-1 rounded-full transition-all duration-700"
-                                                        style={{ width: `${status === 'Done' ? 100 : (status === 'Review' ? 90 : (status === 'In Progress' ? 50 : 0))}%` }}
-                                                    ></div>
-                                                </div>
+                                            <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+                                                <div
+                                                    className={`h-1 rounded-full transition-all duration-500 ${
+                                                        status === 'Done' ? 'bg-emerald-500' :
+                                                        status === 'Review' ? 'bg-amber-500' :
+                                                        status === 'In Progress' ? 'bg-teal-500' : 'bg-slate-300'
+                                                    }`}
+                                                    style={{ width: `${status === 'Done' ? 100 : (status === 'Review' ? 90 : (status === 'In Progress' ? 50 : 0))}%` }}
+                                                ></div>
                                             </div>
                                         )}
 
                                         {/* Footer Row */}
-                                        <div className="flex items-center justify-between pt-1 mt-auto">
+                                        <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100 mt-auto">
                                             {/* Assignee on left */}
                                             {(() => {
                                                 const primaryAssignee = ticket.assignees?.length > 0 ? ticket.assignees[0] : ticket.assignee;
@@ -2265,23 +2249,23 @@ const WorkAllocation = () => {
                                                     : ticket.assignee?.name?.split(' ')[0] || 'Unassigned';
 
                                                 return (
-                                                    <div className="flex items-center gap-1.5 cursor-default">
+                                                    <div className="flex items-center gap-1.5 min-w-0 flex-1" title={ticket.assignee?.name || displayName}>
                                                         {primaryId ? (
-                                                            <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-600 border border-white shadow-sm shrink-0">
+                                                            <div className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 font-black flex items-center justify-center text-[9px] border border-white shadow-2xs shrink-0">
                                                                 {displayName.charAt(0).toUpperCase()}
                                                             </div>
                                                         ) : (
                                                             <div className="w-5 h-5 rounded-full bg-slate-50 flex items-center justify-center border border-slate-200 shrink-0">
-                                                                <User className="w-3 h-3 text-slate-400" />
+                                                                <User className="w-2.5 h-2.5 text-slate-400" />
                                                             </div>
                                                         )}
-                                                        <span className="text-[10px] font-medium text-slate-500 truncate max-w-[70px]">{displayName}</span>
+                                                        <span className="text-[11px] font-semibold text-slate-600 truncate">{displayName}</span>
                                                     </div>
                                                 );
                                             })()}
 
                                             {/* Micro-actions on right */}
-                                            <div className="flex gap-1 shrink-0 items-center">
+                                            <div className="flex items-center gap-1 shrink-0">
                                                 {status === 'Review' ? (
                                                     <>
                                                         <button
@@ -2289,20 +2273,20 @@ const WorkAllocation = () => {
                                                                 e.stopPropagation();
                                                                 updateStatus(ticket._id, 'Done');
                                                             }}
-                                                            className="bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200/80 px-2 sm:px-3 rounded-md text-[10px] sm:text-xs font-semibold transition-all inline-flex items-center gap-1 shadow-xs h-7 sm:h-8"
+                                                            className="bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200/90 px-2 py-1 rounded-md text-[11px] font-bold transition-all inline-flex items-center gap-1 shadow-2xs h-6.5"
                                                             title="Approve"
                                                         >
-                                                            <Check className="w-3 sm:w-3.5 h-3 sm:h-3.5 stroke-[3]" /> Approve
+                                                            <Check className="w-3 h-3 stroke-[2.5]" /> Approve
                                                         </button>
                                                         <button
                                                             onClick={async (e) => {
                                                                 e.stopPropagation();
                                                                 setRejectConfirm({ isOpen: true, ticket, reason: '' });
                                                             }}
-                                                            className="bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200/80 px-2 sm:px-3 rounded-md text-[10px] sm:text-xs font-semibold transition-all inline-flex items-center gap-1 shadow-xs h-7 sm:h-8"
+                                                            className="bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200/90 px-2 py-1 rounded-md text-[11px] font-bold transition-all inline-flex items-center gap-1 shadow-2xs h-6.5"
                                                             title="Reject"
                                                         >
-                                                            <X className="w-3 sm:w-3.5 h-3 sm:h-3.5 stroke-[3]" /> Reject
+                                                            <X className="w-3 h-3 stroke-[2.5]" /> Reject
                                                         </button>
                                                     </>
                                                 ) : (
@@ -2314,10 +2298,10 @@ const WorkAllocation = () => {
                                                                     const prevStatus = columns[columns.indexOf(status) - 1];
                                                                     updateStatus(ticket._id, prevStatus);
                                                                 }}
-                                                                className="bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200/80 px-2 sm:px-3 rounded-md text-[10px] sm:text-xs font-semibold transition-all inline-flex items-center gap-1 shadow-xs h-7 sm:h-8"
+                                                                className="bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200/80 px-2 py-1 rounded-md text-[11px] font-semibold transition-all inline-flex items-center gap-0.5 shadow-2xs h-6.5"
                                                                 title="Move Back"
                                                             >
-                                                                ← Back
+                                                                <ChevronLeft className="w-3 h-3" /> Back
                                                             </button>
                                                         )}
                                                         {status !== 'Done' && (
@@ -2327,10 +2311,10 @@ const WorkAllocation = () => {
                                                                     const nextStatus = columns[columns.indexOf(status) + 1];
                                                                     updateStatus(ticket._id, nextStatus);
                                                                 }}
-                                                                className="bg-teal-50 hover:bg-teal-600 text-teal-700 hover:text-white border border-teal-200/80 px-2 sm:px-3 rounded-md text-[10px] sm:text-xs font-semibold transition-all inline-flex items-center gap-1 shadow-xs h-7 sm:h-8"
+                                                                className="bg-teal-50 hover:bg-teal-600 text-teal-700 hover:text-white border border-teal-200/80 px-2 py-1 rounded-md text-[11px] font-semibold transition-all inline-flex items-center gap-0.5 shadow-2xs h-6.5"
                                                                 title="Move Next"
                                                             >
-                                                                Next →
+                                                                Next <ChevronRight className="w-3 h-3" />
                                                             </button>
                                                         )}
                                                     </>
@@ -2368,22 +2352,14 @@ const WorkAllocation = () => {
                                             </button>
                                         </div>
                                     </div>
-                                ) : (
-                                    <button
-                                        onClick={() => setInlineCreateStatus(status)}
-                                        className="w-full py-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 flex items-center justify-center gap-1.5 transition-all duration-200 group/btn mt-1 border border-transparent border-dashed hover:border-slate-300"
-                                    >
-                                        <Plus className="w-3.5 h-3.5" />
-                                        <span className="text-[10px] font-semibold">Add Task</span>
-                                    </button>
-                                )}
+                                ) : null}
                             </div>
                         </div>
                     ))}
                 </div>
             </div>
 
-            {/* Full-Screen Workspace Task Modal */}
+{/* Full-Screen Workspace Task Modal */}
             {isModalOpen && selectedTicket && (
                 <div className="fixed inset-0 bg-black/60 z-[600] flex flex-col items-center justify-center backdrop-blur-sm transition-all duration-300 p-2">
                     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[97vw] h-[96vh] flex flex-col animate-in zoom-in-95 duration-300 overflow-hidden border border-slate-200/80">
@@ -2417,6 +2393,41 @@ const WorkAllocation = () => {
                                 </button>
                             </div>
 
+                            {/* View Switcher for existing tasks */}
+                            {selectedTicket._id !== 'new' && (
+                                <div className="hidden lg:flex items-center bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80 shadow-2xs">
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveModalTab('details')}
+                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                            activeModalTab !== 'execution'
+                                                ? 'bg-white text-teal-700 shadow-xs border border-slate-200/60'
+                                                : 'text-slate-500 hover:text-slate-700'
+                                        }`}
+                                    >
+                                        <AlignLeft className="w-3.5 h-3.5" />
+                                        <span>Task Studio</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveModalTab('execution')}
+                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                            activeModalTab === 'execution'
+                                                ? 'bg-teal-600 text-white shadow-xs'
+                                                : 'text-slate-500 hover:text-slate-700'
+                                        }`}
+                                    >
+                                        <BarChart2 className="w-3.5 h-3.5" />
+                                        <span>Execution Analytics</span>
+                                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+                                            activeModalTab === 'execution' ? 'bg-teal-700 text-teal-100' : 'bg-slate-200 text-slate-600'
+                                        }`}>
+                                            {selectedTicket.status === 'Done' ? '100%' : (selectedTicket.status === 'Review' ? '90%' : (selectedTicket.status === 'In Progress' ? '25%' : '0%'))}
+                                        </span>
+                                    </button>
+                                </div>
+                            )}
+
                             {/* Right side controls — Phase Status + AI Brain + Create + Close */}
                             <div className="flex items-center gap-2 w-full md:w-auto justify-start md:justify-end">
                                 {/* Phase Status */}
@@ -2446,8 +2457,15 @@ const WorkAllocation = () => {
 
                                 {selectedTicket._id === 'new' && (
                                     <button
-                                        disabled={!selectedTicket.title}
                                         onClick={async () => {
+                                            if (!selectedTicket.title || !selectedTicket.title.trim()) {
+                                                toast.warning('Please enter a Workspace Definition title before creating the task');
+                                                const titleEl = document.querySelector('#modal-sec-details textarea, #modal-sec-details input');
+                                                if (titleEl) {
+                                                    titleEl.focus();
+                                                }
+                                                return;
+                                            }
                                             setLoading(true);
                                             try {
                                                 const taskToSave = { ...selectedTicket };
@@ -2552,7 +2570,12 @@ const WorkAllocation = () => {
                                                 setLoading(false);
                                             }
                                         }}
-                                        className="flex-1 sm:flex-none bg-teal-600 text-white h-9 px-4 rounded-xl text-xs font-bold hover:bg-teal-700 transition-all shadow-md shadow-teal-100 active:scale-[0.98] flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                        className={`flex-1 sm:flex-none h-9 px-4 rounded-xl text-xs font-bold transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-1.5 ${
+                                            selectedTicket.title?.trim()
+                                                ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-teal-100'
+                                                : 'bg-teal-600/75 hover:bg-teal-700 text-white/90 shadow-slate-100'
+                                        }`}
+                                        title={selectedTicket.title?.trim() ? 'Create Task' : 'Enter a workspace title to create task'}
                                     >
                                         <Check className="w-3.5 h-3.5 stroke-[3]" /><span>Create</span>
                                     </button>
@@ -2590,58 +2613,242 @@ const WorkAllocation = () => {
                             </div>
                         )}
 
-                        {/* Body - Responsive Layout */}
-                        <div className="flex-1 flex flex-col md:overflow-hidden bg-white min-h-0">
-                            {/* Mobile: Sticky section tabs for seamless tab/swipe switching */}
-                            <div className="md:hidden flex items-center justify-around border-b border-slate-200 bg-white px-2 py-2 shrink-0 relative">
+                        {/* Body - Clean Studio Layout (Responsive & Intuitive) */}
+                        <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/20 min-h-0">
+                            {/* Mobile / Small Screen Navigation Tab Bar */}
+                            <div className="lg:hidden flex items-center justify-around border-b border-slate-200 bg-white px-2 py-2 shrink-0">
                                 {[
-                                    { id: 'details', label: 'Details', icon: AlignLeft },
-                                    { id: 'assign', label: 'Assign & AI', icon: Users },
-                                    { id: 'execution', label: 'Execution', icon: BarChart2 }
+                                    { id: 'details', label: '1. Task Scope', icon: AlignLeft },
+                                    { id: 'assign', label: '2. Logistics', icon: Users },
+                                    ...(selectedTicket._id !== 'new' ? [{ id: 'execution', label: '3. Analytics', icon: BarChart2 }] : [])
                                 ].map((tab) => {
                                     const Icon = tab.icon;
-                                    const isActive = activeModalTab === tab.id;
+                                    const isActive = (activeModalTab === tab.id) || (tab.id === 'details' && activeModalTab !== 'assign' && activeModalTab !== 'execution');
                                     return (
                                         <button
                                             key={tab.id}
                                             type="button"
-                                            onClick={() => scrollToTab(tab.id)}
-                                            className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 text-[10px] font-extrabold uppercase tracking-wider transition-colors ${isActive ? 'text-teal-600' : 'text-slate-400 hover:text-slate-600'
-                                                }`}
+                                            onClick={() => setActiveModalTab(tab.id)}
+                                            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 text-xs font-bold rounded-xl transition-all ${
+                                                isActive
+                                                    ? 'bg-teal-50 text-teal-700 border border-teal-200 shadow-2xs'
+                                                    : 'text-slate-500 hover:text-slate-800'
+                                            }`}
                                         >
                                             <Icon className="w-3.5 h-3.5" />
                                             <span>{tab.label}</span>
                                         </button>
                                     );
                                 })}
-                                {/* Premium sliding indicator line */}
-                                <div
-                                    className="absolute bottom-0 h-0.5 bg-teal-600 transition-all duration-300 ease-out"
-                                    style={{
-                                        width: '33.33%',
-                                        left: `${['details', 'assign', 'execution'].indexOf(activeModalTab) * 33.33}%`
-                                    }}
-                                />
                             </div>
 
-                            <div className="flex-1 overflow-hidden bg-white min-h-0">
-                                <div
-                                    ref={columnsContainerRef}
-                                    onScroll={handleModalScroll}
-                                    className="flex md:grid flex-col md:grid-cols-[28%_44%_28%] overflow-y-auto md:overflow-y-hidden scroll-smooth w-full h-full min-h-0 custom-scrollbar md:h-full md:divide-x divide-slate-100"
-                                >
-
-                                    {/* 🔹 COLUMN 1: Task Input & Checklist (LEFT) */}
-                                    <div id="modal-sec-details" className="w-full md:w-auto flex flex-col px-4 py-4 md:h-full md:overflow-hidden lg:px-6 lg:py-6 overflow-visible md:overflow-y-hidden">
-                                        {/* Mobile section label */}
-                                        <div className="md:hidden flex items-center gap-2 mb-4 pb-2 border-b border-slate-200">
-                                            <AlignLeft className="w-4 h-4 text-teal-600" />
-                                            <span className="text-xs font-black text-slate-700 uppercase tracking-widest">Details</span>
+                            {/* View Content */}
+                            {activeModalTab === 'execution' && selectedTicket._id !== 'new' ? (
+                                /* 🔹 FULL-WIDTH EXECUTION & PROGRESS ANALYTICS VIEW */
+                                <div id="modal-sec-execution" className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 lg:p-8 bg-slate-50/40">
+                                    <div className="max-w-5xl mx-auto space-y-6">
+                                        {/* Overall Completion Card */}
+                                        <div className="bg-white border border-teal-100 rounded-3xl p-5 sm:p-6 shadow-2xs relative overflow-hidden">
+                                            <div className="absolute top-0 left-0 w-2 h-full bg-teal-500"></div>
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className="w-10 h-10 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center text-teal-600 shadow-2xs">
+                                                        <BarChart2 className="w-5 h-5" />
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Overall Task Completion</h3>
+                                                        <p className="text-[11px] text-slate-400 font-medium">Real-time status based on sub-task verification</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-black bg-teal-50 text-teal-700 px-3 py-1 rounded-xl border border-teal-200 shadow-2xs">
+                                                        {selectedTicket.status === 'Done' ? 100 : (selectedTicket.status === 'Review' ? 90 : (selectedTicket.status === 'In Progress' ? 25 : 0))}% COMPLETED
+                                                    </span>
+                                                    <span className="text-xs font-bold text-slate-500 uppercase px-2.5 py-1 bg-slate-100 rounded-xl">
+                                                        Phase: {selectedTicket.status}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner flex p-0.5 border border-slate-200/60">
+                                                <div
+                                                    className="bg-gradient-to-r from-teal-500 to-emerald-500 h-2 rounded-full transition-all duration-1000 ease-out shadow-xs"
+                                                    style={{ width: `${selectedTicket.status === 'Done' ? 100 : (selectedTicket.status === 'Review' ? 90 : (selectedTicket.status === 'In Progress' ? 25 : 0))}%` }}
+                                                />
+                                            </div>
                                         </div>
-                                        <div className="shrink-0 mb-3">
-                                            <div className="flex items-center gap-1.5 mb-1.5">
-                                                <AlignLeft className="w-3.5 h-3.5 text-teal-600" />
-                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Workspace Definition</span>
+
+                                        {/* Resource Execution Graph */}
+                                        <div className="bg-white border border-slate-200/80 rounded-3xl p-5 sm:p-6 shadow-2xs space-y-4">
+                                            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className="w-9 h-9 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center text-teal-600 shadow-2xs">
+                                                        <Users className="w-4 h-4" />
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Resource Execution Graph</h4>
+                                                        <p className="text-[10px] text-slate-400 font-medium">Track completion and review submission proofs by assigned developer</p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setActiveModalTab('details')}
+                                                    className="text-xs font-bold text-teal-600 hover:text-teal-700 hover:underline flex items-center gap-1"
+                                                >
+                                                    <AlignLeft className="w-3.5 h-3.5" />
+                                                    <span>Back to Task Studio</span>
+                                                </button>
+                                            </div>
+
+                                            <div className="space-y-4 pt-1">
+                                                {isFetchingCompletions ? (
+                                                    <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                                                        <Spinner size="md" className="mb-4" />
+                                                        <p className="text-xs font-bold uppercase tracking-widest">Loading Analytics...</p>
+                                                    </div>
+                                                ) : selectedTicket.assignees?.length > 0 && selectedTicket.checklist?.length > 0 ? (
+                                                    selectedTicket.checklist.map((item, idx) => {
+                                                        const itemCompletions = ticketCompletions.filter(c => String(c.subTaskId) === String(item._id) || String(c.subTaskId) === String(idx));
+                                                        return (
+                                                            <div key={item._id || idx} className="bg-slate-50/60 border border-slate-200/80 rounded-2xl overflow-hidden shadow-2xs hover:shadow-xs transition-all">
+                                                                <div className="bg-white px-4 py-3 border-b border-slate-200/70 flex justify-between items-center gap-3">
+                                                                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                                                        <span className="text-[9.5px] font-black bg-teal-100/80 text-teal-800 px-2.5 py-0.5 rounded-lg border border-teal-200 shrink-0">
+                                                                            ST-{String(idx + 1).padStart(2, '0')}
+                                                                        </span>
+                                                                        <div className="flex flex-col min-w-0">
+                                                                            <span
+                                                                                className={`text-xs font-bold text-slate-800 cursor-pointer hover:text-teal-600 transition-colors ${expandedSubTasks[idx] ? 'whitespace-pre-wrap break-words' : 'truncate'}`}
+                                                                                title={expandedSubTasks[idx] ? "Click to collapse" : "Click to view more details"}
+                                                                                onClick={() => toggleSubTaskExpand(idx)}
+                                                                            >
+                                                                                {item.text || `Point ${idx + 1}`}
+                                                                            </span>
+                                                                            {item.text && item.text.length > 50 && (
+                                                                                <button
+                                                                                    onClick={() => toggleSubTaskExpand(idx)}
+                                                                                    className="text-[9px] text-teal-600 hover:text-teal-800 font-bold mt-0.5 text-left hover:underline select-none"
+                                                                                >
+                                                                                    {expandedSubTasks[idx] ? 'Show less' : '... more details'}
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex -space-x-1.5 shrink-0">
+                                                                        {selectedTicket.assignees.slice(0, 5).map(w => (
+                                                                            <div key={w._id || w} className={`w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-[8.5px] font-extrabold shadow-2xs ${itemCompletions.some(c => String(c.workerId?._id || c.workerId) === String(w._id || w)) ? 'bg-teal-500 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                                                                                {(w.name || 'W').charAt(0)}
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="p-3 sm:p-4 space-y-2.5 bg-slate-50/40">
+                                                                    {selectedTicket.assignees.map(worker => {
+                                                                        const workerId = worker._id || worker;
+                                                                        const comp = itemCompletions.find(c => String(c.workerId?._id || c.workerId) === String(workerId));
+                                                                        const isDone = comp && comp.isCompleted;
+                                                                        const hasProof = comp?.proofFiles?.length > 0;
+
+                                                                        return (
+                                                                            <div key={workerId} className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200/70 hover:border-teal-300 hover:shadow-2xs transition-all gap-3">
+                                                                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                                                    <div className="w-8 h-8 rounded-full bg-teal-50 border border-teal-100 flex items-center justify-center text-[10px] font-black text-teal-700 shadow-2xs shrink-0">
+                                                                                        {(worker.name || 'W').charAt(0).toUpperCase()}
+                                                                                    </div>
+                                                                                    <span className="text-xs sm:text-sm font-bold text-slate-700 truncate" title={worker.name || 'Worker'}>
+                                                                                        {worker.name || 'Worker'}
+                                                                                    </span>
+                                                                                </div>
+
+                                                                                <div className="flex items-center gap-2 shrink-0">
+                                                                                    {/* Status Badge */}
+                                                                                    {isDone ? (
+                                                                                        <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-xl text-[9.5px] font-black uppercase border border-emerald-200 shadow-2xs">
+                                                                                            <CheckCircle2 className="w-3 h-3" /> Done
+                                                                                        </span>
+                                                                                    ) : (
+                                                                                        <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 px-2.5 py-1 rounded-xl text-[9.5px] font-black uppercase border border-amber-200 shadow-2xs">
+                                                                                            <Clock className="w-3 h-3" /> Pending
+                                                                                        </span>
+                                                                                    )}
+
+                                                                                    {/* Proof Status Button */}
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => triggerReferenceUpload(selectedTicket._id === 'new' ? tempTicketId : selectedTicket._id, selectedTicket._id === 'new' ? idx : (item._id || idx), workerId)}
+                                                                                        className="inline-flex items-center gap-1 bg-slate-50 hover:bg-teal-50 text-slate-600 hover:text-teal-700 px-2.5 py-1 rounded-xl text-[9.5px] font-black uppercase border border-slate-200 hover:border-teal-200 transition-all shadow-2xs cursor-pointer"
+                                                                                    >
+                                                                                        <Paperclip className="w-3 h-3" /> {comp?.referenceFiles?.length > 0 ? 'REF ✓' : 'REF'}
+                                                                                    </button>
+
+                                                                                    {/* View Proof Action */}
+                                                                                    {hasProof && (
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={() => setProofViewer({ isOpen: true, files: comp.proofFiles, userName: worker.name, subTaskText: item.text })}
+                                                                                            className="flex items-center gap-1.5 px-3 py-1 bg-teal-600 text-white rounded-xl text-[9.5px] font-black uppercase hover:bg-teal-700 transition-all shadow-sm shadow-teal-100 active:scale-95 group"
+                                                                                        >
+                                                                                            <Eye className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" /> View Proof
+                                                                                        </button>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })
+                                                ) : (
+                                                    <div className="text-center py-12 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 flex flex-col items-center justify-center p-6 shadow-2xs">
+                                                        <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center text-slate-400 mb-3 border border-slate-200/70 shadow-2xs">
+                                                            <Users className="w-6 h-6 text-teal-600/70" />
+                                                        </div>
+                                                        <p className="text-xs font-black text-slate-600 uppercase tracking-widest">No Execution Data Available Yet</p>
+                                                        <p className="text-[11px] text-slate-400 font-medium mt-1 max-w-[280px] leading-relaxed">
+                                                            Assign developers to this task and add checklist points to track real-time subtask completion.
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                /* 🔹 MAIN 2-COLUMN TASK STUDIO (LEFT: SCOPE & WHAT, RIGHT: LOGISTICS & WHO) */
+                                <div ref={columnsContainerRef} className="flex-1 flex flex-col lg:flex-row overflow-hidden bg-white min-h-0">
+                                    {/* ⬅️ LEFT COLUMN: TASK SCOPE & DEFINITION */}
+                                    <div
+                                        id="modal-sec-details"
+                                        className={`${
+                                            activeModalTab === 'assign' ? 'hidden lg:flex' : 'flex'
+                                        } flex-1 lg:flex-[1.35] xl:flex-[1.45] flex-col overflow-y-auto custom-scrollbar p-4 sm:p-6 lg:p-7 space-y-5`}
+                                    >
+                                        {/* Card 1: Workspace Definition (Title) */}
+                                        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5">
+                                                    <AlignLeft className="w-4 h-4 text-teal-600" />
+                                                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider">Workspace Definition</span>
+                                                </div>
+                                                {selectedTicket._id === 'new' ? (
+                                                    <span className="text-[9px] font-black text-teal-600 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-100 uppercase">
+                                                        Required
+                                                    </span>
+                                                ) : selectedTicket.createdAt ? (
+                                                    <div className="flex items-center gap-2.5 text-[9px] font-bold text-slate-400">
+                                                        <span className="flex items-center gap-1">
+                                                            <Calendar className="w-3 h-3 text-teal-600" />
+                                                            {new Date(selectedTicket.createdAt).toLocaleDateString()}
+                                                        </span>
+                                                        {selectedTicket.updatedAt && (
+                                                            <span className="flex items-center gap-1">
+                                                                <History className="w-3 h-3 text-teal-600" />
+                                                                {new Date(selectedTicket.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ) : null}
                                             </div>
                                             <TitleInput
                                                 initialValue={selectedTicket.title}
@@ -2649,41 +2856,56 @@ const WorkAllocation = () => {
                                                     updateSelectedTicket({ title: newTitle }, true);
                                                 }}
                                             />
-
-                                            {selectedTicket._id !== 'new' && selectedTicket.createdAt && (
-                                                <div className="flex items-center gap-3 mt-2 text-[8.5px] font-bold text-slate-400 px-1">
-                                                    <div className="flex items-center gap-1 opacity-80 hover:opacity-100 transition-opacity">
-                                                        <Calendar className="w-3 h-3 text-teal-600" />
-                                                        <span>Created: {new Date(selectedTicket.createdAt).toLocaleDateString()}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-1 opacity-80 hover:opacity-100 transition-opacity">
-                                                        <History className="w-3 h-3 text-teal-600" />
-                                                        <span>Mod: {new Date(selectedTicket.updatedAt).toLocaleTimeString()}</span>
-                                                    </div>
-                                                </div>
-                                            )}
+                                            <p className="text-[10px] text-slate-400 font-medium">
+                                                Give this workspace or task a clear title describing what needs to be delivered.
+                                            </p>
                                         </div>
 
-                                        <div className="flex-1 flex flex-col min-h-[180px] lg:min-h-0 bg-slate-50/50 rounded-2xl p-3 border border-slate-200/60 shadow-2xs">
-                                            <div className="flex justify-between items-center mb-2 shrink-0">
-                                                <label className="text-xs font-extrabold text-slate-700 flex items-center">
-                                                    <List className="w-4 h-4 mr-1.5 text-teal-600" /> Task Checklist
-                                                </label>
-                                                <span className="text-[9.5px] font-black text-teal-600 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-100 shadow-2xs">
-                                                    {selectedTicket.checklist?.length || 0} SUB-TASKS
-                                                </span>
+                                        {/* Card 2: Task Checklist & Action Items */}
+                                        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3 flex-1 flex flex-col min-h-[220px]">
+                                            <div className="flex justify-between items-center shrink-0">
+                                                <div className="flex items-center gap-2">
+                                                    <CheckSquare className="w-4 h-4 text-teal-600" />
+                                                    <h3 className="text-[11px] font-black text-slate-700 uppercase tracking-wider">Task Checklist & Sub-Tasks</h3>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[9.5px] font-black text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-100 shadow-2xs">
+                                                        {(selectedTicket.checklist?.length || 0) > 0
+                                                            ? `${(selectedTicket.checklist || []).filter(i => i.completed).length} of ${selectedTicket.checklist?.length || 0} Completed (${Math.round(((selectedTicket.checklist || []).filter(i => i.completed).length / Math.max(1, selectedTicket.checklist?.length || 0)) * 100)}%)`
+                                                            : '0 Sub-Tasks'}
+                                                    </span>
+                                                </div>
                                             </div>
 
-                                            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-2 pb-1">
+                                            {/* Micro progress bar */}
+                                            {(selectedTicket.checklist?.length || 0) > 0 && (
+                                                <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden shrink-0">
+                                                    <div
+                                                        className="bg-gradient-to-r from-teal-500 to-emerald-500 h-full rounded-full transition-all duration-300"
+                                                        style={{ width: `${Math.round(((selectedTicket.checklist || []).filter(i => i.completed).length / Math.max(1, selectedTicket.checklist?.length || 0)) * 100)}%` }}
+                                                    />
+                                                </div>
+                                            )}
+
+                                            {/* Checklist sub-tasks list */}
+                                            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-2 pb-1 min-h-[100px] max-h-[340px]">
                                                 {(selectedTicket.checklist && selectedTicket.checklist.length > 0 ? selectedTicket.checklist : [{ text: '', completed: false, _id: 'default-0' }]).map((item, idx) => (
-                                                    <div key={item._id || `item-${idx}`} className="flex items-start gap-2.5 group p-2 bg-white hover:bg-slate-50/80 rounded-xl transition-all border border-slate-200/80 hover:border-slate-300 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/10 shadow-2xs relative min-h-[38px]">
+                                                    <div
+                                                        key={item._id || `item-${idx}`}
+                                                        className="flex items-start gap-2.5 group p-2.5 bg-slate-50/50 hover:bg-white rounded-xl transition-all border border-slate-200/80 hover:border-teal-400 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/10 shadow-2xs relative min-h-[42px]"
+                                                    >
                                                         <div className="flex items-center shrink-0 mt-0.5">
-                                                            <div
+                                                            <button
+                                                                type="button"
                                                                 onClick={() => toggleChecklistItem(idx)}
-                                                                className={`w-4 h-4 rounded-md flex items-center justify-center border-2 transition-all cursor-pointer ${item.completed ? 'bg-teal-500 border-teal-500 text-white shadow-2xs' : 'border-slate-300 hover:border-teal-500 bg-white'}`}
+                                                                className={`w-4 h-4 rounded-md flex items-center justify-center border-2 transition-all cursor-pointer ${
+                                                                    item.completed
+                                                                        ? 'bg-teal-500 border-teal-500 text-white shadow-2xs'
+                                                                        : 'border-slate-300 hover:border-teal-500 bg-white'
+                                                                }`}
                                                             >
                                                                 {item.completed && <Check className="w-3 h-3 stroke-[3]" />}
-                                                            </div>
+                                                            </button>
                                                         </div>
                                                         <div className="flex-1 flex items-center min-w-0">
                                                             <textarea
@@ -2691,11 +2913,18 @@ const WorkAllocation = () => {
                                                                 value={item.text}
                                                                 onChange={(e) => updateChecklistItemText(idx, e.target.value)}
                                                                 onKeyDown={(e) => {
-                                                                    if (e.key === 'Enter') { e.preventDefault(); addChecklistItem(idx); }
-                                                                    else if (e.key === 'Backspace' && item.text === '' && (selectedTicket.checklist || []).length > 1) { e.preventDefault(); removeChecklistItem(idx); }
+                                                                    if (e.key === 'Enter') {
+                                                                        e.preventDefault();
+                                                                        addChecklistItem(idx);
+                                                                    } else if (e.key === 'Backspace' && item.text === '' && (selectedTicket.checklist || []).length > 1) {
+                                                                        e.preventDefault();
+                                                                        removeChecklistItem(idx);
+                                                                    }
                                                                 }}
-                                                                className={`w-full bg-transparent border-none focus:ring-0 text-xs font-semibold text-slate-700 placeholder-slate-300 outline-none resize-none min-h-[20px] max-h-[90px] leading-snug py-0 scrollbar-hidden ${item.completed ? 'text-slate-400 line-through italic' : ''}`}
-                                                                placeholder="Add sub-task details..."
+                                                                className={`w-full bg-transparent border-none focus:ring-0 text-xs font-semibold text-slate-700 placeholder-slate-300 outline-none resize-none min-h-[20px] max-h-[120px] leading-snug py-0 scrollbar-hidden ${
+                                                                    item.completed ? 'text-slate-400 line-through italic' : ''
+                                                                }`}
+                                                                placeholder="Add sub-task details or requirements..."
                                                                 rows={1}
                                                                 title={item.text}
                                                                 onInput={(e) => {
@@ -2711,763 +2940,635 @@ const WorkAllocation = () => {
                                                             />
                                                         </div>
                                                         <button
+                                                            type="button"
                                                             onClick={() => removeChecklistItem(idx)}
-                                                            className="p-1 text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all rounded-lg shrink-0 mt-0.5"
+                                                            className="p-1 text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all rounded-lg shrink-0 opacity-70 group-hover:opacity-100"
+                                                            title="Delete sub-task"
                                                         >
                                                             <X className="w-3.5 h-3.5" />
                                                         </button>
                                                     </div>
                                                 ))}
                                             </div>
-                                            <button
-                                                onClick={() => addChecklistItem()}
-                                                className="mt-2 flex items-center justify-center gap-1.5 text-teal-600 hover:bg-teal-600 hover:text-white text-[10px] font-extrabold uppercase tracking-wider transition-all py-2 px-3.5 bg-teal-50/50 hover:bg-teal-600 border border-dashed border-teal-200 rounded-xl group shadow-2xs active:scale-95 w-full"
-                                            >
-                                                <Plus className="w-4 h-4 transition-transform group-hover:rotate-90" /> Add Next Point
-                                            </button>
-                                        </div>
 
-                                        {/* REFINED Planning Section at Bottom (Timeline & Priority) */}
-                                        <div className="shrink-0 mt-2.5 pt-2 border-t border-slate-100 px-0.5 pb-0.5 animate-in fade-in duration-300">
-                                            <div className="bg-white border border-slate-200/80 rounded-2xl shadow-2xs overflow-hidden">
-                                                <div className="bg-slate-50/80 px-3 py-2 border-b border-slate-100 flex items-center justify-between">
-                                                    <div className="flex items-center gap-1.5">
-                                                        <LayoutDashboard className="w-3.5 h-3.5 text-teal-600" />
-                                                        <h3 className="text-[10px] font-black text-slate-600 uppercase tracking-wider">Timeline & Priority</h3>
-                                                    </div>
-                                                    <div className="flex items-center gap-1.5">
-                                                        <span className={`w-2 h-2 rounded-full ${isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'bg-rose-500 animate-pulse' : 'bg-teal-500'}`}></span>
-                                                        <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wide">{isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'Overdue' : 'Active'}</span>
-                                                    </div>
-                                                </div>
-
-                                                <div className="p-2.5 space-y-2.5">
-                                                    {/* Timeline Row - Full width 2-column grid for date inputs */}
-                                                    <div className="flex flex-col gap-1">
-                                                        <div className="flex items-center gap-1">
-                                                            <Calendar className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                                                            <span className="text-[9.5px] font-extrabold text-slate-500 uppercase tracking-wider">Dates</span>
-                                                        </div>
-                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full">
-                                                            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/90 rounded-xl px-2 py-1 shadow-2xs">
-                                                                <span className="text-[9px] font-black text-slate-400 uppercase shrink-0">Start</span>
-                                                                <CustomDatePicker
-                                                                    value={selectedTicket.startDate || ''}
-                                                                    onChange={(val) => updateSelectedTicket({ startDate: val })}
-                                                                    className="flex-1"
-                                                                    inputClassName="w-full bg-transparent text-xs font-bold text-slate-700 border-none p-0 shadow-none"
-                                                                    placeholder="Start date"
-                                                                />
-                                                            </div>
-                                                            <div className={`flex items-center gap-2 border rounded-xl px-2 py-1 shadow-2xs ${isOverdue(selectedTicket.endDate, selectedTicket.status)
-                                                                ? 'bg-rose-50 border-rose-200 text-rose-700'
-                                                                : 'bg-slate-50 border-slate-200/90 text-slate-700'
-                                                                }`}>
-                                                                <span className="text-[9px] font-black text-slate-400 uppercase shrink-0">End</span>
-                                                                <CustomDatePicker
-                                                                    value={selectedTicket.endDate || ''}
-                                                                    onChange={(val) => updateSelectedTicket({ endDate: val })}
-                                                                    className="flex-1"
-                                                                    inputClassName="w-full bg-transparent text-xs font-bold text-slate-700 border-none p-0 shadow-none"
-                                                                    placeholder="End date"
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Priority Row */}
-                                                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                                                        <div className="flex items-center gap-1 shrink-0">
-                                                            <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                                                            <span className="text-[9.5px] font-extrabold text-slate-500 uppercase tracking-wider">Priority</span>
-                                                        </div>
-                                                        <div className="flex gap-1.5 flex-1 w-full">
-                                                            {['Low', 'Medium', 'High'].map(p => (
-                                                                <button
-                                                                    key={p}
-                                                                    type="button"
-                                                                    onClick={() => updateSelectedTicket({ priority: p })}
-                                                                    className={`flex-1 py-1.5 rounded-xl text-[10px] sm:text-xs font-black uppercase transition-all border flex items-center justify-center text-center h-8 ${selectedTicket.priority === p
-                                                                        ? (p === 'High' ? 'bg-red-500 border-red-500 text-white shadow-xs' : p === 'Medium' ? 'bg-amber-500 border-amber-500 text-white shadow-xs' : 'bg-blue-500 border-blue-500 text-white shadow-xs')
-                                                                        : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300 hover:bg-slate-50'
-                                                                        }`}
-                                                                >
-                                                                    <span>{p}</span>
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                </div>
+                                            {/* Add Next Point Button */}
+                                            <div className="pt-1 shrink-0">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => addChecklistItem()}
+                                                    className="w-full flex items-center justify-center gap-2 text-teal-700 hover:text-white text-xs font-bold transition-all py-2.5 px-4 bg-teal-50/70 hover:bg-teal-600 border border-dashed border-teal-300 hover:border-teal-600 rounded-xl group shadow-2xs active:scale-[0.99]"
+                                                >
+                                                    <Plus className="w-4 h-4 transition-transform group-hover:rotate-90" />
+                                                    <span>Add Sub-Task Point</span>
+                                                </button>
+                                                <span className="text-[9px] text-slate-400 font-medium text-center block mt-1">
+                                                    Tip: Press Enter in any sub-task field to add the next item immediately.
+                                                </span>
                                             </div>
                                         </div>
+
+                                        {/* Card 3: Task References & Attachments */}
+                                        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3">
+                                            <div className="flex justify-between items-center">
+                                                <div className="flex items-center gap-2">
+                                                    <Paperclip className="w-4 h-4 text-teal-600" />
+                                                    <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider">Task References & Attachments</h3>
+                                                </div>
+                                                <input
+                                                    type="file"
+                                                    ref={taskRefFileInputRef}
+                                                    onChange={handleTaskRefFileChange}
+                                                    multiple
+                                                    className="hidden"
+                                                    accept="image/*"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
+                                                    className="text-[10px] font-black uppercase bg-teal-50 text-teal-700 hover:bg-teal-100 hover:text-teal-800 px-3 py-1.5 rounded-xl border border-teal-200 transition-colors shadow-2xs flex items-center gap-1"
+                                                >
+                                                    <Plus className="w-3 h-3" />
+                                                    <span>Upload</span>
+                                                </button>
+                                            </div>
+
+                                            {/* Drag & Drop Zone */}
+                                            <div
+                                                onDragOver={(e) => { e.preventDefault(); setIsDraggingTaskRef(true); }}
+                                                onDragEnter={(e) => { e.preventDefault(); setIsDraggingTaskRef(true); }}
+                                                onDragLeave={(e) => { e.preventDefault(); setIsDraggingTaskRef(false); }}
+                                                onDrop={async (e) => {
+                                                    e.preventDefault();
+                                                    setIsDraggingTaskRef(false);
+                                                    const files = e.dataTransfer.files;
+                                                    await uploadTaskRefFiles(files, selectedTicket._id);
+                                                }}
+                                                onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
+                                                className={`text-center py-5 px-4 border-2 border-dashed rounded-2xl transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
+                                                    isDraggingTaskRef
+                                                        ? 'border-teal-500 bg-teal-50/70 shadow-inner'
+                                                        : 'border-slate-200 hover:border-teal-400 bg-slate-50/50 hover:bg-teal-50/30'
+                                                }`}
+                                            >
+                                                <Paperclip className="w-5 h-5 text-teal-500 mb-0.5" />
+                                                <p className="text-xs font-bold text-slate-700">
+                                                    {isDraggingTaskRef ? 'Drop files here!' : 'Drag & drop image references here, or click to browse'}
+                                                </p>
+                                                <p className="text-[10px] text-slate-400 font-medium">Supports screenshots, diagrams & image specs</p>
+                                            </div>
+
+                                            {/* Previews of uploaded task references */}
+                                            {selectedTicket.referenceFiles && selectedTicket.referenceFiles.length > 0 && (
+                                                <div className="flex flex-wrap gap-2.5 pt-1 max-h-[140px] overflow-y-auto custom-scrollbar">
+                                                    {selectedTicket.referenceFiles.map(file => (
+                                                        <div key={file._id} className="relative w-16 h-16 rounded-xl border border-slate-200 overflow-hidden group shadow-2xs shrink-0">
+                                                            <img
+                                                                src={getFullFileUrl(file.url)}
+                                                                alt={file.name}
+                                                                className="w-full h-full object-cover"
+                                                            />
+                                                            <div className="absolute inset-0 bg-slate-900/60 flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-[1px]">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setZoomedImage({ url: getFullFileUrl(file.url), name: file.name });
+                                                                    }}
+                                                                    className="p-1 text-white hover:text-teal-400 transition-colors"
+                                                                    title="View Image"
+                                                                >
+                                                                    <Eye className="w-3.5 h-3.5" />
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleDeleteTaskReference(selectedTicket._id, file._id);
+                                                                    }}
+                                                                    className="p-1 text-white hover:text-rose-400 transition-colors"
+                                                                    title="Delete Image"
+                                                                >
+                                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Card 4: Developer Query & Review Feedback (if applicable) */}
+                                        {selectedTicket.workerQuery && (
+                                            <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-4 shadow-2xs space-y-2.5">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <HelpCircle className="w-4 h-4 text-amber-600 animate-pulse" />
+                                                        <span className="text-[10px] font-black text-amber-900 uppercase tracking-wider">Developer Query Pending</span>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => updateSelectedTicket({ workerQuery: '' })}
+                                                        className="text-[10px] font-bold text-amber-800 hover:text-amber-950 bg-amber-200/70 hover:bg-amber-300/80 px-2.5 py-1 rounded-lg transition-all"
+                                                    >
+                                                        Mark Resolved
+                                                    </button>
+                                                </div>
+                                                <div className="w-full bg-white border border-amber-200 rounded-xl p-3 text-xs font-medium text-slate-800 shadow-2xs">
+                                                    {selectedTicket.workerQuery}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {selectedTicket._id !== 'new' && (
+                                            <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs space-y-2">
+                                                <div className="flex items-center gap-2">
+                                                    <MessageSquare className="w-3.5 h-3.5 text-orange-500" />
+                                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Resolution Feedback & Review Notes</span>
+                                                </div>
+                                                <AutoGrowingTextarea
+                                                    value={selectedTicket.feedback || ''}
+                                                    onChange={(newVal) => updateSelectedTicket({ feedback: newVal }, true)}
+                                                    className="w-full bg-orange-50/40 border border-orange-100 rounded-xl p-3 text-xs font-medium text-orange-950 placeholder-orange-300 focus:ring-2 focus:ring-orange-200 transition-all"
+                                                    placeholder="Add review feedback, rejection reasons, or QA acceptance notes..."
+                                                />
+                                            </div>
+                                        )}
                                     </div>
 
-                                    {/* 🔹 COLUMN 2: Phase Status & Controls (CENTER) */}
-                                    <div id="modal-sec-assign" className="w-full md:w-auto flex flex-col bg-slate-50/30 md:h-full md:overflow-hidden md:border-r border-slate-100 overflow-visible md:overflow-y-hidden">
-                                        {/* Mobile section label */}
-                                        <div className="md:hidden flex items-center gap-2 px-4 pt-4 pb-2 border-b border-slate-150">
-                                            <Users className="w-4 h-4 text-teal-600" />
-                                            <span className="text-xs font-black text-slate-700 uppercase tracking-widest">Assign & AI</span>
+                                    {/* ➡️ RIGHT COLUMN: ASSIGNMENT, TIMELINE & AUTOMATION */}
+                                    <div
+                                        id="modal-sec-assign"
+                                        className={`${
+                                            activeModalTab === 'assign' ? 'flex' : 'hidden lg:flex'
+                                        } w-full lg:w-[420px] xl:w-[460px] flex flex-col overflow-y-auto custom-scrollbar p-4 sm:p-6 bg-slate-50/50 border-t lg:border-t-0 lg:border-l border-slate-200/80 space-y-5`}
+                                    >
+                                        {/* Card 1: Team & Assignee Allocation */}
+                                        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4 shrink-0">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <Users className="w-4 h-4 text-teal-600" />
+                                                    <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider">Team & Assignee Allocation</h3>
+                                                </div>
+                                                {((selectedTicket.assignees || []).length > 0) && (
+                                                    <span className="text-[9px] font-black bg-teal-50 text-teal-700 px-2.5 py-0.5 rounded-full border border-teal-100">
+                                                        {(selectedTicket.assignees || []).length} Assigned
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Assignment Section (Team / Individual / Both + Mode) */}
+                                            <AssignmentSection
+                                                selectedTicket={selectedTicket}
+                                                updateSelectedTicket={updateSelectedTicket}
+                                                workers={workers}
+                                                assignmentMode={assignmentMode}
+                                                setAssignmentMode={setAssignmentMode}
+                                            />
+
+                                            {/* Quick Assign Section */}
+                                            {sortedByWorkload.length > 0 && (() => {
+                                                const currentAssigneeIds = (selectedTicket.assignees || []).map(a => typeof a === 'object' ? a._id : a);
+                                                const toggleAssignee = (wId) => {
+                                                    if (currentAssigneeIds.includes(wId)) {
+                                                        updateSelectedTicket({ assignees: currentAssigneeIds.filter(id => id !== wId) });
+                                                    } else {
+                                                        updateSelectedTicket({ assignees: [...currentAssigneeIds, wId] });
+                                                    }
+                                                };
+                                                return (
+                                                    <div className="pt-3 border-t border-slate-100 space-y-3">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                                                                <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider">Quick Assign</span>
+                                                            </div>
+                                                            <span className="text-[9px] text-slate-400 font-bold">Click chip to toggle</span>
+                                                        </div>
+
+                                                        <div className="space-y-3 max-h-[180px] overflow-y-auto pr-1 custom-scrollbar">
+                                                            {/* Idle developers first */}
+                                                            {idleDevelopers.length > 0 && (
+                                                                <div>
+                                                                    <div className="text-[9px] font-black text-emerald-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                                                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                                        <span>Available / Idle ({idleDevelopers.length})</span>
+                                                                    </div>
+                                                                    <div className="flex flex-wrap gap-1.5">
+                                                                        {idleDevelopers.slice(0, 10).map(w => {
+                                                                            const isSelected = currentAssigneeIds.includes(w._id);
+                                                                            return (
+                                                                                <button
+                                                                                    key={w._id}
+                                                                                    type="button"
+                                                                                    onClick={() => toggleAssignee(w._id)}
+                                                                                    className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[9.5px] font-bold transition-all ${
+                                                                                        isSelected
+                                                                                            ? 'ring-2 ring-teal-500 bg-emerald-50 border-emerald-300 text-emerald-800'
+                                                                                            : 'bg-emerald-50/60 border-emerald-100 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50'
+                                                                                    }`}
+                                                                                >
+                                                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                                                                    <span>{w.name.split(' ')[0]}</span>
+                                                                                    {isSelected && <Check className="w-3 h-3 text-teal-600 ml-0.5 stroke-[3]" />}
+                                                                                </button>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Busy developers */}
+                                                            {assignedDevelopers.length > 0 && (
+                                                                <div>
+                                                                    <div className="text-[9px] font-black text-amber-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                                                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                                                        <span>Active / Busy ({assignedDevelopers.length})</span>
+                                                                    </div>
+                                                                    <div className="flex flex-wrap gap-1.5">
+                                                                        {assignedDevelopers.slice(0, 10).map(w => {
+                                                                            const { activeTasks } = getWorkerLoad(w._id);
+                                                                            const { dot, badge } = workloadColor(activeTasks);
+                                                                            const isSelected = currentAssigneeIds.includes(w._id);
+                                                                            return (
+                                                                                <button
+                                                                                    key={w._id}
+                                                                                    type="button"
+                                                                                    onClick={() => toggleAssignee(w._id)}
+                                                                                    className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[9.5px] font-bold transition-all ${
+                                                                                        isSelected
+                                                                                            ? 'ring-2 ring-teal-500 ' + badge
+                                                                                            : badge + ' hover:shadow-2xs'
+                                                                                    }`}
+                                                                                >
+                                                                                    <span className={`w-1.5 h-1.5 rounded-full ${dot}`}></span>
+                                                                                    <span>{w.name.split(' ')[0]}</span>
+                                                                                    <span className="opacity-60 text-[8px]">({activeTasks})</span>
+                                                                                    {isSelected && <Check className="w-2.5 h-2.5 text-teal-600 ml-0.5 stroke-[3]" />}
+                                                                                </button>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
-                                        <div className="hidden md:flex items-center gap-1.5 px-3 pt-3 pb-2 border-b border-slate-100">
-                                            <Users className="w-3.5 h-3.5 text-teal-600" />
-                                            <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Assign & AI</span>
-                                        </div>
-                                        {/* Fixed Top Part (Assignment & Quick Assign Side-by-Side) */}
-                                        <div className="shrink-0 p-4 lg:p-5 bg-white border-b border-gray-150 shadow-[0_4px_12px_rgba(0,0,0,0.02)]">
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                                                {/* Left Column: Assignment Options */}
-                                                <div>
-                                                    <AssignmentSection
-                                                        selectedTicket={selectedTicket}
-                                                        updateSelectedTicket={updateSelectedTicket}
-                                                        workers={workers}
-                                                        assignmentMode={assignmentMode}
-                                                        setAssignmentMode={setAssignmentMode}
+
+                                        {/* Card 2: Timeline & Priority */}
+                                        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3.5 shrink-0">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <Calendar className="w-4 h-4 text-teal-600" />
+                                                    <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider">Timeline & Priority</h3>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`w-2 h-2 rounded-full ${isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'bg-rose-500 animate-pulse' : (selectedTicket.endDate ? 'bg-teal-500' : 'bg-slate-300')}`}></span>
+                                                    <span className={`text-[9px] font-extrabold uppercase tracking-wide ${isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'text-rose-600 font-black' : 'text-slate-400'}`}>
+                                                        {isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'Overdue' : (selectedTicket.endDate ? 'Active' : 'No Deadline')}
+                                                    </span>
+                                                    {(selectedTicket.startDate || selectedTicket.endDate) && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => updateSelectedTicket({ startDate: '', endDate: '' })}
+                                                            className="text-[9px] font-bold text-slate-400 hover:text-rose-500 transition-colors ml-1"
+                                                            title="Clear all dates"
+                                                        >
+                                                            Reset
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Start Date & Due Date Inputs */}
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                                <div className="flex flex-col bg-slate-50/80 hover:bg-slate-100/70 border border-slate-200 hover:border-teal-400 rounded-xl px-3 py-2 shadow-2xs transition-all">
+                                                    <span className="text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-1">Start Date</span>
+                                                    <CustomDatePicker
+                                                        value={selectedTicket.startDate || ''}
+                                                        onChange={(val) => updateSelectedTicket({ startDate: val })}
+                                                        className="w-full"
+                                                        showIcon={false}
+                                                        inputClassName="w-full bg-transparent text-xs font-bold text-slate-800 border-none p-0 shadow-none hover:text-teal-700 cursor-pointer"
+                                                        placeholder="Pick start date"
                                                     />
                                                 </div>
 
-                                                {/* Right Column: Quick Assign Options */}
-                                                <div className="border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-6">
-                                                    {sortedByWorkload.length > 0 && (() => {
-                                                        const currentAssigneeIds = (selectedTicket.assignees || []).map(a => typeof a === 'object' ? a._id : a);
-                                                        const toggleAssignee = (wId) => {
-                                                            if (currentAssigneeIds.includes(wId)) {
-                                                                updateSelectedTicket({ assignees: currentAssigneeIds.filter(id => id !== wId) });
-                                                            } else {
-                                                                updateSelectedTicket({ assignees: [...currentAssigneeIds, wId] });
-                                                            }
-                                                        };
+                                                <div className={`flex flex-col border rounded-xl px-3 py-2 shadow-2xs transition-all ${
+                                                    isOverdue(selectedTicket.endDate, selectedTicket.status)
+                                                        ? 'bg-rose-50/90 border-rose-300 hover:border-rose-400'
+                                                        : 'bg-slate-50/80 hover:bg-slate-100/70 border-slate-200 hover:border-teal-400'
+                                                }`}>
+                                                    <div className="flex items-center justify-between mb-1">
+                                                        <span className={`text-[8.5px] font-black uppercase tracking-wider ${isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'text-rose-600' : 'text-slate-400'}`}>
+                                                            End / Due Date
+                                                        </span>
+                                                        {isOverdue(selectedTicket.endDate, selectedTicket.status) && (
+                                                            <span className="text-[8px] font-black uppercase bg-rose-200/80 text-rose-800 px-1.5 py-0.2 rounded">Overdue</span>
+                                                        )}
+                                                    </div>
+                                                    <CustomDatePicker
+                                                        value={selectedTicket.endDate || ''}
+                                                        minDate={selectedTicket.startDate ? new Date(selectedTicket.startDate) : undefined}
+                                                        onChange={(val) => updateSelectedTicket({ endDate: val })}
+                                                        className="w-full"
+                                                        showIcon={false}
+                                                        inputClassName={`w-full bg-transparent text-xs font-bold border-none p-0 shadow-none cursor-pointer ${isOverdue(selectedTicket.endDate, selectedTicket.status) ? 'text-rose-700' : 'text-slate-800 hover:text-teal-700'}`}
+                                                        placeholder="Pick due date"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Quick Preset Buttons */}
+                                            <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
+                                                <span className="text-[8.5px] font-black text-slate-400 uppercase tracking-wider">Quick:</span>
+                                                {[
+                                                    { label: 'Today', days: 0 },
+                                                    { label: 'Tomorrow', days: 1 },
+                                                    { label: '+3 Days', days: 3 },
+                                                    { label: '+1 Wk', days: 7 }
+                                                ].map(preset => (
+                                                    <button
+                                                        key={preset.label}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const now = new Date();
+                                                            const startStr = selectedTicket.startDate || formatDateToYMD(now);
+                                                            const target = new Date();
+                                                            target.setDate(target.getDate() + preset.days);
+                                                            const endStr = formatDateToYMD(target);
+                                                            updateSelectedTicket({ startDate: startStr, endDate: endStr });
+                                                        }}
+                                                        className="text-[9.5px] font-bold px-2.5 py-1 bg-slate-100 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 border border-slate-200 text-slate-600 rounded-xl transition-all active:scale-95 shadow-2xs"
+                                                    >
+                                                        {preset.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            {/* Priority Selector */}
+                                            <div className="pt-2 border-t border-slate-100 space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Zap className="w-3.5 h-3.5 text-amber-500" />
+                                                        <span className="text-[9.5px] font-black text-slate-600 uppercase tracking-wider">Priority Level</span>
+                                                    </div>
+                                                    <span className="text-[9px] font-extrabold text-slate-400 uppercase">
+                                                        {selectedTicket.priority || 'Low'}
+                                                    </span>
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-2 w-full">
+                                                    {[
+                                                        { id: 'Low', label: 'Low', activeBg: 'bg-blue-600 border-blue-600 text-white shadow-xs', dot: 'bg-blue-400' },
+                                                        { id: 'Medium', label: 'Medium', activeBg: 'bg-amber-500 border-amber-500 text-white shadow-xs', dot: 'bg-amber-400' },
+                                                        { id: 'High', label: 'High', activeBg: 'bg-rose-600 border-rose-600 text-white shadow-xs', dot: 'bg-rose-400' }
+                                                    ].map(p => {
+                                                        const isSelected = selectedTicket.priority === p.id;
                                                         return (
-                                                            <div className="space-y-3">
-                                                                <div className="flex items-center justify-between">
-                                                                    <div className="flex items-center gap-1.5">
-                                                                        <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                                                                        <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Quick Assign</span>
-                                                                    </div>
-                                                                    <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Click to add/remove</span>
-                                                                </div>
-                                                                <div className="space-y-3 max-h-[140px] overflow-y-auto pr-1 custom-scrollbar">
-                                                                    {/* Idle developers first */}
-                                                                    {idleDevelopers.length > 0 && (
-                                                                        <div>
-                                                                            <div className="text-[9px] font-extrabold text-emerald-600 uppercase tracking-wider mb-1">● Idle ({idleDevelopers.length})</div>
-                                                                            <div className="flex flex-wrap gap-1.5">
-                                                                                {idleDevelopers.slice(0, 6).map(w => {
-                                                                                    const isSelected = currentAssigneeIds.includes(w._id);
-                                                                                    return (
-                                                                                        <button
-                                                                                            key={w._id}
-                                                                                            type="button"
-                                                                                            onClick={() => toggleAssignee(w._id)}
-                                                                                            className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[9px] font-bold transition-all ${isSelected ? 'ring-2 ring-teal-500 bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-emerald-50/50 border-emerald-100 text-emerald-600 hover:shadow-sm hover:border-emerald-300'}`}
-                                                                                        >
-                                                                                            <span className="w-1 h-1 rounded-full bg-emerald-500"></span>
-                                                                                            {w.name.split(' ')[0]}
-                                                                                            {isSelected && <Check className="w-2.5 h-2.5 text-teal-600 ml-0.5" />}
-                                                                                        </button>
-                                                                                    );
-                                                                                })}
-                                                                            </div>
-                                                                        </div>
-                                                                    )}
-                                                                    {/* Busy developers */}
-                                                                    {assignedDevelopers.length > 0 && (
-                                                                        <div>
-                                                                            <div className="text-[9px] font-extrabold text-amber-600 uppercase tracking-wider mb-1">● Busy ({assignedDevelopers.length})</div>
-                                                                            <div className="flex flex-wrap gap-1.5">
-                                                                                {assignedDevelopers.slice(0, 6).map(w => {
-                                                                                    const { activeTasks } = getWorkerLoad(w._id);
-                                                                                    const { dot, badge } = workloadColor(activeTasks);
-                                                                                    const isSelected = currentAssigneeIds.includes(w._id);
-                                                                                    return (
-                                                                                        <button
-                                                                                            key={w._id}
-                                                                                            onClick={() => toggleAssignee(w._id)}
-                                                                                            className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[9px] font-bold transition-all ${isSelected ? 'ring-2 ring-teal-500 ' + badge : badge + ' hover:shadow-sm'}`}
-                                                                                        >
-                                                                                            <span className={`w-1 h-1 rounded-full ${dot}`}></span>
-                                                                                            {w.name.split(' ')[0]}
-                                                                                            <span className="opacity-60 text-[8px]">({activeTasks})</span>
-                                                                                            {isSelected && <Check className="w-2.5 h-2.5 text-teal-600 ml-0.5" />}
-                                                                                        </button>
-                                                                                    );
-                                                                                })}
-                                                                            </div>
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            </div>
+                                                            <button
+                                                                key={p.id}
+                                                                type="button"
+                                                                onClick={() => updateSelectedTicket({ priority: p.id })}
+                                                                className={`py-2 px-2.5 rounded-xl text-xs font-black uppercase transition-all border flex items-center justify-center gap-1.5 text-center active:scale-95 ${
+                                                                    isSelected
+                                                                        ? p.activeBg
+                                                                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                                                                }`}
+                                                            >
+                                                                <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white' : p.dot}`} />
+                                                                <span>{p.label}</span>
+                                                            </button>
                                                         );
-                                                    })()}
+                                                    })}
                                                 </div>
                                             </div>
                                         </div>
 
-                                        {/* Scrollable Bottom Content */}
-                                        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-5 space-y-4">
-                                            {/* AI Task Optimizer / Assistant */}
-                                            <div className="bg-gradient-to-br from-indigo-50/60 to-teal-50/60 border border-teal-100 rounded-2xl p-4 shadow-sm relative overflow-hidden">
-                                                <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/5 rounded-full blur-2xl"></div>
-                                                <div className="flex items-center justify-between mb-3">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="bg-teal-500 text-white p-1.5 rounded-lg shadow-sm">
-                                                            <Cpu className="w-4 h-4 animate-pulse" />
-                                                        </div>
-                                                        <div>
-                                                            <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1">
-                                                                AI Task Assistant
-                                                                <Sparkles className="w-3 h-3 text-amber-500 fill-amber-500" />
-                                                            </h3>
-                                                            <p className="text-[9px] font-semibold text-slate-400">Optimize priorities, subtasks, & assignments</p>
-                                                        </div>
+                                        {/* Card 3: AI Task Assistant */}
+                                        <div className="bg-gradient-to-br from-indigo-50/70 via-white to-teal-50/70 border border-teal-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3 relative shrink-0 min-h-[140px]">
+                                            <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/5 rounded-full blur-2xl pointer-events-none"></div>
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="bg-teal-600 text-white p-2 rounded-xl shadow-2xs shrink-0">
+                                                        <Cpu className="w-4 h-4 animate-pulse" />
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                                                            <span>AI Task Assistant</span>
+                                                            <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                                                        </h3>
+                                                        <p className="text-[10px] font-medium text-slate-500">Auto-predicts priority, subtasks, & best-fit developers</p>
                                                     </div>
                                                 </div>
+                                            </div>
 
-                                                {!aiAnalysisResult ? (
+                                            {!aiAnalysisResult ? (
+                                                <div className="space-y-2 pt-1">
                                                     <button
+                                                        type="button"
                                                         disabled={isAnalyzing || !selectedTicket.title}
                                                         onClick={handleAnalyzeTask}
-                                                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition-all shadow-md hover:shadow-teal-100 disabled:opacity-50 active:scale-[0.98]"
+                                                        className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-xs transition-all shadow-2xs active:scale-[0.98] ${
+                                                            !selectedTicket.title
+                                                                ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                                                                : 'bg-teal-600 hover:bg-teal-700 text-white shadow-teal-100 cursor-pointer'
+                                                        }`}
                                                     >
                                                         {isAnalyzing ? (
                                                             <>
                                                                 <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                                                <span>Analyzing with DeepSeek...</span>
+                                                                <span>Analyzing with DeepSeek AI...</span>
                                                             </>
                                                         ) : (
                                                             <>
-                                                                <Cpu className="w-3.5 h-3.5" />
-                                                                <span>Analyze with AI</span>
+                                                                <Sparkles className="w-3.5 h-3.5 fill-current" />
+                                                                <span>{selectedTicket.title ? 'Analyze Task with AI' : 'Enter Title to Enable AI'}</span>
                                                             </>
                                                         )}
                                                     </button>
-                                                ) : (
-                                                    <div className="space-y-4">
-                                                        <div className="grid grid-cols-2 gap-2 bg-white/70 p-2.5 rounded-xl border border-slate-100">
-                                                            <div className="text-[10px]">
-                                                                <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Priority</span>
-                                                                <span className={`font-extrabold uppercase ${aiAnalysisResult.priority === 'High' ? 'text-red-500' :
-                                                                    aiAnalysisResult.priority === 'Medium' ? 'text-orange-500' : 'text-blue-500'
-                                                                    }`}>{aiAnalysisResult.priority}</span>
+                                                    {!selectedTicket.title && (
+                                                        <p className="text-[9.5px] text-amber-700 bg-amber-50/80 border border-amber-200/80 rounded-xl p-2 font-medium text-center">
+                                                            💡 Tip: Type a Workspace Definition title on the left to run AI analysis.
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-3.5 pt-1">
+                                                    <div className="grid grid-cols-2 gap-2 bg-white/90 p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                                                        <div className="text-[10px]">
+                                                            <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Priority</span>
+                                                            <span className={`font-extrabold uppercase ${
+                                                                aiAnalysisResult.priority === 'High' ? 'text-rose-600' :
+                                                                aiAnalysisResult.priority === 'Medium' ? 'text-amber-600' : 'text-blue-600'
+                                                            }`}>{aiAnalysisResult.priority}</span>
+                                                        </div>
+                                                        <div className="text-[10px]">
+                                                            <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Complexity</span>
+                                                            <span className={`font-extrabold uppercase ${
+                                                                aiAnalysisResult.complexity === 'High' ? 'text-purple-600' :
+                                                                aiAnalysisResult.complexity === 'Medium' ? 'text-indigo-600' : 'text-slate-600'
+                                                            }`}>{aiAnalysisResult.complexity}</span>
+                                                        </div>
+                                                        <div className="text-[10px] col-span-2 mt-1.5 pt-1.5 border-t border-slate-100 flex justify-between items-center">
+                                                            <div>
+                                                                <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Est. Time</span>
+                                                                <span className="font-extrabold text-slate-700">{aiAnalysisResult.estimatedHours} hrs <span className="text-slate-400 font-normal">({(aiAnalysisResult.estimatedHours / 8).toFixed(1)} Days)</span></span>
                                                             </div>
-                                                            <div className="text-[10px]">
-                                                                <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Complexity</span>
-                                                                <span className={`font-extrabold uppercase ${aiAnalysisResult.complexity === 'High' ? 'text-purple-600' :
-                                                                    aiAnalysisResult.complexity === 'Medium' ? 'text-indigo-600' : 'text-slate-600'
-                                                                    }`}>{aiAnalysisResult.complexity}</span>
-                                                            </div>
-                                                            <div className="text-[10px] col-span-2 mt-1.5 pt-1.5 border-t border-slate-100/60 flex justify-between items-center">
-                                                                <div>
-                                                                    <span className="text-slate-400 font-bold block uppercase tracking-tight">AI Est. Time</span>
-                                                                    <span className="font-extrabold text-slate-700">{aiAnalysisResult.estimatedHours} hrs <span className="text-slate-400 font-normal">({(aiAnalysisResult.estimatedHours / 8).toFixed(1)} Days)</span></span>
-                                                                </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleApplySpecs}
+                                                                className="px-2.5 py-1 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 rounded-lg text-[9px] font-extrabold uppercase transition-colors"
+                                                            >
+                                                                Apply
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {aiAnalysisResult.subtasks && aiAnalysisResult.subtasks.length > 0 && (
+                                                        <div className="space-y-1.5 bg-white/90 p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                                                            <div className="flex items-center justify-between mb-1">
+                                                                <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider">Suggested Subtasks</span>
                                                                 <button
-                                                                    onClick={handleApplySpecs}
-                                                                    className="px-2.5 py-1 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-100 rounded-lg text-[9px] font-extrabold uppercase transition-colors"
+                                                                    type="button"
+                                                                    onClick={handleMergeSubtasks}
+                                                                    className="px-2.5 py-1 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 rounded-lg text-[9px] font-extrabold uppercase transition-colors"
                                                                 >
-                                                                    Apply
+                                                                    Merge Selected
                                                                 </button>
                                                             </div>
+                                                            <div className="space-y-1 max-h-[140px] overflow-y-auto custom-scrollbar pr-1">
+                                                                {aiAnalysisResult.subtasks.map((sub, i) => {
+                                                                    const isChecked = !!selectedSuggestedSubtasks[i];
+                                                                    const toggleCheck = () => {
+                                                                        setSelectedSuggestedSubtasks(prev => ({
+                                                                            ...prev,
+                                                                            [i]: !prev[i]
+                                                                        }));
+                                                                    };
+
+                                                                    return (
+                                                                        <div key={i} className="flex items-center justify-between gap-1.5 p-1.5 hover:bg-slate-50 rounded-lg group/subtask transition-colors">
+                                                                            <div className="flex items-start gap-2 text-[11px] text-slate-700 font-semibold leading-relaxed min-w-0 flex-1">
+                                                                                <input
+                                                                                    type="checkbox"
+                                                                                    checked={isChecked}
+                                                                                    onChange={toggleCheck}
+                                                                                    className="w-3.5 h-3.5 mt-0.5 rounded text-teal-600 border-slate-300 focus:ring-teal-500 cursor-pointer shrink-0"
+                                                                                />
+                                                                                <span
+                                                                                    onClick={toggleCheck}
+                                                                                    className="cursor-pointer truncate flex-1"
+                                                                                    title={sub}
+                                                                                >
+                                                                                    {sub}
+                                                                                </span>
+                                                                            </div>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => handleMergeSingleSubtask(sub, i)}
+                                                                                className="opacity-0 group-hover/subtask:opacity-100 px-1.5 py-0.5 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded text-[9px] font-black uppercase transition-all shrink-0 ml-1 flex items-center gap-0.5 shadow-2xs"
+                                                                                title="Add single subtask to checklist"
+                                                                            >
+                                                                                <Plus className="w-2.5 h-2.5" />
+                                                                                <span>Add</span>
+                                                                            </button>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
                                                         </div>
+                                                    )}
 
-                                                        {aiAnalysisResult.subtasks && aiAnalysisResult.subtasks.length > 0 && (
-                                                            <div className="space-y-1.5 bg-white/70 p-2.5 rounded-xl border border-slate-100">
-                                                                <div className="flex items-center justify-between mb-1">
-                                                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Suggested Subtasks</span>
-                                                                    <button
-                                                                        onClick={handleMergeSubtasks}
-                                                                        className="px-2.5 py-1 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-100 rounded-lg text-[9px] font-extrabold uppercase transition-colors"
-                                                                    >
-                                                                        Merge
-                                                                    </button>
-                                                                </div>
-                                                                <div className="space-y-1">
-                                                                    {aiAnalysisResult.subtasks.map((sub, i) => {
-                                                                        const isChecked = !!selectedSuggestedSubtasks[i];
-                                                                        const toggleCheck = () => {
-                                                                            setSelectedSuggestedSubtasks(prev => ({
-                                                                                ...prev,
-                                                                                [i]: !prev[i]
-                                                                            }));
-                                                                        };
-
-                                                                        return (
-                                                                            <div key={i} className="flex items-center justify-between gap-1.5 p-1 hover:bg-slate-50 rounded-lg group/subtask transition-colors">
-                                                                                <div className="flex items-start gap-2 text-[11px] text-slate-600 font-semibold leading-relaxed min-w-0 flex-1">
-                                                                                    <input
-                                                                                        type="checkbox"
-                                                                                        checked={isChecked}
-                                                                                        onChange={toggleCheck}
-                                                                                        className="w-3.5 h-3.5 mt-0.5 rounded text-teal-600 border-slate-350 focus:ring-teal-500 cursor-pointer shrink-0"
-                                                                                    />
-                                                                                    <span
-                                                                                        onClick={toggleCheck}
-                                                                                        className="cursor-pointer truncate flex-1"
-                                                                                        title={sub}
-                                                                                    >
-                                                                                        {sub}
-                                                                                    </span>
+                                                    {aiAnalysisResult.recommendations && aiAnalysisResult.recommendations.length > 0 && (
+                                                        <div className="space-y-2 bg-white/90 p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                                                            <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider block mb-1">AI Recommended Developers</span>
+                                                            <div className="space-y-2 max-h-[160px] overflow-y-auto custom-scrollbar pr-1">
+                                                                {aiAnalysisResult.recommendations.map((rec, i) => {
+                                                                    const isAssigned = (selectedTicket.assignees || []).some(a => (typeof a === 'object' ? a._id : a) === rec.developerId);
+                                                                    return (
+                                                                        <div key={i} className="bg-slate-50/70 p-2.5 rounded-xl border border-slate-200 flex flex-col gap-1.5 shadow-2xs">
+                                                                            <div className="flex justify-between items-center">
+                                                                                <div className="flex items-center gap-1.5">
+                                                                                    <span className="text-xs font-bold text-slate-800">{rec.developerName}</span>
+                                                                                    <span className="text-[9px] font-extrabold px-1.5 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-full">{rec.matchScore}% Match</span>
                                                                                 </div>
                                                                                 <button
-                                                                                    onClick={() => handleMergeSingleSubtask(sub, i)}
-                                                                                    className="opacity-0 group-hover/subtask:opacity-100 px-1.5 py-0.5 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded text-[9px] font-black uppercase transition-all shrink-0 ml-1 flex items-center gap-0.5 shadow-sm"
-                                                                                    title="Add single subtask to checklist"
+                                                                                    type="button"
+                                                                                    onClick={() => handleAssignDev(rec.developerId)}
+                                                                                    className={`px-2.5 py-1 rounded-lg text-[9px] font-extrabold uppercase transition-colors ${
+                                                                                        isAssigned
+                                                                                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                                                                                            : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-2xs'
+                                                                                    }`}
+                                                                                    disabled={isAssigned}
                                                                                 >
-                                                                                    <Plus className="w-2.5 h-2.5" />
-                                                                                    <span>Add</span>
+                                                                                    {isAssigned ? 'Assigned' : 'Assign'}
                                                                                 </button>
                                                                             </div>
-                                                                        );
-                                                                    })}
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {aiAnalysisResult.recommendations && aiAnalysisResult.recommendations.length > 0 && (
-                                                            <div className="space-y-2 bg-white/70 p-2.5 rounded-xl border border-slate-100">
-                                                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">AI Recommended Assignees</span>
-                                                                <div className="space-y-2">
-                                                                    {aiAnalysisResult.recommendations.map((rec, i) => {
-                                                                        const isAssigned = (selectedTicket.assignees || []).some(a => (typeof a === 'object' ? a._id : a) === rec.developerId);
-                                                                        return (
-                                                                            <div key={i} className="bg-white p-2 rounded-lg border border-slate-100 flex flex-col gap-1.5 shadow-sm">
-                                                                                <div className="flex justify-between items-center">
-                                                                                    <div className="flex items-center gap-1.5">
-                                                                                        <span className="text-xs font-bold text-slate-700">{rec.developerName}</span>
-                                                                                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-full">{rec.matchScore}% Match</span>
-                                                                                    </div>
+                                                                            {rec.reasons && rec.reasons.length > 0 && (
+                                                                                <div className="space-y-1 pl-1">
                                                                                     <button
-                                                                                        onClick={() => handleAssignDev(rec.developerId)}
-                                                                                        className={`px-2.5 py-1 rounded-lg text-[9px] font-extrabold uppercase transition-colors ${isAssigned
-                                                                                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
-                                                                                            : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm'
-                                                                                            }`}
-                                                                                        disabled={isAssigned}
+                                                                                        type="button"
+                                                                                        onClick={() => toggleRecExpand(rec.developerId)}
+                                                                                        className="text-[9px] text-indigo-600 font-bold hover:underline flex items-center gap-0.5"
                                                                                     >
-                                                                                        {isAssigned ? 'Assigned' : 'Assign'}
+                                                                                        {expandedRecs[rec.developerId] ? 'Hide Details ▲' : 'Show Details ▾'}
                                                                                     </button>
+                                                                                    {expandedRecs[rec.developerId] && (
+                                                                                        <div className="space-y-0.5 mt-0.5 animate-in slide-in-from-top-1 duration-150">
+                                                                                            {rec.reasons.map((r, ri) => (
+                                                                                                <div key={ri} className="text-[10px] text-slate-500 font-medium leading-normal flex items-start gap-1">
+                                                                                                    <span className="text-emerald-500 font-bold shrink-0">✓</span>
+                                                                                                    <span>{r.startsWith('✓') ? r.slice(1).trim() : r}</span>
+                                                                                                </div>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                    )}
                                                                                 </div>
-                                                                                {rec.reasons && rec.reasons.length > 0 && (
-                                                                                    <div className="space-y-1 pl-1">
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            onClick={() => toggleRecExpand(rec.developerId)}
-                                                                                            className="text-[9px] text-indigo-600 font-bold hover:underline flex items-center gap-0.5"
-                                                                                        >
-                                                                                            {expandedRecs[rec.developerId] ? 'Hide Details ▲' : 'Show Details ▾'}
-                                                                                        </button>
-                                                                                        {expandedRecs[rec.developerId] && (
-                                                                                            <div className="space-y-0.5 mt-0.5 animate-in slide-in-from-top-1 duration-150">
-                                                                                                {rec.reasons.map((r, ri) => (
-                                                                                                    <div key={ri} className="text-[10px] text-slate-500 font-medium leading-normal flex items-start gap-1">
-                                                                                                        <span className="text-emerald-500 font-bold shrink-0">✓</span>
-                                                                                                        <span>{r.startsWith('✓') ? r.slice(1).trim() : r}</span>
-                                                                                                    </div>
-                                                                                                ))}
-                                                                                            </div>
-                                                                                        )}
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                        );
-                                                                    })}
-                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
                                                             </div>
-                                                        )}
+                                                        </div>
+                                                    )}
 
-                                                        <button
-                                                            onClick={handleAnalyzeTask}
-                                                            disabled={isAnalyzing}
-                                                            className="w-full text-center text-[10px] font-black text-teal-600 hover:text-teal-700 bg-transparent py-1 border border-dashed border-teal-200 hover:border-teal-400 rounded-xl transition-all"
-                                                        >
-                                                            {isAnalyzing ? 'Re-analyzing...' : '↻ Re-analyze with AI'}
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleAnalyzeTask}
+                                                        disabled={isAnalyzing}
+                                                        className="w-full text-center text-[10px] font-black text-teal-600 hover:text-teal-700 bg-transparent py-1.5 border border-dashed border-teal-300 hover:border-teal-500 rounded-xl transition-all"
+                                                    >
+                                                        {isAnalyzing ? 'Re-analyzing...' : '↻ Re-analyze with AI'}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
 
-                                            {/* Recurring Task Selector */}
+                                        {/* Card 4: Recurring Tasks & Permanent Delete */}
+                                        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3 shrink-0">
                                             <RecurringTaskPanel
                                                 config={recurringConfig}
                                                 onChange={handleRecurringConfigChange}
                                             />
 
-                                            {/* Employee Query Display */}
-                                            {selectedTicket.workerQuery && (
-                                                <div className="flex flex-col gap-2 pt-1 mb-2 bg-amber-50/60 rounded-2xl p-4 shadow-sm border border-amber-200">
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex items-center gap-2">
-                                                            <HelpCircle className="w-4 h-4 text-amber-600 animate-pulse" />
-                                                            <span className="text-[10px] font-bold text-amber-800 uppercase tracking-widest">Developer Query</span>
-                                                        </div>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => updateSelectedTicket({ workerQuery: '' })}
-                                                            className="text-[10px] font-bold text-amber-700 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 px-2 py-1 rounded-lg transition-all"
-                                                        >
-                                                            Mark Resolved
-                                                        </button>
-                                                    </div>
-                                                    <div className="w-full bg-white border border-amber-200 rounded-xl p-3 text-xs font-medium text-slate-800 shadow-2xs">
-                                                        {selectedTicket.workerQuery}
-                                                    </div>
-                                                </div>
-                                            )}
-                                            <div className="flex flex-col gap-2 pt-1 bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-                                                <div className="flex items-center gap-2">
-                                                    <MessageSquare className="w-3 h-3 text-orange-500" />
-                                                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Resolution Feedback</span>
-                                                </div>
-                                                <AutoGrowingTextarea
-                                                    value={selectedTicket.feedback || ''}
-                                                    onChange={(newVal) => updateSelectedTicket({ feedback: newVal }, true)}
-                                                    className="w-full bg-orange-50/50 border-none rounded-xl p-3 text-xs font-medium text-orange-800 placeholder-orange-300 focus:ring-2 focus:ring-orange-200 transition-all"
-                                                    placeholder="Add review notes..."
-                                                />
-                                            </div>
-
                                             {selectedTicket._id !== 'new' && (
-                                                <button
-                                                    onClick={() => handleDeleteTicket(selectedTicket)}
-                                                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-red-100 bg-red-50/30 text-red-600 hover:bg-red-500 hover:text-white transition-all font-bold text-[9px] uppercase tracking-widest group shadow-sm active:scale-95 animate-in fade-in duration-200"
-                                                >
-                                                    <Trash2 className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" /> Permanently Delete
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* 🔹 COLUMN 3: Execution & Analytics (RIGHT) */}
-                                    <div id="modal-sec-execution" className="w-full md:w-auto flex flex-col px-4 py-4 md:h-full md:overflow-y-auto custom-scrollbar bg-slate-50/10 lg:px-6 lg:py-6 overflow-visible md:overflow-y-auto">
-                                        {/* Mobile section label */}
-                                        <div className="md:hidden flex items-center gap-2 mb-4 pb-2 border-b border-slate-200">
-                                            <BarChart2 className="w-4 h-4 text-teal-600" />
-                                            <span className="text-xs font-black text-slate-700 uppercase tracking-widest">Execution</span>
-                                        </div>
-                                        <div className="hidden md:flex items-center gap-1.5 mb-3 pb-2 border-b border-slate-100">
-                                            <BarChart2 className="w-3.5 h-3.5 text-teal-600" />
-                                            <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Execution</span>
-                                        </div>
-                                        <div className="flex-1 flex flex-col min-h-0">
-
-                                            {/* Progress Card & Shared Task References Grid */}
-                                            {selectedTicket._id !== 'new' ? (
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 shrink-0">
-                                                    {/* Left Column: Progress Card */}
-                                                    <div className="bg-white border border-teal-100 rounded-2xl p-4 shadow-2xs relative overflow-hidden flex flex-col justify-center">
-                                                        <div className="absolute top-0 left-0 w-1.5 h-full bg-teal-500"></div>
-                                                        <div className="flex justify-between items-center mb-3">
-                                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                                                                <BarChart2 className="w-4 h-4 text-teal-600" />
-                                                                Overall Completion
-                                                            </span>
-                                                            <span className="text-[10px] font-black bg-teal-50 text-teal-600 px-2.5 py-0.5 rounded-full border border-teal-100">
-                                                                {selectedTicket.status === 'Done' ? 100 : (selectedTicket.status === 'Review' ? 90 : (selectedTicket.status === 'In Progress' ? 25 : 0))}% DONE
-                                                            </span>
-                                                        </div>
-                                                        <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden shadow-inner flex p-0.5 border border-slate-200/50">
-                                                            <div
-                                                                className="bg-teal-500 h-1.5 rounded-full transition-all duration-1000 ease-out shadow-xs"
-                                                                style={{ width: `${selectedTicket.status === 'Done' ? 100 : (selectedTicket.status === 'Review' ? 90 : (selectedTicket.status === 'In Progress' ? 25 : 0))}%` }}
-                                                            ></div>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Right Column: Shared Task References Card */}
-                                                    <div className="bg-white border border-teal-100 rounded-2xl p-4 shadow-2xs relative overflow-hidden flex flex-col justify-between">
-                                                        <div className="absolute top-0 left-0 w-1.5 h-full bg-teal-500"></div>
-                                                        <div className="flex justify-between items-center mb-3">
-                                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                                                                <Paperclip className="w-4 h-4 text-teal-600" />
-                                                                Task References
-                                                            </span>
-                                                            <input
-                                                                type="file"
-                                                                ref={taskRefFileInputRef}
-                                                                onChange={handleTaskRefFileChange}
-                                                                multiple
-                                                                className="hidden"
-                                                                accept="image/*"
-                                                            />
-                                                            <button
-                                                                onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
-                                                                className="text-[10px] font-black uppercase bg-teal-50 text-teal-600 hover:bg-teal-100 px-2.5 py-1 rounded-xl border border-teal-100 transition-colors shadow-2xs"
-                                                            >
-                                                                Upload
-                                                            </button>
-                                                        </div>
-
-                                                        {/* Drag & Drop Zone */}
-                                                        <div
-                                                            onDragOver={(e) => { e.preventDefault(); setIsDraggingTaskRef(true); }}
-                                                            onDragEnter={(e) => { e.preventDefault(); setIsDraggingTaskRef(true); }}
-                                                            onDragLeave={(e) => { e.preventDefault(); setIsDraggingTaskRef(false); }}
-                                                            onDrop={async (e) => {
-                                                                e.preventDefault();
-                                                                setIsDraggingTaskRef(false);
-                                                                const files = e.dataTransfer.files;
-                                                                await uploadTaskRefFiles(files, selectedTicket._id);
-                                                            }}
-                                                            className={`text-center py-3 px-3 border-2 border-dashed rounded-xl transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${isDraggingTaskRef
-                                                                ? 'border-teal-500 bg-teal-50/60 shadow-inner'
-                                                                : 'border-slate-200 hover:border-teal-400 bg-slate-50/40 hover:bg-teal-50/20'
-                                                                }`}
-                                                            onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
-                                                        >
-                                                            <Paperclip className="w-4 h-4 text-teal-500" />
-                                                            <p className="text-[10px] font-bold text-slate-500">
-                                                                {isDraggingTaskRef ? 'Drop files here!' : 'Drag & drop references here'}
-                                                            </p>
-                                                        </div>
-
-                                                        {/* Previews of uploaded task references */}
-                                                        {selectedTicket.referenceFiles && selectedTicket.referenceFiles.length > 0 && (
-                                                            <div className="flex flex-wrap gap-2 mt-3 max-h-[80px] overflow-y-auto custom-scrollbar">
-                                                                {selectedTicket.referenceFiles.map(file => (
-                                                                    <div key={file._id} className="relative w-14 h-14 rounded-xl border border-slate-200 overflow-hidden group shadow-2xs shrink-0">
-                                                                        <img
-                                                                            src={getFullFileUrl(file.url)}
-                                                                            alt={file.name}
-                                                                            className="w-full h-full object-cover"
-                                                                        />
-                                                                        <div className="absolute inset-0 bg-slate-900/60 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-[1px]">
-                                                                            <button
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    setZoomedImage({ url: getFullFileUrl(file.url), name: file.name });
-                                                                                }}
-                                                                                className="p-1 text-white hover:text-teal-400 transition-colors"
-                                                                                title="View Image"
-                                                                            >
-                                                                                <Eye className="w-3.5 h-3.5" />
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    handleDeleteTaskReference(selectedTicket._id, file._id);
-                                                                                }}
-                                                                                className="p-1 text-white hover:text-rose-400 transition-colors"
-                                                                                title="Delete Image"
-                                                                            >
-                                                                                <Trash2 className="w-3.5 h-3.5" />
-                                                                            </button>
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div className="mb-6 shrink-0">
-                                                    {/* Full-width Task References Card for New Task */}
-                                                    <div className="bg-white border border-teal-100 rounded-2xl p-4 shadow-2xs relative overflow-hidden flex flex-col justify-between min-h-[140px]">
-                                                        <div className="absolute top-0 left-0 w-1.5 h-full bg-teal-500"></div>
-                                                        <div className="flex justify-between items-center mb-3">
-                                                            <span className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                                                                <Paperclip className="w-4 h-4 text-teal-600" />
-                                                                Task References
-                                                            </span>
-                                                            <input
-                                                                type="file"
-                                                                ref={taskRefFileInputRef}
-                                                                onChange={handleTaskRefFileChange}
-                                                                multiple
-                                                                className="hidden"
-                                                                accept="image/*"
-                                                            />
-                                                            <button
-                                                                onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
-                                                                className="text-[10px] font-black uppercase bg-teal-50 text-teal-600 hover:bg-teal-100 px-2.5 py-1 rounded-xl border border-teal-100 transition-colors shadow-2xs"
-                                                            >
-                                                                Upload
-                                                            </button>
-                                                        </div>
-
-                                                        {/* Drag & Drop Zone */}
-                                                        <div
-                                                            onDragOver={(e) => { e.preventDefault(); setIsDraggingTaskRef(true); }}
-                                                            onDragEnter={(e) => { e.preventDefault(); setIsDraggingTaskRef(true); }}
-                                                            onDragLeave={(e) => { e.preventDefault(); setIsDraggingTaskRef(false); }}
-                                                            onDrop={async (e) => {
-                                                                e.preventDefault();
-                                                                setIsDraggingTaskRef(false);
-                                                                const files = e.dataTransfer.files;
-                                                                await uploadTaskRefFiles(files, selectedTicket._id);
-                                                            }}
-                                                            className={`text-center py-6 px-4 border-2 border-dashed rounded-2xl transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${isDraggingTaskRef
-                                                                ? 'border-teal-500 bg-teal-50/60 shadow-inner'
-                                                                : 'border-slate-200 hover:border-teal-400 bg-slate-50/40 hover:bg-teal-50/20'
-                                                                }`}
-                                                            onClick={() => taskRefFileInputRef.current && taskRefFileInputRef.current.click()}
-                                                        >
-                                                            <Paperclip className="w-5 h-5 text-teal-500 mb-1" />
-                                                            <p className="text-xs font-bold text-slate-500">
-                                                                {isDraggingTaskRef ? 'Drop files here!' : 'Drag & drop references here'}
-                                                            </p>
-                                                            <p className="text-[10px] text-slate-400 font-medium">Supports images & reference attachments</p>
-                                                        </div>
-
-                                                        {/* Previews of uploaded task references */}
-                                                        {selectedTicket.referenceFiles && selectedTicket.referenceFiles.length > 0 && (
-                                                            <div className="flex flex-wrap gap-2 mt-3 max-h-[80px] overflow-y-auto custom-scrollbar">
-                                                                {selectedTicket.referenceFiles.map(file => (
-                                                                    <div key={file._id} className="relative w-14 h-14 rounded-xl border border-slate-200 overflow-hidden group shadow-2xs shrink-0">
-                                                                        <img
-                                                                            src={getFullFileUrl(file.url)}
-                                                                            alt={file.name}
-                                                                            className="w-full h-full object-cover"
-                                                                        />
-                                                                        <div className="absolute inset-0 bg-slate-900/60 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-[1px]">
-                                                                            <button
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    setZoomedImage({ url: getFullFileUrl(file.url), name: file.name });
-                                                                                }}
-                                                                                className="p-1 text-white hover:text-teal-400 transition-colors"
-                                                                                title="View Image"
-                                                                            >
-                                                                                <Eye className="w-3.5 h-3.5" />
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    handleDeleteTaskReference(selectedTicket._id, file._id);
-                                                                                }}
-                                                                                className="p-1 text-white hover:text-rose-400 transition-colors"
-                                                                                title="Delete Image"
-                                                                            >
-                                                                                <Trash2 className="w-3.5 h-3.5" />
-                                                                            </button>
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </div>
+                                                <div className="pt-2 border-t border-slate-100">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteTicket(selectedTicket)}
+                                                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-rose-200 bg-rose-50/50 text-rose-600 hover:bg-rose-600 hover:text-white transition-all font-bold text-[9.5px] uppercase tracking-wider group shadow-2xs active:scale-95"
+                                                    >
+                                                        <Trash2 className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                                                        <span>Permanently Delete Task</span>
+                                                    </button>
                                                 </div>
                                             )}
-
-                                            {/* Execution Breakdown Area (SCROLLABLE) */}
-                                            <div className="flex-1 flex flex-col min-h-0">
-                                                <div className="flex items-center gap-2.5 mb-4 shrink-0">
-                                                    <div className="w-8 h-8 bg-teal-50 border border-teal-100 rounded-xl flex items-center justify-center shadow-2xs">
-                                                        <Users className="w-4 h-4 text-teal-600" />
-                                                    </div>
-                                                    <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider">Resource Execution Graph</h3>
-                                                </div>
-
-                                                <div className="flex-1 overflow-y-auto custom-scrollbar pr-3 space-y-4 pb-6">
-                                                    {isFetchingCompletions ? (
-                                                        <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-                                                            <Spinner size="md" className="mb-4" />
-                                                            <p className="text-xs font-bold uppercase tracking-widest">Loading Analytics...</p>
-                                                        </div>
-                                                    ) : selectedTicket.assignees?.length > 0 ? (
-                                                        selectedTicket.checklist?.map((item, idx) => {
-                                                            const itemCompletions = ticketCompletions.filter(c => String(c.subTaskId) === String(item._id) || String(c.subTaskId) === String(idx));
-                                                            return (
-                                                                <div key={item._id || idx} className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all">
-                                                                    <div className="bg-gray-50/80 px-4 py-3 border-b border-gray-100 flex justify-between items-center">
-                                                                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                                            <span className="text-[9px] font-black bg-teal-100 text-teal-700 px-2 py-0.5 rounded border border-teal-200 shrink-0">
-                                                                                ST-{String(idx + 1).padStart(2, '0')}
-                                                                            </span>
-                                                                            <div className="flex flex-col min-w-0">
-                                                                                <span
-                                                                                    className={`text-xs font-bold text-gray-800 cursor-pointer hover:text-teal-600 transition-colors ${expandedSubTasks[idx] ? 'whitespace-pre-wrap break-words' : 'truncate'}`}
-                                                                                    title={expandedSubTasks[idx] ? "Click to collapse" : "Click to view more details"}
-                                                                                    onClick={() => toggleSubTaskExpand(idx)}
-                                                                                >
-                                                                                    {item.text || `Point ${idx + 1}`}
-                                                                                </span>
-                                                                                {item.text && item.text.length > 40 && (
-                                                                                    <button
-                                                                                        onClick={() => toggleSubTaskExpand(idx)}
-                                                                                        className="text-[9px] text-teal-600 hover:text-teal-800 font-bold mt-0.5 text-left hover:underline select-none"
-                                                                                    >
-                                                                                        {expandedSubTasks[idx] ? 'Show less' : '... more details'}
-                                                                                    </button>
-                                                                                )}
-                                                                            </div>
-                                                                        </div>
-                                                                        <div className="flex -space-x-1.5">
-                                                                            {selectedTicket.assignees.slice(0, 5).map(w => (
-                                                                                <div key={w._id || w} className={`w-5 h-5 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-extrabold shadow-sm ${itemCompletions.some(c => String(c.workerId?._id || c.workerId) === String(w._id || w)) ? 'bg-teal-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
-                                                                                    {(w.name || 'W').charAt(0)}
-                                                                                </div>
-                                                                            ))}
-                                                                        </div>
-                                                                    </div>
-
-                                                                    <div className="p-3 space-y-3">
-                                                                        {selectedTicket.assignees.map(worker => {
-                                                                            const workerId = worker._id || worker;
-                                                                            const comp = itemCompletions.find(c => String(c.workerId?._id || c.workerId) === String(workerId));
-                                                                            const isDone = comp && comp.isCompleted;
-                                                                            const hasProof = comp?.proofFiles?.length > 0;
-
-                                                                            return (
-                                                                                <div key={workerId} className="flex items-center justify-between p-3 rounded-2xl bg-gray-50/50 border border-gray-100 hover:bg-white hover:border-teal-200 hover:shadow-sm transition-all group">
-                                                                                    <div className="flex items-center gap-3 flex-1 min-w-0 mr-4">
-                                                                                        <div className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center text-[10px] font-black text-teal-600 shadow-sm shrink-0">
-                                                                                            {(worker.name || 'W').charAt(0).toUpperCase()}
-                                                                                        </div>
-                                                                                        <span className="text-sm font-bold text-gray-700 truncate" title={worker.name || 'Worker'}>
-                                                                                            {worker.name || 'Worker'}
-                                                                                        </span>
-                                                                                    </div>
-
-                                                                                    <div className="flex items-center gap-3 shrink-0 ml-auto">
-                                                                                        {/* Status Badge */}
-                                                                                        {isDone ? (
-                                                                                            <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-green-100 shadow-sm">
-                                                                                                <CheckCircle2 className="w-3.5 h-3.5" /> Done
-                                                                                            </span>
-                                                                                        ) : (
-                                                                                            <span className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-600 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-orange-100 shadow-sm">
-                                                                                                <Clock className="w-3.5 h-3.5" /> Pending
-                                                                                            </span>
-                                                                                        )}
-
-                                                                                        {/* Proof Status Button */}
-                                                                                        <span className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-600 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border border-orange-100 hover:bg-orange-100 transition-all shadow-sm cursor-pointer" onClick={() => triggerReferenceUpload(selectedTicket._id === 'new' ? tempTicketId : selectedTicket._id, selectedTicket._id === 'new' ? idx : (item._id || idx), workerId)}>
-                                                                                            <Paperclip className="w-3.5 h-3.5" /> {comp?.referenceFiles?.length > 0 ? 'REF ✓' : 'REF'}
-                                                                                        </span>
-
-                                                                                        {/* View Action */}
-                                                                                        {hasProof && (
-                                                                                            <button
-                                                                                                onClick={() => setProofViewer({ isOpen: true, files: comp.proofFiles, userName: worker.name, subTaskText: item.text })}
-                                                                                                className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-teal-700 transition-all shadow-md shadow-teal-100 active:scale-95 ml-2 group"
-                                                                                            >
-                                                                                                <Eye className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" /> View
-                                                                                            </button>
-                                                                                        )}
-                                                                                    </div>
-                                                                                </div>
-                                                                            );
-                                                                        })}
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })
-                                                    ) : (
-                                                        <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 flex flex-col items-center justify-center p-6 shadow-2xs">
-                                                            <div className="w-12 h-12 rounded-2xl bg-slate-100/80 flex items-center justify-center text-slate-400 mb-3 border border-slate-200/50">
-                                                                <Users className="w-6 h-6" />
-                                                            </div>
-                                                            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">No Execution Data Available</p>
-                                                            <p className="text-[11px] text-slate-400 font-medium mt-1 max-w-[220px] leading-relaxed">Assign sub-tasks to team members to start tracking real-time execution.</p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     </div>
                 </div>

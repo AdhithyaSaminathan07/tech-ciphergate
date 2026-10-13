@@ -366,7 +366,7 @@ const AdminLayout = () => {
   
   const pageTitle = getPageTitle();
 
-  const isCommPage = location.pathname === '/admin/communication';
+  const isFullHeightPage = location.pathname === '/admin/communication' || location.pathname === '/admin/work-allocation';
 
   return (
     <div className="flex h-screen bg-[#F6F9F7] overflow-hidden font-sans">
@@ -394,12 +394,12 @@ const AdminLayout = () => {
           title={pageTitle}
         />
 
-        <main className={`flex-1 min-w-0 ${isCommPage ? 'overflow-hidden flex flex-col p-1 sm:p-2 md:p-3' : 'overflow-x-hidden overflow-y-auto pb-6 md:pb-10 custom-main-scroll'}`}>
+        <main className={`flex-1 min-w-0 ${isFullHeightPage ? 'overflow-hidden flex flex-col p-1 sm:p-2 md:p-3' : 'overflow-x-hidden overflow-y-auto pb-6 md:pb-10 custom-main-scroll'}`}>
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
-            className={isCommPage ? "h-full w-full flex flex-col flex-1 min-h-0" : "h-full w-full max-w-full mx-auto px-3 sm:px-5 md:px-6 pt-3 md:pt-4 pb-6 md:pb-8"}
+            className={isFullHeightPage ? "h-full w-full flex flex-col flex-1 min-h-0" : "h-full w-full max-w-full mx-auto px-3 sm:px-5 md:px-6 pt-3 md:pt-4 pb-6 md:pb-8"}
           >
             <Suspense fallback={<PageLoader />}>
             <Routes>
