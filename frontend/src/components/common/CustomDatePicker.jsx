@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Calendar from 'react-calendar';
 import './CustomDatePicker.css';
@@ -54,6 +54,39 @@ const parseToDate = (dateVal) => {
   return isNaN(parsed.getTime()) ? new Date() : parsed;
 };
 
+// Calculates popover coordinates synchronously from trigger element
+const calculatePosition = (el) => {
+  if (!el) return null;
+  const rect = el.getBoundingClientRect();
+  const calendarHeight = 330;
+  const calendarWidth = 275;
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const spaceAbove = rect.top;
+
+  // Flip upwards if space below is too small (< 320px) AND there is more room above
+  const openUpwards = spaceBelow < calendarHeight && spaceAbove > spaceBelow;
+
+  let top = 0;
+  if (openUpwards) {
+    top = Math.max(8, rect.top - calendarHeight - 6);
+  } else {
+    top = rect.bottom + 6;
+    if (top + calendarHeight > window.innerHeight - 8) {
+      top = Math.max(8, window.innerHeight - calendarHeight - 8);
+    }
+  }
+
+  let left = rect.left;
+  if (left + calendarWidth > window.innerWidth - 8) {
+    left = Math.max(8, window.innerWidth - calendarWidth - 8);
+  }
+  if (left < 8) {
+    left = 8;
+  }
+
+  return { top, left, openUpwards };
+};
+
 const CustomDatePicker = ({
   value,
   onChange,
@@ -70,7 +103,7 @@ const CustomDatePicker = ({
   showIcon = true
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [coords, setCoords] = useState({ top: 0, left: 0, openUpwards: false });
+  const [coords, setCoords] = useState(null);
   const containerRef = useRef(null);
   const triggerRef = useRef(null);
   const popoverRef = useRef(null);
@@ -80,40 +113,31 @@ const CustomDatePicker = ({
   const updatePosition = useCallback(() => {
     const el = triggerRef.current || containerRef.current;
     if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const calendarHeight = 330;
-    const calendarWidth = 275;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const spaceAbove = rect.top;
-
-    // Flip upwards if space below is too small (< 320px) AND there is more room above
-    const openUpwards = spaceBelow < calendarHeight && spaceAbove > spaceBelow;
-
-    let top = 0;
-    if (openUpwards) {
-      top = Math.max(8, rect.top - calendarHeight - 6);
-    } else {
-      top = rect.bottom + 6;
-      if (top + calendarHeight > window.innerHeight - 8) {
-        top = Math.max(8, window.innerHeight - calendarHeight - 8);
-      }
+    const newCoords = calculatePosition(el);
+    if (newCoords) {
+      setCoords((prev) => {
+        if (
+          prev &&
+          prev.top === newCoords.top &&
+          prev.left === newCoords.left &&
+          prev.openUpwards === newCoords.openUpwards
+        ) {
+          return prev;
+        }
+        return newCoords;
+      });
     }
-
-    let left = rect.left;
-    if (left + calendarWidth > window.innerWidth - 8) {
-      left = Math.max(8, window.innerWidth - calendarWidth - 8);
-    }
-    if (left < 8) {
-      left = 8;
-    }
-
-    setCoords({ top, left, openUpwards });
   }, []);
 
-  // Update position on open, window resize, and scroll (capture phase)
-  useEffect(() => {
+  // Synchronously compute position before browser paints
+  useLayoutEffect(() => {
     if (!isOpen) return;
     updatePosition();
+  }, [isOpen, updatePosition]);
+
+  // Update position on window resize and scroll
+  useEffect(() => {
+    if (!isOpen) return;
 
     const handleScrollOrResize = () => {
       updatePosition();
@@ -192,12 +216,26 @@ const CustomDatePicker = ({
     handleDateChange(new Date());
   };
 
+  const handleToggle = () => {
+    if (disabled) return;
+    if (!isOpen) {
+      const el = triggerRef.current || containerRef.current;
+      const initialCoords = calculatePosition(el);
+      if (initialCoords) {
+        setCoords(initialCoords);
+      }
+      setIsOpen(true);
+    } else {
+      setIsOpen(false);
+    }
+  };
+
   return (
     <div ref={containerRef} className={`relative inline-block ${className}`}>
       {/* Date Trigger Field */}
       <div
         ref={triggerRef}
-        onClick={() => !disabled && setIsOpen(!isOpen)}
+        onClick={handleToggle}
         className={`flex items-center justify-between gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm transition-all cursor-pointer select-none hover:border-teal-400 focus-within:ring-2 focus-within:ring-teal-500/20 ${
           disabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : ''
         } ${isOpen ? 'border-teal-500 ring-2 ring-teal-500/20' : ''} ${inputClassName}`}
@@ -228,7 +266,7 @@ const CustomDatePicker = ({
       </div>
 
       {/* Calendar Portal Popover — rendered in document.body so it is never clipped */}
-      {isOpen &&
+      {isOpen && coords &&
         createPortal(
           <div
             ref={popoverRef}
@@ -236,7 +274,8 @@ const CustomDatePicker = ({
               position: 'fixed',
               top: `${coords.top}px`,
               left: `${coords.left}px`,
-              zIndex: 99999
+              zIndex: 99999,
+              transition: 'none'
             }}
             className="animate-in fade-in zoom-in-95 duration-150 select-none shadow-2xl"
             onClick={(e) => e.stopPropagation()}

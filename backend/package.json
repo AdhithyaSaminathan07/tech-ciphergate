@@ -14,7 +14,9 @@
         "test:dashboard-salary": "node tests/dashboardSalary.test.js",
         "test:salary-audit": "node tests/salaryModuleAudit.test.js",
         "test:read-only-audit": "node tests/readOnlySalaryAudit.test.js",
-        "test": "npm run test:dashboard-salary && npm run test:salary-audit && npm run test:read-only-audit"
+        "test:performance-audit": "node tests/performanceModuleAudit.test.js",
+        "test:kpi-audit": "node tests/kpiModuleAudit.test.js",
+        "test": "npm run test:dashboard-salary && npm run test:salary-audit && npm run test:read-only-audit && npm run test:performance-audit && npm run test:kpi-audit"
     },
     "dependencies": {
         "@aws-sdk/client-athena": "^3.500.0",

@@ -12,26 +12,50 @@ const Settings = require('../models/Settings');
 
 // Helper for KPI
 const calculateKpiStats = (tickets) => {
-  const closedTickets = tickets.filter(t => t.status === 'Done');
+  const closedTickets = (tickets || []).filter(t => t && t.status === 'Done');
   let totalDays = 0;
-  closedTickets.forEach(t => {
-    const doneStatus = t.statusHistory?.find(h => h.status === 'Done');
-    if (doneStatus)
-      totalDays += (new Date(doneStatus.changedAt) - new Date(t.createdAt)) / 86400000;
-  });
-  const avgCycleTime = closedTickets.length > 0 ? (totalDays / closedTickets.length).toFixed(1) : 0;
+  let validDaysCount = 0;
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-  const closedThisWeek = closedTickets.filter(t => {
-    const d = t.statusHistory?.find(h => h.status === 'Done');
-    return d && new Date(d.changedAt) >= oneWeekAgo;
-  }).length;
-  const breached = closedTickets.filter(t => {
-    const d = t.statusHistory?.find(h => h.status === 'Done');
-    if (!d) return false;
-    return (new Date(d.changedAt) - new Date(t.createdAt)) / 86400000 > 7;
-  }).length;
-  const slaBreachRate = closedTickets.length > 0 ? Math.round((breached / closedTickets.length) * 100) : 0;
+  let closedThisWeek = 0;
+  let breached = 0;
+
+  closedTickets.forEach(t => {
+    // For reopened tickets, find latest valid transition to Done
+    let latestDoneDate = null;
+    if (Array.isArray(t.statusHistory) && t.statusHistory.length > 0) {
+      for (let i = t.statusHistory.length - 1; i >= 0; i--) {
+        const h = t.statusHistory[i];
+        if (h && h.status === 'Done' && h.changedAt) {
+          const d = new Date(h.changedAt);
+          if (!isNaN(d.getTime())) {
+            latestDoneDate = d;
+            break;
+          }
+        }
+      }
+    }
+    if (!latestDoneDate && t.updatedAt) {
+      const d = new Date(t.updatedAt);
+      if (!isNaN(d.getTime())) latestDoneDate = d;
+    }
+
+    if (latestDoneDate) {
+      const createdDate = new Date(t.createdAt);
+      if (!isNaN(createdDate.getTime())) {
+        const cycleDays = Math.max(0, (latestDoneDate.getTime() - createdDate.getTime()) / 86400000);
+        totalDays += cycleDays;
+        validDaysCount++;
+        if (cycleDays > 7) breached++;
+      }
+      if (latestDoneDate >= oneWeekAgo) {
+        closedThisWeek++;
+      }
+    }
+  });
+
+  const avgCycleTime = validDaysCount > 0 ? (totalDays / validDaysCount).toFixed(1) : 0;
+  const slaBreachRate = validDaysCount > 0 ? Math.round((breached / validDaysCount) * 100) : 0;
   return { avgCycleTime, closedThisWeek, slaBreachRate };
 };
 

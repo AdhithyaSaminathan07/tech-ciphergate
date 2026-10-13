@@ -1,8 +1,40 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Calendar from 'react-calendar';
 import './CustomDatePicker.css';
 import { formatDateToYMD, formatDateToDisplay } from './CustomDatePicker';
+
+// Calculates popover coordinates synchronously from trigger element
+const calculatePosition = (el) => {
+  if (!el) return null;
+  const rect = el.getBoundingClientRect();
+  const calendarHeight = 350;
+  const calendarWidth = 280;
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const spaceAbove = rect.top;
+
+  const openUpwards = spaceBelow < calendarHeight && spaceAbove > spaceBelow;
+
+  let top = 0;
+  if (openUpwards) {
+    top = Math.max(8, rect.top - calendarHeight - 6);
+  } else {
+    top = rect.bottom + 6;
+    if (top + calendarHeight > window.innerHeight - 8) {
+      top = Math.max(8, window.innerHeight - calendarHeight - 8);
+    }
+  }
+
+  let left = rect.left;
+  if (left + calendarWidth > window.innerWidth - 8) {
+    left = Math.max(8, window.innerWidth - calendarWidth - 8);
+  }
+  if (left < 8) {
+    left = 8;
+  }
+
+  return { top, left, openUpwards };
+};
 
 const CustomDateRangePicker = ({
   startDate,
@@ -12,7 +44,7 @@ const CustomDateRangePicker = ({
   className = ''
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [coords, setCoords] = useState({ top: 0, left: 0, openUpwards: false });
+  const [coords, setCoords] = useState(null);
   const [tempRange, setTempRange] = useState([
     startDate ? new Date(startDate) : null,
     endDate ? new Date(endDate) : null
@@ -32,38 +64,29 @@ const CustomDateRangePicker = ({
   const updatePosition = useCallback(() => {
     const el = triggerRef.current || containerRef.current;
     if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const calendarHeight = 350;
-    const calendarWidth = 280;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const spaceAbove = rect.top;
-
-    const openUpwards = spaceBelow < calendarHeight && spaceAbove > spaceBelow;
-
-    let top = 0;
-    if (openUpwards) {
-      top = Math.max(8, rect.top - calendarHeight - 6);
-    } else {
-      top = rect.bottom + 6;
-      if (top + calendarHeight > window.innerHeight - 8) {
-        top = Math.max(8, window.innerHeight - calendarHeight - 8);
-      }
+    const newCoords = calculatePosition(el);
+    if (newCoords) {
+      setCoords((prev) => {
+        if (
+          prev &&
+          prev.top === newCoords.top &&
+          prev.left === newCoords.left &&
+          prev.openUpwards === newCoords.openUpwards
+        ) {
+          return prev;
+        }
+        return newCoords;
+      });
     }
-
-    let left = rect.left;
-    if (left + calendarWidth > window.innerWidth - 8) {
-      left = Math.max(8, window.innerWidth - calendarWidth - 8);
-    }
-    if (left < 8) {
-      left = 8;
-    }
-
-    setCoords({ top, left, openUpwards });
   }, []);
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    updatePosition();
+  }, [isOpen, updatePosition]);
 
   useEffect(() => {
     if (!isOpen) return;
-    updatePosition();
 
     const handleScrollOrResize = () => {
       updatePosition();
@@ -134,12 +157,25 @@ const CustomDateRangePicker = ({
 
   const isRangeSelected = startDate && endDate;
 
+  const handleToggle = () => {
+    if (!isOpen) {
+      const el = triggerRef.current || containerRef.current;
+      const initialCoords = calculatePosition(el);
+      if (initialCoords) {
+        setCoords(initialCoords);
+      }
+      setIsOpen(true);
+    } else {
+      setIsOpen(false);
+    }
+  };
+
   return (
     <div ref={containerRef} className={`relative inline-block ${className}`}>
       {/* Trigger Button / Input Display */}
       <div
         ref={triggerRef}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleToggle}
         className={`flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-sm transition-all cursor-pointer shadow-sm hover:border-teal-400 select-none ${
           isOpen ? 'border-teal-500 ring-2 ring-teal-500/20' : ''
         }`}
@@ -160,7 +196,7 @@ const CustomDateRangePicker = ({
       </div>
 
       {/* Popover Calendar via Portal */}
-      {isOpen &&
+      {isOpen && coords &&
         createPortal(
           <div
             ref={popoverRef}
@@ -168,7 +204,8 @@ const CustomDateRangePicker = ({
               position: 'fixed',
               top: `${coords.top}px`,
               left: `${coords.left}px`,
-              zIndex: 99999
+              zIndex: 99999,
+              transition: 'none'
             }}
             className="animate-in fade-in zoom-in-95 duration-150 select-none shadow-2xl"
             onClick={(e) => e.stopPropagation()}

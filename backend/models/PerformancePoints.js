@@ -58,6 +58,10 @@ const performancePointsSchema = new mongoose.Schema({
         enum: ['early', 'on_time', 'delayed', 'no_dates', 'manual'],
         default: 'no_dates'
     },
+    penaltyDeducted: {
+        type: Number,
+        default: 0
+    },
     note: {
         type: String,
         default: ''
@@ -68,5 +72,6 @@ const performancePointsSchema = new mongoose.Schema({
 
 performancePointsSchema.index({ worker: 1, subdomain: 1, createdAt: -1 });
 performancePointsSchema.index({ subdomain: 1, createdAt: -1 });
+performancePointsSchema.index({ ticket: 1, worker: 1, reason: 1 });
 
 module.exports = mongoose.model('PerformancePoints', performancePointsSchema);

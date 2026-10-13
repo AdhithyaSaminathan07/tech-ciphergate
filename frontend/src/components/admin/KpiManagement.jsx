@@ -30,6 +30,60 @@ const COLORS = {
     Low: '#10b981'
 };
 
+/**
+ * Safely extracts all unique assignee IDs from a ticket supporting both
+ * ticket.assignee (single) and ticket.assignees (array).
+ * Deduplicates to prevent double-counting a developer assigned to both fields.
+ */
+export const getTicketAssigneeIds = (ticket) => {
+    if (!ticket) return [];
+    const ids = new Set();
+    if (ticket.assignee) {
+        const id = ticket.assignee._id ? String(ticket.assignee._id) : String(ticket.assignee);
+        if (id && id !== 'undefined' && id !== 'null') ids.add(id);
+    }
+    if (Array.isArray(ticket.assignees)) {
+        ticket.assignees.forEach(a => {
+            if (a) {
+                const id = a._id ? String(a._id) : String(a);
+                if (id && id !== 'undefined' && id !== 'null') ids.add(id);
+            }
+        });
+    }
+    return Array.from(ids);
+};
+
+/**
+ * Determines the resolution timestamp for a ticket.
+ * For reopened tickets, checks statusHistory in reverse to select the latest valid
+ * transition to 'Done' rather than the first.
+ * Safely falls back to updatedAt or createdAt if valid, and handles invalid dates gracefully.
+ * Never mutates the original statusHistory array.
+ */
+export const getTicketResolutionDate = (ticket) => {
+    if (!ticket) return null;
+    if (Array.isArray(ticket.statusHistory) && ticket.statusHistory.length > 0) {
+        for (let i = ticket.statusHistory.length - 1; i >= 0; i--) {
+            const entry = ticket.statusHistory[i];
+            if (entry && entry.status === 'Done' && entry.changedAt) {
+                const d = new Date(entry.changedAt);
+                if (!isNaN(d.getTime())) {
+                    return d;
+                }
+            }
+        }
+    }
+    if (ticket.updatedAt) {
+        const d = new Date(ticket.updatedAt);
+        if (!isNaN(d.getTime())) return d;
+    }
+    if (ticket.createdAt) {
+        const d = new Date(ticket.createdAt);
+        if (!isNaN(d.getTime())) return d;
+    }
+    return null;
+};
+
 const KpiManagement = () => {
     const [tickets, setTickets] = useState([]);
     const [workers, setWorkers] = useState([]);
@@ -71,55 +125,76 @@ const KpiManagement = () => {
         const end = new Date(dateRange.end);
         end.setHours(23, 59, 59, 999);
 
-        // Filter tickets by team/assignee if needed
+        // Filter tickets by team/assignee if needed (supports single and multiple assignees)
         let workingTickets = [...tickets];
         if (selectedTeam) {
-            const teamWorkers = workers.filter(w => w.department === selectedTeam).map(w => w._id);
-            workingTickets = workingTickets.filter(t => t.assignee && (teamWorkers.includes(t.assignee._id || t.assignee)));
+            const teamWorkerIds = new Set(workers.filter(w => w.department === selectedTeam).map(w => String(w._id)));
+            workingTickets = workingTickets.filter(t => {
+                const assigneeIds = getTicketAssigneeIds(t);
+                return assigneeIds.some(id => teamWorkerIds.has(id));
+            });
         }
         if (searchTerm) {
-            workingTickets = workingTickets.filter(t => t.title.toLowerCase().includes(searchTerm.toLowerCase()));
+            workingTickets = workingTickets.filter(t => t.title && t.title.toLowerCase().includes(searchTerm.toLowerCase()));
         }
 
         // 1. Stats Summary
         const createdInRange = workingTickets.filter(t => {
             const d = new Date(t.createdAt);
-            return d >= start && d <= end;
+            return !isNaN(d.getTime()) && d >= start && d <= end;
         });
 
         const resolvedInRange = workingTickets.filter(t => {
             if (t.status !== 'Done') return false;
-            const doneHistory = t.statusHistory?.find(h => h.status === 'Done');
-            const d = doneHistory ? new Date(doneHistory.changedAt) : new Date(t.updatedAt);
-            return d >= start && d <= end;
+            const resDate = getTicketResolutionDate(t);
+            return resDate && resDate >= start && resDate <= end;
         });
 
         const totalStoryPoints = resolvedInRange.reduce((sum, t) => sum + (t.storyPoints || 0), 0);
-        const avgTurnaround = resolvedInRange.length > 0
-            ? resolvedInRange.reduce((sum, t) => {
-                const startD = new Date(t.createdAt);
-                const doneH = t.statusHistory?.find(h => h.status === 'Done');
-                const endD = doneH ? new Date(doneH.changedAt) : new Date(t.updatedAt);
-                return sum + (endD - startD) / (1000 * 60 * 60 * 24);
-            }, 0) / resolvedInRange.length
+        let validTurnaroundCount = 0;
+        const totalTurnaroundDays = resolvedInRange.reduce((sum, t) => {
+            const resDate = getTicketResolutionDate(t);
+            if (!resDate || !t.createdAt) return sum;
+            const startD = new Date(t.createdAt);
+            if (isNaN(startD.getTime())) return sum;
+            validTurnaroundCount++;
+            return sum + Math.max(0, (resDate.getTime() - startD.getTime()) / (1000 * 60 * 60 * 24));
+        }, 0);
+        const avgTurnaround = validTurnaroundCount > 0
+            ? totalTurnaroundDays / validTurnaroundCount
             : 0;
 
         // 2. Velocity Data (By Developer) using ID to avoid name collisions
         const workerStats = {};
         workers.forEach(w => {
             if (!selectedTeam || w.department === selectedTeam) {
-                workerStats[w._id] = { id: w._id, name: w.name, completed: 0, points: 0, dept: w.department };
+                workerStats[String(w._id)] = { id: w._id, name: w.name, completed: 0, points: 0, dept: w.department };
             }
         });
 
+        // Attribute completed issues and points to all unique assignees on the ticket without double-counting
         resolvedInRange.forEach(t => {
-            const workerId = (t.assignee?._id || t.assignee);
-            if (workerId && workerStats[workerId]) {
-                workerStats[workerId].completed += 1;
-                workerStats[workerId].points += (t.storyPoints || 0);
-            }
+            const assigneeIds = getTicketAssigneeIds(t);
+            assigneeIds.forEach(workerId => {
+                if (workerStats[workerId]) {
+                    workerStats[workerId].completed += 1;
+                    workerStats[workerId].points += (t.storyPoints || 0);
+                }
+            });
         });
-        const velocityData = Object.values(workerStats).filter(s => s.completed > 0 || s.points > 0).sort((a, b) => b.points - a.points);
+
+        // Deterministic sorting: 1. Points (desc), 2. Completed issues (desc), 3. Name (asc)
+        const velocityData = Object.values(workerStats)
+            .filter(s => s.completed > 0 || s.points > 0)
+            .sort((a, b) => {
+                if (b.points !== a.points) {
+                    return b.points - a.points;
+                }
+                if (b.completed !== a.completed) {
+                    return b.completed - a.completed;
+                }
+                return (a.name || '').localeCompare(b.name || '');
+            });
         const topPerformers = velocityData.slice(0, 5);
 
         // 3. Distribution Data
@@ -147,9 +222,11 @@ const KpiManagement = () => {
             if (timeMap[key]) timeMap[key].created += 1;
         });
         resolvedInRange.forEach(t => {
-            const doneH = t.statusHistory?.find(h => h.status === 'Done');
-            const key = (doneH ? new Date(doneH.changedAt) : new Date(t.updatedAt)).toISOString().split('T')[0];
-            if (timeMap[key]) timeMap[key].resolved += 1;
+            const resDate = getTicketResolutionDate(t);
+            if (resDate) {
+                const key = resDate.toISOString().split('T')[0];
+                if (timeMap[key]) timeMap[key].resolved += 1;
+            }
         });
         const timelineData = Object.values(timeMap);
 
@@ -160,10 +237,13 @@ const KpiManagement = () => {
 
             const counts = { 'To Do': 0, 'In Progress': 0, 'Review': 0, 'Done': 0 };
             workingTickets.forEach(t => {
-                if (new Date(t.createdAt) > dayDate) return;
+                const createdDate = new Date(t.createdAt);
+                if (isNaN(createdDate.getTime()) || createdDate > dayDate) return;
 
                 let currentStatus = 'To Do';
-                const history = [...(t.statusHistory || [])].sort((a, b) => new Date(a.changedAt) - new Date(b.changedAt));
+                const history = [...(t.statusHistory || [])]
+                    .filter(entry => entry && entry.changedAt && !isNaN(new Date(entry.changedAt).getTime()))
+                    .sort((a, b) => new Date(a.changedAt) - new Date(b.changedAt));
 
                 for (const entry of history) {
                     if (new Date(entry.changedAt) <= dayDate) {
@@ -172,7 +252,9 @@ const KpiManagement = () => {
                         break;
                     }
                 }
-                counts[currentStatus]++;
+                if (counts[currentStatus] !== undefined) {
+                    counts[currentStatus]++;
+                }
             });
             return { ...day, ...counts };
         });

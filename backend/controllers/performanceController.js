@@ -79,7 +79,7 @@ const daysBetween = (start, end) => {
 // ─── Calculate Points for a Ticket ───────────────────────────────────────────
 const calculateTicketPoints = (ticket, config) => {
     const { basePoints, advancedMode, penaltyEnabled, penaltyPercentage,
-        priorityMultipliers, typeMultipliers } = config;
+        earlyBonusEnabled, priorityMultipliers, typeMultipliers } = config;
 
     const estimatedDays = daysBetween(ticket.startDate, ticket.endDate);
     const actualDays = daysBetween(ticket.startDate, ticket.actualCompletionDate || new Date());
@@ -91,13 +91,19 @@ const calculateTicketPoints = (ticket, config) => {
             estimatedDays: null,
             actualDays: null,
             efficiencyRatio: null,
+            penaltyDeducted: 0,
             performanceStatus: 'no_dates',
             priorityMultiplier: 1,
             typeMultiplier: 1
         };
     }
 
-    const efficiencyRatio = estimatedDays / actualDays;
+    let efficiencyRatio = estimatedDays / actualDays;
+    // Cap efficiencyRatio at 1.0 if earlyBonusEnabled is false and task was completed early
+    if (!earlyBonusEnabled && efficiencyRatio > 1) {
+        efficiencyRatio = 1;
+    }
+
     let points = efficiencyRatio * basePoints;
 
     // Determine performance status
@@ -115,9 +121,12 @@ const calculateTicketPoints = (ticket, config) => {
     }
 
     // Apply penalty for delayed tasks
+    let penaltyDeducted = 0;
     if (performanceStatus === 'delayed' && penaltyEnabled) {
+        const unpenalized = points;
         const penaltyFactor = 1 - (penaltyPercentage / 100);
         points = Math.max(points * penaltyFactor, 0);
+        penaltyDeducted = Math.max(Math.round((unpenalized - points) * 100) / 100, 0);
     }
 
     // Ensure minimum 0 points, round to 2 decimals
@@ -128,6 +137,7 @@ const calculateTicketPoints = (ticket, config) => {
         estimatedDays,
         actualDays,
         efficiencyRatio: Math.round(efficiencyRatio * 100) / 100,
+        penaltyDeducted,
         performanceStatus,
         priorityMultiplier,
         typeMultiplier
@@ -287,6 +297,19 @@ const awardPointsOnTicketDone = async (ticket, subdomain) => {
         const config = await getPerformanceConfig(subdomain);
         if (!config.enabled) return;
 
+        // Idempotency guard: prevent duplicate awards if ticket was already completed
+        if (ticket.pointsAwarded !== null && ticket.pointsAwarded !== undefined) {
+            return;
+        }
+
+        const alreadyAwardedTicket = await PerformancePoints.exists({
+            ticket: ticket._id,
+            reason: 'task_completed'
+        });
+        if (alreadyAwardedTicket) {
+            return;
+        }
+
         // Get all assignees
         const assigneeIds = [];
         if (ticket.assignees && ticket.assignees.length > 0) {
@@ -297,6 +320,9 @@ const awardPointsOnTicketDone = async (ticket, subdomain) => {
         }
 
         if (assigneeIds.length === 0) return;
+
+        // Deduplicate assignee IDs to prevent duplicate point awards
+        const uniqueAssigneeIds = [...new Set(assigneeIds.map(id => id.toString()))];
 
         // Calculate points
         const completionDate = ticket.actualCompletionDate || new Date();
@@ -312,8 +338,16 @@ const awardPointsOnTicketDone = async (ticket, subdomain) => {
             performanceStatus: result.performanceStatus
         });
 
-        // Award points to each assignee
-        for (const workerId of assigneeIds) {
+        // Award points to each unique assignee
+        for (const workerId of uniqueAssigneeIds) {
+            // Per-worker idempotency guard
+            const alreadyAwardedWorker = await PerformancePoints.exists({
+                ticket: ticket._id,
+                worker: workerId,
+                reason: 'task_completed'
+            });
+            if (alreadyAwardedWorker) continue;
+
             const worker = await Worker.findById(workerId);
             if (!worker) continue;
 
@@ -323,6 +357,7 @@ const awardPointsOnTicketDone = async (ticket, subdomain) => {
                 ticket: ticket._id,
                 subdomain,
                 pointsEarned: result.points,
+                penaltyDeducted: result.penaltyDeducted || 0,
                 reason: 'task_completed',
                 ticketTitle: ticket.title,
                 estimatedDays: result.estimatedDays,
@@ -335,14 +370,30 @@ const awardPointsOnTicketDone = async (ticket, subdomain) => {
             });
 
             // Update worker performance data
-            const newTotal = (worker.performancePoints || 0) + result.points;
+            let newTotal = (worker.performancePoints || 0) + result.points;
             const isDelayed = result.performanceStatus === 'delayed';
             const newStreak = isDelayed ? 0 : (worker.currentStreak || 0) + 1;
             const longestStreak = Math.max(worker.longestStreak || 0, newStreak);
 
+            // Award milestone streak bonus if streakBonusEnabled is active (every 5 consecutive on-time tasks)
+            let streakBonusPoints = 0;
+            if (config.streakBonusEnabled && !isDelayed && newStreak > 0 && newStreak % 5 === 0) {
+                streakBonusPoints = Math.round((config.basePoints * 2) * 100) / 100;
+                await PerformancePoints.create({
+                    worker: workerId,
+                    subdomain,
+                    pointsEarned: streakBonusPoints,
+                    penaltyDeducted: 0,
+                    reason: 'streak_bonus',
+                    performanceStatus: 'on_time',
+                    note: `Streak milestone bonus: ${newStreak} consecutive on-time tasks`
+                });
+                newTotal += streakBonusPoints;
+            }
+
             await Worker.findByIdAndUpdate(workerId, {
                 $inc: {
-                    performancePoints: result.points,
+                    performancePoints: result.points + streakBonusPoints,
                     totalCompletedTickets: 1,
                     totalDelayedTickets: isDelayed ? 1 : 0
                 },
@@ -490,6 +541,12 @@ const getLeaderboard = asyncHandler(async (req, res) => {
     const department = req.query.department;
     const limit = req.query.limit ? parseInt(req.query.limit) : null;
 
+    // Check leaderboard visibility configuration for worker role
+    const config = await getPerformanceConfig(subdomain);
+    if (!config.leaderboardVisible && req.user && req.user.role === 'worker') {
+        return res.json({ leaderboard: [], filter, total: 0, visible: false, message: 'Leaderboard is currently disabled by administrator' });
+    }
+
     let workers;
     const baseQuery = { subdomain, status: 'Active' };
     if (department) baseQuery.department = department;
@@ -632,16 +689,28 @@ const getAdminPerformanceOverview = asyncHandler(async (req, res) => {
     const subdomain = req.user.subdomain;
 
     const totalPointsAgg = await PerformancePoints.aggregate([
-        { $match: { subdomain } },
+        { $match: { subdomain, pointsEarned: { $gt: 0 } } },
         { $group: { _id: null, total: { $sum: '$pointsEarned' } } }
     ]);
-    const totalPointsDistributed = totalPointsAgg[0]?.total || 0;
+    const totalPointsDistributed = Math.round((totalPointsAgg[0]?.total || 0) * 100) / 100;
 
     const totalPenaltiesAgg = await PerformancePoints.aggregate([
-        { $match: { subdomain, pointsEarned: { $lt: 0 } } },
-        { $group: { _id: null, total: { $sum: '$pointsEarned' } } }
+        { $match: { subdomain } },
+        { 
+            $group: { 
+                _id: null, 
+                totalDeducted: { 
+                    $sum: { 
+                        $add: [
+                            { $ifNull: ['$penaltyDeducted', 0] },
+                            { $cond: [{ $and: [{ $lt: ['$pointsEarned', 0] }, { $eq: [{ $ifNull: ['$penaltyDeducted', 0] }, 0] }] }, { $abs: '$pointsEarned' }, 0] }
+                        ] 
+                    } 
+                } 
+            } 
+        }
     ]);
-    const totalPenalties = Math.abs(totalPenaltiesAgg[0]?.total || 0);
+    const totalPenalties = Math.round((totalPenaltiesAgg[0]?.totalDeducted || 0) * 100) / 100;
 
     const topPerformers = await Worker.find({ subdomain, status: 'Active' })
         .select('name username photo performancePoints performanceLevel currentStreak department')
@@ -657,7 +726,8 @@ const getAdminPerformanceOverview = asyncHandler(async (req, res) => {
         .limit(5)
         .lean();
 
-    const streakLeaders = await Worker.find({ subdomain, status: 'Active' })
+    // Only include workers with an active streak (> 0)
+    const streakLeaders = await Worker.find({ subdomain, status: 'Active', currentStreak: { $gt: 0 } })
         .select('name username photo currentStreak longestStreak performancePoints department')
         .populate('department', 'name')
         .sort({ currentStreak: -1 })
@@ -765,27 +835,51 @@ const manualBonus = asyncHandler(async (req, res) => {
         throw new Error('Worker ID and points are required');
     }
 
+    const pointsNum = parseFloat(points);
+    if (isNaN(pointsNum)) {
+        res.status(400);
+        throw new Error('Points must be a valid number');
+    }
+
     const worker = await Worker.findOne({ _id: workerId, subdomain });
     if (!worker) {
         res.status(404);
         throw new Error('Worker not found');
     }
 
-    const pointsNum = parseFloat(points);
-    const recordReason = pointsNum >= 0 ? 'manual_bonus' : 'manual_deduction';
+    const currentPoints = Math.max(worker.performancePoints || 0, 0);
+
+    // If deduction requested, check employee balance and clamp to prevent negative balance
+    let effectivePoints = pointsNum;
+    if (pointsNum < 0) {
+        if (currentPoints <= 0) {
+            res.status(400);
+            throw new Error('Employee already has 0 points; cannot apply further deductions');
+        }
+        if (Math.abs(pointsNum) > currentPoints) {
+            effectivePoints = -currentPoints;
+        }
+    }
+
+    const recordReason = effectivePoints >= 0 ? 'manual_bonus' : 'manual_deduction';
+    const penaltyDeducted = effectivePoints < 0 ? Math.abs(effectivePoints) : 0;
+    const recordNote = effectivePoints !== pointsNum 
+        ? `${note || reason || 'Manual adjustment'} (Capped at employee balance: ${Math.abs(effectivePoints)} pts deducted)`
+        : (note || reason || 'Manual adjustment by admin');
 
     await PerformancePoints.create({
         worker: workerId,
         subdomain,
-        pointsEarned: pointsNum,
+        pointsEarned: effectivePoints,
+        penaltyDeducted,
         reason: recordReason,
         performanceStatus: 'manual',
-        note: note || reason || 'Manual adjustment by admin'
+        note: recordNote
     });
 
-    const newTotal = (worker.performancePoints || 0) + pointsNum;
+    const newTotal = Math.max(0, currentPoints + effectivePoints);
     await Worker.findByIdAndUpdate(workerId, {
-        $inc: { performancePoints: pointsNum },
+        performancePoints: newTotal,
         performanceLevel: getPerformanceLevel(newTotal)
     });
 
@@ -793,12 +887,12 @@ const manualBonus = asyncHandler(async (req, res) => {
     await sendPerformanceNotification({
         workerId,
         subdomain,
-        title: pointsNum >= 0 ? `+${pointsNum} Bonus Points!` : `${pointsNum} Points Deducted`,
-        message: note || reason || `Admin ${pointsNum >= 0 ? 'awarded' : 'deducted'} ${Math.abs(pointsNum)} points`,
+        title: effectivePoints >= 0 ? `+${effectivePoints} Bonus Points!` : `${effectivePoints} Points Deducted`,
+        message: recordNote,
         type: 'task_approved'
     });
 
-    res.json({ success: true, message: 'Points updated', newTotal });
+    res.json({ success: true, message: 'Points updated', newTotal, effectivePoints });
 });
 
 // ─── API: Get Performance Settings ───────────────────────────────────────────

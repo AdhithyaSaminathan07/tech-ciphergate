@@ -88,7 +88,6 @@ const StatCard = ({ icon, label, value, sub, color = 'teal' }) => {
 const PerformanceRewards = () => {
     const [overview, setOverview] = useState(null);
     const [analytics, setAnalytics] = useState([]);
-    const [settings, setSettings] = useState(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('overview');
     const [searchTerm, setSearchTerm] = useState('');
@@ -109,7 +108,6 @@ const PerformanceRewards = () => {
             ]);
             setOverview(ov);
             setAnalytics(an.analytics || []);
-            setSettings(cfg);
             setLocalSettings({ ...cfg });
         } catch (e) {
             console.error('Load error:', e);
@@ -127,7 +125,7 @@ const PerformanceRewards = () => {
     };
 
     const sortedAnalytics = [...analytics]
-        .filter(w => w.name.toLowerCase().includes(searchTerm.toLowerCase()) || w.department.toLowerCase().includes(searchTerm.toLowerCase()))
+        .filter(w => (w.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || (w.department || '').toLowerCase().includes(searchTerm.toLowerCase()))
         .sort((a, b) => {
             const av = a[sortField] ?? 0;
             const bv = b[sortField] ?? 0;
@@ -162,7 +160,6 @@ const PerformanceRewards = () => {
         setSavingSettings(true);
         try {
             await updatePerformanceSettings(localSettings);
-            setSettings(localSettings);
             toast.success('Settings saved successfully!');
         } catch (e) {
             toast.error('Failed to save settings');

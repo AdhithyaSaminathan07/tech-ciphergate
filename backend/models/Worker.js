@@ -55,7 +55,8 @@ const workerSchema = mongoose.Schema({
   // Performance & Rewards System Fields
   performancePoints: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0
   },
   currentStreak: {
     type: Number,
