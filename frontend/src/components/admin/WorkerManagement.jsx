@@ -9,7 +9,7 @@ import {
 import { 
   MoreVertical, Search, Filter, UserCheck, UserMinus, 
   UserX, Download, RefreshCw, Calendar, ArrowUpDown,
-  Users, X
+  Users, X, FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import WorkerHistoryModal from './WorkerHistoryModal';
@@ -27,6 +27,7 @@ import QRCode from 'qrcode';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import FaceCapture from './FaceCapture';
 import RelieveEmployeeModal from './modals/RelieveEmployeeModal';
+import DirectRelieveModal from './modals/DirectRelieveModal';
 import CustomDatePicker from '../common/CustomDatePicker';
 
 const WorkerManagement = () => {
@@ -71,6 +72,7 @@ const WorkerManagement = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isRelieveModalOpen, setIsRelieveModalOpen] = useState(false);
+  const [isDirectRelieveModalOpen, setIsDirectRelieveModalOpen] = useState(false);
   const [relieveConfirmName, setRelieveConfirmName] = useState('');
   const [selectedWorker, setSelectedWorker] = useState(null);
 
@@ -346,11 +348,17 @@ const WorkerManagement = () => {
     setIsDeleteModalOpen(true);
   };
 
-  // Open relieve worker modal
+  // Open relieve worker modal (with documents)
   const openRelieveModal = (worker) => {
     setSelectedWorker(worker);
     setRelieveConfirmName('');
     setIsRelieveModalOpen(true);
+  };
+
+  // Open direct relieve worker modal (quick / no documents)
+  const openDirectRelieveModal = (worker) => {
+    setSelectedWorker(worker);
+    setIsDirectRelieveModalOpen(true);
   };
 
   // Open face capture modal
@@ -769,7 +777,7 @@ const WorkerManagement = () => {
     {
       header: 'Actions',
       accessor: 'actions',
-      width: '150px',
+      width: '180px',
       sticky: 'right',
       headerAlign: 'text-right',
       align: 'text-right',
@@ -796,11 +804,18 @@ const WorkerManagement = () => {
                   <FaCamera size={14} />
                 </button>
                 <button
-                  onClick={() => openRelieveModal(record)}
-                  className="p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
-                  title="Relieve Developer"
+                  onClick={() => openDirectRelieveModal(record)}
+                  className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                  title="Direct Relieve (Quick)"
                 >
                   <UserMinus size={14} />
+                </button>
+                <button
+                  onClick={() => openRelieveModal(record)}
+                  className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                  title="Relieve & Generate Documents (Official Wizard)"
+                >
+                  <FileText size={14} />
                 </button>
               </>
             ) : (
@@ -905,12 +920,22 @@ const WorkerManagement = () => {
           
           <div className="flex items-center gap-2">
             {worker.status === 'Active' || !worker.status ? (
-              <button 
-                onClick={() => openRelieveModal(worker)}
-                className="px-3 py-1.5 text-xs font-semibold text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors"
-              >
-                Relieve
-              </button>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button 
+                  onClick={() => openDirectRelieveModal(worker)}
+                  className="px-2.5 py-1 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors flex items-center gap-1"
+                  title="Direct Relieve (Quick)"
+                >
+                  <UserMinus size={12} /> Direct Relieve
+                </button>
+                <button 
+                  onClick={() => openRelieveModal(worker)}
+                  className="px-2.5 py-1 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors flex items-center gap-1"
+                  title="Relieve with Documents & Dispatch"
+                >
+                  <FileText size={12} /> Relieve + Docs
+                </button>
+              </div>
             ) : worker.status === 'Relieved' ? (
               <>
                 <button 
@@ -1893,19 +1918,43 @@ const WorkerManagement = () => {
         </div>
       </Modal>
 
-      {/* New Automated Relieve Employee Modal */}
+      {/* Direct Relieve Modal (Quick / No Documents) */}
+      <DirectRelieveModal
+        isOpen={isDirectRelieveModalOpen}
+        onClose={() => setIsDirectRelieveModalOpen(false)}
+        worker={selectedWorker}
+        onComplete={() => {
+          loadData();
+          loadWorkers(1, false);
+        }}
+        onSwitchToDocumentRelieve={(w) => {
+          setSelectedWorker(w);
+          setIsRelieveModalOpen(true);
+        }}
+      />
+
+      {/* Automated Relieve Employee Modal (With Documents & Dispatch) */}
       <RelieveEmployeeModal
         isOpen={isRelieveModalOpen}
         onClose={() => setIsRelieveModalOpen(false)}
         worker={selectedWorker}
-        onComplete={loadData}
+        onComplete={() => {
+          loadData();
+          loadWorkers(1, false);
+        }}
+        onSwitchToDirectRelieve={(w) => {
+          setSelectedWorker(w);
+          setIsDirectRelieveModalOpen(true);
+        }}
       />
-
 
       <WorkerHistoryModal
         isOpen={isHistoryModalOpen}
         onClose={() => setIsHistoryModalOpen(false)}
-        onRestore={loadData}
+        onRestore={() => {
+          loadData();
+          loadWorkers(1, false);
+        }}
       />
     </div>
   );

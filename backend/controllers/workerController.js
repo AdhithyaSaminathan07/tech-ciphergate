@@ -440,6 +440,11 @@ const updateWorker = asyncHandler(async (req, res) => {
       // Update status if provided
       if (status) {
         updateData.status = status;
+        if (status === 'Relieved') {
+          updateData.relievedAt = req.body.relievedAt || new Date();
+        } else if (status === 'Active') {
+          updateData.relievedAt = null;
+        }
       }
 
       // Update name if provided

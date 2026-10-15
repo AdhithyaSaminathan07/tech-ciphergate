@@ -15,7 +15,13 @@ import { processRelieve } from '../../../services/exitManagementService';
 import CustomDatePicker from '../../common/CustomDatePicker';
 import './RelieveEmployeeModal.css';
 
-const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
+const RelieveEmployeeModal = ({ 
+  isOpen, 
+  onClose, 
+  worker, 
+  onComplete,
+  onSwitchToDirectRelieve 
+}) => {
   const { subdomain } = useContext(appContext);
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
@@ -89,8 +95,8 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
 
       // Reset Delivery Options
       setDeliveryOptions({
-        email: true,
-        whatsapp: true,
+        email: Boolean(worker.email && validateEmail(worker.email)),
+        whatsapp: Boolean(worker.phoneNumber && validateMobile(worker.phoneNumber)),
         download: true
       });
 
@@ -256,27 +262,40 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
     try {
       const documentFiles = await generatePDFs();
 
+      const hasValidEmail = Boolean(exitDetails.email && validateEmail(exitDetails.email));
+      const hasValidPhone = Boolean(exitDetails.phoneNumber && validateMobile(exitDetails.phoneNumber));
+
       const payload = {
         workerId: worker._id,
         relievingDate: exitDetails.relievingDate,
         lastWorkingDay: exitDetails.lastWorkingDay,
         reason: exitDetails.reason,
         selectedDocuments: Object.keys(selectedDocs).filter(k => selectedDocs[k]),
-        deliveryOptions,
+        deliveryOptions: {
+          email: Boolean(deliveryOptions.email && hasValidEmail),
+          whatsapp: Boolean(deliveryOptions.whatsapp && hasValidPhone),
+          download: Boolean(deliveryOptions.download)
+        },
         documentFiles,
-        email: exitDetails.email,
-        phoneNumber: exitDetails.phoneNumber
+        email: hasValidEmail ? exitDetails.email.trim() : '',
+        phoneNumber: hasValidPhone ? exitDetails.phoneNumber.trim() : ''
       };
 
       const response = await processRelieve(payload);
 
-      if (response.deliveryStatus?.email?.sent || !deliveryOptions.email) {
-        toast.success(response.message || 'Developer relieved and documents sent successfully!');
+      if (response?.success) {
+        if (payload.deliveryOptions.email && response.deliveryStatus?.email?.sent) {
+          toast.success(response.message || 'Developer relieved and documents sent via email successfully!');
+        } else if (payload.deliveryOptions.email && response.deliveryStatus?.email?.error) {
+          toast.warning(`Developer relieved, but document email delivery failed: ${response.deliveryStatus.email.error}`);
+        } else {
+          toast.success(response.message || 'Developer relieved successfully!');
+        }
       } else {
-        toast.warning(response.message || 'Developer relieved, but document delivery failed. Please check mail settings.');
+        toast.error(response?.message || 'Failed to complete relieve process');
       }
 
-      onComplete();
+      if (onComplete) onComplete();
       onClose();
     } catch (error) {
       toast.error(error.message || 'Failed to complete relieve process');
@@ -314,6 +333,25 @@ const RelieveEmployeeModal = ({ isOpen, onClose, worker, onComplete }) => {
                 exit={{ opacity: 0, x: -20 }}
                 className="grid grid-cols-1 md:grid-cols-2 gap-6"
               >
+                {onSwitchToDirectRelieve && (
+                  <div className="md:col-span-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 p-3 bg-amber-50 border border-amber-200/90 rounded-xl text-xs">
+                    <div className="flex items-center gap-2 text-amber-950 font-medium">
+                      <span className="font-bold text-amber-900 bg-amber-200/60 px-2 py-0.5 rounded text-[11px]">⚡ Quick Option</span>
+                      <span>Just want to directly relieve without generating documents?</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onSwitchToDirectRelieve(worker);
+                      }}
+                      className="px-3 py-1 bg-white hover:bg-amber-100 text-amber-800 font-bold rounded-lg border border-amber-300 transition-colors shadow-sm text-xs whitespace-nowrap"
+                    >
+                      Direct Relieve Instead →
+                    </button>
+                  </div>
+                )}
+
                 <div className="form-group">
                   <label className="block text-sm font-bold text-gray-700 mb-2">Joining Date</label>
                   <CustomDatePicker

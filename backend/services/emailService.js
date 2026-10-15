@@ -6,21 +6,32 @@ const nodemailer = require('nodemailer');
  */
 const sendEmail = async (options) => {
   try {
+    const user = (process.env.EMAIL_USER || '').replace(/"/g, '').trim();
+    const pass = (process.env.EMAIL_PASS || '').replace(/"/g, '').replace(/\s/g, '');
+
+    if (!user || !pass) {
+      console.warn('Email credentials not configured in environment');
+      return { success: false, error: 'Email service credentials not configured on server' };
+    }
+
+    const host = (process.env.EMAIL_HOST || 'smtp.gmail.com').replace(/"/g, '').trim();
+    const port = parseInt((process.env.EMAIL_PORT || '587').replace(/"/g, '').trim(), 10);
+    const secure = (process.env.EMAIL_SECURE || 'false').replace(/"/g, '').trim() === 'true';
+
     // Create a transporter
-    // Note: In a production environment, these should come from environment variables or database settings
     const transporter = nodemailer.createTransport({
-      host: (process.env.EMAIL_HOST || 'smtp.gmail.com').replace(/"/g, ''),
-      port: parseInt((process.env.EMAIL_PORT || '587').replace(/"/g, ''), 10),
-      secure: (process.env.EMAIL_SECURE || 'false').replace(/"/g, '') === 'true', 
-      auth: {
-        user: (process.env.EMAIL_USER || '').replace(/"/g, '').trim(),
-        pass: (process.env.EMAIL_PASS || '').replace(/"/g, '').replace(/\s/g, ''),
-      },
+      host,
+      port,
+      secure,
+      auth: { user, pass },
     });
+
+    const cleanFromAddress = (process.env.EMAIL_FROM_ADDRESS || user).replace(/"/g, '').trim();
+    const cleanFromName = (process.env.EMAIL_FROM_NAME || 'Tech Vaseegrah').replace(/"/g, '').trim();
 
     // Define email options
     const mailOptions = {
-      from: `"${process.env.EMAIL_FROM_NAME || 'Tech Vaseegrah'}" <${process.env.EMAIL_FROM_ADDRESS || process.env.EMAIL_USER}>`,
+      from: `"${cleanFromName}" <${cleanFromAddress}>`,
       to: options.to,
       subject: options.subject,
       text: options.text,
