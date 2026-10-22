@@ -45,6 +45,14 @@ router.route('/renumber')
 router.route('/:id/send-whatsapp')
   .post(adminOrWorker, invoiceController.sendInvoiceWhatsApp);
 
+// Preview Job Intake classification for an eligible, verified invoice
+router.route('/:id/job-intake-preview')
+  .get(adminOrWorker, invoiceController.previewJobIntakeForInvoice);
+
+// Trigger Job Intake for an eligible, verified invoice
+router.route('/:id/job-intake')
+  .post(adminOrWorker, invoiceController.triggerJobIntakeForInvoice);
+
 // Individual invoice routes (allow both admin and worker for their own invoices)
 router.route('/:id')
   .get(adminOrWorker, invoiceController.getInvoiceById)

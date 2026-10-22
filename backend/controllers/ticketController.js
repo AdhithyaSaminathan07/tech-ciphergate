@@ -207,11 +207,47 @@ exports.createTicket = async (req, res) => {
         const formattedStartDate = (startDate && startDate.trim() !== '') ? new Date(startDate) : undefined;
         const formattedEndDate = (endDate && endDate.trim() !== '') ? new Date(endDate) : undefined;
 
+        // Validate all candidates in assignee and assignees for tenant isolation and active status
+        const Worker = require('../models/Worker');
+        const allCandidateIds = new Set();
+        const primaryCandidate = assignee
+            ? (typeof assignee === 'object' ? assignee._id : assignee)
+            : (Array.isArray(assignees) && assignees.length > 0
+                ? (typeof assignees[0] === 'object' ? assignees[0]._id : assignees[0])
+                : null);
+
+        if (primaryCandidate) allCandidateIds.add(String(primaryCandidate));
+        if (Array.isArray(assignees)) {
+            assignees.forEach(a => {
+                const id = typeof a === 'object' ? a?._id : a;
+                if (id) allCandidateIds.add(String(id));
+            });
+        }
+
+        for (const cId of allCandidateIds) {
+            const targetWorker = await Worker.findById(cId);
+            if (!targetWorker) {
+                return res.status(400).json({ message: 'Selected worker does not exist' });
+            }
+            if (targetWorker.subdomain && subdomain && targetWorker.subdomain.toLowerCase() !== subdomain.toLowerCase()) {
+                return res.status(403).json({ message: 'Cannot assign task to a worker from another organization' });
+            }
+            if (targetWorker.status !== 'Active') {
+                return res.status(400).json({ message: `Cannot assign task to inactive worker (${targetWorker.status})` });
+            }
+        }
+
+        const finalAssignee = assignee || (Array.isArray(assignees) && assignees.length > 0 ? assignees[0] : undefined);
+        const finalAssignees = (Array.isArray(assignees) && assignees.length > 0)
+            ? assignees
+            : (assignee ? [assignee] : []);
+
         const newTicket = new Ticket({
             title,
             description,
-            assignee: assignee || undefined,
-            assignees: assignees || [],
+            assignee: finalAssignee,
+            assignees: finalAssignees,
+            assignmentMode: req.body.assignmentMode || (finalAssignees.length > 1 ? 'Both' : (team ? 'Team' : 'Individual')),
             team: team || undefined,
             priority,
             status,
@@ -279,8 +315,14 @@ exports.createTicket = async (req, res) => {
         }
 
         // Socket emission
-        const io = getIO();
-        io.to(subdomain).emit('ticket:created', savedTicket);
+        try {
+            const io = getIO();
+            if (io) {
+                io.to(subdomain).emit('ticket:created', savedTicket);
+            }
+        } catch (socketErr) {
+            // Socket emission should never fail the HTTP request
+        }
 
         res.status(201).json(savedTicket);
     } catch (error) {
@@ -311,8 +353,84 @@ exports.updateTicket = async (req, res) => {
 
         if (title !== undefined) ticket.title = title;
         if (description !== undefined) ticket.description = description;
-        if (assignee !== undefined) ticket.assignee = assignee;
-        if (assignees !== undefined) ticket.assignees = assignees;
+
+        // Manual assignment & Admin Override handling
+        if (assignee !== undefined || assignees !== undefined || req.body.assignmentMode !== undefined) {
+            const Worker = require('../models/Worker');
+            const newAssigneeId = assignee
+                ? (typeof assignee === 'object' ? assignee._id : assignee)
+                : (Array.isArray(assignees) && assignees.length > 0
+                    ? (typeof assignees[0] === 'object' ? assignees[0]._id : assignees[0])
+                    : null);
+            const prevAssigneeId = ticket.assignee ? ticket.assignee.toString() : null;
+
+            // Validate all candidates in assignee and assignees for tenant isolation and active status
+            const allCandidateIds = new Set();
+            if (newAssigneeId) allCandidateIds.add(String(newAssigneeId));
+            if (Array.isArray(assignees)) {
+                assignees.forEach(a => {
+                    const id = typeof a === 'object' ? a?._id : a;
+                    if (id) allCandidateIds.add(String(id));
+                });
+            }
+
+            const ticketTenant = ticket.subdomain || subdomain;
+            for (const cId of allCandidateIds) {
+                const targetWorker = await Worker.findById(cId);
+                if (!targetWorker) {
+                    return res.status(400).json({ message: 'Selected worker does not exist' });
+                }
+                if (targetWorker.subdomain && ticketTenant && targetWorker.subdomain.toLowerCase() !== ticketTenant.toLowerCase()) {
+                    return res.status(403).json({ message: 'Cannot assign task to a worker from another organization' });
+                }
+                if (targetWorker.status !== 'Active') {
+                    return res.status(400).json({ message: `Cannot assign task to inactive worker (${targetWorker.status})` });
+                }
+            }
+
+            const prevAssigneesList = (ticket.assignees || []).map(a => String(a._id || a));
+            const newAssigneesList = assignees !== undefined ? (assignees || []).map(a => String(a._id || a)) : prevAssigneesList;
+            const assigneesChanged = assignees !== undefined && (
+                newAssigneesList.length !== prevAssigneesList.length ||
+                newAssigneesList.some(id => !prevAssigneesList.includes(id))
+            );
+            const modeChanged = req.body.assignmentMode !== undefined && req.body.assignmentMode !== ticket.assignmentMode;
+            const primaryAssigneeChanged = String(newAssigneeId || '') !== String(prevAssigneeId || '');
+
+            const isChanged = primaryAssigneeChanged || assigneesChanged || modeChanged;
+            if (isChanged) {
+                const historyEntry = {
+                    previousAssignee: prevAssigneeId,
+                    newAssignee: newAssigneeId || null,
+                    assignedAt: new Date(),
+                    assignedBy: req.user?._id || null,
+                    assignedByModel: req.user?.role === 'admin' ? 'Admin' : 'Worker',
+                    source: 'override',
+                    reason: req.body.assignmentReason || (newAssigneeId ? `Admin override: ${req.body.assignmentMode || ticket.assignmentMode || 'mode updated'}` : 'Unassigned by admin')
+                };
+                if (!ticket.assignmentHistory) ticket.assignmentHistory = [];
+                ticket.assignmentHistory.push(historyEntry);
+                ticket.assignmentSource = 'override';
+                if (newAssigneeId) {
+                    ticket.unassignedReason = null;
+                }
+            }
+
+            if (assignee !== undefined) {
+                ticket.assignee = assignee;
+            } else if (Array.isArray(assignees)) {
+                ticket.assignee = assignees.length > 0 ? (typeof assignees[0] === 'object' ? assignees[0]._id : assignees[0]) : null;
+            }
+
+            if (assignees !== undefined) {
+                ticket.assignees = assignees;
+            } else if (assignee !== undefined) {
+                ticket.assignees = assignee ? [assignee] : [];
+            }
+
+            if (req.body.assignmentMode !== undefined) ticket.assignmentMode = req.body.assignmentMode;
+        }
+
         if (team !== undefined) ticket.team = team;
         if (priority !== undefined) ticket.priority = priority;
         if (targetTier !== undefined) ticket.targetTier = targetTier;
@@ -360,9 +478,12 @@ exports.updateTicket = async (req, res) => {
         // Ensure checklist is updated if provided
         if (checklist !== undefined) {
             ticket.checklist = checklist;
-        } else if (description !== undefined) {
-            // Otherwise, if description is updated, re-parse it
-            ticket.checklist = parseChecklist(description, ticket.checklist);
+        } else if (description !== undefined && (!ticket.checklist || ticket.checklist.length === 0)) {
+            // Only parse from description if ticket currently has no checklist items
+            const parsed = parseChecklist(description, ticket.checklist);
+            if (parsed.length > 0) {
+                ticket.checklist = parsed;
+            }
         }
 
         // Auto move to Review (not Done) if all checklist items are completed
@@ -375,8 +496,8 @@ exports.updateTicket = async (req, res) => {
         ticket._reviewerId = req.user?._id;
         const updatedTicket = await ticket.save();
         await updatedTicket.populate([
-            { path: 'assignee', select: 'name username status' },
-            { path: 'assignees', select: 'name username department status' }
+            { path: 'assignee', select: 'name username department status role' },
+            { path: 'assignees', select: 'name username department status role' }
         ]);
 
         // Trigger performance points if ticket just moved to Done
@@ -433,8 +554,14 @@ exports.updateTicket = async (req, res) => {
         }
 
         // Socket emission
-        const io = getIO();
-        io.to(updatedTicket.subdomain || subdomain).emit('ticket:updated', updatedTicket);
+        try {
+            const io = getIO();
+            if (io) {
+                io.to(updatedTicket.subdomain || subdomain).emit('ticket:updated', updatedTicket);
+            }
+        } catch (socketErr) {
+            // Socket emission should never fail the HTTP request
+        }
 
         res.status(200).json(updatedTicket);
     } catch (error) {

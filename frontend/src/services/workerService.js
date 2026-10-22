@@ -68,7 +68,35 @@ export const getWorkers = async (subdomainParam, params = {}) => {
     // Add timestamp to prevent caching
     const timestamp = new Date().getTime();
     const response = await api.post(`/workers/all?_t=${timestamp}`, { subdomain, status, ...params });
-    return response.data;
+    const data = response.data;
+    const rawList = Array.isArray(data) ? data : (Array.isArray(data?.workers) ? data.workers : []);
+
+    return rawList.map(w => {
+      let deptName = 'N/A';
+      let deptId = null;
+
+      const rawDept = w.department;
+      if (rawDept) {
+        if (typeof rawDept === 'object' && rawDept !== null) {
+          deptName = rawDept.name ? String(rawDept.name).trim() : (rawDept._id ? String(rawDept._id) : 'N/A');
+          deptId = rawDept._id ? String(rawDept._id) : null;
+        } else if (typeof rawDept === 'string') {
+          deptName = rawDept.trim() || 'N/A';
+          deptId = /^[0-9a-fA-F]{24}$/.test(rawDept.trim()) ? rawDept.trim() : null;
+        }
+      } else if (w.departmentName) {
+        deptName = String(w.departmentName).trim();
+        deptId = w.departmentId || null;
+      }
+
+      return {
+        ...w,
+        department: deptName,
+        departmentName: deptName,
+        departmentId: deptId || w.departmentId || null,
+        departmentInfo: { _id: deptId || w.departmentId || null, name: deptName }
+      };
+    });
   } catch (error) {
     console.error('Workers fetch error:', error);
     throw error.response ? error.response.data : new Error('Failed to fetch workers');

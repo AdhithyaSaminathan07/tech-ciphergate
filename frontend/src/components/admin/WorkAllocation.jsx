@@ -9,7 +9,7 @@ import {
     AlertCircle, Bookmark, Zap, ArrowUp, ArrowDown,
     Minus, X, User, AlignLeft, LayoutDashboard, Flag, List, ListOrdered,
     Calendar, Clock, Check, Brain, ChevronDown, ChevronLeft, ChevronRight, BarChart2, BarChart3, Users, Info, Eye, Paperclip, CheckCircle2, History, Tag, MessageSquare, Download, Maximize2, FileText, HelpCircle, ImagePlus, Filter, Repeat,
-    Cpu, Sparkles
+    Cpu, Sparkles, Code, Pencil
 } from 'lucide-react';
 import { getFullFileUrl } from '../../utils/fileUtils';
 import { toast } from 'react-toastify';
@@ -114,6 +114,195 @@ const AutoGrowingTextarea = ({ value, onChange, placeholder, className }) => {
     );
 };
 
+
+// 🔹 Helper to filter out commercial invoice / customer PII and extract only project requirements & scope
+const extractProjectScopeOnly = (rawText) => {
+    if (!rawText || typeof rawText !== 'string') return '';
+    const text = rawText.trim();
+    if (!text) return '';
+
+    // If text does not contain invoice/customer headers, return as is
+    const hasCustomerHeader = /###\s*Customer Information/i.test(text);
+    const hasCommercialHeader = /###\s*Commercial Details/i.test(text);
+
+    if (!hasCustomerHeader && !hasCommercialHeader) {
+        return text;
+    }
+
+    // Split text into section blocks by ###
+    const sections = text.split(/(?=###\s+)/g);
+    const scopeBlocks = [];
+
+    for (const section of sections) {
+        const trimmed = section.trim();
+        // Skip Customer Information and Commercial Details
+        if (/^###\s*Customer Information/i.test(trimmed)) continue;
+        if (/^###\s*Commercial Details/i.test(trimmed)) continue;
+
+        if (/^###\s*(Scope & Line Items|Scope of Work)/i.test(trimmed)) {
+            // Strip out Qty/Rate/Total commercial details from lines
+            const lines = trimmed.split('\n');
+            const cleanLines = lines.map(line => {
+                if (/^###/i.test(line)) return '### Scope of Work';
+                // Remove (Qty: ..., Rate: ..., Total: ...)
+                return line.replace(/\s*\(Qty:\s*[^)]+\)/gi, '').trimEnd();
+            }).filter(l => l.trim().length > 0);
+
+            if (cleanLines.length > 1) {
+                scopeBlocks.push(cleanLines.join('\n'));
+            }
+        } else if (/^###\s*(Project Requirements|Project Overview)/i.test(trimmed)) {
+            // Check if generic "No detailed scope provided."
+            const content = trimmed.replace(/^###[^\n]+\n*/i, '').trim();
+            if (content && !/no detailed scope provided/i.test(content) && !/created automatically/i.test(content)) {
+                scopeBlocks.push(trimmed);
+            }
+        } else {
+            // Any other custom developer requirement section
+            scopeBlocks.push(trimmed);
+        }
+    }
+
+    const result = scopeBlocks.join('\n\n').trim();
+    if (!result) {
+        return 'Detailed project requirements have not been provided yet.';
+    }
+    return result;
+};
+
+// 🔹 Workspace Description Section (View & Edit with "No description available" fallback)
+const WorkspaceDescription = ({ description, onUpdate }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const cleanInitial = useMemo(() => extractProjectScopeOnly(description), [description]);
+    const [localValue, setLocalValue] = useState(cleanInitial || '');
+    const [isSaving, setIsSaving] = useState(false);
+    const textareaRef = useRef(null);
+
+    useEffect(() => {
+        setLocalValue(cleanInitial || '');
+    }, [cleanInitial]);
+
+    useEffect(() => {
+        if (isEditing && textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+            textareaRef.current.style.height = `${Math.max(72, textareaRef.current.scrollHeight)}px`;
+            textareaRef.current.focus();
+        }
+    }, [isEditing]);
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        try {
+            await onUpdate(localValue.trim());
+            setIsEditing(false);
+        } catch (err) {
+            console.error('Failed to save description:', err);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleCancel = () => {
+        setLocalValue(cleanInitial || '');
+        setIsEditing(false);
+    };
+
+    const hasDescription = Boolean(localValue && localValue.trim());
+
+    return (
+        <div className="pt-2.5 border-t border-slate-100/90 space-y-1.5">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-teal-600" />
+                    <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider">Description</span>
+                </div>
+                {!isEditing && (
+                    <button
+                        type="button"
+                        onClick={() => setIsEditing(true)}
+                        className="text-[10px] font-bold text-teal-600 hover:text-teal-700 bg-teal-50 hover:bg-teal-100 px-2 py-0.5 rounded-md border border-teal-200/80 transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                        <Pencil className="w-2.5 h-2.5" />
+                        <span>{hasDescription ? 'Edit' : 'Add Description'}</span>
+                    </button>
+                )}
+            </div>
+
+            {isEditing ? (
+                <div className="space-y-2 pt-0.5">
+                    <textarea
+                        ref={textareaRef}
+                        rows={2}
+                        value={localValue}
+                        onChange={(e) => {
+                            setLocalValue(e.target.value);
+                            e.target.style.height = 'auto';
+                            e.target.style.height = `${Math.max(72, e.target.scrollHeight)}px`;
+                        }}
+                        placeholder="Enter workspace or project description..."
+                        className="w-full text-xs sm:text-sm text-slate-800 border border-teal-400 focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 bg-white rounded-xl p-3 focus:outline-none transition-all leading-relaxed placeholder-slate-300 resize-none min-h-[72px] shadow-2xs"
+                    />
+                    <div className="flex items-center justify-end gap-2">
+                        <button
+                            type="button"
+                            onClick={handleCancel}
+                            disabled={isSaving}
+                            className="px-2.5 py-1 text-xs font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleSave}
+                            disabled={isSaving}
+                            className="px-3 py-1 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 active:scale-95 rounded-lg shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                            {isSaving ? (
+                                <>
+                                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    <span>Saving...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Check className="w-3 h-3 stroke-[2.5]" />
+                                    <span>Save</span>
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            ) : hasDescription ? (
+                <div
+                    onClick={() => setIsEditing(true)}
+                    className="w-full text-xs text-slate-700 bg-slate-50/70 hover:bg-slate-50 border border-slate-200/80 rounded-xl p-3 whitespace-pre-wrap leading-relaxed cursor-pointer transition-colors group relative shadow-2xs"
+                    title="Click to edit description"
+                >
+                    {localValue}
+                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-[9px] font-semibold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100">
+                            Edit
+                        </span>
+                    </div>
+                </div>
+            ) : (
+                <div
+                    onClick={() => setIsEditing(true)}
+                    className="w-full py-2.5 px-3 bg-slate-50/50 hover:bg-slate-50 border border-dashed border-slate-200 hover:border-teal-400 rounded-xl flex items-center justify-between cursor-pointer transition-all group shadow-2xs"
+                >
+                    <div className="flex items-center gap-2">
+                        <Info className="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-500 transition-colors" />
+                        <span className="text-xs text-slate-400 group-hover:text-slate-600 font-medium italic">
+                            No description available
+                        </span>
+                    </div>
+                    <span className="text-[10px] font-bold text-teal-600 bg-teal-50 group-hover:bg-teal-100 px-2 py-0.5 rounded-md border border-teal-200/80 transition-colors">
+                        + Add
+                    </span>
+                </div>
+            )}
+        </div>
+    );
+};
 
 const IssueIcon = ({ type }) => {
     switch (type) {
@@ -373,56 +562,199 @@ const MultiSelect = ({ options, selected, onChange, placeholder }) => {
     );
 };
 
+// Helper functions for safe team and department normalization
+const getDeptName = (dept) => {
+    if (!dept) return '';
+    if (typeof dept === 'object') return (dept.name || (dept._id ? String(dept._id) : '')).trim();
+    return String(dept).trim();
+};
+
+const getDeptId = (dept) => {
+    if (!dept) return '';
+    if (typeof dept === 'object' && dept._id) return String(dept._id).trim();
+    const str = String(dept).trim();
+    return /^[0-9a-fA-F]{24}$/.test(str) ? str : '';
+};
+
+const isWorkerInTeam = (worker, targetTeam) => {
+    if (!worker || !targetTeam) return false;
+
+    const targetTeamName = getDeptName(targetTeam).toLowerCase().trim();
+    const targetTeamId = getDeptId(targetTeam);
+
+    const workerDeptName = (
+        getDeptName(worker.department) || 
+        worker.departmentName || 
+        (worker.departmentInfo ? worker.departmentInfo.name : '') || 
+        ''
+    ).toLowerCase().trim();
+
+    const workerDeptId = (
+        getDeptId(worker.department) || 
+        worker.departmentId || 
+        (worker.departmentInfo ? String(worker.departmentInfo._id) : '') || 
+        ''
+    );
+
+    // 1. Authoritative exact name match (case-insensitive)
+    if (targetTeamName && workerDeptName && targetTeamName === workerDeptName) {
+        return true;
+    }
+
+    // 2. Authoritative ID match
+    if (targetTeamId && workerDeptId && targetTeamId === workerDeptId) {
+        return true;
+    }
+
+    // 3. ID matches Name (e.g. if target was passed as ID and worker department name is compared)
+    if (targetTeamId && workerDeptName && targetTeamId.toLowerCase() === workerDeptName) {
+        return true;
+    }
+    if (targetTeamName && workerDeptId && targetTeamName === workerDeptId.toLowerCase()) {
+        return true;
+    }
+
+    // 4. Authoritative functional department & designation matching
+    if (targetTeamName === 'dev' || targetTeamName === 'development' || targetTeamName === 'software' || targetTeamName === 'engineering') {
+        if (workerDeptName === 'dev' || workerDeptName === 'development') return true;
+        if (/\b(dev|development|developer)\b/i.test(workerDeptName) || workerDeptName.startsWith('dev')) return true;
+        if (worker.role === 'developer' && (!workerDeptName || workerDeptName === 'n/a')) return true;
+        const designation = String(worker.designation || '').toLowerCase();
+        if (designation.includes('developer') || designation.includes('engineer')) return true;
+    }
+
+    if (targetTeamName.includes('design') || targetTeamName.includes('creative') || targetTeamName.includes('ui') || targetTeamName.includes('ux')) {
+        if (worker.role === 'designer') return true;
+        const designation = String(worker.designation || '').toLowerCase();
+        if (designation.includes('design') || designation.includes('ui') || designation.includes('ux') || designation.includes('figma')) return true;
+    }
+
+    if (targetTeamName.includes('market') || targetTeamName.includes('seo') || targetTeamName.includes('growth')) {
+        if (worker.role === 'marketing' || worker.role === 'marketer') return true;
+        const designation = String(worker.designation || '').toLowerCase();
+        if (designation.includes('market') || designation.includes('seo') || designation.includes('growth')) return true;
+    }
+
+    if (targetTeamName.includes('test') || targetTeamName.includes('qa') || targetTeamName.includes('quality')) {
+        if (worker.role === 'tester' || worker.role === 'qa') return true;
+        const designation = String(worker.designation || '').toLowerCase();
+        if (designation.includes('test') || designation.includes('qa') || designation.includes('quality')) return true;
+    }
+
+    return false;
+};
+
 const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers, assignmentMode = 'group', setAssignmentMode }) => {
     const [assignmentType, setAssignmentType] = useState('Individual'); // Team, Individual, Both
 
     useEffect(() => {
-        if (selectedTicket.team && selectedTicket.assignees?.length > 0) {
-            // Check if all team members are in assignees
-            const teamMembers = workers.filter(w => w.status !== 'Relieved' && w.department === selectedTicket.team).map(w => w._id);
-            const hasExtra = selectedTicket.assignees.some(id => !teamMembers.includes(typeof id === 'object' ? id._id : id));
-            if (hasExtra) setAssignmentType('Both');
-            else setAssignmentType('Team');
-        } else if (selectedTicket.team) {
-            setAssignmentType('Team');
-        } else {
-            setAssignmentType('Individual');
+        // 1. Authoritative check: if ticket already has a persisted assignmentMode, honor it directly
+        if (selectedTicket.assignmentMode && ['Team', 'Individual', 'Both'].includes(selectedTicket.assignmentMode)) {
+            setAssignmentType(selectedTicket.assignmentMode);
+            return;
         }
-    }, [selectedTicket._id]);
+
+        const teamName = getDeptName(selectedTicket.team);
+        const currentAssignees = (selectedTicket.assignees || []).map(id => typeof id === 'object' ? id._id : id);
+        if (currentAssignees.length === 0 && selectedTicket.assignee) {
+            currentAssignees.push(typeof selectedTicket.assignee === 'object' ? selectedTicket.assignee._id : selectedTicket.assignee);
+        }
+
+        // If no team is set on ticket, default to Individual
+        if (!teamName) {
+            setAssignmentType('Individual');
+            return;
+        }
+
+        // Find actual active workers belonging to this team/department
+        const teamMemberIds = workers
+            .filter(w => w.status === 'Active' && isWorkerInTeam(w, teamName))
+            .map(w => String(w._id));
+
+        if (currentAssignees.length === 0) {
+            setAssignmentType('Individual');
+        } else if (currentAssignees.length === 1 && (teamMemberIds.length > 1 || !teamMemberIds.includes(String(currentAssignees[0])))) {
+            // Exactly one employee selected, not the entire team -> Individual
+            setAssignmentType('Individual');
+        } else if (teamMemberIds.length > 0 && teamMemberIds.every(id => currentAssignees.map(String).includes(id))) {
+            const hasExtra = currentAssignees.some(id => !teamMemberIds.includes(String(id)));
+            if (hasExtra) {
+                setAssignmentType('Both');
+            } else {
+                setAssignmentType('Team');
+            }
+        } else {
+            setAssignmentType(currentAssignees.length <= 1 ? 'Individual' : 'Both');
+        }
+    }, [selectedTicket._id, selectedTicket.assignmentMode]);
 
     const handleTypeChange = (type) => {
         setAssignmentType(type);
-        if (type === 'Individual') {
-            updateSelectedTicket({ team: '' });
-        }
+        const currentAssignees = (selectedTicket.assignees && selectedTicket.assignees.length > 0)
+            ? selectedTicket.assignees.map(a => typeof a === 'object' ? a._id : a)
+            : (selectedTicket.assignee ? [typeof selectedTicket.assignee === 'object' ? selectedTicket.assignee._id : selectedTicket.assignee] : []);
+        const primaryAssignee = currentAssignees[0] || (selectedTicket.assignee ? (typeof selectedTicket.assignee === 'object' ? selectedTicket.assignee._id : selectedTicket.assignee) : null);
+
+        // Switching modes must not silently assign every department member.
+        // Preserve existing legitimate manual assignments.
+        updateSelectedTicket({
+            assignmentMode: type,
+            assignees: currentAssignees,
+            assignee: primaryAssignee || null
+        });
     };
 
     const handleTeamChange = (team) => {
-        updateSelectedTicket({ team });
+        const teamName = getDeptName(team);
+        const teamMembers = workers
+            .filter(w => w.status === 'Active' && isWorkerInTeam(w, teamName))
+            .map(w => w._id);
+        const currentAssignees = (selectedTicket.assignees || []).map(a => typeof a === 'object' ? a._id : a);
+
         if (assignmentType === 'Team') {
-            const teamMembers = workers.filter(w => w.status !== 'Relieved' && w.department === team).map(w => w._id);
-            updateSelectedTicket({ assignees: teamMembers });
+            updateSelectedTicket({
+                team: teamName,
+                assignmentMode: 'Team',
+                assignees: teamMembers,
+                assignee: teamMembers[0] || null
+            });
         } else if (assignmentType === 'Both') {
-            const teamMembers = workers.filter(w => w.status !== 'Relieved' && w.department === team).map(w => w._id);
-            const currentAssignees = (selectedTicket.assignees || []).map(a => typeof a === 'object' ? a._id : a);
             const merged = [...new Set([...teamMembers, ...currentAssignees])];
-            updateSelectedTicket({ assignees: merged });
+            updateSelectedTicket({
+                team: teamName,
+                assignmentMode: 'Both',
+                assignees: merged,
+                assignee: currentAssignees[0] || teamMembers[0] || null
+            });
+        } else {
+            updateSelectedTicket({
+                team: teamName,
+                assignmentMode: 'Individual'
+            });
         }
     };
 
     const handleEmployeeChange = (employeeIds) => {
-        let finalIds = [...employeeIds];
-        if (assignmentType === 'Team' || assignmentType === 'Both') {
-            if (selectedTicket.team) {
-                const teamMembers = workers.filter(w => w.status !== 'Relieved' && w.department === selectedTicket.team).map(w => w._id);
-                finalIds = [...new Set([...teamMembers, ...finalIds])];
-            }
-        }
-        updateSelectedTicket({ assignees: finalIds });
+        const finalIds = [...employeeIds];
+        updateSelectedTicket({
+            assignees: finalIds,
+            assignee: finalIds[0] || null,
+            assignmentMode: assignmentType
+        });
     };
 
     const currentAssigneeIds = (selectedTicket.assignees || []).map(a => typeof a === 'object' ? a._id : a);
-    const teamMembersCount = selectedTicket.team ? workers.filter(w => w.status !== 'Relieved' && w.department === selectedTicket.team).length : 0;
+    const teamName = getDeptName(selectedTicket.team);
+    const teamMembersCount = teamName
+        ? workers.filter(w => w.status === 'Active' && isWorkerInTeam(w, teamName)).length
+        : 0;
+
+    const availableTeams = [...new Set(
+        workers
+            .filter(w => w.status === 'Active')
+            .map(w => getDeptName(w.department))
+            .filter(d => d && d !== '' && d.toUpperCase() !== 'N/A')
+    )].sort();
 
     return (
         <div className="space-y-3.5">
@@ -445,13 +777,13 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers, assi
             {(assignmentType === 'Team' || assignmentType === 'Both') && (
                 <div className="flex flex-col gap-1.5 animate-in slide-in-from-top-2 duration-300">
                     <span className="text-slate-400 font-extrabold text-[9.5px] uppercase tracking-wider">Select Team</span>
-                    <Select value={selectedTicket.team || undefined} onValueChange={handleTeamChange}>
+                    <Select value={teamName || undefined} onValueChange={handleTeamChange}>
                         <SelectTrigger className="w-full bg-white border-slate-200 h-10 text-xs font-bold shadow-2xs rounded-2xl focus:ring-2 focus:ring-teal-500/20">
                             <SelectValue placeholder="Select a team..." />
                         </SelectTrigger>
                         <SelectContent className="z-[700] rounded-2xl border-slate-200">
-                            {[...new Set(workers.filter(w => w.status !== 'Relieved').map(w => w.department).filter(d => d && d.trim() !== '' && d.trim().toUpperCase() !== 'N/A'))].length > 0 ? (
-                                [...new Set(workers.filter(w => w.status !== 'Relieved').map(w => w.department).filter(d => d && d.trim() !== '' && d.trim().toUpperCase() !== 'N/A'))].map(team => (
+                            {availableTeams.length > 0 ? (
+                                availableTeams.map(team => (
                                     <SelectItem key={team} value={team} className="rounded-xl font-medium">{team}</SelectItem>
                                 ))
                             ) : (
@@ -459,14 +791,15 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers, assi
                             )}
                         </SelectContent>
                     </Select>
-                    {selectedTicket.team && (
+                    {teamName && (
                         <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-teal-50 border border-teal-100 rounded-xl text-teal-700 text-[10px] font-extrabold mt-0.5">
                             <div className="flex items-center gap-1.5">
                                 <Users className="w-3.5 h-3.5" />
-                                Team: {selectedTicket.team} ({teamMembersCount} members)
+                                Team: {teamName} ({teamMembersCount} {teamMembersCount === 1 ? 'member' : 'members'})
                             </div>
                             <button
-                                onClick={() => { updateSelectedTicket({ team: '', assignees: [] }); }}
+                                type="button"
+                                onClick={() => { updateSelectedTicket({ team: '', assignees: assignmentType === 'Team' ? [] : (selectedTicket.assignees || []) }); }}
                                 className="text-[9px] font-black text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2 py-0.5 rounded-md border border-rose-100 transition-colors flex items-center gap-0.5"
                             >
                                 <X className="w-2.5 h-2.5" /> Clear
@@ -476,14 +809,34 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers, assi
                 </div>
             )}
 
+            {assignmentType === 'Individual' && teamName && (
+                <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200/80 rounded-xl text-slate-600 text-[10px] font-bold">
+                    <div className="flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Team / Department: <strong className="text-slate-800">{teamName}</strong> ({teamMembersCount} {teamMembersCount === 1 ? 'member' : 'members'})</span>
+                    </div>
+                    <span className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">Individual Mode</span>
+                </div>
+            )}
+
             {(assignmentType === 'Individual' || assignmentType === 'Both') && (
                 <div className="flex flex-col gap-1.5 animate-in slide-in-from-top-2 duration-300">
-                    <span className="text-slate-400 font-extrabold text-[9.5px] uppercase tracking-wider">Select Assignees (Managers / Developers)</span>
+                    <span className="text-slate-400 font-extrabold text-[9.5px] uppercase tracking-wider">
+                        {assignmentType === 'Both' ? 'Select Lead & Additional Assignees' : 'Select Assignee (Manager / Developer)'}
+                    </span>
                     <MultiSelect
-                        options={workers.map(w => {
-                            const isMgr = w.role === 'manager' || (w.designation && w.designation.toLowerCase().includes('manager'));
-                            return { id: w._id, name: w.name, role: isMgr ? 'manager' : 'developer', status: w.status };
-                        })}
+                        options={workers
+                            .filter(w => w.status === 'Active')
+                            .map(w => {
+                                const isMgr = w.role === 'manager' || (w.designation && w.designation.toLowerCase().includes('manager'));
+                                const dept = getDeptName(w.department);
+                                return {
+                                    id: w._id,
+                                    name: `${w.name}${dept ? ` (${dept})` : ''}`,
+                                    role: isMgr ? 'manager' : 'developer',
+                                    status: w.status
+                                };
+                            })}
                         selected={currentAssigneeIds}
                         onChange={handleEmployeeChange}
                         placeholder="Add assignees..."
@@ -491,7 +844,7 @@ const AssignmentSection = ({ selectedTicket, updateSelectedTicket, workers, assi
                 </div>
             )}
 
-            {/* Multi-Assignee Mode Selector: Group Task vs Assign Separately */}
+                        {/* Multi-Assignee Mode Selector: Group Task vs Assign Separately */}
             {selectedTicket._id === 'new' && setAssignmentMode && (
                 <div className="flex flex-col gap-2 pt-2 border-t border-slate-100 animate-in slide-in-from-top-2 duration-300">
                     <span className="text-slate-400 font-extrabold text-[9.5px] uppercase tracking-wider flex items-center justify-between">
@@ -771,7 +1124,8 @@ const WorkAllocation = () => {
         if (!subdomain) return;
         try {
             const workersData = await getWorkers({ subdomain });
-            setWorkers(workersData);
+            const list = Array.isArray(workersData) ? workersData : (Array.isArray(workersData?.workers) ? workersData.workers : []);
+            setWorkers(list);
         } catch (error) {
             console.error('Error fetching workers:', error);
         }
@@ -1761,7 +2115,7 @@ const WorkAllocation = () => {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all_teams">All Teams</SelectItem>
-                                    {[...new Set(workers.filter(w => w.status !== 'Relieved').map(w => w.department).filter(Boolean))].map(team => (
+                                    {[...new Set(workers.filter(w => w.status !== 'Relieved').map(w => getDeptName(w.department)).filter(Boolean))].map(team => (
                                         <SelectItem key={team} value={team}>{team}</SelectItem>
                                     ))}
                                 </SelectContent>
@@ -1854,7 +2208,7 @@ const WorkAllocation = () => {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="all_teams">All Teams</SelectItem>
-                                        {[...new Set(workers.filter(w => w.status !== 'Relieved').map(w => w.department).filter(Boolean))].map(team => (
+                                        {[...new Set(workers.filter(w => w.status !== 'Relieved').map(w => getDeptName(w.department)).filter(Boolean))].map(team => (
                                             <SelectItem key={team} value={team}>{team}</SelectItem>
                                         ))}
                                     </SelectContent>
@@ -2224,6 +2578,14 @@ const WorkAllocation = () => {
                                             </div>
                                         </div>
 
+                                        {/* Unassigned Reason Badge */}
+                                        {!ticket.assignee && ticket.unassignedReason && (
+                                            <div className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-md" title={ticket.unassignedReason}>
+                                                <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
+                                                <span className="truncate">{ticket.unassignedReason}</span>
+                                            </div>
+                                        )}
+
                                         {/* Progress Section */}
                                         {(ticket.checklist?.length > 0 || status !== 'To Do') && (
                                             <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
@@ -2244,9 +2606,13 @@ const WorkAllocation = () => {
                                             {(() => {
                                                 const primaryAssignee = ticket.assignees?.length > 0 ? ticket.assignees[0] : ticket.assignee;
                                                 const primaryId = primaryAssignee?._id || primaryAssignee;
-                                                const displayName = ticket.assignees?.length > 0
-                                                    ? `${ticket.assignees[0].name.split(' ')[0]}${ticket.assignees.length > 1 ? ` +${ticket.assignees.length - 1}` : ''}`
-                                                    : ticket.assignee?.name?.split(' ')[0] || 'Unassigned';
+                                                const primaryWorker = (typeof primaryAssignee === 'object' && primaryAssignee?.name)
+                                                    ? primaryAssignee
+                                                    : workers.find(w => String(w._id) === String(primaryId));
+                                                const workerName = primaryWorker?.name || (typeof ticket.assignee === 'object' ? ticket.assignee?.name : null) || '';
+                                                const firstWord = workerName ? workerName.split(' ')[0] : 'Unassigned';
+                                                const extraCount = (ticket.assignees && ticket.assignees.length > 1) ? ticket.assignees.length - 1 : 0;
+                                                const displayName = extraCount > 0 ? `${firstWord} +${extraCount}` : firstWord;
 
                                                 return (
                                                     <div className="flex items-center gap-1.5 min-w-0 flex-1" title={ticket.assignee?.name || displayName}>
@@ -2260,6 +2626,20 @@ const WorkAllocation = () => {
                                                             </div>
                                                         )}
                                                         <span className="text-[11px] font-semibold text-slate-600 truncate">{displayName}</span>
+                                                        {primaryId && ticket.assignmentSource && ticket.assignmentSource !== 'manual' && (
+                                                            <span className={`text-[8.5px] px-1.5 py-0.2 rounded font-extrabold uppercase shrink-0 ${
+                                                                ticket.assignmentSource === 'automatic'
+                                                                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                                                    : 'bg-purple-50 text-purple-700 border border-purple-200'
+                                                            }`} title={ticket.assignmentSource === 'automatic' ? 'Automatically Assigned (System 2)' : 'Admin Override'}>
+                                                                {ticket.assignmentSource === 'automatic' ? 'Auto' : 'Override'}
+                                                            </span>
+                                                        )}
+                                                        {!primaryId && ticket.unassignedReason && (
+                                                            <span className="text-[8.5px] px-1.5 py-0.2 rounded font-extrabold uppercase shrink-0 bg-amber-50 text-amber-700 border border-amber-200" title={`Unassigned Reason: ${ticket.unassignedReason}`}>
+                                                                Unassigned
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 );
                                             })()}
@@ -2824,8 +3204,8 @@ const WorkAllocation = () => {
                                             activeModalTab === 'assign' ? 'hidden lg:flex' : 'flex'
                                         } flex-1 lg:flex-[1.35] xl:flex-[1.45] flex-col overflow-y-auto custom-scrollbar p-4 sm:p-6 lg:p-7 space-y-5`}
                                     >
-                                        {/* Card 1: Workspace Definition (Title) */}
-                                        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-2">
+                                        {/* Card 1: Workspace Definition (Title & Description) */}
+                                        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3">
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-1.5">
                                                     <AlignLeft className="w-4 h-4 text-teal-600" />
@@ -2850,15 +3230,29 @@ const WorkAllocation = () => {
                                                     </div>
                                                 ) : null}
                                             </div>
-                                            <TitleInput
-                                                initialValue={selectedTicket.title}
-                                                onUpdate={async (newTitle) => {
-                                                    updateSelectedTicket({ title: newTitle }, true);
+                                            <div className="space-y-1">
+                                                <TitleInput
+                                                    initialValue={selectedTicket.title}
+                                                    onUpdate={async (newTitle) => {
+                                                        updateSelectedTicket({ title: newTitle }, true);
+                                                    }}
+                                                />
+                                                <p className="text-[10px] text-slate-400 font-medium">
+                                                    Give this workspace or task a clear title describing what needs to be delivered.
+                                                </p>
+                                            </div>
+
+                                            {/* Project / Workspace Description */}
+                                            <WorkspaceDescription
+                                                description={selectedTicket.description}
+                                                onUpdate={async (newDesc) => {
+                                                    await updateSelectedTicket({
+                                                        description: newDesc,
+                                                        checklist: selectedTicket.checklist
+                                                    }, false);
+                                                    toast.success('Workspace description updated');
                                                 }}
                                             />
-                                            <p className="text-[10px] text-slate-400 font-medium">
-                                                Give this workspace or task a clear title describing what needs to be delivered.
-                                            </p>
                                         </div>
 
                                         {/* Card 2: Task Checklist & Action Items */}
@@ -3109,12 +3503,48 @@ const WorkAllocation = () => {
                                                     <Users className="w-4 h-4 text-teal-600" />
                                                     <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider">Team & Assignee Allocation</h3>
                                                 </div>
-                                                {((selectedTicket.assignees || []).length > 0) && (
-                                                    <span className="text-[9px] font-black bg-teal-50 text-teal-700 px-2.5 py-0.5 rounded-full border border-teal-100">
-                                                        {(selectedTicket.assignees || []).length} Assigned
-                                                    </span>
-                                                )}
+                                                {(() => {
+                                                    const uniqueAssigneeIds = new Set();
+                                                    if (Array.isArray(selectedTicket.assignees)) {
+                                                        selectedTicket.assignees.forEach(a => {
+                                                            const id = typeof a === 'object' ? a?._id : a;
+                                                            if (id) uniqueAssigneeIds.add(String(id));
+                                                        });
+                                                    }
+                                                    if (selectedTicket.assignee) {
+                                                        const id = typeof selectedTicket.assignee === 'object' ? selectedTicket.assignee?._id : selectedTicket.assignee;
+                                                        if (id) uniqueAssigneeIds.add(String(id));
+                                                    }
+                                                    const count = uniqueAssigneeIds.size;
+                                                    return count > 0 ? (
+                                                        <span className="text-[9px] font-black bg-teal-50 text-teal-700 px-2.5 py-0.5 rounded-full border border-teal-100">
+                                                            {count} Assigned
+                                                        </span>
+                                                    ) : null;
+                                                })()}
                                             </div>
+
+                                            {selectedTicket.unassignedReason && (!selectedTicket.assignee && (!selectedTicket.assignees || selectedTicket.assignees.length === 0)) && (
+                                                <div className={`border rounded-2xl p-3 text-xs flex items-start gap-2.5 shadow-2xs ${
+                                                    (selectedTicket.unassignedReason.includes('Software Development job detected') || selectedTicket.unassignedReason.includes('Software job detected'))
+                                                        ? 'bg-blue-50/90 border-blue-200 text-blue-900'
+                                                        : 'bg-amber-50/80 border-amber-200/90 text-amber-900'
+                                                }`}>
+                                                    {(selectedTicket.unassignedReason.includes('Software Development job detected') || selectedTicket.unassignedReason.includes('Software job detected')) ? (
+                                                        <Code className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                                                    ) : (
+                                                        <HelpCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                                                    )}
+                                                    <div className="space-y-0.5 min-w-0">
+                                                        <span className={`text-[10px] font-black uppercase tracking-wider block ${
+                                                            (selectedTicket.unassignedReason.includes('Software Development job detected') || selectedTicket.unassignedReason.includes('Software job detected')) ? 'text-blue-800' : 'text-amber-800'
+                                                        }`}>
+                                                            {(selectedTicket.unassignedReason.includes('Software Development job detected') || selectedTicket.unassignedReason.includes('Software job detected')) ? 'Software Task Allocation' : 'Automatic Assignment Notice'}
+                                                        </span>
+                                                        <p className="text-[11px] font-medium leading-snug break-words">{selectedTicket.unassignedReason}</p>
+                                                    </div>
+                                                </div>
+                                            )}
 
                                             {/* Assignment Section (Team / Individual / Both + Mode) */}
                                             <AssignmentSection
@@ -3127,13 +3557,19 @@ const WorkAllocation = () => {
 
                                             {/* Quick Assign Section */}
                                             {sortedByWorkload.length > 0 && (() => {
-                                                const currentAssigneeIds = (selectedTicket.assignees || []).map(a => typeof a === 'object' ? a._id : a);
+                                                const currentAssigneeIds = (selectedTicket.assignees && selectedTicket.assignees.length > 0)
+                                                    ? selectedTicket.assignees.map(a => typeof a === 'object' ? a._id : a).filter(Boolean).map(String)
+                                                    : (selectedTicket.assignee ? [String(typeof selectedTicket.assignee === 'object' ? selectedTicket.assignee._id : selectedTicket.assignee)] : []);
                                                 const toggleAssignee = (wId) => {
-                                                    if (currentAssigneeIds.includes(wId)) {
-                                                        updateSelectedTicket({ assignees: currentAssigneeIds.filter(id => id !== wId) });
-                                                    } else {
-                                                        updateSelectedTicket({ assignees: [...currentAssigneeIds, wId] });
-                                                    }
+                                                    const strId = String(wId);
+                                                    const isSelected = currentAssigneeIds.includes(strId);
+                                                    const nextIds = isSelected
+                                                        ? currentAssigneeIds.filter(id => id !== strId)
+                                                        : [...currentAssigneeIds, strId];
+                                                    updateSelectedTicket({
+                                                        assignees: nextIds,
+                                                        assignee: nextIds[0] || null
+                                                    });
                                                 };
                                                 return (
                                                     <div className="pt-3 border-t border-slate-100 space-y-3">
@@ -3155,7 +3591,7 @@ const WorkAllocation = () => {
                                                                     </div>
                                                                     <div className="flex flex-wrap gap-1.5">
                                                                         {idleDevelopers.slice(0, 10).map(w => {
-                                                                            const isSelected = currentAssigneeIds.includes(w._id);
+                                                                            const isSelected = currentAssigneeIds.includes(String(w._id));
                                                                             return (
                                                                                 <button
                                                                                     key={w._id}
@@ -3188,7 +3624,7 @@ const WorkAllocation = () => {
                                                                         {assignedDevelopers.slice(0, 10).map(w => {
                                                                             const { activeTasks } = getWorkerLoad(w._id);
                                                                             const { dot, badge } = workloadColor(activeTasks);
-                                                                            const isSelected = currentAssigneeIds.includes(w._id);
+                                                                            const isSelected = currentAssigneeIds.includes(String(w._id));
                                                                             return (
                                                                                 <button
                                                                                     key={w._id}
@@ -4050,7 +4486,7 @@ const WorkAllocation = () => {
                                                 <div className="grid grid-cols-[1fr_auto_auto] gap-3 items-center">
                                                     <div className="min-w-0">
                                                         <div className="font-bold text-[13px] text-slate-800 truncate">{w.name}</div>
-                                                        <div className="text-[10px] text-slate-400">{w.department || 'No Department'}</div>
+                                                        <div className="text-[10px] text-slate-400">{getDeptName(w.department) || 'No Department'}</div>
                                                     </div>
                                                     <div className="text-center">
                                                         <span className={`text-xs font-black px-2 py-1 rounded-lg border ${badge}`}>
@@ -4075,12 +4511,12 @@ const WorkAllocation = () => {
                                                             setSelectedTicket({
                                                                 _id: 'new', title: '', description: '', priority: 'Low', status: 'To Do',
                                                                 issueType: 'Task', storyPoints: 0, labels: [], assignee: w, assignees: [],
-                                                                team: w.department || '', startDate: '', endDate: '',
+                                                                team: getDeptName(w.department) || '', startDate: '', endDate: '',
                                                                 checklist: [{ text: '', completed: false }]
                                                             });
                                                             const tempId = Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
                                                             setTempTicketId(tempId);
-                                                            setModalFilterTeam(w.department || '');
+                                                            setModalFilterTeam(getDeptName(w.department) || '');
                                                             setIsModalOpen(true);
                                                         }}
                                                         className="text-[9px] font-black uppercase tracking-wider text-teal-600 hover:text-teal-700 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-lg border border-teal-200 transition-colors flex items-center gap-1"
@@ -4133,9 +4569,9 @@ const StatsBreakdownModal = ({ isOpen, onClose, tickets, workers, columns }) => 
     if (!isOpen) return null;
 
     // Calculate team-wise stats
-    const teams = [...new Set(workers.map(w => w.department || 'Unassigned').filter(Boolean))];
+    const teams = [...new Set(workers.map(w => getDeptName(w.department) || 'Unassigned').filter(Boolean))];
     const teamStats = teams.map(team => {
-        const teamWorkers = workers.filter(w => (w.department || 'Unassigned') === team).map(w => w._id);
+        const teamWorkers = workers.filter(w => (getDeptName(w.department) || 'Unassigned') === team).map(w => w._id);
         const teamTickets = tickets.filter(t =>
             (t.assignee && teamWorkers.includes(t.assignee._id || t.assignee)) ||
             (t.assignees && t.assignees.some(a => teamWorkers.includes(a._id || a)))
@@ -4158,7 +4594,7 @@ const StatsBreakdownModal = ({ isOpen, onClose, tickets, workers, columns }) => 
         columns.forEach(col => {
             stats[col] = workerTickets.filter(t => t.status === col).length;
         });
-        return { name: worker.name, team: worker.department || 'Unassigned', stats, total: workerTickets.length };
+        return { name: worker.name, team: getDeptName(worker.department) || 'Unassigned', stats, total: workerTickets.length };
     });
 
     return (

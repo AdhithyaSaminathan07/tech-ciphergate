@@ -66,7 +66,7 @@ const Sidebar = ({ links, logoText = 'Task Tracker', user, onLogout, mobileOpen,
       <aside
         onMouseLeave={() => setExpandedDropdowns({})}
         className={`group/sidebar z-[500] bg-[#064E3B] text-white shadow-[4px_0_24px_rgba(0,0,0,0.06)] border-r border-[#043B2C] transition-all duration-[300ms] ease-[cubic-bezier(0.4,0,0.2,1)] flex flex-col overflow-hidden md:overflow-visible flex-shrink-0 fixed inset-y-0 left-0 md:sticky md:top-0 md:h-screen ${
-          isOpen ? 'translate-x-0 w-[270px] shadow-2xl' : '-translate-x-full md:translate-x-0 md:w-[72px] hover:md:w-[240px]'
+          isOpen ? 'translate-x-0 w-[270px] shadow-2xl' : '-translate-x-full md:translate-x-0 md:w-[72px] hover:md:w-[264px]'
         } md:flex`}
       >
         {/* Inner Wrapper */}

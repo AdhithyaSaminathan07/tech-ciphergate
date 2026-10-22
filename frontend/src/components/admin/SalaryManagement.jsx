@@ -320,7 +320,8 @@ const SalaryManagement = () => {
             setHasMore(response.pagination?.hasMore || false);
             setPage(pageNumber);
         } catch (error) {
-            toast.error('Failed to load salary data');
+            setHasMore(false);
+            toast.error('Failed to load salary data', { toastId: 'failed-to-load-salary-data' });
             console.error(error);
         } finally {
             setIsLoading(false);
@@ -2030,7 +2031,9 @@ const SalaryManagement = () => {
                                 <span className="text-xs text-slate-500 font-medium ml-2">Loading more employees...</span>
                             </div>
                         )}
-                        <div ref={sentinelRef} id="infinite-scroll-sentinel" className="h-4 w-full" />
+                        {hasMore && !isLoading && (
+                            <div ref={sentinelRef} id="infinite-scroll-sentinel" className="h-4 w-full" />
+                        )}
                     </>
                 )}
             </Card>

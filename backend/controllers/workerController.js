@@ -288,15 +288,59 @@ const getWorkers = asyncHandler(async (req, res) => {
       workers = await workersQuery.lean();
     }
 
+    // Fetch departments for the subdomain so unpopulated ObjectId or string IDs can be authoritatively resolved
+    const Department = require('../models/Department');
+    const orgDepartments = await Department.find({ subdomain }).select('_id name code').lean();
+    const deptIdMap = new Map();
+    const deptNameMap = new Map();
+    orgDepartments.forEach(d => {
+      deptIdMap.set(String(d._id), d.name);
+      deptNameMap.set(d.name.toLowerCase().trim(), d.name);
+      if (d.code) deptNameMap.set(d.code.toLowerCase().trim(), d.name);
+    });
+
+    const normalizeWorkerDepartment = (dept) => {
+      if (!dept) return { _id: null, name: 'N/A' };
+      if (typeof dept === 'object' && dept !== null) {
+        if (dept.name) {
+          return { _id: dept._id ? String(dept._id) : null, name: String(dept.name).trim() };
+        }
+        if (dept._id) {
+          const idStr = String(dept._id);
+          const resolvedName = deptIdMap.get(idStr) || idStr;
+          return { _id: idStr, name: resolvedName };
+        }
+      }
+      if (typeof dept === 'string') {
+        const trimmed = dept.trim();
+        if (deptIdMap.has(trimmed)) {
+          return { _id: trimmed, name: deptIdMap.get(trimmed) };
+        }
+        if (deptNameMap.has(trimmed.toLowerCase())) {
+          return { _id: null, name: deptNameMap.get(trimmed.toLowerCase()) };
+        }
+        return { _id: null, name: trimmed };
+      }
+      const idStr = String(dept);
+      return { _id: idStr, name: deptIdMap.get(idStr) || idStr };
+    };
+
     // Transform workers to include department name, face enrollment status, and full photo URL
-    const transformedWorkers = workers.map(worker => ({
-      ...worker,
-      faceEnrolled: Array.isArray(worker.faceEmbeddings) && worker.faceEmbeddings.length > 0,
-      department: worker.department ? worker.department.name : 'N/A',
-      photoUrl: worker.photo
-        ? `/uploads/${worker.photo}`
-        : `https://ui-avatars.com/api/?name=${encodeURIComponent(worker.name)}`
-    }));
+    const transformedWorkers = workers.map(worker => {
+      const normDept = normalizeWorkerDepartment(worker.department);
+      const cleanDeptName = normDept.name !== 'N/A' ? normDept.name : 'N/A';
+      return {
+        ...worker,
+        faceEnrolled: Array.isArray(worker.faceEmbeddings) && worker.faceEmbeddings.length > 0,
+        department: cleanDeptName,
+        departmentName: cleanDeptName,
+        departmentId: normDept._id,
+        departmentInfo: normDept,
+        photoUrl: worker.photo
+          ? `/uploads/${worker.photo}`
+          : `https://ui-avatars.com/api/?name=${encodeURIComponent(worker.name)}`
+      };
+    });
 
     try {
       const fs = require('fs');

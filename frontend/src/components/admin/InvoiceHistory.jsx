@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Card from '../common/Card';
-import { deleteInvoice, updateInvoice } from '../../services/invoiceService';
+import { deleteInvoice, updateInvoice, triggerInvoiceJobIntake, getInvoiceJobIntakePreview } from '../../services/invoiceService';
 import { toast } from 'react-toastify';
 import StageProofModal from './StageProofModal';
 import SequentialRenumberModal from './SequentialRenumberModal';
@@ -86,6 +86,20 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteI
 
   // Image Preview Modal - supports gallery with multiple proofs
   const [previewGallery, setPreviewGallery] = useState(null);
+
+  // Job Intake modal & processing states
+  const [selectedInvoiceForIntake, setSelectedInvoiceForIntake] = useState(null);
+  const [isJobIntakeModalOpen, setIsJobIntakeModalOpen] = useState(false);
+  const [processingIntakeId, setProcessingIntakeId] = useState(null);
+  const [intakeResultInfo, setIntakeResultInfo] = useState(null);
+  const [intakeClassification, setIntakeClassification] = useState(null);
+  const [isLoadingClassification, setIsLoadingClassification] = useState(false);
+  const [intakeDepartments, setIntakeDepartments] = useState([]);
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
+  const [assignmentMode, setAssignmentMode] = useState('Individual'); // 'Individual' | 'Team' | 'Both'
+  const [selectedMemberId, setSelectedMemberId] = useState('');
+  const [selectedMemberIds, setSelectedMemberIds] = useState([]);
+  const [teamSize, setTeamSize] = useState('');
 
   // Helper: get all proofs from a stage detail field
   const getProofs = (details) => {
@@ -328,6 +342,246 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteI
       setIsStageModalOpen(false);
       setSelectedInvoiceForStage(null);
       setTargetStage(null);
+    }
+  };
+
+  // Check if an invoice has completed authorized payment verification
+  const isInvoiceEligibleForJobIntake = (invoice) => {
+    if (!invoice) return false;
+    const paymentProofs = getProofs(invoice.paymentDetails);
+    const hasPaymentProof = paymentProofs.length > 0 || !!(invoice.paymentDetails && invoice.paymentDetails.proof);
+
+    // Status must be Payment Received, Work completion, Closure agreement, isPaid, or TAX INVOICE
+    const isVerifiedStatus = (
+      invoice.status === 'Payment Received' ||
+      invoice.status === 'Work completion' ||
+      invoice.status === 'Closure agreement' ||
+      invoice.isPaid ||
+      invoice.invoiceType === 'TAX INVOICE'
+    );
+
+    return Boolean(hasPaymentProof && isVerifiedStatus);
+  };
+
+  const handleJobIntakeClick = async (invoice) => {
+    setSelectedInvoiceForIntake(invoice);
+    setIntakeResultInfo(null);
+    setIntakeClassification(null);
+    setIntakeDepartments([]);
+    setSelectedDepartmentId('');
+    setAssignmentMode('Individual');
+    setSelectedMemberId('');
+    setSelectedMemberIds([]);
+    setTeamSize('');
+    setIsLoadingClassification(true);
+    setIsJobIntakeModalOpen(true);
+
+    try {
+      const res = await getInvoiceJobIntakePreview(invoice._id);
+      if (res && res.success && res.data) {
+        setIntakeClassification(res.data);
+        const depts = Array.isArray(res.data.departments) ? res.data.departments : [];
+        setIntakeDepartments(depts);
+
+        if (depts.length > 0) {
+          const defaultDeptId = res.data.suggestedDepartmentId || depts[0]._id;
+          setSelectedDepartmentId(defaultDeptId);
+          const dept = depts.find(d => d._id === defaultDeptId) || depts[0];
+          if (dept && Array.isArray(dept.members) && dept.members.length > 0) {
+            const firstEligible = dept.members.find(m => m.isEligible !== false) || dept.members[0];
+            setSelectedMemberId(firstEligible._id);
+            setSelectedMemberIds([firstEligible._id]);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch preview job intake classification:', err);
+    } finally {
+      setIsLoadingClassification(false);
+    }
+  };
+
+  const handleIntakeDepartmentChange = (deptId) => {
+    setSelectedDepartmentId(deptId);
+    setTeamSize('');
+    const dept = intakeDepartments.find(d => d._id === deptId);
+    const members = dept?.members || [];
+    const firstEligible = members.find(m => m.isEligible !== false) || members[0];
+    if (firstEligible) {
+      setSelectedMemberId(firstEligible._id);
+      setSelectedMemberIds([firstEligible._id]);
+    } else {
+      setSelectedMemberId('');
+      setSelectedMemberIds([]);
+    }
+  };
+
+  const handleIntakeAssignmentModeChange = (mode) => {
+    setAssignmentMode(mode);
+    setTeamSize('');
+    const dept = intakeDepartments.find(d => d._id === selectedDepartmentId);
+    const members = dept?.members || [];
+    const firstEligible = members.find(m => m.isEligible !== false) || members[0];
+    if (firstEligible) {
+      setSelectedMemberId(firstEligible._id);
+      setSelectedMemberIds([firstEligible._id]);
+    } else {
+      setSelectedMemberId('');
+      setSelectedMemberIds([]);
+    }
+  };
+
+  const handleSelectAllMembers = () => {
+    const dept = intakeDepartments.find(d => d._id === selectedDepartmentId);
+    const members = dept?.members || [];
+    const allIds = members.map(m => m._id);
+    setSelectedMemberIds(allIds);
+    if (!selectedMemberId && allIds.length > 0) {
+      setSelectedMemberId(allIds[0]);
+    }
+  };
+
+  const handleClearMemberSelection = () => {
+    setSelectedMemberIds([]);
+    setSelectedMemberId('');
+  };
+
+  const handleToggleIntakeMember = (memberId) => {
+    setSelectedMemberIds(prev => {
+      const exists = prev.includes(memberId);
+      const next = exists ? prev.filter(id => id !== memberId) : [...prev, memberId];
+      if (!exists && !selectedMemberId) {
+        setSelectedMemberId(memberId);
+      } else if (exists && selectedMemberId === memberId) {
+        setSelectedMemberId(next[0] || '');
+      }
+      return next;
+    });
+  };
+
+  // Lock background body scrolling when Job Intake modal is active
+  useEffect(() => {
+    if (isJobIntakeModalOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      const handleKeyDown = (e) => {
+        if (e.key === 'Escape' && processingIntakeId !== selectedInvoiceForIntake?._id) {
+          setIsJobIntakeModalOpen(false);
+          setSelectedInvoiceForIntake(null);
+          setIntakeResultInfo(null);
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.body.style.overflow = originalOverflow;
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+  }, [isJobIntakeModalOpen, processingIntakeId, selectedInvoiceForIntake]);
+
+  const handleConfirmJobIntake = async () => {
+    if (!selectedInvoiceForIntake) return;
+    const currentDept = intakeDepartments.find(d => d._id === selectedDepartmentId);
+    const deptMembers = currentDept?.members || [];
+    const eligibleMembers = deptMembers.filter(m => m.isEligible !== false);
+    const eligibleCount = currentDept?.eligibleMemberCount ?? eligibleMembers.length;
+
+    if (intakeDepartments.length > 0 && (!currentDept || deptMembers.length === 0)) {
+      toast.error(`Selected department '${currentDept?.name || ''}' has no active members.`);
+      return;
+    }
+
+    if (eligibleCount === 0) {
+      toast.error(`Selected department '${currentDept?.name || ''}' has no eligible active members (all on leave or at capacity).`);
+      return;
+    }
+
+    let parsedTeamSize = null;
+
+    if (assignmentMode === 'Individual') {
+      if (!selectedMemberId) {
+        toast.error('Please select an active member to assign.');
+        return;
+      }
+      const chosenWorker = deptMembers.find(m => m._id === selectedMemberId);
+      if (chosenWorker && chosenWorker.isEligible === false) {
+        toast.error(`Selected employee ${chosenWorker.name} is ineligible: ${chosenWorker.ineligibilityReason || 'Unavailable'}.`);
+        return;
+      }
+    } else if (assignmentMode === 'Team') {
+      if (!teamSize || String(teamSize).trim() === '') {
+        toast.error('Please enter the Number of Team Members.');
+        return;
+      }
+      parsedTeamSize = parseInt(teamSize, 10);
+      if (!Number.isInteger(parsedTeamSize) || parsedTeamSize <= 0) {
+        toast.error('Number of Team Members must be a positive integer.');
+        return;
+      }
+      if (parsedTeamSize > eligibleCount) {
+        toast.error(`Requested team size (${parsedTeamSize}) exceeds the number of eligible employees (${eligibleCount}) in department '${currentDept?.name}'.`);
+        return;
+      }
+    } else if (assignmentMode === 'Both') {
+      if (!selectedMemberId) {
+        toast.error('Please designate a primary lead member for Both assignment mode.');
+        return;
+      }
+      const leadWorker = deptMembers.find(m => m._id === selectedMemberId);
+      if (leadWorker && leadWorker.isEligible === false) {
+        toast.error(`Designated lead ${leadWorker.name} is ineligible: ${leadWorker.ineligibilityReason || 'Unavailable'}. Please select an eligible lead.`);
+        return;
+      }
+      if (!teamSize || String(teamSize).trim() === '') {
+        toast.error('Please enter the Number of Team Members (must be at least 2).');
+        return;
+      }
+      parsedTeamSize = parseInt(teamSize, 10);
+      if (!Number.isInteger(parsedTeamSize) || parsedTeamSize < 2) {
+        toast.error('In Both mode, team size must be at least 2 (lead + 1 or more members).');
+        return;
+      }
+      if (parsedTeamSize > eligibleCount) {
+        toast.error(`Requested team size (${parsedTeamSize}) exceeds the number of eligible employees (${eligibleCount}) in department '${currentDept?.name}'.`);
+        return;
+      }
+    }
+
+    try {
+      setProcessingIntakeId(selectedInvoiceForIntake._id);
+      const res = await triggerInvoiceJobIntake(selectedInvoiceForIntake._id, {
+        departmentId: currentDept?._id,
+        departmentName: currentDept?.name,
+        assignmentMode,
+        teamSize: parsedTeamSize,
+        requiredMembersCount: parsedTeamSize,
+        selectedMemberId: assignmentMode === 'Individual'
+          ? selectedMemberId
+          : (assignmentMode === 'Both' ? selectedMemberId : null),
+        selectedMemberIds: assignmentMode === 'Individual'
+          ? [selectedMemberId]
+          : [],
+        selectedJobType: currentDept?.name || 'Website Development'
+      });
+
+      if (res.success) {
+        setIntakeResultInfo(res.data);
+        if (res.data?.isRecovered) {
+          toast.success(res.message || 'Job ticket was successfully recovered for this invoice!');
+        } else if (res.data?.isDuplicate) {
+          toast.info(res.message || 'Job intake updated for this invoice.');
+        } else {
+          toast.success(res.message || 'Job intake processed and ticket created successfully!');
+        }
+        if (onRefresh) {
+          onRefresh();
+        }
+      }
+    } catch (err) {
+      console.error('Error triggering job intake:', err);
+      toast.error(err.message || 'Failed to trigger job intake');
+    } finally {
+      setProcessingIntakeId(null);
     }
   };
 
@@ -815,6 +1069,19 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteI
                         >
                           Delete
                         </button>
+                        {isInvoiceEligibleForJobIntake(invoice) && (
+                          <>
+                            <span className="text-gray-200">|</span>
+                            <button
+                              onClick={() => handleJobIntakeClick(invoice)}
+                              disabled={processingIntakeId === invoice._id}
+                              className="text-emerald-600 hover:text-emerald-800 text-sm font-semibold transition-colors disabled:opacity-50 flex items-center gap-1"
+                              title="Register Job Intake and create Work Allocation ticket"
+                            >
+                              {processingIntakeId === invoice._id ? 'Processing...' : 'Job Intake'}
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -918,6 +1185,18 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteI
                     </svg>
                     Delete
                   </button>
+                  {isInvoiceEligibleForJobIntake(invoice) && (
+                    <button
+                      onClick={() => handleJobIntakeClick(invoice)}
+                      disabled={processingIntakeId === invoice._id}
+                      className="flex-1 py-2.5 text-sm font-semibold text-emerald-600 hover:bg-emerald-50 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      {processingIntakeId === invoice._id ? 'Processing...' : 'Job Intake'}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -1063,6 +1342,474 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteI
         invoice={invoiceForNoEdit}
         onSuccess={onRefresh}
       />
+
+      {/* Job Intake Confirmation & References Modal */}
+      {isJobIntakeModalOpen && selectedInvoiceForIntake && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-hidden animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && processingIntakeId !== selectedInvoiceForIntake._id) {
+              setIsJobIntakeModalOpen(false);
+              setSelectedInvoiceForIntake(null);
+              setIntakeResultInfo(null);
+            }
+          }}
+        >
+          <div
+            className="relative bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-gray-100 flex flex-col max-h-[90vh] max-h-[90dvh] sm:max-h-[85vh] sm:max-h-[85dvh] overflow-hidden my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header - Fixed at top */}
+            <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-gray-100 flex-shrink-0 bg-white sticky top-0 z-10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold flex-shrink-0">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 leading-snug">Confirm Job Intake</h3>
+                  <p className="text-xs text-gray-500">Invoice History Verification Trigger</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsJobIntakeModalOpen(false);
+                  setSelectedInvoiceForIntake(null);
+                  setIntakeResultInfo(null);
+                }}
+                disabled={processingIntakeId === selectedInvoiceForIntake._id}
+                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                title="Close dialog"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body - Internally scrollable */}
+            <div className="px-5 sm:px-6 py-4 space-y-4 overflow-y-auto flex-1 min-h-0 overscroll-contain">
+              <div className="bg-gray-50 rounded-xl p-4 border border-gray-200/70 space-y-2.5">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500 font-medium">Invoice Number:</span>
+                  <span className="font-bold text-gray-900 font-mono">{selectedInvoiceForIntake.invoiceNo}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500 font-medium">Customer:</span>
+                  <span className="font-semibold text-gray-800">{selectedInvoiceForIntake.customerName || 'N/A'}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500 font-medium">Contact:</span>
+                  <span className="text-gray-700">{selectedInvoiceForIntake.customerContact || 'N/A'}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500 font-medium">Amount:</span>
+                  <span className="font-bold text-emerald-700">₹{calculateTotal(selectedInvoiceForIntake).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500 font-medium">Payment Verification:</span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                    Verified & Approved
+                  </span>
+                </div>
+              </div>
+
+              {/* Department & Member Selection Controls */}
+              {!intakeResultInfo && (
+                <div className="bg-slate-50/90 rounded-xl p-4 border border-slate-200/80 space-y-4">
+                  {/* Department Selector */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                        Department / Team
+                      </label>
+                      {isLoadingClassification && (
+                        <span className="text-[11px] text-gray-500 animate-pulse flex items-center gap-1 font-medium">
+                          <span className="w-3 h-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                          Loading departments...
+                        </span>
+                      )}
+                    </div>
+                    <select
+                      value={selectedDepartmentId}
+                      onChange={(e) => handleIntakeDepartmentChange(e.target.value)}
+                      disabled={processingIntakeId === selectedInvoiceForIntake._id || isLoadingClassification}
+                      className="w-full text-xs font-semibold bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs cursor-pointer"
+                    >
+                      {intakeDepartments.length === 0 ? (
+                        <option value="">No departments available</option>
+                      ) : (
+                        intakeDepartments.map(dept => (
+                          <option key={dept._id} value={dept._id}>
+                            {dept.name} ({dept.activeMemberCount || 0} active {dept.activeMemberCount === 1 ? 'member' : 'members'})
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+
+                  {/* Assignment Mode Selector: Individual, Team, Both */}
+                  <div className="space-y-1.5">
+                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wider block">
+                      Assignment Mode
+                    </span>
+                    <div className="flex gap-1 p-1 bg-slate-200/70 rounded-xl border border-slate-300/60">
+                      {['Individual', 'Team', 'Both'].map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => handleIntakeAssignmentModeChange(mode)}
+                          className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                            assignmentMode === mode
+                              ? 'bg-white text-emerald-700 shadow-xs border border-slate-200/80'
+                              : 'text-gray-500 hover:text-gray-800'
+                          }`}
+                        >
+                          {mode}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-gray-500">
+                      {assignmentMode === 'Individual' && 'Assigns this job to one specific active team member.'}
+                      {assignmentMode === 'Team' && 'Assigns this job to selected active team members of the department.'}
+                      {assignmentMode === 'Both' && 'Assigns this job to selected team members and designates a primary lead.'}
+                    </p>
+                  </div>
+
+                  {/* Active Members & Team Size Selection */}
+                  {(() => {
+                    const currentDept = intakeDepartments.find(d => d._id === selectedDepartmentId);
+                    const members = currentDept?.members || [];
+                    const eligibleMembers = members.filter(m => m.isEligible !== false);
+                    const eligibleCount = currentDept?.eligibleMemberCount ?? eligibleMembers.length;
+                    const totalCount = currentDept?.totalMemberCount ?? members.length;
+
+                    if (members.length === 0) {
+                      return (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs flex items-start gap-2">
+                          <span className="font-bold text-amber-600">⚠️</span>
+                          <span>No active employees currently belong to <strong>{currentDept?.name || 'this department'}</strong>. Please select another department.</span>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-3">
+                        {/* Department Pool Eligibility Status */}
+                        <div className="flex items-center justify-between text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+                          <div>
+                            <span className="font-semibold text-gray-700">Department Pool:</span>{' '}
+                            <span className="text-emerald-700 font-bold">{eligibleCount} eligible</span>
+                            {totalCount > eligibleCount && (
+                              <span className="text-amber-700 font-medium"> ({totalCount - eligibleCount} unavailable on leave/workload)</span>
+                            )}
+                            <span className="text-gray-500"> out of {totalCount} total members</span>
+                          </div>
+                        </div>
+
+                        {assignmentMode === 'Individual' && (
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-gray-700 uppercase tracking-wider block">
+                              Select Assignee
+                            </label>
+                            <select
+                              value={selectedMemberId}
+                              onChange={(e) => setSelectedMemberId(e.target.value)}
+                              disabled={processingIntakeId === selectedInvoiceForIntake._id}
+                              className="w-full text-xs font-semibold bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs cursor-pointer"
+                            >
+                              {members.map(m => (
+                                <option key={m._id} value={m._id} disabled={m.isEligible === false}>
+                                  {m.name} — {m.designation || m.role || 'Developer'} {m.isEligible === false ? `[Ineligible: ${m.ineligibilityReason || 'Unavailable'}]` : ''}
+                                </option>
+                              ))}
+                            </select>
+                            <p className="text-[11px] text-gray-500">
+                              Assigns this job to one eligible employee.
+                            </p>
+                          </div>
+                        )}
+
+                        {assignmentMode === 'Team' && (
+                          <div className="space-y-3">
+                            <div className="space-y-1.5">
+                              <label htmlFor="team-size-input" className="text-xs font-bold text-gray-700 uppercase tracking-wider block">
+                                Number of Team Members
+                              </label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  id="team-size-input"
+                                  type="number"
+                                  min="1"
+                                  max={eligibleCount}
+                                  value={teamSize}
+                                  onChange={(e) => setTeamSize(e.target.value)}
+                                  placeholder={`e.g. 3 (Max: ${eligibleCount})`}
+                                  disabled={processingIntakeId === selectedInvoiceForIntake._id || eligibleCount === 0}
+                                  className="w-44 text-xs font-semibold bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
+                                />
+                                <span className="text-xs text-gray-500 font-medium">
+                                  out of {eligibleCount} eligible employees
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 p-2 rounded-lg">
+                                ✨ <strong>System 3 KPI Ranking:</strong> Evaluates OTCR, FTAR, performance points, and active workload to automatically select the top {teamSize && parseInt(teamSize, 10) > 0 ? parseInt(teamSize, 10) : 'requested'} eligible team members.
+                              </p>
+                            </div>
+
+                            {/* Candidate pool list */}
+                            <div className="space-y-1">
+                              <span className="text-xs font-semibold text-gray-600 block">Department Candidates:</span>
+                              <div className="space-y-1 max-h-36 overflow-y-auto p-2 bg-white rounded-lg border border-gray-200 divide-y divide-gray-100 text-xs">
+                                {members.map(m => (
+                                  <div key={m._id} className="flex items-center justify-between py-1 px-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className={m.isEligible !== false ? 'font-medium text-gray-800' : 'text-gray-400 line-through'}>
+                                        {m.name}
+                                      </span>
+                                      <span className="text-[10px] text-gray-400">({m.designation || 'Developer'})</span>
+                                    </div>
+                                    <div>
+                                      {m.isEligible !== false ? (
+                                        <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-semibold border border-emerald-200">
+                                          Eligible
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-medium border border-amber-200">
+                                          {m.ineligibilityReason || 'Unavailable'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {assignmentMode === 'Both' && (
+                          <div className="space-y-3">
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-bold text-gray-700 uppercase tracking-wider block">
+                                Designate Primary Lead Member:
+                              </label>
+                              <select
+                                value={selectedMemberId}
+                                onChange={(e) => setSelectedMemberId(e.target.value)}
+                                disabled={processingIntakeId === selectedInvoiceForIntake._id || eligibleMembers.length === 0}
+                                className="w-full text-xs font-semibold bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-2xs cursor-pointer disabled:bg-gray-100 disabled:cursor-not-allowed"
+                              >
+                                {members.map(m => (
+                                  <option key={m._id} value={m._id} disabled={m.isEligible === false}>
+                                    {m.name} — {m.designation || m.role || 'Lead'} {m.isEligible === false ? `[Ineligible: ${m.ineligibilityReason || 'Unavailable'}]` : ''}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label htmlFor="team-size-input-both" className="text-xs font-bold text-gray-700 uppercase tracking-wider block">
+                                Number of Team Members
+                              </label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  id="team-size-input-both"
+                                  type="number"
+                                  min="2"
+                                  max={eligibleCount}
+                                  value={teamSize}
+                                  onChange={(e) => setTeamSize(e.target.value)}
+                                  placeholder={`e.g. 3 (Min: 2, Max: ${eligibleCount})`}
+                                  disabled={processingIntakeId === selectedInvoiceForIntake._id || eligibleCount < 2}
+                                  className="w-44 text-xs font-semibold bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-2xs"
+                                />
+                                <span className="text-xs text-gray-500 font-medium">
+                                  total members including lead (out of {eligibleCount} eligible)
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-purple-800 bg-purple-50 border border-purple-200 p-2 rounded-lg">
+                                ✨ <strong>Both Mode:</strong> Preserves the designated lead and uses System 3 KPI ranking to select the remaining {teamSize && parseInt(teamSize, 10) > 1 ? parseInt(teamSize, 10) - 1 : 'N - 1'} highest-scoring eligible team members.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Confirmation Step Recap Display */}
+                  {(() => {
+                    const currentDept = intakeDepartments.find(d => d._id === selectedDepartmentId);
+                    const members = currentDept?.members || [];
+                    const eligibleMembers = members.filter(m => m.isEligible !== false);
+                    const eligibleCount = currentDept?.eligibleMemberCount ?? eligibleMembers.length;
+                    let assignedDisplay = 'None';
+                    if (assignmentMode === 'Individual') {
+                      const m = members.find(mem => mem._id === selectedMemberId);
+                      assignedDisplay = m ? m.name : 'None selected (required)';
+                    } else if (assignmentMode === 'Team') {
+                      assignedDisplay = teamSize
+                        ? `System 3 will rank and select the top ${teamSize} candidates from ${eligibleCount} eligible employees`
+                        : 'Please enter Number of Team Members';
+                    } else if (assignmentMode === 'Both') {
+                      const lead = members.find(mem => mem._id === selectedMemberId);
+                      assignedDisplay = teamSize && lead
+                        ? `Lead: ${lead.name} + top ${parseInt(teamSize, 10) - 1} members selected via System 3 ranking (Total: ${teamSize})`
+                        : 'Please designate lead and enter Number of Team Members';
+                    }
+
+                    return (
+                      <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-3 text-xs space-y-1.5">
+                        <div className="font-bold text-emerald-900 flex items-center justify-between">
+                          <span>Confirmation Summary</span>
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-200/80 text-emerald-900 font-mono text-[11px] font-semibold">
+                            {assignmentMode} Mode
+                          </span>
+                        </div>
+                        <div className="text-gray-700">
+                          <strong>Department:</strong> {currentDept?.name || 'None selected'}
+                        </div>
+                        <div className="text-gray-700">
+                          <strong>Assignment Plan:</strong> {assignedDisplay}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Existing, Recovered or Newly Created Intake References */}
+              {intakeResultInfo ? (
+                <div className={`p-4 rounded-xl border ${
+                  intakeResultInfo.isRecovered
+                    ? 'bg-blue-50 border-blue-200 text-blue-900'
+                    : intakeResultInfo.isDuplicate
+                      ? 'bg-amber-50 border-amber-200 text-amber-900'
+                      : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                } space-y-2 text-sm`}>
+                  <div className="flex items-center gap-2 font-bold">
+                    <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>
+                      {intakeResultInfo.isRecovered
+                        ? (intakeResultInfo.recoveredAction === 'restored'
+                            ? 'Job Ticket Successfully Restored'
+                            : 'Job Ticket Successfully Recreated')
+                        : intakeResultInfo.isDuplicate
+                          ? 'Existing Job Intake Record Updated'
+                          : 'Job Ticket Successfully Generated'}
+                    </span>
+                  </div>
+                  <div className="text-xs space-y-1 font-mono pt-1">
+                    <div><strong>Order Ref:</strong> {intakeResultInfo.orderId}</div>
+                    <div><strong>Ticket ID:</strong> {intakeResultInfo.ticketId}</div>
+                    <div><strong>Invoice No:</strong> {intakeResultInfo.invoiceNo}</div>
+                    {intakeResultInfo.department && (
+                      <div><strong>Assigned Department:</strong> {intakeResultInfo.department}</div>
+                    )}
+                    {intakeResultInfo.assignmentMode && (
+                      <div><strong>Assignment Mode:</strong> {intakeResultInfo.assignmentMode}</div>
+                    )}
+                    <div><strong>Ticket Status:</strong> To Do</div>
+                    {intakeResultInfo.isRecovered && (
+                      <div className="text-blue-700 font-sans text-[11px] pt-1">
+                        {intakeResultInfo.recoveredAction === 'restored'
+                          ? 'The deleted ticket was safely restored and relinked.'
+                          : 'A replacement ticket was created and relinked.'}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* System 3 Selected Members and Score Explanations */}
+                  {Array.isArray(intakeResultInfo.selectedMembers) && intakeResultInfo.selectedMembers.length > 0 && (
+                    <div className="mt-3 pt-2.5 border-t border-emerald-200/80 space-y-1.5 font-sans">
+                      <div className="font-bold text-xs text-emerald-950 flex items-center justify-between">
+                        <span>Assigned Team Members ({intakeResultInfo.selectedMembers.length}):</span>
+                        <span className="text-[10px] text-emerald-700 font-normal">Ranked via System 3 KPI Analysis</span>
+                      </div>
+                      <div className="space-y-1 max-h-44 overflow-y-auto">
+                        {intakeResultInfo.selectedMembers.map((sm, idx) => (
+                          <div key={sm._id || idx} className="bg-white/90 p-2 rounded-lg border border-emerald-200/60 flex items-center justify-between text-xs shadow-2xs">
+                            <div className="min-w-0 pr-2">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-gray-900 truncate">{sm.name}</span>
+                                <span className="text-[10px] text-gray-500">({sm.designation || 'Developer'})</span>
+                              </div>
+                              {sm.explanation && (
+                                <div className="text-[10px] text-emerald-800 font-medium truncate mt-0.5">{sm.explanation}</div>
+                              )}
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              {sm.totalScore !== undefined && (
+                                <span className="font-bold text-emerald-800 text-[11px] bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                  {sm.totalScore} pts
+                                </span>
+                              )}
+                              {sm.kpiScore !== null && sm.kpiScore !== undefined && (
+                                <span className="text-[10px] text-gray-500 block mt-0.5">KPI: {sm.kpiScore}%</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  Proceed with Job Intake registration for invoice <strong className="text-gray-900">{selectedInvoiceForIntake.invoiceNo}</strong> ({selectedInvoiceForIntake.customerName || 'Customer'})?
+                  This will link this verified invoice to a Job Intake record and assign the selected department members.
+                </p>
+              )}
+            </div>
+
+            {/* Modal Footer - Fixed at bottom */}
+            <div className="flex items-center justify-end gap-3 px-5 sm:px-6 py-3.5 border-t border-gray-100 flex-shrink-0 bg-gray-50/90 sticky bottom-0 z-10">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsJobIntakeModalOpen(false);
+                  setSelectedInvoiceForIntake(null);
+                  setIntakeResultInfo(null);
+                }}
+                disabled={processingIntakeId === selectedInvoiceForIntake._id}
+                className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-800 hover:bg-gray-200/60 rounded-lg transition-colors cursor-pointer"
+              >
+                {intakeResultInfo ? 'Close' : 'Cancel'}
+              </button>
+
+              {!intakeResultInfo && (
+                <button
+                  type="button"
+                  onClick={handleConfirmJobIntake}
+                  disabled={
+                    processingIntakeId === selectedInvoiceForIntake._id ||
+                    !selectedDepartmentId ||
+                    (intakeDepartments.find(d => d._id === selectedDepartmentId)?.members?.length === 0) ||
+                    (assignmentMode === 'Individual' && !selectedMemberId) ||
+                    (assignmentMode === 'Team' && selectedMemberIds.length === 0) ||
+                    (assignmentMode === 'Both' && (selectedMemberIds.length === 0 || !selectedMemberId))
+                  }
+                  className="px-5 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  {processingIntakeId === selectedInvoiceForIntake._id ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Processing...</span>
+                    </>
+                  ) : (
+                    <span>Confirm Job Intake</span>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

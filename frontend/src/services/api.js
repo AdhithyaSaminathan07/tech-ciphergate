@@ -21,9 +21,23 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
-// Request interceptor: we no longer inject the token from localStorage
+// Request interceptor: clean invalid Authorization headers and inject token from localStorage as fallback
 api.interceptors.request.use(
-  (config) => config,
+  (config) => {
+    if (config.headers) {
+      const auth = config.headers.Authorization || config.headers.authorization;
+      if (auth === 'Bearer null' || auth === 'Bearer undefined') {
+        delete config.headers.Authorization;
+        delete config.headers.authorization;
+      }
+    }
+    const token = localStorage.getItem('token');
+    if (token && token !== 'null' && token !== 'undefined' && !config.headers?.Authorization && !config.headers?.authorization) {
+      if (!config.headers) config.headers = {};
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
   (error) => Promise.reject(error)
 );
 
@@ -63,7 +77,10 @@ api.interceptors.response.use(
 
       try {
         // Attempt to refresh the token
-        await axios.post(`${import.meta.env.VITE_API_URL || '/api'}/auth/refresh`, {}, { withCredentials: true });
+        const refreshResponse = await axios.post(`${import.meta.env.VITE_API_URL || '/api'}/auth/refresh`, {}, { withCredentials: true });
+        if (refreshResponse.data?.token) {
+          localStorage.setItem('token', refreshResponse.data.token);
+        }
         
         isRefreshing = false;
         processQueue(null);

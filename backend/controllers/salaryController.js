@@ -1445,7 +1445,18 @@ const deleteSalaryProject = asyncHandler(async (req, res) => {
 
 // Get bulk salary report for all workers in a date range
 const getBulkSalaryReport = asyncHandler(async (req, res) => {
-  const { subdomain, fromDate, toDate } = req.query;
+  const {
+    subdomain,
+    fromDate,
+    toDate,
+    searchTerm,
+    filterDepartment,
+    filterMinSalary,
+    filterMaxSalary,
+    filterFineStatus,
+    filterBankStatus,
+    sortBy
+  } = req.query;
 
   if (!subdomain || !fromDate || !toDate) {
     return res.status(400).json({ message: 'Subdomain, fromDate, and toDate are required' });
@@ -1488,16 +1499,19 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
     };
 
     // 1. Search Term (name, rfid, or department name)
-    if (searchTerm) {
+    if (searchTerm && typeof searchTerm === 'string' && searchTerm.trim() !== '') {
+      const trimmedSearch = searchTerm.trim();
       const Department = require('../models/Department');
-      const matchedDepts = await Department.find({ subdomain, name: { $regex: searchTerm, $options: 'i' } });
+      const matchedDepts = await Department.find({ subdomain, name: { $regex: trimmedSearch, $options: 'i' } });
       const matchedDeptIds = matchedDepts.map(d => d._id);
 
-      query.$or = [
-        { name: { $regex: searchTerm, $options: 'i' } },
-        { rfid: { $regex: searchTerm, $options: 'i' } },
-        { department: { $in: matchedDeptIds } }
-      ];
+      query.$and.push({
+        $or: [
+          { name: { $regex: trimmedSearch, $options: 'i' } },
+          { rfid: { $regex: trimmedSearch, $options: 'i' } },
+          { department: { $in: matchedDeptIds } }
+        ]
+      });
     }
 
     // 2. Department filter
@@ -1506,10 +1520,10 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
     }
 
     // 3. Min/Max Salary
-    if (filterMinSalary) {
+    if (filterMinSalary && !isNaN(parseFloat(filterMinSalary))) {
       query.salary = { ...query.salary, $gte: parseFloat(filterMinSalary) };
     }
-    if (filterMaxSalary) {
+    if (filterMaxSalary && !isNaN(parseFloat(filterMaxSalary))) {
       query.salary = { ...query.salary, $lte: parseFloat(filterMaxSalary) };
     }
 
@@ -1540,12 +1554,14 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         query['bankDetails.accountNumber'] = { $exists: true, $ne: '' };
         query['bankDetails.ifscCode'] = { $exists: true, $ne: '' };
       } else if (filterBankStatus === 'Pending') {
-        query.$or = [
-          { 'bankDetails.accountNumber': { $exists: false } },
-          { 'bankDetails.accountNumber': '' },
-          { 'bankDetails.ifscCode': { $exists: false } },
-          { 'bankDetails.ifscCode': '' }
-        ];
+        query.$and.push({
+          $or: [
+            { 'bankDetails.accountNumber': { $exists: false } },
+            { 'bankDetails.accountNumber': '' },
+            { 'bankDetails.ifscCode': { $exists: false } },
+            { 'bankDetails.ifscCode': '' }
+          ]
+        });
       }
     }
 
@@ -1920,7 +1936,7 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         const finalSalaryWithAdjustment = Math.max(0, result.totalFinalSalary + totalAdjustment);
 
         // Enterprise Payroll Module: Attach Payroll Record
-        const payrollRecord = allPayrollRecords.find(pr => pr.workerId.toString() === result.workerId);
+        const payrollRecord = allPayrollRecords.find(pr => pr.workerId?.toString() === result.workerId);
 
         let totalAdditions = 0;
         let totalDeductions = 0;

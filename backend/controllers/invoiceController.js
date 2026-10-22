@@ -1,9 +1,13 @@
 const Invoice = require('../models/Invoice');
 const Admin = require('../models/Admin');
 const Worker = require('../models/Worker');
-const DeleteHistory = require('../models/DeleteHistory'); // Add this line
+const Department = require('../models/Department');
+const JobIntake = require('../models/JobIntake');
+const DeleteHistory = require('../models/DeleteHistory');
 const mongoose = require('mongoose');
 const { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parse, format } = require('date-fns');
+const { processJobIntakeFromVerifiedInvoice } = require('../services/jobIntakeService');
+const { classifyInvoiceJob } = require('../services/jobAssignmentService');
 
 // Helper to parse DD-MM-YYYY, YYYY-MM-DD or DD/MM/YYYY to Date object
 const parseInvoiceDate = (dateStr) => {
@@ -98,6 +102,8 @@ const createInvoice = async (req, res) => {
       status: initialStatus,
       isPaid: req.body.isPaid || false,
       paymentRecords: req.body.paymentRecords || [],
+      paymentDetails: req.body.paymentDetails || undefined,
+      externalOrderId: req.body.externalOrderId || undefined,
       createdBy: req.user._id,
       createdByModel,
       workerInfo: workerInfo || {},
@@ -152,6 +158,36 @@ const updateInvoice = async (req, res) => {
         success: false,
         message: 'Invoice not found'
       });
+    }
+
+    // Check if user has permission to update this invoice
+    // Workers can update their own invoices, admins can update any invoice
+    const isInvoiceOwner = existingInvoice.createdBy.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isInvoiceOwner && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only update your own invoices.'
+      });
+    }
+
+    // Tenant isolation check
+    if (req.user && req.user.subdomain) {
+      let invoiceSubdomain = null;
+      if (existingInvoice.createdByModel === 'Admin') {
+        const creator = await Admin.findById(existingInvoice.createdBy).select('subdomain').lean();
+        invoiceSubdomain = creator?.subdomain;
+      } else if (existingInvoice.createdByModel === 'Worker') {
+        const creator = await Worker.findById(existingInvoice.createdBy).select('subdomain').lean();
+        invoiceSubdomain = creator?.subdomain;
+      }
+      if (invoiceSubdomain && invoiceSubdomain.toLowerCase() !== req.user.subdomain.toLowerCase()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. Invoice belongs to another organization.'
+        });
+      }
     }
 
     // Check if new invoiceNo is already used by another invoice
@@ -219,22 +255,32 @@ const updateInvoice = async (req, res) => {
       });
     }
 
-    // Check if user has permission to update this invoice
-    // Workers can update their own invoices, admins can update any invoice
-    const isInvoiceOwner = invoice.createdBy.toString() === req.user._id.toString();
-    const isAdmin = req.user.role === 'admin';
+    // Trigger Job Intake only at the successful, authorized payment-verification transition
+    // Condition: valid payment proof is present AND status is verified ('Payment Received', 'Work completion', 'Closure agreement', or isPaid)
+    let intakeResult = null;
+    const isPaymentVerified = hasPaymentProof && (
+      invoice.status === 'Payment Received' ||
+      invoice.status === 'Work completion' ||
+      invoice.status === 'Closure agreement' ||
+      invoice.isPaid
+    );
 
-    if (!isInvoiceOwner && !isAdmin) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied. You can only update your own invoices.'
-      });
+    if (isPaymentVerified) {
+      try {
+        intakeResult = await processJobIntakeFromVerifiedInvoice({
+          invoice,
+          adminUser: req.user
+        });
+      } catch (intakeErr) {
+        console.error('[InvoiceController] Failed to process job intake for verified invoice:', intakeErr);
+      }
     }
 
     res.status(200).json({
       success: true,
       message: 'Invoice updated successfully',
-      data: invoice
+      data: invoice,
+      ...(intakeResult ? { intake: intakeResult } : {})
     });
   } catch (error) {
     console.error('Error updating invoice:', error);
@@ -798,7 +844,7 @@ const sendInvoiceWhatsApp = async (req, res) => {
       sum + (item.isTotalOverridden ? (item.total * item.gst / 100) : (item.qty * item.rate * item.gst / 100)), 0);
     const grandTotal = subtotal + gstTotal;
 
-    const { sendWhatsApp } = require('../services/whatsappService');
+    const whatsappService = require('../services/whatsappService');
     const templateName = 'tech_invoice_send';
 
     let whatsappResult = {};
@@ -806,7 +852,7 @@ const sendInvoiceWhatsApp = async (req, res) => {
     if (templateName) {
       // Send via Meta Approved WhatsApp Template (Required for 24h business-initiated messaging window)
       console.log(`[Invoice WhatsApp] Sending template '${templateName}' to ${phone}...`);
-      const templateRes = await sendWhatsApp(req.user?.subdomain || 'tech-vaseegrah', phone, {
+      const templateRes = await whatsappService.sendWhatsApp(req.user?.subdomain || 'tech-vaseegrah', phone, {
         type: 'template',
         templateName: templateName,
         languageCode: 'en',
@@ -933,6 +979,280 @@ const renumberInvoices = async (req, res) => {
   }
 };
 
+// Preview Job Intake classification for an eligible, verified invoice
+const previewJobIntakeForInvoice = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const invoice = await Invoice.findById(id);
+    if (!invoice) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invoice not found'
+      });
+    }
+
+    // Tenant resolution
+    let subdomain = null;
+    if (invoice.createdByModel === 'Admin') {
+      const creator = await Admin.findById(invoice.createdBy).select('subdomain').lean();
+      subdomain = creator?.subdomain;
+    } else if (invoice.createdByModel === 'Worker') {
+      const creator = await Worker.findById(invoice.createdBy).select('subdomain').lean();
+      subdomain = creator?.subdomain;
+    }
+    if (!subdomain && invoice.subdomain) {
+      subdomain = invoice.subdomain;
+    }
+    if (!subdomain && req.user?.subdomain) {
+      subdomain = req.user.subdomain;
+    }
+
+    const departments = await Department.find({ subdomain }).lean();
+    const workers = await Worker.find({ subdomain, status: 'Active' }).lean();
+
+    const orderId = (invoice.externalOrderId && String(invoice.externalOrderId).trim())
+      ? String(invoice.externalOrderId).trim()
+      : `INV-${invoice.invoiceNo || invoice._id}`;
+
+    const existingIntake = await JobIntake.findOne({
+      subdomain,
+      $or: [{ orderId }, { invoiceId: invoice._id }]
+    }).lean();
+
+    const classification = classifyInvoiceJob({
+      invoice,
+      linkedOrder: existingIntake,
+      departments,
+      workers
+    });
+
+    const webDept = departments.find(d => {
+      const name = (d.name || '').toLowerCase();
+      return name.includes('website') || name.includes('web development');
+    });
+
+    // Resolve leaves and workloads to determine accurate employee eligibility
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(now);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const Leave = require('../models/Leave');
+    const activeLeaves = await Leave.find({
+      subdomain,
+      worker: { $in: workers.map(w => w._id) },
+      status: 'Approved',
+      startDate: { $lte: todayEnd },
+      endDate: { $gte: todayStart }
+    }).select('worker').lean();
+    const onLeaveWorkerIds = new Set(activeLeaves.map(l => String(l.worker)));
+
+    const Ticket = require('../models/ticketModel');
+    const activeTickets = await Ticket.find({
+      subdomain,
+      isDeleted: { $ne: true },
+      status: { $in: ['To Do', 'In Progress', 'Review'] },
+      $or: [
+        { assignee: { $in: workers.map(w => w._id) } },
+        { assignees: { $in: workers.map(w => w._id) } }
+      ]
+    }).select('assignee assignees').lean();
+
+    const workloadMap = new Map();
+    workers.forEach(w => workloadMap.set(String(w._id), 0));
+    activeTickets.forEach(t => {
+      const aid = t.assignee ? String(t.assignee) : null;
+      if (aid && workloadMap.has(aid)) workloadMap.set(aid, workloadMap.get(aid) + 1);
+      if (Array.isArray(t.assignees)) {
+        t.assignees.forEach(a => {
+          const id = String(a);
+          if (id && id !== aid && workloadMap.has(id)) workloadMap.set(id, workloadMap.get(id) + 1);
+        });
+      }
+    });
+
+    // Populate existing departments and their active members for this tenant
+    const departmentsWithMembers = departments.map(d => {
+      const dWorkers = workers.filter(w => {
+        const wDept = w.department ? w.department.toString() : '';
+        const isAssigned = Array.isArray(d.assignedDevelopers) && d.assignedDevelopers.some(id => id && id.toString() === w._id.toString());
+        return wDept === d._id.toString() || isAssigned;
+      }).map(w => {
+        const idStr = String(w._id);
+        const isOnLeave = onLeaveWorkerIds.has(idStr);
+        const activeTasks = workloadMap.get(idStr) || 0;
+        const isOverloaded = activeTasks >= 5;
+        const isEligible = !isOnLeave && !isOverloaded;
+        let ineligibilityReason = null;
+        if (isOnLeave) ineligibilityReason = 'On Approved Leave';
+        else if (isOverloaded) ineligibilityReason = `At Capacity (${activeTasks}/5 active tasks)`;
+
+        return {
+          _id: w._id,
+          name: w.name,
+          username: w.username,
+          photo: w.photo || '',
+          designation: w.designation || 'Developer',
+          role: w.role || 'developer',
+          isOnLeave,
+          activeTasks,
+          isOverloaded,
+          isEligible,
+          ineligibilityReason
+        };
+      });
+
+      const eligibleMemberCount = dWorkers.filter(w => w.isEligible).length;
+
+      return {
+        _id: d._id,
+        name: d.name,
+        departmentType: d.departmentType || 'Project',
+        description: d.description || '',
+        activeMemberCount: dWorkers.length,
+        eligibleMemberCount,
+        members: dWorkers
+      };
+    });
+
+    let suggestedDepartmentId = null;
+    if (webDept) {
+      suggestedDepartmentId = webDept._id;
+    } else if (departmentsWithMembers.length > 0) {
+      suggestedDepartmentId = departmentsWithMembers[0]._id;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        jobType: classification.jobType,
+        reason: classification.reason,
+        priorityMatched: classification.priorityMatched,
+        hasExistingIntake: Boolean(existingIntake),
+        storedJobType: existingIntake?.jobDetails?.serviceCategory || null,
+        invoiceNo: invoice.invoiceNo,
+        customerName: invoice.customerName,
+        customerContact: invoice.customerContact,
+        totalAmount: (invoice.items || []).reduce((sum, it) => sum + (Number(it.total) || 0), 0),
+        webDeptAvailable: Boolean(webDept),
+        subdomain,
+        departments: departmentsWithMembers,
+        suggestedDepartmentId
+      }
+    });
+  } catch (error) {
+    console.error('Error previewing job intake classification:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error previewing job intake classification'
+    });
+  }
+};
+
+// Trigger Job Intake manually from Invoice History for an eligible verified invoice
+const triggerJobIntakeForInvoice = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const invoice = await Invoice.findById(id);
+    if (!invoice) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invoice not found'
+      });
+    }
+
+    // Permission check: workers can only trigger for their own invoices, admins for any invoice in their tenant
+    const isInvoiceOwner = invoice.createdBy && req.user && req.user._id && invoice.createdBy.toString() === req.user._id.toString();
+    const isAdmin = req.user && (req.user.role === 'admin' || req.user.role === 'superadmin');
+
+    if (!isInvoiceOwner && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only trigger job intake for your own invoices.'
+      });
+    }
+
+    // Tenant isolation check
+    if (req.user && req.user.subdomain) {
+      let invoiceSubdomain = null;
+      if (invoice.createdByModel === 'Admin') {
+        const creator = await Admin.findById(invoice.createdBy).select('subdomain').lean();
+        invoiceSubdomain = creator?.subdomain;
+      } else if (invoice.createdByModel === 'Worker') {
+        const creator = await Worker.findById(invoice.createdBy).select('subdomain').lean();
+        invoiceSubdomain = creator?.subdomain;
+      }
+      if (invoiceSubdomain && invoiceSubdomain.toLowerCase() !== req.user.subdomain.toLowerCase()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. Invoice belongs to another organization.'
+        });
+      }
+    }
+
+    // Eligibility check: Allow Job Intake only for invoices that have completed the existing authorized payment-verification process
+    const hasPaymentProof = !!(
+      invoice.paymentDetails && (
+        (Array.isArray(invoice.paymentDetails.proofs) && invoice.paymentDetails.proofs.length > 0) ||
+        (invoice.paymentDetails.proof && String(invoice.paymentDetails.proof).trim().length > 0)
+      )
+    );
+
+    const isVerifiedStatus = (
+      invoice.status === 'Payment Received' ||
+      invoice.status === 'Work completion' ||
+      invoice.status === 'Closure agreement' ||
+      invoice.isPaid ||
+      invoice.invoiceType === 'TAX INVOICE'
+    );
+
+    if (!hasPaymentProof || !isVerifiedStatus) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invoice has not completed authorized payment verification. Please upload and verify payment proof first.'
+      });
+    }
+
+    // Process job intake idempotently via shared service
+    const result = await processJobIntakeFromVerifiedInvoice({
+      invoice,
+      adminUser: req.user,
+      selectedJobType: req.body?.selectedJobType,
+      departmentId: req.body?.departmentId,
+      departmentName: req.body?.departmentName,
+      assignmentMode: req.body?.assignmentMode,
+      teamSize: req.body?.teamSize,
+      requiredMembersCount: req.body?.teamSize || req.body?.requiredMembersCount,
+      selectedMemberId: req.body?.selectedMemberId,
+      selectedMemberIds: req.body?.selectedMemberIds
+    });
+
+    let message = 'Job intake processed and ticket created successfully.';
+    if (result.isRecovered) {
+      message = result.recoveredAction === 'restored'
+        ? 'Job ticket was successfully restored for this invoice.'
+        : 'Job ticket was successfully recreated for this invoice.';
+    } else if (result.isDuplicate) {
+      message = 'Job intake already exists for this invoice.';
+    }
+
+    res.status(200).json({
+      success: true,
+      message,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error triggering job intake for invoice:', error);
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Error triggering job intake for invoice'
+    });
+  }
+};
+
 module.exports = {
   createInvoice,
   updateInvoice,
@@ -949,5 +1269,7 @@ module.exports = {
   getDeletedInvoiceById,
   getNextInvoiceNo,
   sendInvoiceWhatsApp,
-  renumberInvoices
+  renumberInvoices,
+  triggerJobIntakeForInvoice,
+  previewJobIntakeForInvoice
 };

@@ -1146,4 +1146,194 @@ h3 {
 
 .custom-main-scroll {
   scrollbar-gutter: stable;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Tech Ciphergate — Center-Originated Water Ripple (Stationary Cards)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Surface container: keeps every card, panel, and row completely stationary */
+.water-ripple-surface {
+  position: relative !important;
+  overflow: hidden !important;
+  isolation: isolate;
+  contain: paint;
+  transform: none !important;
+}
+
+/* Dedicated ripple containment layer inside card's rounded borders */
+.water-ripple-layer {
+  position: absolute !important;
+  inset: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+  border-radius: inherit !important;
+  z-index: 1 !important;
+  contain: paint !important;
+  mask-image: radial-gradient(white, black);
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+}
+
+/* Primary water ripple ring: 2px crisp translucent teal border centered in card (~950ms) */
+.water-ripple-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 50%;
+  pointer-events: none;
+  border: 2px solid rgba(13, 148, 136, 0.65);
+  background: radial-gradient(circle, rgba(20, 184, 166, 0.06) 0%, transparent 60%);
+  box-shadow: 0 0 5px rgba(20, 184, 166, 0.35), inset 0 0 3px rgba(45, 212, 191, 0.2);
+  animation: centerRippleExpand1 950ms cubic-bezier(0.1, 0.5, 0.2, 1) forwards;
+  will-change: transform, opacity;
+}
+
+/* Secondary concentric ripple ring: 1.5px translucent teal border centered in card (~1080ms) */
+.water-ripple-ring-secondary {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 50%;
+  pointer-events: none;
+  border: 1.5px solid rgba(20, 184, 166, 0.50);
+  background: transparent;
+  box-shadow: 0 0 4px rgba(45, 212, 191, 0.25);
+  animation: centerRippleExpand2 1080ms cubic-bezier(0.1, 0.5, 0.2, 1) forwards;
+  will-change: transform, opacity;
+}
+
+/* Tertiary outer capillary ripple ring: 1px soft teal border centered in card (~1200ms) */
+.water-ripple-ring-tertiary {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 50%;
+  pointer-events: none;
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  background: transparent;
+  box-shadow: 0 0 3px rgba(45, 212, 191, 0.15);
+  animation: centerRippleExpand3 1200ms cubic-bezier(0.1, 0.5, 0.2, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes centerRippleExpand1 {
+  0% {
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0.90;
+  }
+  25% {
+    opacity: 0.65;
+  }
+  60% {
+    opacity: 0.30;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes centerRippleExpand2 {
+  0% {
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0.70;
+  }
+  30% {
+    opacity: 0.45;
+  }
+  70% {
+    opacity: 0.18;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.08);
+    opacity: 0;
+  }
+}
+
+@keyframes centerRippleExpand3 {
+  0% {
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0.55;
+  }
+  35% {
+    opacity: 0.30;
+  }
+  75% {
+    opacity: 0.10;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.15);
+    opacity: 0;
+  }
+}
+
+/* Accessibility: respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .water-ripple-layer,
+  .water-ripple-ring,
+  .water-ripple-ring-secondary,
+  .water-ripple-ring-tertiary {
+    display: none !important;
+    animation: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Tech Ciphergate — Responsive KPI Dashboard Grids (Zero Overflow)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* 5-column responsive grid for Primary KPI & Board Throughput summaries */
+.kpi-grid-5 {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 0.75rem;
+  width: 100%;
+  min-width: 0;
+  align-items: stretch;
+}
+
+@media (min-width: 640px) {
+  .kpi-grid-5 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .kpi-grid-5 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .kpi-grid-5 {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+/* 4-column responsive grid for Department Performance & Capacity Rollup */
+.kpi-dept-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 0.75rem;
+  width: 100%;
+  min-width: 0;
+  align-items: stretch;
+}
+
+@media (min-width: 640px) {
+  .kpi-dept-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .kpi-dept-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .kpi-dept-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }

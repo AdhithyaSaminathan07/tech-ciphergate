@@ -32,8 +32,9 @@ export const login = async (credentials, userType) => {
     const response = await api.post(`/auth/${userType}`, credentials);
     const userData = response.data;
     
-    // We NO LONGER store sensitive data in localStorage.
-    // Cookies handle the JWT, and React state handles the user object.
+    if (userData && userData.token) {
+      localStorage.setItem('token', userData.token);
+    }
     
     return userData;
   } catch (error) {
@@ -54,8 +55,10 @@ export const login = async (credentials, userType) => {
 
 export const logout = async () => {
   try {
+    localStorage.removeItem('token');
     await api.post('/auth/logout');
   } catch (error) {
+    localStorage.removeItem('token');
     console.error('Logout error:', error);
   }
 };

@@ -13,6 +13,7 @@ import { registerSW } from 'virtual:pwa-register'
 // Explicitly register the service worker for better reliability on various mobile devices
 const updateSW = registerSW({
   onNeedRefresh() {
+    updateSW(true);
   },
   onOfflineReady() {
   },

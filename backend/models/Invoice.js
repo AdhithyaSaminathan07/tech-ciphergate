@@ -45,8 +45,12 @@ const invoiceSchema = new mongoose.Schema({
   },
   source: { 
     type: String, 
-    enum: ['admin', 'worker'], 
+    enum: ['admin', 'worker', 'intake', 'website'], 
     default: 'admin' 
+  },
+  externalOrderId: {
+    type: String,
+    sparse: true
   },
   // Field to track when admin last viewed invoices
   adminLastViewed: {
@@ -83,6 +87,12 @@ const invoiceSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
+
+// Schema index definition with partialFilterExpression for fast, non-colliding order lookups
+invoiceSchema.index(
+  { externalOrderId: 1, createdBy: 1 },
+  { partialFilterExpression: { externalOrderId: { $type: 'string' } } }
+);
 
 // Pre-save hook to ensure invoiceType and status reflect payment proof presence or existing state
 invoiceSchema.pre('save', function(next) {

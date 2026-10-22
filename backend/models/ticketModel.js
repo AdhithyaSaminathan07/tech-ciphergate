@@ -35,6 +35,42 @@ const reviewCycleSchema = new mongoose.Schema({
     }
 }, { _id: false });
 
+const assignmentHistorySchema = new mongoose.Schema({
+    previousAssignee: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Worker',
+        default: null
+    },
+    newAssignee: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Worker',
+        default: null
+    },
+    assignedAt: {
+        type: Date,
+        default: Date.now
+    },
+    assignedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        default: null
+    },
+    assignedByModel: {
+        type: String,
+        enum: ['Admin', 'Worker', 'System'],
+        default: 'System'
+    },
+    source: {
+        type: String,
+        enum: ['automatic', 'manual', 'override'],
+        default: 'manual'
+    },
+    reason: {
+        type: String,
+        trim: true,
+        default: ''
+    }
+}, { _id: false });
+
 const ticketSchema = new mongoose.Schema({
     title: {
         type: String,
@@ -199,7 +235,23 @@ const ticketSchema = new mongoose.Schema({
     deletedBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Worker'
-    }
+    },
+    assignmentSource: {
+        type: String,
+        enum: ['manual', 'automatic', 'override'],
+        default: 'manual'
+    },
+    assignmentMode: {
+        type: String,
+        enum: ['Individual', 'Team', 'Both'],
+        default: 'Individual'
+    },
+    unassignedReason: {
+        type: String,
+        trim: true,
+        default: null
+    },
+    assignmentHistory: [assignmentHistorySchema]
 }, { timestamps: true });
 
 // Middleware to record status history and review cycles

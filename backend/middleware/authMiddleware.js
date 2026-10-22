@@ -7,13 +7,16 @@ const protect = asyncHandler(async (req, res, next) => {
   let token;
 
   // Check for token in cookies first, then authorization header
-  if (req.cookies && req.cookies.token) {
+  if (req.cookies && req.cookies.token && req.cookies.token !== 'null' && req.cookies.token !== 'undefined') {
     token = req.cookies.token;
   } else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    token = req.headers.authorization.split(' ')[1];
+    const rawToken = req.headers.authorization.split(' ')[1];
+    if (rawToken && rawToken !== 'null' && rawToken !== 'undefined') {
+      token = rawToken;
+    }
   }
 
-  if (!token) {
+  if (!token || token === 'null' || token === 'undefined') {
     return res.status(401).json({ message: 'Not authorized, no token' });
   }
 

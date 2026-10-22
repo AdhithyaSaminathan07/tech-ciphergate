@@ -162,3 +162,23 @@ export const renumberInvoices = async (options) => {
     throw error.response?.data || { message: 'Error renumbering invoices' };
   }
 };
+
+// Preview Job Intake classification for an eligible verified invoice
+export const getInvoiceJobIntakePreview = async (id) => {
+  try {
+    const response = await api.get(`/invoices/${id}/job-intake-preview`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: 'Error previewing job intake classification' };
+  }
+};
+
+// Trigger Job Intake for an eligible verified invoice
+export const triggerInvoiceJobIntake = async (id, options = {}) => {
+  try {
+    const response = await api.post(`/invoices/${id}/job-intake`, options);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: 'Error triggering job intake' };
+  }
+};

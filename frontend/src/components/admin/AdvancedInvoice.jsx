@@ -107,7 +107,8 @@ const getFreshInvoiceData = (formattedDate = '') => ({
   invoiceType: 'PROFORMA INVOICE',
   status: 'Invoice',
   isPaid: false,
-  paymentRecords: []
+  paymentRecords: [],
+  externalOrderId: ''
 });
 
 const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) => {
@@ -166,7 +167,8 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
       invoiceType: effectiveType,
       status: data.status || 'Invoice',
       isPaid: data.isPaid || false,
-      paymentRecords: data.paymentRecords || []
+      paymentRecords: data.paymentRecords || [],
+      externalOrderId: data.externalOrderId || ''
     };
   };
 
@@ -1188,18 +1190,30 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
 
     try {
       setIsSaving(true);
+      const effectiveId = invoiceData._id || initialData?._id;
+      let savedInvoice = null;
       if (onInvoiceSave) {
-        await onInvoiceSave({ ...invoiceData, signature: signaturePreview, _id: initialData?._id, gstEnabled: true });
+        savedInvoice = await onInvoiceSave({ ...invoiceData, signature: signaturePreview, _id: effectiveId, gstEnabled: true });
       } else {
-        if (initialData?._id) {
-          await updateInvoice(initialData._id, { ...invoiceData, signature: signaturePreview, gstEnabled: true });
+        let res;
+        if (effectiveId) {
+          res = await updateInvoice(effectiveId, { ...invoiceData, signature: signaturePreview, gstEnabled: true });
         } else {
-          await createInvoice({ ...invoiceData, signature: signaturePreview, gstEnabled: true });
+          res = await createInvoice({ ...invoiceData, signature: signaturePreview, gstEnabled: true });
+        }
+        if (res?.success) {
+          savedInvoice = res.data;
         }
       }
+
+      const targetId = savedInvoice?._id || savedInvoice?.mongoId || effectiveId;
+      if (targetId && !invoiceData._id) {
+        setInvoiceData(prev => ({ ...prev, _id: targetId }));
+      }
+
       toast.success('Invoice saved successfully!');
 
-      if (!initialData?._id) {
+      if (!effectiveId) {
         const nextRes = await getNextInvoiceNo().catch(() => null);
         if (nextRes?.success && nextRes.data?.nextInvoiceNo) {
           setInvoiceData({
@@ -1235,22 +1249,27 @@ const AdvancedInvoice = ({ onInvoiceSave, initialData, isPreviewMode = false }) 
 
     try {
       setIsSending(true);
+      const effectiveId = invoiceData._id || initialData?._id;
       let savedInvoice = null;
       if (onInvoiceSave) {
-        savedInvoice = await onInvoiceSave({ ...invoiceData, signature: signaturePreview, _id: initialData?._id, gstEnabled: true });
+        savedInvoice = await onInvoiceSave({ ...invoiceData, signature: signaturePreview, _id: effectiveId, gstEnabled: true });
       } else {
         let res;
-        if (initialData?._id) {
-          res = await updateInvoice(initialData._id, { ...invoiceData, signature: signaturePreview, gstEnabled: true });
+        if (effectiveId) {
+          res = await updateInvoice(effectiveId, { ...invoiceData, signature: signaturePreview, gstEnabled: true });
         } else {
           res = await createInvoice({ ...invoiceData, signature: signaturePreview, gstEnabled: true });
         }
-        if (res.success) {
+        if (res?.success) {
           savedInvoice = res.data;
         }
       }
 
-      const targetId = savedInvoice?._id || savedInvoice?.mongoId || initialData?._id;
+      const targetId = savedInvoice?._id || savedInvoice?.mongoId || effectiveId;
+      if (targetId && !invoiceData._id) {
+        setInvoiceData(prev => ({ ...prev, _id: targetId }));
+      }
+
       const pdfBase64 = await generatePdfBase64();
 
       if (targetId && pdfBase64) {

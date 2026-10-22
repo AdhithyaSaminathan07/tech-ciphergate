@@ -33,20 +33,19 @@ const BCRYPT_SALT_ROUNDS = process.env.NODE_ENV === 'production' ? 12 : 10;
 // Helper: Set secure cookies
 const setCookies = (res, accessToken, refreshToken) => {
   const isProduction = process.env.NODE_ENV === 'production';
+  const isSecure = process.env.COOKIE_SECURE === 'true' || (isProduction && process.env.COOKIE_SECURE !== 'false');
 
   res.cookie('token', accessToken, {
     httpOnly: true,
-    // FIX: Use 'none' for testing cross-site, 'Lax' for AWS production
-    sameSite: isProduction ? 'Lax' : 'none', 
-    // FIX: Must be true for 'none' to work. Both Render and AWS use HTTPS, so true is safe.
-    secure: true, 
+    sameSite: isSecure ? 'none' : 'lax', 
+    secure: isSecure, 
     maxAge: 30 * 60 * 1000 // 30 minutes
   });
 
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
-    sameSite: isProduction ? 'Lax' : 'none',
-    secure: true,
+    sameSite: isSecure ? 'none' : 'lax',
+    secure: isSecure,
     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
   });
 };
@@ -101,7 +100,7 @@ const refreshSession = asyncHandler(async (req, res) => {
   const { accessToken, refreshToken: newRefreshToken } = await generateTokens(storedToken.userId, storedToken.userModel === 'Admin' ? 'admin' : 'worker');
   setCookies(res, accessToken, newRefreshToken);
 
-  res.json({ message: 'Token refreshed' });
+  res.json({ message: 'Token refreshed', token: accessToken });
 });
 
 // @desc    Logout user
@@ -240,7 +239,8 @@ const loginAdmin = asyncHandler(async (req, res) => {
       photo: admin.photo,
       role: 'admin',
       subdomain: admin.subdomain,
-      organizationId: admin.organizationId
+      organizationId: admin.organizationId,
+      token: accessToken
     });
   } else {
     logAudit({ action: 'LOGIN_ADMIN', actor: { _id: username, role: 'unknown' }, outcome: 'FAILURE', ip: req.ip });
@@ -310,7 +310,8 @@ const loginWorker = asyncHandler(async (req, res) => {
       photo: worker.photo,
       department: worker.department ? worker.department.name : 'Unassigned',
       role: 'worker',
-      rfid: worker.rfid
+      rfid: worker.rfid,
+      token: accessToken
       // Sensitive fields like salary are not returned directly in login
     });
   } else {

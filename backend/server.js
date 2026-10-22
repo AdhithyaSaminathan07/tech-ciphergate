@@ -110,8 +110,13 @@ const app = express();
     app.use('/api', generalLimiter); // Apply general rate limit
 // ------------------------------------------------------------------------
 
-    // Middleware
-    app.use(express.json({ limit: '50mb' }));
+    // Middleware with raw body buffer capture for webhook HMAC signature verification
+    app.use(express.json({
+      limit: '50mb',
+      verify: (req, res, buf) => {
+        req.rawBody = buf;
+      }
+    }));
     app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
     // Serve static files from uploads directory with proper headers
@@ -205,7 +210,9 @@ const app = express();
     app.use('/api/ai', aiRoutes);
     app.use('/api/server', serverRoutes);
     app.use('/api/webhook', webhookRoutes);
+    app.use('/api/intake', require('./routes/jobIntakeRoutes'));
     app.use('/api/dashboard', dashboardRoutes);
+    app.use('/api/kpi', require('./routes/kpiRoutes'));
 
 
     // Test App routes
