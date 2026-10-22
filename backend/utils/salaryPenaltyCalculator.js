@@ -53,6 +53,20 @@ const backfillReviewCycles = (ticket) => {
     }
   });
 
+  // If ticket is currently in 'Review' but no review cycle was reconstructed from history,
+  // ensure a pending review cycle is present using the reliable submission timestamp from history or creation
+  if (cycles.length === 0 && ticket.status === 'Review') {
+    const revEntry = (ticket.statusHistory || []).find(h => h.status === 'Review');
+    const submissionTime = revEntry?.changedAt || (history.length > 0 ? history[history.length - 1].changedAt : (ticket.createdAt || new Date()));
+    cycles.push({
+      submissionTime,
+      decision: 'Pending',
+      decisionTime: null,
+      reviewer: null,
+      feedback: ''
+    });
+  }
+
   return cycles;
 };
 
@@ -112,38 +126,39 @@ const calculateTaskPenalties = ({ worker, tickets, report, fromDate, toDate }) =
       const todayStr = getDateStr(new Date());
       if (dateStr > todayStr) return false;
 
-      // Find review cycles submitted on or before dateStr
-      const activeCycles = mappedCycles.filter(c => c.submissionDateStr <= dateStr);
+      // Approved business rule: When a task enters Review, its task-related salary penalty
+      // must be ₹0, including all previously accrued overdue deductions.
+      if (ticket.status === 'Review') {
+        return false;
+      }
 
-      if (activeCycles.length === 0) {
+      // If mappedCycles is empty, task was never submitted for review
+      if (mappedCycles.length === 0) {
         // Late submission and not yet submitted on or before dateStr
         return true;
       }
 
-      // Check the latest cycle submitted on or before dateStr
-      const latestCycle = activeCycles[activeCycles.length - 1];
+      // Check the latest cycle
+      const latestCycle = mappedCycles[mappedCycles.length - 1];
 
-      // If submitted on dateStr, the deduction stops on dateStr
-      if (latestCycle.submissionDateStr === dateStr) {
+      // If currently awaiting review in the latest cycle
+      if (latestCycle.decision === 'Pending') {
         return false;
       }
 
-      if (latestCycle.decision === 'Pending') {
-        return false; // Safe while waiting for review
-      }
-
+      // If approved after review, the review submission waived past deductions
       if (latestCycle.decision === 'Approved') {
-        if (!latestCycle.decisionDateStr || latestCycle.decisionDateStr > dateStr) {
-          return false; // Still pending on dateStr
-        }
-        return false; // Approved, permanently ends cycle
+        return false;
       }
 
+      // If rejected and returned to active work (In Progress / To Do)
       if (latestCycle.decision === 'Rejected') {
-        if (!latestCycle.decisionDateStr || latestCycle.decisionDateStr > dateStr) {
-          return false; // Still pending on dateStr
+        const rejectionDateStr = latestCycle.decisionDateStr || latestCycle.submissionDateStr;
+        // The previously submitted review cycle is waived up to rejection date
+        if (dateStr <= rejectionDateStr) {
+          return false;
         }
-        // Rejected on or before dateStr, and not resubmitted yet
+        // New overdue period starting after rejection while in active work
         return true;
       }
 
@@ -211,7 +226,7 @@ const calculateTaskPenalties = ({ worker, tickets, report, fromDate, toDate }) =
     } else {
       const latestOverallCycle = mappedCycles[mappedCycles.length - 1];
       if (latestOverallCycle) {
-        if (latestOverallCycle.decision === 'Pending') {
+        if (latestOverallCycle.decision === 'Pending' || ticket.status === 'Review') {
           if (latestOverallCycle.submissionDateStr <= dueDateStr) {
             protectionState = 'Submitted on time'; // Submitted on or before due date, awaiting review
           } else {
@@ -224,7 +239,9 @@ const calculateTaskPenalties = ({ worker, tickets, report, fromDate, toDate }) =
         }
       } else {
         // No cycles at all
-        if (todayStr > dueDateStr) {
+        if (ticket.status === 'Review') {
+          protectionState = 'Awaiting review';
+        } else if (todayStr > dueDateStr) {
           protectionState = 'Deduction active'; // Overdue and not submitted
         }
       }
@@ -257,9 +274,12 @@ const calculateTaskPenalties = ({ worker, tickets, report, fromDate, toDate }) =
     const dueDateStr = getDateStr(task.endDate);
     if (task.status === 'Done') {
       if (!task.doneDate) return false;
-      return getDateStr(task.doneDate) > dueDateStr;
+      return getDateStr(task.doneDate) > dueDateStr && task.taskDeduction > 0;
+    } else if (task.status === 'Review') {
+      // Waived tasks in Review have ₹0 deduction and are excluded from active salary-deduction breakdowns
+      return task.taskDeduction > 0;
     } else {
-      return todayStr > dueDateStr;
+      return task.taskDeduction > 0;
     }
   });
 
