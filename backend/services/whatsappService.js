@@ -1,5 +1,19 @@
 const axios = require('axios');
+const https = require('https');
 const GowhatsConfig = require('../models/GowhatsConfig');
+
+// Reusable HTTPS agent with Keep-Alive to pool TCP/TLS connections to Meta Graph API
+const metaHttpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 25,
+  maxFreeSockets: 10,
+  timeout: 60000
+});
+
+const metaHttpClient = axios.create({
+  httpsAgent: metaHttpsAgent,
+  timeout: 45000
+});
 
 /**
  * Sends a WhatsApp message using Meta Graph API.
@@ -67,7 +81,7 @@ exports.sendWhatsApp = async (subdomain, phone, data) => {
 
           const uploadUrl = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/media`;
           console.log(`[WhatsApp Service] Uploading media file (${mimeType}) to Meta (${data.filePath})...`);
-          const uploadRes = await axios.post(uploadUrl, formData, {
+          const uploadRes = await metaHttpClient.post(uploadUrl, formData, {
             headers: { 'Authorization': `Bearer ${apiKey}` }
           });
           if (uploadRes.data && uploadRes.data.id) {
@@ -121,13 +135,16 @@ exports.sendWhatsApp = async (subdomain, phone, data) => {
           formData.append('file', new Blob([fileBuffer], { type: mimeType }), filename);
 
           const uploadUrl = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/media`;
-          console.log(`[WhatsApp Service] Uploading media file (${mimeType}) to Meta for Template (${data.filePath})...`);
-          const uploadRes = await axios.post(uploadUrl, formData, {
+          const corrId = data.correlationId || 'wa_' + Date.now();
+          console.log(`[WhatsApp Service] [${corrId}] Uploading media file (${mimeType}) to Meta for Template...`);
+          const tUploadStart = Date.now();
+          const uploadRes = await metaHttpClient.post(uploadUrl, formData, {
             headers: { 'Authorization': `Bearer ${apiKey}` }
           });
+          const mediaUploadDuration = Date.now() - tUploadStart;
           if (uploadRes.data && uploadRes.data.id) {
             const mediaId = uploadRes.data.id;
-            console.log(`[WhatsApp Service] Template Media uploaded successfully. Media ID: ${mediaId}`);
+            console.log(`[WhatsApp Service] [${corrId}] Template Media uploaded to Meta in ${mediaUploadDuration}ms. Media ID obtained.`);
             
             // Replace document link with uploaded mediaId in header component
             components = components.map(comp => {
@@ -168,9 +185,12 @@ exports.sendWhatsApp = async (subdomain, phone, data) => {
       };
     }
 
-    console.log(`[WhatsApp Service] Sending ${data.type} to ${phone} via PhoneID ${phoneNumberId}`);
-    const response = await axios.post(url, messageData, { headers });
-    console.log(`[WhatsApp Service] Success:`, response.data);
+    const corrId = data.correlationId || 'wa_' + Date.now();
+    console.log(`[WhatsApp Service] [${corrId}] Dispatching ${data.type} to Meta Cloud...`);
+    const tMsgStart = Date.now();
+    const response = await metaHttpClient.post(url, messageData, { headers });
+    const msgDuration = Date.now() - tMsgStart;
+    console.log(`[WhatsApp Service] [${corrId}] Message dispatched to Meta Cloud in ${msgDuration}ms`);
     return { success: true, response: response.data };
 
   } catch (error) {

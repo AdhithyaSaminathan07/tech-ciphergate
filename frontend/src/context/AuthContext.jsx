@@ -1,6 +1,7 @@
 // src/context/AuthContext.jsx
 import { createContext, useState, useEffect } from 'react';
 import { login as loginService, logout as logoutService, getCurrentUser } from '../services/authService';
+import { persistTenantSubdomain, clearStoredSubdomain } from '../utils/tenantUtils';
 
 export const AuthContext = createContext();
 
@@ -20,6 +21,9 @@ export const AuthProvider = ({ children }) => {
             email: userData.email,
             role: userData.role
           }));
+          if (userData.subdomain && userData.subdomain !== 'main') {
+            persistTenantSubdomain(userData.subdomain);
+          }
         }
       } catch (error) {
         console.error('Failed to load user', error);
@@ -41,6 +45,9 @@ export const AuthProvider = ({ children }) => {
           email: userData.email,
           role: userData.role || userType
         }));
+        if (userData.subdomain && userData.subdomain !== 'main') {
+          persistTenantSubdomain(userData.subdomain);
+        }
       }
       return userData;
     } catch (error) {
@@ -53,6 +60,7 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     await logoutService();
     setUser(null);
+    clearStoredSubdomain();
   };
 
   const updateUser = (userData) => {

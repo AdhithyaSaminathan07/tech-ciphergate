@@ -15,8 +15,18 @@ const { sendNewLeaveRequestNotification } = require('../services/notificationSer
 // @route   GET /api/leaves/apply-info/:subdomain
 // @access  Private (Worker)
 const getLeaveApplyStats = asyncHandler(async (req, res) => {
-  const { subdomain } = req.params;
+  let { subdomain } = req.params;
   const workerId = req.user._id;
+
+  // Resolve subdomain from authenticated worker if parameter is 'main' or missing
+  if ((!subdomain || subdomain === 'main') && req.user?.subdomain) {
+    subdomain = req.user.subdomain;
+  }
+
+  if (!subdomain || subdomain === 'main') {
+    res.status(400);
+    throw new Error('Company name is missing, login again.');
+  }
 
   const settings = await Settings.findOne({ subdomain });
   const worker = await Worker.findById(workerId);
@@ -162,11 +172,16 @@ const getLeaveApplyStats = asyncHandler(async (req, res) => {
 // @route   GET /api/leaves/:subdomain/:me
 // @access  Private
 const getLeaves = asyncHandler(async (req, res) => {
-  const { subdomain, me } = req.params;
+  let { subdomain, me } = req.params;
 
   if (!['1', '0'].includes(me)) {
     res.status(404);
     throw new Error('URL not found');
+  }
+
+  // Resolve worker's own subdomain if me === '1' and subdomain is missing or 'main'
+  if ((!subdomain || subdomain === 'main') && me === '1' && req.user?.subdomain) {
+    subdomain = req.user.subdomain;
   }
 
   if (!subdomain || subdomain === 'main') {
@@ -205,10 +220,15 @@ const getMyLeaves = asyncHandler(async (req, res) => {
 // @route   POST /api/leaves
 // @access  Private (Worker)
 const createLeave = asyncHandler(async (req, res) => {
-  const { leaveType, startDate, endDate, totalDays, reason, startTime, endTime, subdomain } = req.body;
+  const { leaveType, startDate, endDate, totalDays, reason, startTime, endTime } = req.body;
+  // Authoritative tenant resolution: Worker's authenticated subdomain takes precedence,
+  // falling back to non-main body.subdomain if available
+  const subdomain = (req.user?.subdomain && req.user.subdomain !== 'main')
+    ? req.user.subdomain
+    : (req.body.subdomain !== 'main' ? req.body.subdomain : null);
 
   // Basic validation
-  if (!leaveType || !startDate || !endDate || !reason || !subdomain) {
+  if (!leaveType || !startDate || !endDate || !reason || !subdomain || subdomain === 'main') {
     res.status(400);
     throw new Error('Please provide all required fields');
   }

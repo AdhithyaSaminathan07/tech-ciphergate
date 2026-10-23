@@ -131,8 +131,8 @@ const InvoiceManagement = () => {
       }
 
       if (response.success) {
-        // Refresh invoices list
-        await fetchInvoices();
+        // Refresh invoices list in background without delaying send pipeline
+        fetchInvoices();
         return response.data;
       } else {
         toast.error('Failed to save invoice: ' + response.message);
@@ -141,6 +141,7 @@ const InvoiceManagement = () => {
     } catch (err) {
       console.error('Error saving invoice:', err);
       toast.error('Error saving invoice: ' + (err.message || 'Unknown error'));
+      return null;
     }
   };
 

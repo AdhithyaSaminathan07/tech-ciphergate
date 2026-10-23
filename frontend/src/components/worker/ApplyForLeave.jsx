@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { createLeave, getLeaveApplyStats } from '../../services/leaveService';
+import { resolveTenantSubdomain, persistTenantSubdomain } from '../../utils/tenantUtils';
 import Card from '../common/Card';
 import Button from '../common/Button';
 import Spinner from '../common/Spinner';
@@ -12,7 +13,8 @@ import CustomDatePicker from '../common/CustomDatePicker';
 
 const ApplyForLeave = () => {
   const { user } = useAuth();
-  const { subdomain } = useContext(appContext);
+  const { subdomain, setSubdomain } = useContext(appContext);
+  const effectiveSubdomain = resolveTenantSubdomain(user, subdomain);
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     leaveType: 'Annual Leave',
@@ -29,15 +31,21 @@ const ApplyForLeave = () => {
   const [loadingStats, setLoadingStats] = useState(true);
 
   useEffect(() => {
-    if (subdomain && subdomain !== 'main') {
-      fetchApplyStats();
+    if (effectiveSubdomain && effectiveSubdomain !== 'main') {
+      if (subdomain !== effectiveSubdomain && setSubdomain) {
+        setSubdomain(effectiveSubdomain);
+      }
+      persistTenantSubdomain(effectiveSubdomain);
+      fetchApplyStats(effectiveSubdomain);
     }
-  }, [subdomain]);
+  }, [effectiveSubdomain, subdomain, setSubdomain]);
 
-  const fetchApplyStats = async () => {
+  const fetchApplyStats = async (sub) => {
+    const targetSubdomain = sub || effectiveSubdomain;
+    if (!targetSubdomain || targetSubdomain === 'main') return;
     try {
       setLoadingStats(true);
-      const data = await getLeaveApplyStats(subdomain);
+      const data = await getLeaveApplyStats(targetSubdomain);
       setStats(data);
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -93,7 +101,8 @@ const ApplyForLeave = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!subdomain || subdomain === 'main') {
+    const activeSubdomain = effectiveSubdomain;
+    if (!activeSubdomain || activeSubdomain === 'main') {
       toast.error('Subdomain is missing, check the URL');
       return;
     }
@@ -121,8 +130,8 @@ const ApplyForLeave = () => {
     formPayload.append('startDate', formData.startDate);
     formPayload.append('endDate', formData.endDate);
     formPayload.append('reason', formData.reason);
-    // FIX: Append the subdomain to the form data
-    formPayload.append('subdomain', subdomain);
+    // Append the resolved tenant subdomain to the form data
+    formPayload.append('subdomain', activeSubdomain);
     formPayload.append('totalDays', formData.totalDays);
     if (formData.document) {
       formPayload.append('document', formData.document);

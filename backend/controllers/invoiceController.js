@@ -849,15 +849,19 @@ const sendInvoiceWhatsApp = async (req, res) => {
 
     let whatsappResult = {};
 
+    const correlationId = req.headers['x-correlation-id'] || req.body?.correlationId || ('wa_' + Date.now());
+    const tBackendStart = Date.now();
+
     if (templateName) {
       // Send via Meta Approved WhatsApp Template (Required for 24h business-initiated messaging window)
-      console.log(`[Invoice WhatsApp] Sending template '${templateName}' to ${phone}...`);
+      console.log(`[Invoice WhatsApp] [${correlationId}] Sending template '${templateName}' to customer phone...`);
       const templateRes = await whatsappService.sendWhatsApp(req.user?.subdomain || 'tech-vaseegrah', phone, {
         type: 'template',
         templateName: templateName,
         languageCode: 'en',
         filePath: filePath,
         filename: `Invoice_${invoice.invoiceNo}.pdf`,
+        correlationId,
         components: [
           {
             type: 'header',
@@ -885,6 +889,9 @@ const sendInvoiceWhatsApp = async (req, res) => {
       whatsappResult = { templateRes, textRes: templateRes };
     }
 
+    const backendDuration = Date.now() - tBackendStart;
+    console.log(`[Invoice WhatsApp] [${correlationId}] Total backend WhatsApp processing: ${backendDuration}ms`);
+
     const isWhatsAppSent = whatsappResult?.templateRes?.success || whatsappResult?.textRes?.success;
 
     res.status(200).json({
@@ -894,7 +901,8 @@ const sendInvoiceWhatsApp = async (req, res) => {
         ? 'Invoice saved and sent via WhatsApp successfully'
         : (whatsappResult?.templateRes?.error || 'Invoice saved successfully'),
       pdfUrl,
-      whatsappResult
+      whatsappResult,
+      backendDurationMs: backendDuration
     });
   } catch (error) {
     console.error('Error sending invoice via WhatsApp:', error);

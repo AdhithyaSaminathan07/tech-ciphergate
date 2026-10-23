@@ -3,6 +3,7 @@ import Card from '../common/Card';
 import { deleteInvoice, updateInvoice } from '../../services/invoiceService';
 import { toast } from 'react-toastify';
 import StageProofModal from '../admin/StageProofModal';
+import InvoicePdfPreviewModal from '../common/InvoicePdfPreviewModal';
 
 // Helper to normalize any date string to DD/MM/YYYY
 const normalizeInvoiceDate = (dateStr) => {
@@ -42,6 +43,7 @@ const STAGES = ['Invoice', 'Payment Received', 'Work completion', 'Closure agree
 const WorkerInvoiceHistory = ({ invoices, onEditInvoice, onDeleteInvoice, onStatusUpdate }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState(null);
+  const [previewInvoice, setPreviewInvoice] = useState(null);
   // Search & Filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [minPrice, setMinPrice] = useState('');
@@ -738,6 +740,14 @@ const WorkerInvoiceHistory = ({ invoices, onEditInvoice, onDeleteInvoice, onStat
                   <td className="py-3.5 px-4 text-center">
                     <div className="flex justify-center items-center gap-3">
                       <button
+                        onClick={() => setPreviewInvoice(invoice)}
+                        className="text-emerald-600 hover:text-emerald-700 text-sm font-semibold transition-colors flex items-center gap-1"
+                        title="Preview invoice PDF"
+                      >
+                        Preview PDF
+                      </button>
+                      <span className="text-gray-200">|</span>
+                      <button
                         onClick={() => onEditInvoice(invoice)}
                         className="text-[#0d9488] hover:text-[#0f766e] text-sm font-semibold transition-colors"
                       >
@@ -856,6 +866,15 @@ const WorkerInvoiceHistory = ({ invoices, onEditInvoice, onDeleteInvoice, onStat
             </div>
           </div>
         </div>
+      )}
+
+      {/* PDF Preview Modal */}
+      {previewInvoice && (
+        <InvoicePdfPreviewModal
+          isOpen={Boolean(previewInvoice)}
+          onClose={() => setPreviewInvoice(null)}
+          invoiceData={previewInvoice}
+        />
       )}
     </div>
   );

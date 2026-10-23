@@ -1,22 +1,37 @@
 import api from './api';
+import { resolveTenantSubdomain, getStoredSubdomain } from '../utils/tenantUtils';
 
-export const getAllLeaves = async (leaveData) => {
+export const getAllLeaves = async (leaveData = {}) => {
   try {
-    if (!leaveData.subdomain || leaveData.subdomain == 'main') {
+    const subdomain = (leaveData?.subdomain && leaveData.subdomain !== 'main')
+      ? leaveData.subdomain
+      : (getStoredSubdomain() || resolveTenantSubdomain());
+
+    if (!subdomain || subdomain === 'main') {
       throw new Error('Subdomain is missing check the URL');
     }
 
-    const response = await api.get(`/leaves/${leaveData.subdomain}/0`);
+    const response = await api.get(`/leaves/${subdomain}/0`);
     return response.data;
   } catch (error) {
     throw error.response ? error.response.data : new Error('Failed to fetch leaves');
   }
 };
 
-export const getMyLeaves = async (leaveData) => {
+export const getMyLeaves = async (leaveData = {}) => {
   try {
-    console.log('Fetching leaves for subdomain:', leaveData.subdomain);
-    const response = await api.get(`/leaves/${leaveData.subdomain}/1`);
+    const subdomain = (leaveData?.subdomain && leaveData.subdomain !== 'main')
+      ? leaveData.subdomain
+      : (getStoredSubdomain() || resolveTenantSubdomain());
+
+    if (!subdomain || subdomain === 'main') {
+      // Backend /leaves/me is dedicated for worker's own leaves using authenticated token
+      const response = await api.get('/leaves/me');
+      return Array.isArray(response.data) ? response.data : [];
+    }
+
+    console.log('Fetching leaves for subdomain:', subdomain);
+    const response = await api.get(`/leaves/${subdomain}/1`);
     console.log('Leaves Service Response:', response.data);
     console.log('Number of leaves found:', Array.isArray(response.data) ? response.data.length : 'Not an array');
 
@@ -42,9 +57,20 @@ export const createLeave = async (leaveData) => {
       startDate = formData.get('startDate');
       endDate = formData.get('endDate');
       leaveType = formData.get('leaveType');
+
+      // Attempt tenant resolution if missing or 'main'
+      if (!subdomain || subdomain === 'main') {
+        const resolved = getStoredSubdomain() || resolveTenantSubdomain();
+        if (resolved && resolved !== 'main') {
+          subdomain = resolved;
+          formData.set('subdomain', resolved);
+        }
+      }
     } else {
       // If it's a regular object, create FormData
-      subdomain = leaveData.subdomain;
+      subdomain = (leaveData.subdomain && leaveData.subdomain !== 'main')
+        ? leaveData.subdomain
+        : (getStoredSubdomain() || resolveTenantSubdomain());
       reason = leaveData.reason;
       startDate = leaveData.startDate;
       endDate = leaveData.endDate;
@@ -54,10 +80,13 @@ export const createLeave = async (leaveData) => {
       Object.keys(leaveData).forEach(key => {
         if (key === 'document' && leaveData.document) {
           formData.append('document', leaveData.document, leaveData.document.name);
-        } else {
+        } else if (key !== 'subdomain') {
           formData.append(key, leaveData[key]);
         }
       });
+      if (subdomain) {
+        formData.append('subdomain', subdomain);
+      }
     }
 
     // Validation
@@ -131,10 +160,18 @@ export const getLeavesByStatus = async (status) => {
 
 export const getLeaveApplyStats = async (subdomain) => {
   try {
-    const response = await api.get(`/leaves/apply-info/${subdomain}`);
+    const targetSubdomain = (subdomain && subdomain !== 'main')
+      ? subdomain
+      : (getStoredSubdomain() || resolveTenantSubdomain());
+
+    if (!targetSubdomain || targetSubdomain === 'main') {
+      throw new Error('Subdomain is missing check the URL');
+    }
+
+    const response = await api.get(`/leaves/apply-info/${targetSubdomain}`);
     return response.data;
   } catch (error) {
-    throw error.response ? error.response.data : new Error('Failed to fetch leave apply stats');
+    throw error.response ? error.response.data : new Error(error.message || 'Failed to fetch leave apply stats');
   }
 };
 

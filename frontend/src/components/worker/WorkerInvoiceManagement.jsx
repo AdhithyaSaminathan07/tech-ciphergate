@@ -62,8 +62,8 @@ const WorkerInvoiceManagement = () => {
       }
       
       if (response.success) {
-        // Refresh invoices list
-        await fetchInvoices();
+        // Refresh invoices list in background without delaying send pipeline
+        fetchInvoices();
         return response.data;
       } else {
         toast.error('Failed to save invoice: ' + response.message);
@@ -72,6 +72,7 @@ const WorkerInvoiceManagement = () => {
     } catch (err) {
       console.error('Error saving invoice:', err);
       toast.error('Error saving invoice: ' + (err.message || 'Unknown error'));
+      return null;
     }
   };
 
@@ -96,7 +97,7 @@ const WorkerInvoiceManagement = () => {
 
   // Create a wrapper function that includes worker information
   const handleInvoiceSaveWithWorkerInfo = (invoiceData) => {
-    handleInvoiceSave(invoiceData);
+    return handleInvoiceSave(invoiceData);
   };
 
   return (

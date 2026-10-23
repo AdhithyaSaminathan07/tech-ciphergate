@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import StageProofModal from './StageProofModal';
 import SequentialRenumberModal from './SequentialRenumberModal';
 import EditInvoiceNoModal from './EditInvoiceNoModal';
+import InvoicePdfPreviewModal from '../common/InvoicePdfPreviewModal';
 
 // Helper to normalize any date string to DD/MM/YYYY
 const normalizeInvoiceDate = (dateStr) => {
@@ -68,6 +69,7 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteI
   const [localInvoices, setLocalInvoices] = useState(invoices);
   const [isRenumberModalOpen, setIsRenumberModalOpen] = useState(false);
   const [invoiceForNoEdit, setInvoiceForNoEdit] = useState(null);
+  const [previewInvoice, setPreviewInvoice] = useState(null);
 
   // Search & Filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -1044,6 +1046,14 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteI
                     </td>
                     <td className="py-3.5 px-4 text-center">
                       <div className="flex justify-center items-center gap-2">
+                        <button
+                          onClick={() => setPreviewInvoice(invoice)}
+                          className="text-emerald-600 hover:text-emerald-800 text-sm font-semibold transition-colors flex items-center gap-1"
+                          title="Preview invoice PDF"
+                        >
+                          Preview PDF
+                        </button>
+                        <span className="text-gray-200">|</span>
                         {onViewInvoice && (
                           <>
                             <button
@@ -1155,6 +1165,17 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteI
 
                 {/* Card Actions */}
                 <div className="flex border-t border-gray-100 divide-x divide-gray-100">
+                  <button
+                    onClick={() => setPreviewInvoice(invoice)}
+                    className="flex-1 py-2.5 text-sm font-semibold text-emerald-600 hover:bg-emerald-50 transition-colors flex items-center justify-center gap-1.5"
+                    title="Preview PDF"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    Preview PDF
+                  </button>
                   {onViewInvoice && (
                     <button
                       onClick={() => onViewInvoice(invoice)}
@@ -1809,6 +1830,15 @@ const InvoiceHistory = ({ invoices = [], onEditInvoice, onViewInvoice, onDeleteI
             </div>
           </div>
         </div>
+      )}
+
+      {/* PDF Preview Modal */}
+      {previewInvoice && (
+        <InvoicePdfPreviewModal
+          isOpen={Boolean(previewInvoice)}
+          onClose={() => setPreviewInvoice(null)}
+          invoiceData={previewInvoice}
+        />
       )}
     </div>
   );

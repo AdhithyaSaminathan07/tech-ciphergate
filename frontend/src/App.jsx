@@ -49,6 +49,7 @@ import PrivateRoute from './components/common/PrivateRoute';
 // Context
 import appContext from './context/AppContext';
 import { useEffect, useState } from 'react';
+import { getStoredSubdomain, extractSubdomainFromHostname, persistTenantSubdomain, clearStoredSubdomain } from './utils/tenantUtils';
 const WorkerAttendance = lazy(() => import('./components/admin/WorkerAttendance'));
 const Settings = lazy(() => import('./components/admin/Settings'));
 const AdminProfile = lazy(() => import('./components/admin/AdminProfile'));
@@ -95,22 +96,24 @@ const MainLoader = () => (
 );
 
 function App() {
-  // Initialize subdomain with the actual value from localStorage immediately
+  // Initialize subdomain with stored value or hostname extraction
   const [subdomain, setSubdomain] = useState(() => {
-    const stored = localStorage.getItem('tasktracker-subdomain');
-    return stored || 'main'; // Default to 'main' instead of null
+    const stored = getStoredSubdomain();
+    if (stored) return stored;
+    const fromHost = extractSubdomainFromHostname();
+    return fromHost || 'main';
   });
 
   const getSubdomain = () => {
-    return localStorage.getItem('tasktracker-subdomain') || 'main';
+    return getStoredSubdomain() || extractSubdomainFromHostname() || 'main';
   };
 
   // Custom function to update subdomain and localStorage
   const updateSubdomain = (newSubdomain) => {
     if (newSubdomain && newSubdomain !== 'main') {
-      localStorage.setItem('tasktracker-subdomain', newSubdomain);
+      persistTenantSubdomain(newSubdomain);
     } else {
-      localStorage.removeItem('tasktracker-subdomain');
+      clearStoredSubdomain();
     }
     setSubdomain(newSubdomain || 'main');
   };
@@ -119,24 +122,28 @@ function App() {
   useEffect(() => {
     // Listen for storage changes from other tabs/windows
     const handleStorageChange = (e) => {
-      if (e.key === 'tasktracker-subdomain') {
-        const newValue = e.newValue || 'main';
-        setSubdomain(newValue);
+      if (e.key === 'tasktracker-subdomain' || e.key === 'subdomain') {
+        const newValue = e.newValue || getSubdomain();
+        if (newValue && newValue !== 'main') {
+          setSubdomain(newValue);
+        }
       }
     };
 
     window.addEventListener('storage', handleStorageChange);
 
-    // Also check periodically for subdomain changes
+    // Also check periodically for subdomain changes without downgrading a valid state
     const interval = setInterval(() => {
-      const current = getSubdomain();
-      setSubdomain(prev => {
-        if (prev !== current) {
-          return current;
-        }
-        return prev;
-      });
-    }, 2000); // Check every 2 seconds (reduced frequency)
+      const current = getStoredSubdomain() || extractSubdomainFromHostname();
+      if (current && current !== 'main') {
+        setSubdomain(prev => {
+          if (prev !== current) {
+            return current;
+          }
+          return prev;
+        });
+      }
+    }, 2000);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);

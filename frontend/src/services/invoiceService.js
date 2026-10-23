@@ -141,12 +141,14 @@ export const getNextInvoiceNo = async () => {
 };
 
 // Send invoice via WhatsApp API
-export const sendInvoiceWhatsApp = async (id, pdfBase64, recipientPhone) => {
+export const sendInvoiceWhatsApp = async (id, pdfBase64, recipientPhone, correlationId) => {
   try {
+    const headers = correlationId ? { 'X-Correlation-ID': correlationId } : {};
     const response = await api.post(`/invoices/${id}/send-whatsapp`, {
       pdfBase64,
-      recipientPhone
-    });
+      recipientPhone,
+      correlationId
+    }, { headers });
     return response.data;
   } catch (error) {
     throw error.response?.data || { message: 'Error sending invoice via WhatsApp' };
