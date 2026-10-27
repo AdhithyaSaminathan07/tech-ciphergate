@@ -3,6 +3,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import api from '../../services/api';
 import { getWorkers } from '../../services/workerService';
 import appContext from '../../context/AppContext';
+import { AuthContext } from '../../context/AuthContext';
 import Button from '../common/Button';
 import Table from '../common/Table';
 import { FaTrophy, FaUser, FaCalendarAlt, FaDownload, FaBuilding, FaCheckCircle, FaTimesCircle, FaPercent } from 'react-icons/fa';
@@ -10,6 +11,8 @@ import CustomDatePicker from '../common/CustomDatePicker';
 
 const EmployeeScores = () => {
     const { subdomain } = useContext(appContext);
+    const { user } = useContext(AuthContext);
+    const effectiveSubdomain = (subdomain && subdomain !== 'main') ? subdomain : (user?.subdomain || subdomain);
     const [scores, setScores] = useState([]);
     const [workers, setWorkers] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -18,8 +21,7 @@ const EmployeeScores = () => {
 
     useEffect(() => {
         fetchWorkers();
-        fetchScores();
-    }, []);
+    }, [effectiveSubdomain]);
 
     useEffect(() => {
         fetchScores();
@@ -27,7 +29,7 @@ const EmployeeScores = () => {
 
     const fetchWorkers = async () => {
         try {
-            const workersData = await getWorkers({ subdomain });
+            const workersData = await getWorkers({ subdomain: effectiveSubdomain });
             setWorkers(workersData || []);
         } catch (error) {
             console.error('Error fetching workers:', error);

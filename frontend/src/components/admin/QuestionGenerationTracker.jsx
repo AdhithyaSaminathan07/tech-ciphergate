@@ -75,6 +75,8 @@ const QuestionGenerationTracker = ({
         return <FaCheckCircle className="text-green-500" />;
       case 'in-progress':
         return <FaClock className="text-orange-500 animate-pulse" />;
+      case 'partial_failure':
+        return <FaExclamationCircle className="text-amber-500" />;
       case 'failed':
         return <FaExclamationCircle className="text-red-500" />;
       default:
@@ -88,6 +90,8 @@ const QuestionGenerationTracker = ({
         return 'bg-green-100 border-green-300';
       case 'in-progress':
         return 'bg-orange-100 border-orange-300';
+      case 'partial_failure':
+        return 'bg-amber-100 border-amber-300';
       case 'failed':
         return 'bg-red-100 border-red-300';
       default:

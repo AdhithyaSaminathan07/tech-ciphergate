@@ -7,6 +7,14 @@ const TestAttemptSchema = new mongoose.Schema({
         ref: 'Worker',  // Reference to Worker model
         required: true,
     },
+    batchId: {
+        type: String,
+        index: true,
+    },
+    subdomain: {
+        type: String,
+        index: true,
+    },
     topic: {
         type: String,
         required: true,

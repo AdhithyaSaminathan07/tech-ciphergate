@@ -9,7 +9,7 @@ const LearningTopic = require('../models/LearningTopic');
 const DailyTopic = require('../models/DailyTopic');
 const validator = require('validator');
 const jobManager = require('../utils/jobManager');
-const { processQuestionGeneration } = require('../utils/questionProcessor');
+const { processQuestionGeneration, processThreeSetQuestionGeneration } = require('../utils/questionProcessor');
 const { generateMCQQuestions, generateUPSCQuestions } = require('../utils/openai');
 
 // Simple logging utility
@@ -37,7 +37,7 @@ const MAX_RETRIES = 5;
 const RETRY_DELAY = 1500;
 
 // Input validation middleware
-const validateQuestionGeneration = (req, res, next) => {
+const validateQuestionGeneration = async (req, res, next) => {
     const { workerIds, numQuestions, topic, commonTopics, individualTopics, topicMode, questionFormat, generationMode } = req.body;
 
     if (!workerIds || !Array.isArray(workerIds) || workerIds.length === 0) {
@@ -51,6 +51,26 @@ const validateQuestionGeneration = (req, res, next) => {
             return res.status(400).json({
                 message: `Invalid worker ID format: ${id}`
             });
+        }
+    }
+
+    // Tenant isolation: Enforce that all workers belong to admin's organization
+    if (req.user?.subdomain && req.user.subdomain !== 'main') {
+        try {
+            const isMockedOrConnected = Worker.find !== mongoose.Model.find || mongoose.connection.readyState === 1;
+            if (isMockedOrConnected) {
+                const crossTenantWorkers = await Worker.find({
+                    _id: { $in: workerIds },
+                    subdomain: { $ne: req.user.subdomain }
+                }).select('_id');
+                if (crossTenantWorkers && crossTenantWorkers.length > 0) {
+                    return res.status(403).json({
+                        message: 'Cannot generate or assign tests to workers from another organization.'
+                    });
+                }
+            }
+        } catch (workerTenantErr) {
+            log.warn('Could not verify worker tenant isolation:', workerTenantErr.message);
         }
     }
     const numQuestionsInt = parseInt(numQuestions);
@@ -70,9 +90,12 @@ const validateQuestionGeneration = (req, res, next) => {
 
     // Validate topic based on mode
     if (topicMode === 'common') {
-        // For common mode, either topic or commonTopics must be provided
-        const topicsToCheck = commonTopics || (topic ? [topic] : []);
-        if (topicsToCheck.length === 0 || (typeof topic === 'string' && !topic.trim())) {
+        // For common mode, either topic string or commonTopics array must be provided
+        const topicsToCheck = (Array.isArray(commonTopics) && commonTopics.length > 0)
+            ? commonTopics
+            : (typeof topic === 'string' && topic.trim() ? [topic.trim()] : []);
+
+        if (topicsToCheck.length === 0) {
             return res.status(400).json({
                 message: 'Common topics are required when using common mode'
             });
@@ -140,7 +163,10 @@ const generateAndStoreQuestions = [
     validateQuestionGeneration,
     async (req, res) => {
         const jobId = uuidv4();
-        jobManager.createJob(jobId);
+        jobManager.createJob(jobId, {
+            totalWorkers: req.body.workerIds?.length || 0,
+            workerIds: req.body.workerIds || []
+        });
 
         // Immediately respond to the client with a job ID
         res.status(202).json({
@@ -153,9 +179,11 @@ const generateAndStoreQuestions = [
         // Use the appropriate processor based on generation mode
         const { generationMode = 'standard' } = req.body;
         const processorFunction = generationMode === 'three-sets' ? processThreeSetQuestionGeneration : processQuestionGeneration;
+        const adminSubdomain = req.user?.subdomain || (req.user?.role === 'admin' ? req.user.subdomain : 'main');
         const payload = {
             ...req.body,
-            subdomain: req.body.subdomain || req.subdomain || req.headers['x-subdomain'] || 'default'
+            adminSubdomain: adminSubdomain || 'main',
+            subdomain: (adminSubdomain && adminSubdomain !== 'main') ? adminSubdomain : (req.body.subdomain && req.body.subdomain !== 'main' ? req.body.subdomain : 'main')
         };
 
         processorFunction(payload, jobId).catch(err => {
@@ -173,25 +201,31 @@ const getQuestionsForTest = async (req, res) => {
     const { workerId } = req.params;
 
     try {
-        // Debug logging
-        console.log('Request user:', req.user);
-        console.log('Requested workerId:', workerId);
+        // Validate worker ID format upfront
+        if (!workerId || !mongoose.Types.ObjectId.isValid(workerId)) {
+            return res.status(400).json({
+                message: 'Invalid or missing employee ID.',
+                reason: 'invalid_worker_id'
+            });
+        }
+
+        // Clean metadata logging (prevents leaking credentials or large embedding vectors)
+        log.info('Test questions requested', {
+            userId: req.user?._id?.toString(),
+            role: req.user?.role,
+            subdomain: req.user?.subdomain,
+            requestedWorkerId: String(workerId)
+        });
 
         // Authorization check: Workers can only access their own questions
-        if (req.user.role === 'worker') {
-            console.log('User is worker, checking ID match...');
-            console.log('req.user._id:', req.user._id);
-            console.log('req.user._id.toString():', req.user._id.toString());
-            console.log('workerId:', workerId);
-            console.log('IDs match:', req.user._id.toString() === workerId);
-
-            // Use a more robust comparison that handles different ID formats
-            const userIdString = req.user._id.toString();
+        if (req.user?.role === 'worker') {
+            const userIdString = req.user._id ? req.user._id.toString() : '';
             const requestedIdString = workerId.toString();
 
             if (userIdString !== requestedIdString) {
                 return res.status(403).json({
-                    message: 'Access denied. You can only access your own test questions.'
+                    message: 'Access denied. You can only access your own test questions.',
+                    reason: 'access_denied'
                 });
             }
         }
@@ -199,16 +233,154 @@ const getQuestionsForTest = async (req, res) => {
         // Find the worker
         const worker = await Worker.findById(workerId);
         if (!worker) {
-            return res.status(404).json({ message: 'Worker not found.' });
+            return res.status(404).json({
+                message: 'Worker not found.',
+                reason: 'worker_not_found'
+            });
         }
 
-        const latestQuestionEntry = await Question.findOne({ worker: workerId })
-            .sort({ createdAt: -1 })
-            .select('topic timeDuration totalTestDuration createdAt isMixed allTopics questionSet showFeedback')
-            .lean();
+        // Tenant isolation check
+        const effectiveSubdomain = req.user?.subdomain || req.subdomain || 'main';
+        if (worker.subdomain && effectiveSubdomain !== 'main' && worker.subdomain !== effectiveSubdomain) {
+            return res.status(403).json({
+                message: 'Access denied: Worker belongs to a different organization.',
+                reason: 'tenant_mismatch'
+            });
+        }
+
+        // Intelligent Batch Selection:
+        // 1. If explicit batchId or testId provided in query, honor it
+        const requestedBatchId = req.query.batchId || req.query.testId;
+        let selectedQuestionEntry = null;
+
+        if (requestedBatchId) {
+            selectedQuestionEntry = await Question.findOne({ worker: workerId, batchId: requestedBatchId })
+                .sort({ createdAt: -1 })
+                .select('topic timeDuration totalTestDuration createdAt isMixed allTopics questionSet showFeedback batchId')
+                .lean();
+
+            if (!selectedQuestionEntry) {
+                return res.status(404).json({
+                    message: `Test batch "${requestedBatchId}" was not found for this employee.`,
+                    reason: 'batch_not_found'
+                });
+            }
+        }
+
+        // 2. If worker has an active, unexpired in-progress attempt, prioritize that attempt's batch
+        if (!selectedQuestionEntry) {
+            try {
+                if (TestAttempt.findOne !== mongoose.Model.findOne || mongoose.connection.readyState === 1) {
+                    const queryObj = TestAttempt.findOne({
+                        worker: workerId,
+                        status: 'in-progress'
+                    });
+                    const inProgressAttempt = typeof queryObj?.sort === 'function'
+                        ? await queryObj.sort({ createdAt: -1 })
+                        : await queryObj;
+
+                    if (inProgressAttempt && inProgressAttempt.batchId) {
+                        const now = Date.now();
+                        const startTime = inProgressAttempt.testStartTime ? new Date(inProgressAttempt.testStartTime).getTime() : now;
+                        const elapsed = Math.floor((now - startTime) / 1000);
+                        const limit = inProgressAttempt.totalTestDuration || 600;
+                        if (elapsed < limit) {
+                            selectedQuestionEntry = await Question.findOne({ worker: workerId, batchId: inProgressAttempt.batchId })
+                                .sort({ createdAt: -1 })
+                                .select('topic timeDuration totalTestDuration createdAt isMixed allTopics questionSet showFeedback batchId')
+                                .lean();
+                        }
+                    }
+                }
+            } catch (activeAttemptErr) {
+                log.warn('Could not inspect active attempt for batch selection:', activeAttemptErr.message);
+            }
+        }
+
+        // 3. Find latest uncompleted batch if multiple tests exist for this developer
+        let completedBatchIds = [];
+        if (!selectedQuestionEntry) {
+            try {
+                if (TestAttempt.find !== mongoose.Model.find || mongoose.connection.readyState === 1) {
+                    const completedAttemptsQuery = TestAttempt.find({
+                        worker: workerId,
+                        status: 'completed',
+                        batchId: { $exists: true, $ne: null }
+                    });
+                    const completedAttempts = typeof completedAttemptsQuery?.select === 'function'
+                        ? await completedAttemptsQuery.select('batchId')
+                        : await completedAttemptsQuery;
+
+                    if (Array.isArray(completedAttempts) && completedAttempts.length > 0) {
+                        completedBatchIds = completedAttempts.map(a => a.batchId).filter(Boolean);
+                    }
+
+                    if (completedBatchIds.length > 0) {
+                        selectedQuestionEntry = await Question.findOne({
+                            worker: workerId,
+                            batchId: { $nin: completedBatchIds }
+                        })
+                        .sort({ createdAt: -1 })
+                        .select('topic timeDuration totalTestDuration createdAt isMixed allTopics questionSet showFeedback batchId')
+                        .lean();
+                    }
+                }
+            } catch (uncompletedErr) {
+                log.warn('Could not query uncompleted batches:', uncompletedErr.message);
+            }
+        }
+
+        // Check if question generation is in progress or recently failed for this worker BEFORE falling back
+        if (!selectedQuestionEntry && global.jobs) {
+            for (const job of global.jobs.values()) {
+                if (job.state === 'queued' || job.state === 'processing') {
+                    const isForWorker = !job.workerIds || job.workerIds.length === 0 || job.workerIds.map(String).includes(String(workerId));
+                    if (isForWorker) {
+                        return res.status(404).json({
+                            message: 'Question generation is currently in progress. Please check back shortly.',
+                            reason: 'generation_in_progress',
+                            progress: job.progress || 0
+                        });
+                    }
+                }
+                if (job.state === 'failed') {
+                    const failedWorker = job.failedWorkers?.find(f => String(f.workerId) === String(workerId));
+                    if (failedWorker) {
+                        return res.status(404).json({
+                            message: `Question generation failed for this employee: ${failedWorker.reason || job.reason || 'No questions generated'}. Please contact your administrator.`,
+                            reason: 'generation_failed',
+                            details: failedWorker.reason || job.reason
+                        });
+                    }
+                }
+            }
+        }
+
+        // 4. Default: Fallback to the absolute latest assigned batch if no generation is active/failed
+        if (!selectedQuestionEntry) {
+            selectedQuestionEntry = await Question.findOne({ worker: workerId })
+                .sort({ createdAt: -1 })
+                .select('topic timeDuration totalTestDuration createdAt isMixed allTopics questionSet showFeedback batchId')
+                .lean();
+        }
+
+        const latestQuestionEntry = selectedQuestionEntry;
 
         if (!latestQuestionEntry) {
-            return res.status(404).json({ message: 'No questions found for this employee yet. Please contact your admin.' });
+            // Distinguish whether worker has recorded topics vs not
+            const topicQuery = DailyTopic.findOne({ workerId });
+            const hasAnyTopics = typeof topicQuery?.lean === 'function' ? await topicQuery.lean() : await topicQuery;
+            if (!hasAnyTopics) {
+                return res.status(404).json({
+                    message: 'No daily topics recorded yet. Please submit your daily topics before taking a test.',
+                    reason: 'no_topics_recorded'
+                });
+            }
+
+            return res.status(404).json({
+                message: 'Topics were recorded, but no test questions have been generated for the selected period yet. Please contact your administrator.',
+                reason: 'topics_not_found_for_period'
+            });
         }
 
         const latestCreationTime = latestQuestionEntry.createdAt;
@@ -222,64 +394,134 @@ const getQuestionsForTest = async (req, res) => {
         // For single topic, use the original topic
         const testTopicId = isMixed ? allTopics.sort().join(',') : latestQuestionEntry.topic;
 
-        const existingCompletedAttempt = await TestAttempt.findOne({
-            worker: workerId,
-            topic: testTopicId,
-            status: 'completed'
-        });
+        // Retrieve all questions belonging to this specific generation batch
+        let questions = [];
+        if (latestQuestionEntry.batchId) {
+            const batchQuery = { worker: workerId, batchId: latestQuestionEntry.batchId };
+            if (questionSet) batchQuery.questionSet = questionSet;
+            questions = await Question.find(batchQuery);
+        }
 
-        if (existingCompletedAttempt) {
-            return res.status(403).json({
-                message: `You have already completed the test for these topics: "${allTopics.join(', ')}".`
+        // Fallback for legacy records or unbatched questions
+        if (!questions || questions.length === 0) {
+            const timeThreshold = new Date(latestCreationTime.getTime() - 5 * 60000); // 5 minutes before
+            const maxThreshold = new Date(latestCreationTime.getTime() + 5 * 60000); // 5 minutes after
+
+            if (questionSet) {
+                questions = await Question.find({
+                    worker: workerId,
+                    questionSet: questionSet,
+                    createdAt: { $gte: timeThreshold, $lte: maxThreshold }
+                });
+                if (!questions || questions.length === 0) {
+                    questions = await Question.find({
+                        worker: workerId,
+                        questionSet: questionSet
+                    }).sort({ createdAt: -1 }).limit(latestQuestionEntry.totalQuestions || 20);
+                }
+            } else if (isMixed) {
+                questions = await Question.find({
+                    worker: workerId,
+                    createdAt: { $gte: timeThreshold, $lte: maxThreshold }
+                });
+            } else {
+                questions = await Question.find({
+                    worker: workerId,
+                    topic: latestQuestionEntry.topic,
+                    createdAt: { $gte: timeThreshold, $lte: maxThreshold }
+                });
+                if (!questions || questions.length === 0) {
+                    questions = await Question.find({ worker: workerId, topic: latestQuestionEntry.topic })
+                        .sort({ createdAt: -1 })
+                        .limit(latestQuestionEntry.totalQuestions || 20);
+                }
+            }
+        }
+
+        if (!questions || questions.length === 0) {
+            return res.status(404).json({
+                message: `Questions are recorded for your account, but could not be returned for this batch. Please contact your administrator.`,
+                reason: 'questions_available_not_returned'
             });
         }
 
-        let testAttempt = await TestAttempt.findOne({
-            worker: workerId,
-            topic: testTopicId,
-            status: 'in-progress'
-        });
+        const batchQuestionIds = questions.map(q => q._id);
 
-        let questions;
-        if (!testAttempt) {
-            // Get all questions from the same generation batch (same creation time)
-            // For mixed topics: get all questions created around the same time (within 1 minute)
-            // For single topic: get questions with the specific topic
-            // For three-set mode: get questions from the same set
-            if (questionSet) {
-                // For three-set mode, get questions from the same set
-                questions = await Question.find({
-                    worker: workerId,
-                    questionSet: questionSet
+        // Check for completed attempt specifically for the current question batch
+        let existingCompletedAttempt = null;
+        if (latestQuestionEntry.batchId) {
+            existingCompletedAttempt = await TestAttempt.findOne({
+                worker: workerId,
+                batchId: latestQuestionEntry.batchId,
+                status: 'completed'
+            });
+        } else {
+            existingCompletedAttempt = await TestAttempt.findOne({
+                worker: workerId,
+                status: 'completed',
+                questions: { $in: batchQuestionIds }
+            });
+        }
+
+        if (existingCompletedAttempt) {
+            return res.status(403).json({
+                message: `You have already completed the test for these topics: "${allTopics.join(', ')}".`,
+                reason: 'already_completed'
+            });
+        }
+
+        let testAttempt = null;
+        if (latestQuestionEntry.batchId) {
+            testAttempt = await TestAttempt.findOne({
+                worker: workerId,
+                batchId: latestQuestionEntry.batchId,
+                status: 'in-progress'
+            });
+        } else {
+            testAttempt = await TestAttempt.findOne({
+                worker: workerId,
+                status: 'in-progress',
+                questions: { $in: batchQuestionIds }
+            });
+        }
+
+        // Check if an existing in-progress attempt for this batch has expired
+        if (testAttempt) {
+            const now = Date.now();
+            const startTime = testAttempt.testStartTime ? new Date(testAttempt.testStartTime).getTime() : now;
+            const elapsedSeconds = Math.floor((now - startTime) / 1000);
+            const totalLimitSeconds = testAttempt.totalTestDuration || totalDuration || 600;
+
+            if (elapsedSeconds >= totalLimitSeconds) {
+                testAttempt.status = 'completed';
+                await testAttempt.save();
+                return res.status(403).json({
+                    message: `Your test session for "${allTopics.join(', ')}" has expired.`,
+                    reason: 'already_completed'
                 });
-                log.info(`Three-set test: Found ${questions.length} questions for worker ${workerId} in set ${questionSet}`);
-            } else if (isMixed) {
-                // For mixed topics, get all questions created around the same time (within 1 minute)
-                const timeThreshold = new Date(latestCreationTime.getTime() - 60000); // 1 minute before
-                questions = await Question.find({
-                    worker: workerId,
-                    createdAt: {
-                        $gte: timeThreshold,
-                        $lte: new Date(latestCreationTime.getTime() + 60000) // 1 minute after
-                    }
-                });
-                log.info(`Mixed topic test: Found ${questions.length} questions for worker ${workerId} in batch created around ${latestCreationTime}`);
-            } else {
-                // For single topic, get questions with the specific topic
-                questions = await Question.find({ worker: workerId, topic: latestQuestionEntry.topic });
-                log.info(`Single topic test: Found ${questions.length} questions for worker ${workerId} with topic: ${latestQuestionEntry.topic}`);
             }
+        }
 
-            if (questions.length === 0) {
-                return res.status(404).json({
-                    message: `No questions found for the latest topics for this employee.`
-                });
+        if (!testAttempt) {
+            // Close any older in-progress attempts from previous batches so they do not linger
+            try {
+                const isAttemptMockedOrConnected = TestAttempt.updateMany !== mongoose.Model.updateMany || mongoose.connection.readyState === 1;
+                if (isAttemptMockedOrConnected) {
+                    await TestAttempt.updateMany(
+                        { worker: workerId, status: 'in-progress' },
+                        { status: 'missed' }
+                    );
+                }
+            } catch (markErr) {
+                log.warn('Could not close older in-progress attempts:', markErr.message);
             }
 
             const shuffledQuestionIds = questions.sort(() => 0.5 - Math.random()).map(q => q._id);
 
             testAttempt = await TestAttempt.create({
                 worker: workerId,
+                batchId: latestQuestionEntry.batchId || null,
+                subdomain: worker.subdomain || effectiveSubdomain,
                 topic: testTopicId,
                 questions: shuffledQuestionIds,
                 durationPerQuestion: defaultDurationPerQuestion,
@@ -293,11 +535,17 @@ const getQuestionsForTest = async (req, res) => {
             log.info(`New test attempt created with ID: ${testAttempt._id}`);
 
         } else {
+            const attemptQuestionIdStrings = (testAttempt.questions || []).map(id => id.toString());
             questions = await Question.find({ '_id': { $in: testAttempt.questions } });
-            questions.sort((a, b) => testAttempt.questions.indexOf(a._id) - testAttempt.questions.indexOf(b._id));
+            questions.sort((a, b) => attemptQuestionIdStrings.indexOf(a._id.toString()) - attemptQuestionIdStrings.indexOf(b._id.toString()));
 
             log.info(`Resuming test attempt with ID: ${testAttempt._id}`);
         }
+
+        const now = Date.now();
+        const startTime = testAttempt.testStartTime ? new Date(testAttempt.testStartTime).getTime() : now;
+        const elapsedSeconds = Math.max(0, Math.floor((now - startTime) / 1000));
+        const effectiveTotalDuration = Math.max(1, (testAttempt.totalTestDuration || totalDuration) - elapsedSeconds);
 
         const questionsToSend = questions.map(q => ({
             _id: q._id,
@@ -311,19 +559,22 @@ const getQuestionsForTest = async (req, res) => {
         }));
 
         res.json({
+            batchId: latestQuestionEntry.batchId || null,
             testAttemptId: testAttempt._id,
             questions: questionsToSend,
             currentQuestionIndex: testAttempt.currentQuestionIndex,
             questionStartTime: testAttempt.questionStartTime,
             durationPerQuestion: testAttempt.durationPerQuestion,
-            totalTestDuration: testAttempt.totalTestDuration,
+            totalTestDuration: effectiveTotalDuration,
             testStartTime: testAttempt.testStartTime,
             status: testAttempt.status,
+            topic: isMixed ? allTopics.join(', ') : latestQuestionEntry.topic,
             latestTopic: isMixed ? allTopics.join(', ') : latestQuestionEntry.topic,
             isMixed: isMixed,
             allTopics: allTopics,
             questionSet: questionSet,
-            showFeedback: latestQuestionEntry ? (latestQuestionEntry.showFeedback !== false) : true
+            showFeedback: latestQuestionEntry ? (latestQuestionEntry.showFeedback !== false) : true,
+            reason: 'questions_available'
         });
 
     } catch (error) {
@@ -339,21 +590,49 @@ const getAllQuestions = async (req, res) => {
     const { topic, date, workerId } = req.query;
     try {
         let query = {};
-        if (workerId && mongoose.Types.ObjectId.isValid(workerId)) {
+        // Server-side tenant scoping: authenticated user.subdomain takes precedence over query params
+        const effectiveSubdomain = (req.user && req.user.subdomain && req.user.subdomain !== 'main')
+            ? req.user.subdomain
+            : (req.query.subdomain || req.user?.subdomain);
+
+        if (effectiveSubdomain && effectiveSubdomain !== 'main') {
+            const tenantWorkersQuery = Worker.find({ subdomain: effectiveSubdomain });
+            const tenantWorkers = typeof tenantWorkersQuery?.select === 'function'
+                ? await tenantWorkersQuery.select('_id')
+                : await tenantWorkersQuery;
+            const tenantWorkerIds = tenantWorkers.map(w => w._id);
+
+            if (workerId && mongoose.Types.ObjectId.isValid(workerId)) {
+                const targetId = new mongoose.Types.ObjectId(workerId);
+                const isMember = tenantWorkerIds.some(id => id.equals(targetId));
+                if (!isMember) {
+                    return res.status(200).json({ questions: [], stats: { totalQuestions: 0, uniqueWorkers: 0 } });
+                }
+                query.worker = targetId;
+            } else {
+                query.worker = { $in: tenantWorkerIds };
+            }
+        } else if (req.user && req.user.role === 'admin' && req.user.subdomain && req.user.subdomain !== 'main') {
+            // Fail closed: tenant admin must never view another tenant's questions
+            query.worker = { $in: [] };
+        } else if (workerId && mongoose.Types.ObjectId.isValid(workerId)) {
             query.worker = new mongoose.Types.ObjectId(workerId);
         }
+
         if (topic) {
             query.topic = { $regex: topic, $options: 'i' };
         }
         if (date) {
             const startOfDay = new Date(date);
-            startOfDay.setUTCHours(0, 0, 0, 0);
-            const endOfDay = new Date(date);
-            endOfDay.setUTCHours(23, 59, 59, 999);
-            query.createdAt = {
-                $gte: startOfDay,
-                $lte: endOfDay
-            };
+            if (!isNaN(startOfDay.getTime())) {
+                startOfDay.setUTCHours(0, 0, 0, 0);
+                const endOfDay = new Date(date);
+                endOfDay.setUTCHours(23, 59, 59, 999);
+                query.createdAt = {
+                    $gte: startOfDay,
+                    $lte: endOfDay
+                };
+            }
         }
 
         const questions = await Question.find(query)
@@ -367,6 +646,7 @@ const getAllQuestions = async (req, res) => {
             })
             .sort({ createdAt: -1 })
             .lean();
+
 
         // Transform questions to include department name
         const transformedQuestions = questions.map(question => {

@@ -12,8 +12,14 @@ export const getQuestions = async (params = {}) => {
     return response.data;
 };
 
-export const getQuestionsForTest = async (workerId) => {
-    const response = await api.get(`/test/questions/${workerId}`);
+export const getAvailableTests = async (workerId) => {
+    const response = await api.get(`/test/available/${workerId}`);
+    return response.data;
+};
+
+export const getQuestionsForTest = async (workerId, batchId = null) => {
+    const params = batchId ? `?batchId=${batchId}` : '';
+    const response = await api.get(`/test/questions/${workerId}${params}`);
     return response.data;
 };
 

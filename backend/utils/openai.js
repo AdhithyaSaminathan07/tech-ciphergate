@@ -46,6 +46,78 @@ class RateLimiter {
 
 const rateLimiter = new RateLimiter(20);
 
+/**
+ * Safely extracts question array for a given topic from AI response object
+ * Supports:
+ * - Direct key match: parsed[topic]
+ * - Case-insensitive match: parsed["reactjs"] / parsed["ReactJS"]
+ * - Normalized alphanumeric match: parsed["react.js"] / parsed["react_js"]
+ * - Generic fallback keys: parsed.questions, parsed.data
+ * - Direct array response
+ */
+function extractQuestionsForTopic(parsed, targetTopic) {
+    if (!parsed) return null;
+    if (Array.isArray(parsed)) return parsed;
+    if (typeof parsed !== 'object') return null;
+
+    if (Array.isArray(parsed[targetTopic])) return parsed[targetTopic];
+
+    const cleanTarget = String(targetTopic || '').trim().toLowerCase();
+    const normTarget = cleanTarget.replace(/[^a-z0-9]/g, '');
+
+    // Case-insensitive check
+    for (const [key, val] of Object.entries(parsed)) {
+        if (key.trim().toLowerCase() === cleanTarget && Array.isArray(val)) {
+            return val;
+        }
+    }
+
+    // Normalized alphanumeric check (e.g., "ReactJS", "react.js", "ReactJs" -> "reactjs")
+    for (const [key, val] of Object.entries(parsed)) {
+        if (key.toLowerCase().replace(/[^a-z0-9]/g, '') === normTarget && Array.isArray(val)) {
+            return val;
+        }
+    }
+
+    // Generic keys commonly produced by LLMs
+    if (Array.isArray(parsed.questions)) return parsed.questions;
+    if (Array.isArray(parsed.data)) return parsed.data;
+
+    // Single array property fallback
+    const arrayProps = Object.values(parsed).filter(Array.isArray);
+    if (arrayProps.length === 1) return arrayProps[0];
+
+    return null;
+}
+
+/**
+ * Normalizes question object structure to ensure questionText, options, and correctAnswer match
+ */
+function normalizeMCQQuestion(question) {
+    if (!question || typeof question !== 'object') return null;
+    const text = question.questionText || question.question;
+    if (!text || typeof text !== 'string') return null;
+    if (!Array.isArray(question.options) || question.options.length !== 4) return null;
+    if (question.correctAnswer === undefined || question.correctAnswer === null) return null;
+
+    // Check if options include correctAnswer (with trimming / letter prefix tolerance)
+    let matchedOption = question.options.find(opt => opt === question.correctAnswer);
+    if (!matchedOption) {
+        const cleanAnswer = String(question.correctAnswer).replace(/^\([a-d]\)\s*/i, '').trim().toLowerCase();
+        matchedOption = question.options.find(opt => 
+            String(opt).replace(/^\([a-d]\)\s*/i, '').trim().toLowerCase() === cleanAnswer
+        );
+    }
+
+    if (!matchedOption) return null;
+
+    return {
+        ...question,
+        questionText: text,
+        correctAnswer: matchedOption
+    };
+}
+
 const generateSingleBatch = async (topics, numQuestionsPerTopic, difficulty = 'Medium', attempt = 1, subdomain = '') => {
     await rateLimiter.waitIfNeeded();
     // NOTE: checkAndRecordAiUsage is called by the orchestrator (generateMCQQuestions) before retry loops.
@@ -103,21 +175,22 @@ const generateSingleBatch = async (topics, numQuestionsPerTopic, difficulty = 'M
              throw new Error("No valid JSON object found in the AI response.");
         }
 
-
         const parsedQuestions = JSON.parse(jsonString);
         
         for (const topic of topics) {
-            if (!parsedQuestions[topic] || !Array.isArray(parsedQuestions[topic])) {
+            const rawQuestions = extractQuestionsForTopic(parsedQuestions, topic);
+            if (!rawQuestions || !Array.isArray(rawQuestions) || rawQuestions.length === 0) {
                 throw new Error(`Invalid response structure for topic: ${topic}`);
             }
-            for (const question of parsedQuestions[topic]) {
-                if (!question.questionText || !Array.isArray(question.options) || question.options.length !== 4 || !question.correctAnswer) {
+            const normalizedQuestions = [];
+            for (const question of rawQuestions) {
+                const normalized = normalizeMCQQuestion(question);
+                if (!normalized) {
                     throw new Error(`Invalid question structure in topic: ${topic}`);
                 }
-                if (!question.options.includes(question.correctAnswer)) {
-                    throw new Error(`Correct answer not found in options for topic: ${topic}`);
-                }
+                normalizedQuestions.push(normalized);
             }
+            parsedQuestions[topic] = normalizedQuestions;
         }
         
         console.log(`[DeepSeek] ✅ Successfully generated questions for:`, topics);
@@ -282,10 +355,11 @@ Response format:
         const parsedQuestions = JSON.parse(jsonString);
         
         for (const topic of topics) {
-            if (!parsedQuestions[topic] || !Array.isArray(parsedQuestions[topic])) {
+            const rawQuestions = extractQuestionsForTopic(parsedQuestions, topic);
+            if (!rawQuestions || !Array.isArray(rawQuestions) || rawQuestions.length === 0) {
                 throw new Error(`Invalid response structure for topic: ${topic}`);
             }
-            for (const question of parsedQuestions[topic]) {
+            for (const question of rawQuestions) {
                 if (!question.question || !Array.isArray(question.options) || question.options.length !== 4 || !question.correctAnswer || !question.format) {
                     throw new Error(`Invalid question structure in topic: ${topic}`);
                 }
@@ -296,6 +370,7 @@ Response format:
                     throw new Error(`Invalid format for topic: ${topic}`);
                 }
             }
+            parsedQuestions[topic] = rawQuestions;
         }
         
         console.log(`[DeepSeek] ✅ Successfully generated UPSC-style questions for:`, topics);
@@ -487,6 +562,7 @@ const generateMCQQuestions = async (topics, numQuestionsPerTopic, difficulty = '
                 
                 let batchSuccess = false;
                 let batchAttempt = 1;
+                let lastBatchError = null;
                 
                 // Count usage ONCE per batch (before retries), not inside the batch function.
                 await checkAndRecordAiUsage(subdomain);
@@ -494,10 +570,11 @@ const generateMCQQuestions = async (topics, numQuestionsPerTopic, difficulty = '
                 while (!batchSuccess && batchAttempt <= MAX_API_RETRIES) {
                     try {
                         const batchResult = await generateSingleBatch([topic], batchSize, difficulty, batchAttempt, subdomain);
+                        const batchQuestions = extractQuestionsForTopic(batchResult, topic);
                         
-                        if (batchResult[topic] && Array.isArray(batchResult[topic]) && batchResult[topic].length > 0) {
-                            const generatedCount = Math.min(batchResult[topic].length, batchSize);
-                            results[topic].push(...batchResult[topic].slice(0, generatedCount));
+                        if (batchQuestions && Array.isArray(batchQuestions) && batchQuestions.length > 0) {
+                            const generatedCount = Math.min(batchQuestions.length, batchSize);
+                            results[topic].push(...batchQuestions.slice(0, generatedCount));
                             
                             console.log(`[DeepSeek] ✅ Batch ${batchNumber} success: ${generatedCount} questions generated`);
                             remaining -= generatedCount;
@@ -506,6 +583,7 @@ const generateMCQQuestions = async (topics, numQuestionsPerTopic, difficulty = '
                             throw new Error("Empty or invalid batch result");
                         }
                     } catch (batchError) {
+                        lastBatchError = batchError;
                         console.error(`[DeepSeek] ⚠️ Batch ${batchNumber} attempt ${batchAttempt} failed:`, batchError.message);
                         
                         if (batchAttempt < MAX_API_RETRIES) {
@@ -518,6 +596,10 @@ const generateMCQQuestions = async (topics, numQuestionsPerTopic, difficulty = '
                         }
                         batchAttempt++;
                     }
+                }
+
+                if (!batchSuccess && results[topic].length === 0) {
+                    throw new Error(`Batch generation failed after ${MAX_API_RETRIES} attempts: ${lastBatchError ? lastBatchError.message : 'No questions returned'}`);
                 }
                 batchNumber++;
                 
@@ -569,6 +651,7 @@ const generateUPSCQuestions = async (topics, numQuestionsPerTopic, difficulty = 
                 
                 let batchSuccess = false;
                 let batchAttempt = 1;
+                let lastBatchError = null;
                 
                 // Count usage ONCE per batch (before retries), not inside the batch function.
                 await checkAndRecordAiUsage(subdomain);
@@ -576,11 +659,11 @@ const generateUPSCQuestions = async (topics, numQuestionsPerTopic, difficulty = 
                 while (!batchSuccess && batchAttempt <= MAX_API_RETRIES) {
                     try {
                         const batchResult = await generateUPSCSingleBatch([topic], batchSize, difficulty, batchAttempt, subdomain);
+                        const batchQuestions = extractQuestionsForTopic(batchResult, topic);
 
-                        
-                        if (batchResult[topic] && Array.isArray(batchResult[topic]) && batchResult[topic].length > 0) {
-                            const generatedCount = Math.min(batchResult[topic].length, batchSize);
-                            results[topic].push(...batchResult[topic].slice(0, generatedCount));
+                        if (batchQuestions && Array.isArray(batchQuestions) && batchQuestions.length > 0) {
+                            const generatedCount = Math.min(batchQuestions.length, batchSize);
+                            results[topic].push(...batchQuestions.slice(0, generatedCount));
                             
                             console.log(`[DeepSeek] ✅ UPSC Batch ${batchNumber} success: ${generatedCount} questions generated`);
                             remaining -= generatedCount;
@@ -589,6 +672,7 @@ const generateUPSCQuestions = async (topics, numQuestionsPerTopic, difficulty = 
                             throw new Error("Empty or invalid UPSC batch result");
                         }
                     } catch (batchError) {
+                        lastBatchError = batchError;
                         console.error(`[DeepSeek] ⚠️ UPSC Batch ${batchNumber} attempt ${batchAttempt} failed:`, batchError.message);
                         
                         if (batchAttempt < MAX_API_RETRIES) {
@@ -601,6 +685,10 @@ const generateUPSCQuestions = async (topics, numQuestionsPerTopic, difficulty = 
                         }
                         batchAttempt++;
                     }
+                }
+
+                if (!batchSuccess && results[topic].length === 0) {
+                    throw new Error(`UPSC batch generation failed after ${MAX_API_RETRIES} attempts: ${lastBatchError ? lastBatchError.message : 'No questions returned'}`);
                 }
                 batchNumber++;
                 
@@ -629,4 +717,4 @@ const generateUPSCQuestions = async (topics, numQuestionsPerTopic, difficulty = 
     }
 };
 
-module.exports = { generateMCQQuestions, generateUPSCQuestions, generateThreeUPSCSets };
+module.exports = { generateMCQQuestions, generateUPSCQuestions, generateThreeUPSCSets, extractQuestionsForTopic };

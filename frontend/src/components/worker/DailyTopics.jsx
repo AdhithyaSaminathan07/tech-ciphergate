@@ -29,16 +29,24 @@ import {
   FaCheckCircle
 } from 'react-icons/fa';
 
+const getLocalDateString = (d = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const DailyTopics = () => {
   const { user } = useAuth();
   const { subdomain } = useContext(appContext);
+  const effectiveSubdomain = (subdomain && subdomain !== 'main') ? subdomain : (user?.subdomain || subdomain || 'default');
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
   const [newTopic, setNewTopic] = useState({
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalDateString(),
     topic: ''
   });
   const [errors, setErrors] = useState({});
@@ -62,7 +70,7 @@ const DailyTopics = () => {
       setLoading(true);
       const response = await getWorkerTopics({
         workerId: user._id,
-        subdomain,
+        subdomain: effectiveSubdomain,
         limit: 50
       });
       setTopics(response.topics || []);
@@ -76,7 +84,6 @@ const DailyTopics = () => {
 
 const validateTopic = (topic, date) => {
   const newErrors = {};
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
   if (!topic.trim()) {
     newErrors.topic = 'Topic is required';
@@ -88,14 +95,8 @@ const validateTopic = (topic, date) => {
     newErrors.date = 'Date is required';
   } else if (!isValidDate(date)) {
     newErrors.date = 'Invalid date format';
-  } else if (date !== today) {
-    newErrors.date = 'You can only add a topic for today';
-  }
-
-  // Check if topic already exists for this date
-  const existingTopic = topics.find(t => t.date === date);
-  if (existingTopic) {
-    newErrors.date = 'A topic already exists for today';
+  } else if (isFutureDate(date)) {
+    newErrors.date = 'Cannot add topics for future dates';
   }
 
   return newErrors;
@@ -114,7 +115,7 @@ const validateTopic = (topic, date) => {
       return;
     }
 
-    if (!subdomain) {
+    if (!effectiveSubdomain) {
       setErrors({ add: 'Subdomain not found' });
       return;
     }
@@ -125,16 +126,16 @@ const validateTopic = (topic, date) => {
         workerId: user._id,
         date: newTopic.date,
         topic: newTopic.topic.trim(),
-        subdomain
+        subdomain: effectiveSubdomain
       });
       
       setShowAddModal(false);
       setNewTopic({
-        date: new Date().toISOString().split('T')[0],
+        date: getLocalDateString(),
         topic: ''
       });
       setErrors({});
-      setSuccessMessage('Topic added successfully!');
+      setSuccessMessage('Topic saved successfully!');
       await fetchTopics();
     } catch (error) {
       console.error('Error adding topic:', error);
@@ -183,7 +184,7 @@ const validateTopic = (topic, date) => {
   };
 
   const getTodayStats = () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
     const todayTopic = topics.find(t => t.date === today);
     const thisWeekTopics = getWeekDates().filter(date => 
       topics.some(t => t.date === date)
@@ -472,7 +473,7 @@ const validateTopic = (topic, date) => {
               Study Date
             </label>
            <div className="p-3 bg-gray-100 rounded-lg text-gray-700 text-sm">
-  {formatDateForDisplay(new Date().toISOString().split('T')[0])}
+  {formatDateForDisplay(newTopic.date || getLocalDateString())}
 </div>
 
             {errors.date && (

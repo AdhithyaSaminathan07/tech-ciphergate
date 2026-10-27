@@ -3,7 +3,9 @@ const mongoose = require('mongoose');
 const Question = require('../models/Question');
 const Worker = require('../models/Worker');
 const LearningTopic = require('../models/LearningTopic');
-const { generateMCQQuestions, generateUPSCQuestions } = require('./openai'); // Updated import
+const DailyTopic = require('../models/DailyTopic');
+const openai = require('./openai');
+const { validateAndFilterQuestions } = require('./topicValidator');
 const jobManager = require('./jobManager');
 const {
     CONCURRENT_WORKERS,
@@ -17,6 +19,28 @@ const log = {
     error: (message, error = {}) => console.error(`[ERROR] ${new Date().toISOString()} - ${message}`, error),
     warn: (message, data = {}) => console.warn(`[WARN] ${new Date().toISOString()} - ${message}`, data)
 };
+
+/**
+ * Safely extracts topic questions from result dictionary with case-insensitivity and fallback
+ */
+function extractQuestionsFromResult(resultObj, targetTopic) {
+    if (openai && typeof openai.extractQuestionsForTopic === 'function') {
+        const extracted = openai.extractQuestionsForTopic(resultObj, targetTopic);
+        if (Array.isArray(extracted)) return extracted;
+    }
+    if (!resultObj || typeof resultObj !== 'object') return [];
+    if (Array.isArray(resultObj[targetTopic])) return resultObj[targetTopic];
+    const targetNorm = String(targetTopic || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (const [key, val] of Object.entries(resultObj)) {
+        if (key.toLowerCase().replace(/[^a-z0-9]/g, '') === targetNorm && Array.isArray(val)) {
+            return val;
+        }
+    }
+    if (Array.isArray(resultObj.questions)) return resultObj.questions;
+    const arrayProps = Object.values(resultObj).filter(Array.isArray);
+    if (arrayProps.length === 1) return arrayProps[0];
+    return [];
+}
 
 async function runWithConcurrency(tasks, concurrency) {
     // Use a more efficient approach for managing concurrency
@@ -41,6 +65,24 @@ async function runWithConcurrency(tasks, concurrency) {
 // SUPER OPTIMIZATION: Add caching for common topics
 const topicCache = new Map();
 
+async function runWithOptionalTransaction(session, operation) {
+    try {
+        return await session.withTransaction(async () => {
+            return await operation(session);
+        });
+    } catch (err) {
+        if (err.message && (
+            err.message.includes('replica set member') || 
+            err.message.includes('Transactions are not supported') ||
+            err.message.includes('Transaction numbers are only allowed')
+        )) {
+            log.warn('MongoDB transactions not supported on this instance; executing operation without session.');
+            return await operation(null);
+        }
+        throw err;
+    }
+}
+
 const processQuestionGeneration = async (jobData, jobId) => {
     const {
         workerIds,
@@ -52,6 +94,8 @@ const processQuestionGeneration = async (jobData, jobId) => {
         topic: commonTopic,
         commonTopics,
         individualTopics,
+        startDate,
+        endDate,
         questionFormat = 'mcq', // Add question format with default value
         answerFeedback
     } = jobData;
@@ -79,11 +123,32 @@ const processQuestionGeneration = async (jobData, jobId) => {
         let taskResult;
 
         try {
-            await session.withTransaction(async () => {
-                const worker = workerMap.get(workerId);
-                if (!worker) {
-                    throw new Error('Worker not found in map');
-                }
+            const worker = workerMap.get(String(workerId));
+            if (!worker) {
+                throw new Error('Worker not found in map');
+            }
+
+            // Strict tenant validation: Target worker must belong to requesting admin's organization
+            const adminTenant = jobData.adminSubdomain;
+            if (adminTenant && adminTenant !== 'main' && worker.subdomain && worker.subdomain !== adminTenant) {
+                log.warn('DIAGNOSTIC_WORKER_SKIPPED', {
+                    batchId: jobId,
+                    workerId: String(workerId),
+                    reasonCode: 'TENANT_MISMATCH',
+                    queriedCount: 0
+                });
+                taskResult = { 
+                    workerId, 
+                    workerName: worker.name, 
+                    success: false, 
+                    reason: 'Worker belongs to a different organization.', 
+                    reasonCode: 'TENANT_MISMATCH' 
+                };
+            }
+
+            if (!taskResult) {
+                // Effective tenant is derived strictly from the authorized target worker
+                const effectiveSubdomain = worker.subdomain || (adminTenant && adminTenant !== 'main' ? adminTenant : 'main');
 
                 let topicsToUse = [];
                 let rawTopics = [];
@@ -96,31 +161,88 @@ const processQuestionGeneration = async (jobData, jobId) => {
                         : [];
                     rawTopics = commonTopicsToUse;
                 } else {
-                    rawTopics = (individualTopics && individualTopics[workerId]) || [];
+                    const workerIdStr = String(workerId);
+                    rawTopics = (individualTopics && (individualTopics[workerId] || individualTopics[workerIdStr])) || [];
                     
                     if (rawTopics.length === 0) {
-                        const dbTopics = await LearningTopic.find({ worker: workerId }).select('topic').lean().session(session);
-                        rawTopics = dbTopics.map(t => t.topic);
-                    }
-                    
-                    for (const rawTopic of rawTopics) {
-                        if (typeof rawTopic === 'string' && rawTopic.includes(',')) {
-                            const splitTopics = rawTopic.split(',').map(t => t.trim()).filter(Boolean);
-                            topicsToUse.push(...splitTopics);
-                        } else if (rawTopic && typeof rawTopic === 'string') {
-                            topicsToUse.push(rawTopic.trim());
+                        try {
+                            const query = { 
+                                workerId: worker._id,
+                                ...(effectiveSubdomain && effectiveSubdomain !== 'main' ? { subdomain: effectiveSubdomain } : {})
+                            };
+                            if (startDate && endDate) {
+                                query.date = { $gte: startDate, $lte: endDate };
+                            }
+                            const dailyTopics = await DailyTopic.find(query).sort({ date: -1 }).limit(10).lean();
+                            if (dailyTopics && dailyTopics.length > 0) {
+                                rawTopics = dailyTopics.map(t => t.topic);
+                                log.info('DIAGNOSTIC_DAILY_TOPIC_LOOKUP', {
+                                    batchId: jobId,
+                                    workerId: workerIdStr,
+                                    queriedCount: dailyTopics.length,
+                                    reasonCode: 'TOPICS_FOUND_IN_PERIOD'
+                                });
+                            } else if (startDate && endDate && (jobData.allowHistoricalFallback === true || jobData.historicalFallback === true)) {
+                                // Explicit historical fallback ONLY if admin chose it
+                                const fallbackQuery = { 
+                                    workerId: worker._id,
+                                    ...(effectiveSubdomain && effectiveSubdomain !== 'main' ? { subdomain: effectiveSubdomain } : {})
+                                };
+                                const recentTopics = await DailyTopic.find(fallbackQuery).sort({ date: -1 }).limit(10).lean();
+                                if (recentTopics && recentTopics.length > 0) {
+                                    rawTopics = recentTopics.map(t => t.topic);
+                                    log.info('DIAGNOSTIC_DAILY_TOPIC_LOOKUP', {
+                                        batchId: jobId,
+                                        workerId: workerIdStr,
+                                        queriedCount: recentTopics.length,
+                                        reasonCode: 'EXPLICIT_HISTORICAL_FALLBACK'
+                                    });
+                                }
+                            }
+                        } catch (topicErr) {
+                            log.warn('Could not query DailyTopic:', topicErr.message);
                         }
                     }
-                    
-                    topicsToUse = [...new Set(topicsToUse)].filter(Boolean);
+
+                    if (rawTopics.length === 0) {
+                        const topicQuery = DailyTopic.findOne({ 
+                            workerId: worker._id,
+                            ...(effectiveSubdomain && effectiveSubdomain !== 'main' ? { subdomain: effectiveSubdomain } : {})
+                        });
+                        const hasAnyTopics = typeof topicQuery?.lean === 'function' ? await topicQuery.lean() : await topicQuery;
+                        const reasonCode = (startDate && endDate && hasAnyTopics) ? 'TOPICS_NOT_FOUND_FOR_PERIOD' : 'NO_TOPICS_RECORDED';
+                        const failureReason = (startDate && endDate && hasAnyTopics) ? 'Topics not found for the selected period' : 'No topics recorded';
+                        log.warn('DIAGNOSTIC_WORKER_SKIPPED', {
+                            batchId: jobId,
+                            workerId: workerIdStr,
+                            reasonCode,
+                            queriedCount: 0
+                        });
+                        taskResult = { workerId, workerName: worker.name, success: false, reason: failureReason, reasonCode };
+                    } else {
+                        for (const rawTopic of rawTopics) {
+                            if (typeof rawTopic === 'string' && rawTopic.includes(',')) {
+                                const splitTopics = rawTopic.split(',').map(t => t.trim()).filter(Boolean);
+                                topicsToUse.push(...splitTopics);
+                            } else if (rawTopic && typeof rawTopic === 'string') {
+                                topicsToUse.push(rawTopic.trim());
+                            }
+                        }
+                        topicsToUse = [...new Set(topicsToUse)].filter(Boolean);
+                    }
                 }
 
-                if (topicsToUse.length === 0) {
-                    log.warn(`Skipping ${worker.name}: No topics found.`);
-                    taskResult = { workerId, workerName: worker.name, success: false, reason: 'No topics' };
-                    return;
+                if (!taskResult && topicsToUse.length === 0) {
+                    log.warn('DIAGNOSTIC_WORKER_SKIPPED', {
+                        batchId: jobId,
+                        workerId: String(workerId),
+                        reasonCode: 'NO_TOPICS_FOUND',
+                        queriedCount: 0
+                    });
+                    taskResult = { workerId, workerName: worker.name, success: false, reason: 'No topics found', reasonCode: 'NO_TOPICS_FOUND' };
                 }
 
+                if (!taskResult && topicsToUse.length > 0) {
                 const combinedTopicString = topicsToUse.join(', ');
                 const targetQuestions = parseInt(numQuestions);
                 const totalTopics = topicsToUse.length;
@@ -158,11 +280,11 @@ const processQuestionGeneration = async (jobData, jobId) => {
                                     const fetchPromise = (async () => {
                                         let resQuestions = [];
                                         if (questionFormat === 'upsc') {
-                                            const result = await generateUPSCQuestions([currentTopic], questionsForThisTopic, difficulty, subdomain);
-                                            resQuestions = result[currentTopic] || [];
+                                            const result = await openai.generateUPSCQuestions([currentTopic], questionsForThisTopic, difficulty, subdomain);
+                                            resQuestions = extractQuestionsFromResult(result, currentTopic);
                                         } else {
-                                            const result = await generateMCQQuestions([currentTopic], questionsForThisTopic, difficulty, subdomain);
-                                            resQuestions = result[currentTopic] || [];
+                                            const result = await openai.generateMCQQuestions([currentTopic], questionsForThisTopic, difficulty, subdomain);
+                                            resQuestions = extractQuestionsFromResult(result, currentTopic);
                                         }
                                         return resQuestions;
                                     })();
@@ -185,17 +307,17 @@ const processQuestionGeneration = async (jobData, jobId) => {
                                 // Uncached / Individual topic generation
                                 let generatedQuestions = [];
                                 if (questionFormat === 'upsc') {
-                                    const result = await generateUPSCQuestions([currentTopic], questionsForThisTopic, difficulty, subdomain);
-                                    generatedQuestions = result[currentTopic] || [];
+                                    const result = await openai.generateUPSCQuestions([currentTopic], questionsForThisTopic, difficulty, subdomain);
+                                    generatedQuestions = extractQuestionsFromResult(result, currentTopic);
                                 } else {
-                                    const result = await generateMCQQuestions([currentTopic], questionsForThisTopic, difficulty, subdomain);
-                                    generatedQuestions = result[currentTopic] || [];
+                                    const result = await openai.generateMCQQuestions([currentTopic], questionsForThisTopic, difficulty, subdomain);
+                                    generatedQuestions = extractQuestionsFromResult(result, currentTopic);
                                 }
                                 
                                 return generatedQuestions.slice(0, questionsForThisTopic);
                             } catch (error) {
                                 log.error(`Failed to generate questions for topic "${currentTopic}":`, error.message);
-                                return [];
+                                return { error: error.message };
                             }
                         });
                     }
@@ -204,14 +326,59 @@ const processQuestionGeneration = async (jobData, jobId) => {
 
                 // Execute topic generation in parallel
                 const topicResults = await runWithConcurrency(topicTasks, CONCURRENT_TOPICS_PER_WORKER);
-                let allQuestionsForWorker = topicResults.flat();
-
-                allQuestionsForWorker = allQuestionsForWorker.slice(0, targetQuestions);
+                const taskErrors = topicResults.filter(r => r && !Array.isArray(r) && r.error).map(r => r.error);
+                let allQuestionsForWorker = topicResults.filter(Array.isArray).flat();
 
                 if (allQuestionsForWorker.length === 0) {
-                    taskResult = { workerId, workerName: worker.name, success: false, reason: 'AI failed to generate questions' };
-                    return;
-                }
+                    let failureReason = 'AI failed to generate questions';
+                    let reasonCode = 'AI_ZERO_QUESTIONS';
+
+                    if (taskErrors.length > 0) {
+                        const rawErr = taskErrors[0];
+                        // Sanitize to avoid leaking tokens, keys, passwords or prompts
+                        const sanitizedErr = String(rawErr).replace(/bearer\s+[a-z0-9_-]+/gi, 'Bearer ***').slice(0, 150);
+                        if (/rate/i.test(rawErr)) {
+                            reasonCode = 'AI_RATE_LIMITED';
+                            failureReason = sanitizedErr;
+                        } else if (/quota|limit|exceed/i.test(rawErr)) {
+                            reasonCode = 'AI_QUOTA_EXCEEDED';
+                            failureReason = sanitizedErr;
+                        } else if (/structure|json|parse/i.test(rawErr)) {
+                            reasonCode = 'AI_MALFORMED_RESPONSE';
+                            failureReason = sanitizedErr;
+                        } else {
+                            reasonCode = 'AI_GENERATION_FAILED';
+                            failureReason = sanitizedErr;
+                        }
+                    }
+
+                    log.warn('DIAGNOSTIC_AI_GENERATION', {
+                        batchId: jobId,
+                        workerId: String(workerId),
+                        rawQuestionsCount: 0,
+                        reasonCode
+                    });
+                    taskResult = { workerId, workerName: worker.name, success: false, reason: failureReason, reasonCode };
+                } else {
+                    // Deterministically validate questions against topic concepts and structural requirements
+                    const { validQuestions, rejectedQuestions } = validateAndFilterQuestions(allQuestionsForWorker, combinedTopicString);
+                    log.info('DIAGNOSTIC_QUESTION_VALIDATION', {
+                        batchId: jobId,
+                        workerId: String(workerId),
+                        rawQuestionsCount: allQuestionsForWorker.length,
+                        validQuestionsCount: validQuestions.length,
+                        rejectedQuestionsCount: rejectedQuestions.length,
+                        reasonCode: validQuestions.length > 0 ? 'VALIDATION_PASSED' : 'VALIDATION_FAILED'
+                    });
+
+                    if (rejectedQuestions.length > 0) {
+                        log.warn(`Filtered ${rejectedQuestions.length} invalid/off-topic questions for ${worker.name}:`, rejectedQuestions.map(r => r.reason));
+                    }
+
+                    if (validQuestions.length === 0) {
+                        taskResult = { workerId, workerName: worker.name, success: false, reason: 'Generated questions did not match studied topic concepts', reasonCode: 'TOPIC_CONCEPTS_MISMATCH' };
+                    } else {
+                        allQuestionsForWorker = validQuestions.slice(0, targetQuestions);
 
                 const questionsToSave = allQuestionsForWorker.map(q => {
                     // Clean options by removing internal letters like (a), (b), (c), (d)
@@ -220,8 +387,11 @@ const processQuestionGeneration = async (jobData, jobId) => {
                         return option.replace(/^\([a-d]\)\s*/i, '').trim();
                     });
                     
-                    // Also clean the correctAnswer
-                    const cleanedCorrectAnswer = q.correctAnswer.replace(/^\([a-d]\)\s*/i, '').trim();
+                    // Also clean the correctAnswer safely whether string or number
+                    const rawCorrectAnswer = typeof q.correctAnswer === 'number'
+                        ? (cleanedOptions[q.correctAnswer] || String(q.correctAnswer))
+                        : String(q.correctAnswer || '');
+                    const cleanedCorrectAnswer = rawCorrectAnswer.replace(/^\([a-d]\)\s*/i, '').trim();
                     
                     // Programmatically shuffle options to guarantee randomness
                     const shuffledOptions = [...cleanedOptions];
@@ -235,6 +405,9 @@ const processQuestionGeneration = async (jobData, jobId) => {
                     );
                     
                     return {
+                        _id: new mongoose.Types.ObjectId(),
+                        batchId: jobId,
+                        subdomain: effectiveSubdomain,
                         worker: worker._id,
                         topic: combinedTopicString,
                         questionText: q.questionText || q.question,
@@ -249,26 +422,69 @@ const processQuestionGeneration = async (jobData, jobId) => {
                     };
                 }).filter(Boolean);
 
-                // SUPER OPTIMIZATION: Use bulk insert for better database performance
-                if (questionsToSave.length > 0) {
-                    await Question.insertMany(questionsToSave, { 
-                        session,
-                        ordered: false // Allow parallel insertion
-                    });
-                }
+            // SUPER OPTIMIZATION: Use bulk insert for better database performance
+            // Only wrap database persistence in transaction, keeping external AI calls outside
+            if (questionsToSave.length > 0) {
+                await runWithOptionalTransaction(session, async (activeSession) => {
+                    try {
+                        await Question.insertMany(questionsToSave, activeSession ? { 
+                            session: activeSession,
+                            ordered: false // Allow parallel insertion in transaction
+                        } : { ordered: true });
+                    } catch (insertErr) {
+                        if (!activeSession) {
+                            // On standalone MongoDB, transactions cannot rollback automatically.
+                            // Clean up any partially inserted questions from this batch to prevent orphan records.
+                            try {
+                                const questionIds = questionsToSave.map(q => q._id).filter(Boolean);
+                                if (questionIds.length > 0) {
+                                    await Question.deleteMany({ _id: { $in: questionIds } });
+                                }
+                            } catch (cleanupErr) {
+                                log.warn('Could not clean up partial writes on standalone MongoDB:', cleanupErr.message);
+                            }
+                        }
+                        throw insertErr;
+                    }
+                });
+            }
 
+            if (questionsToSave.length === 0) {
+                log.warn('DIAGNOSTIC_PERSISTENCE', {
+                    batchId: jobId,
+                    workerId: String(workerId),
+                    persistedQuestionsCount: 0,
+                    reasonCode: 'ZERO_QUESTIONS_PERSISTED'
+                });
+                taskResult = {
+                    workerId,
+                    workerName: worker.name,
+                    success: false,
+                    reason: `No valid questions could be generated or persisted for topics: "${combinedTopicString}".`,
+                    reasonCode: 'ZERO_QUESTIONS_PERSISTED'
+                };
+            } else {
+                log.info('DIAGNOSTIC_PERSISTENCE', {
+                    batchId: jobId,
+                    workerId: String(workerId),
+                    persistedQuestionsCount: questionsToSave.length,
+                    reasonCode: 'QUESTIONS_PERSISTED'
+                });
                 taskResult = { 
                     workerId, 
                     workerName: worker.name, 
                     success: true, 
                     questionsGenerated: questionsToSave.length,
                     targetQuestions: targetQuestions,
-                    topics: combinedTopicString
+                    topics: combinedTopicString,
+                    reasonCode: 'GENERATION_SUCCESS'
                 };
-                
-                // Track total questions for progress reporting
                 totalQuestionsGenerated += questionsToSave.length;
-            });
+            }
+                    }
+                }
+                }
+            }
         } catch (error) {
             const workerName = workerMap.get(workerId)?.name || 'Unknown';
             log.error(`Transaction failed for worker ${workerName}:`, error.message);
@@ -292,17 +508,40 @@ const processQuestionGeneration = async (jobData, jobId) => {
 
     const successfulWorkers = results.filter(r => r && r.success);
     const failedWorkers = results.filter(r => r && !r.success);
-    // Use the tracked total instead of recalculating
-    // const totalQuestionsGenerated = successfulWorkers.reduce((sum, r) => sum + r.questionsGenerated, 0);
+
+    const hasSuccesses = successfulWorkers.length > 0;
+    const hasFailures = failedWorkers.length > 0;
+
+    let finalState = 'completed';
+    let primaryReason = null;
+
+    if (!hasSuccesses || totalQuestionsGenerated === 0) {
+        finalState = 'failed';
+        primaryReason = failedWorkers.length > 0
+            ? failedWorkers.map(f => `${f.workerName || 'Worker'}: ${f.reason || 'Failed to generate questions'}`).join('; ')
+            : 'Zero questions were generated or persisted.';
+    } else if (hasFailures) {
+        finalState = 'partial_failure';
+        primaryReason = `Generated questions for ${successfulWorkers.length} worker(s), but failed for: ${failedWorkers.map(f => f.workerName).join(', ')}`;
+    }
 
     const returnValue = {
-        success: true,
+        success: hasSuccesses && totalQuestionsGenerated > 0,
         results: successfulWorkers,
         failedWorkers,
-        totalQuestionsGenerated
+        totalQuestionsGenerated,
+        state: finalState,
+        reason: primaryReason
     };
 
-    jobManager.completeJob(jobId, returnValue);
+    if (finalState === 'failed') {
+        jobManager.failJob(jobId, primaryReason, returnValue);
+    } else if (finalState === 'partial_failure') {
+        jobManager.partialFailJob(jobId, primaryReason, returnValue);
+    } else {
+        jobManager.completeJob(jobId, returnValue);
+    }
+
     return returnValue;
 };
 
@@ -323,6 +562,8 @@ const processThreeSetQuestionGeneration = async (jobData, jobId) => {
         topic: commonTopic,
         commonTopics,
         individualTopics,
+        startDate,
+        endDate,
         questionFormat = 'upsc', // Default to UPSC format for three sets
         answerFeedback,
         subdomain
@@ -346,7 +587,7 @@ const processThreeSetQuestionGeneration = async (jobData, jobId) => {
         if (topicsToUse.length > 0) {
             try {
                 log.info('[Optimization] Generating 1 shared 3-set batch for common topics:', topicsToUse);
-                sharedThreeSets = await generateThreeUPSCSets(topicsToUse, parseInt(numQuestions), difficulty, 1, subdomain);
+                sharedThreeSets = await openai.generateThreeUPSCSets(topicsToUse, parseInt(numQuestions), difficulty, 1, subdomain);
             } catch (err) {
                 log.error('[Optimization] Shared 3-set pre-generation failed:', err.message);
                 jobManager.failJob(jobId, err.message || 'Failed to pre-generate question sets.');
@@ -362,11 +603,32 @@ const processThreeSetQuestionGeneration = async (jobData, jobId) => {
         let taskResult;
 
         try {
-            await session.withTransaction(async () => {
-                const worker = workerMap.get(workerId);
-                if (!worker) {
-                    throw new Error('Worker not found in map');
-                }
+            const worker = workerMap.get(String(workerId));
+            if (!worker) {
+                throw new Error('Worker not found in map');
+            }
+
+            // Strict tenant validation: Target worker must belong to requesting admin's organization
+            const adminTenant = jobData.adminSubdomain;
+            if (adminTenant && adminTenant !== 'main' && worker.subdomain && worker.subdomain !== adminTenant) {
+                log.warn('DIAGNOSTIC_WORKER_SKIPPED', {
+                    batchId: jobId,
+                    workerId: String(workerId),
+                    reasonCode: 'TENANT_MISMATCH',
+                    queriedCount: 0
+                });
+                taskResult = { 
+                    workerId, 
+                    workerName: worker.name, 
+                    success: false, 
+                    reason: 'Worker belongs to a different organization.', 
+                    reasonCode: 'TENANT_MISMATCH' 
+                };
+            }
+
+            if (!taskResult) {
+                // Effective tenant is derived strictly from the authorized target worker
+                const effectiveSubdomain = worker.subdomain || (adminTenant && adminTenant !== 'main' ? adminTenant : 'main');
 
                 let topicsToUse = [];
                 let rawTopics = [];
@@ -378,31 +640,88 @@ const processThreeSetQuestionGeneration = async (jobData, jobId) => {
                         : [];
                     rawTopics = commonTopicsToUse;
                 } else {
-                    rawTopics = (individualTopics && individualTopics[workerId]) || [];
+                    const workerIdStr = String(workerId);
+                    rawTopics = (individualTopics && (individualTopics[workerId] || individualTopics[workerIdStr])) || [];
                     
                     if (rawTopics.length === 0) {
-                        const dbTopics = await LearningTopic.find({ worker: workerId }).select('topic').lean().session(session);
-                        rawTopics = dbTopics.map(t => t.topic);
-                    }
-                    
-                    for (const rawTopic of rawTopics) {
-                        if (typeof rawTopic === 'string' && rawTopic.includes(',')) {
-                            const splitTopics = rawTopic.split(',').map(t => t.trim()).filter(Boolean);
-                            topicsToUse.push(...splitTopics);
-                        } else if (rawTopic && typeof rawTopic === 'string') {
-                            topicsToUse.push(rawTopic.trim());
+                        try {
+                            const query = { 
+                                workerId: worker._id,
+                                ...(effectiveSubdomain && effectiveSubdomain !== 'main' ? { subdomain: effectiveSubdomain } : {})
+                            };
+                            if (startDate && endDate) {
+                                query.date = { $gte: startDate, $lte: endDate };
+                            }
+                            const dailyTopics = await DailyTopic.find(query).sort({ date: -1 }).limit(10).lean();
+                            if (dailyTopics && dailyTopics.length > 0) {
+                                rawTopics = dailyTopics.map(t => t.topic);
+                                log.info('DIAGNOSTIC_DAILY_TOPIC_LOOKUP', {
+                                    batchId: jobId,
+                                    workerId: workerIdStr,
+                                    queriedCount: dailyTopics.length,
+                                    reasonCode: 'TOPICS_FOUND_IN_PERIOD'
+                                });
+                            } else if (startDate && endDate && (jobData.allowHistoricalFallback === true || jobData.historicalFallback === true)) {
+                                // Explicit historical fallback ONLY if admin chose it
+                                const fallbackQuery = { 
+                                    workerId: worker._id,
+                                    ...(effectiveSubdomain && effectiveSubdomain !== 'main' ? { subdomain: effectiveSubdomain } : {})
+                                };
+                                const recentTopics = await DailyTopic.find(fallbackQuery).sort({ date: -1 }).limit(10).lean();
+                                if (recentTopics && recentTopics.length > 0) {
+                                    rawTopics = recentTopics.map(t => t.topic);
+                                    log.info('DIAGNOSTIC_DAILY_TOPIC_LOOKUP', {
+                                        batchId: jobId,
+                                        workerId: workerIdStr,
+                                        queriedCount: recentTopics.length,
+                                        reasonCode: 'EXPLICIT_HISTORICAL_FALLBACK'
+                                    });
+                                }
+                            }
+                        } catch (topicErr) {
+                            log.warn('Could not query DailyTopic:', topicErr.message);
                         }
                     }
-                    
-                    topicsToUse = [...new Set(topicsToUse)].filter(Boolean);
+
+                    if (rawTopics.length === 0) {
+                        const topicQuery = DailyTopic.findOne({ 
+                            workerId: worker._id,
+                            ...(effectiveSubdomain && effectiveSubdomain !== 'main' ? { subdomain: effectiveSubdomain } : {})
+                        });
+                        const hasAnyTopics = typeof topicQuery?.lean === 'function' ? await topicQuery.lean() : await topicQuery;
+                        const reasonCode = (startDate && endDate && hasAnyTopics) ? 'TOPICS_NOT_FOUND_FOR_PERIOD' : 'NO_TOPICS_RECORDED';
+                        const failureReason = (startDate && endDate && hasAnyTopics) ? 'Topics not found for the selected period' : 'No topics recorded';
+                        log.warn('DIAGNOSTIC_WORKER_SKIPPED', {
+                            batchId: jobId,
+                            workerId: workerIdStr,
+                            reasonCode,
+                            queriedCount: 0
+                        });
+                        taskResult = { workerId, workerName: worker.name, success: false, reason: failureReason, reasonCode };
+                    } else {
+                        for (const rawTopic of rawTopics) {
+                            if (typeof rawTopic === 'string' && rawTopic.includes(',')) {
+                                const splitTopics = rawTopic.split(',').map(t => t.trim()).filter(Boolean);
+                                topicsToUse.push(...splitTopics);
+                            } else if (rawTopic && typeof rawTopic === 'string') {
+                                topicsToUse.push(rawTopic.trim());
+                            }
+                        }
+                        topicsToUse = [...new Set(topicsToUse)].filter(Boolean);
+                    }
                 }
 
-                if (topicsToUse.length === 0) {
-                    log.warn(`Skipping ${worker.name}: No topics found.`);
-                    taskResult = { workerId, workerName: worker.name, success: false, reason: 'No topics' };
-                    return;
+                if (!taskResult && topicsToUse.length === 0) {
+                    log.warn('DIAGNOSTIC_WORKER_SKIPPED', {
+                        batchId: jobId,
+                        workerId: String(workerId),
+                        reasonCode: 'NO_TOPICS_FOUND',
+                        queriedCount: 0
+                    });
+                    taskResult = { workerId, workerName: worker.name, success: false, reason: 'No topics found', reasonCode: 'NO_TOPICS_FOUND' };
                 }
 
+                if (!taskResult && topicsToUse.length > 0) {
                 const combinedTopicString = topicsToUse.join(', ');
                 const targetQuestions = parseInt(numQuestions);
                 
@@ -414,32 +733,36 @@ const processThreeSetQuestionGeneration = async (jobData, jobId) => {
                 let threeSets = sharedThreeSets;
                 if (!threeSets) {
                     try {
-                        threeSets = await generateThreeUPSCSets(topicsToUse, targetQuestions, difficulty, 1, subdomain);
+                        threeSets = await openai.generateThreeUPSCSets(topicsToUse, targetQuestions, difficulty, 1, subdomain);
                     } catch (error) {
                         log.error(`Failed to generate three question sets:`, error.message);
-                        taskResult = { workerId, workerName: worker.name, success: false, reason: error.message || 'AI failed to generate question sets' };
-                        return;
+                        taskResult = { workerId, workerName: worker.name, success: false, reason: error.message || 'AI failed to generate question sets', reasonCode: 'AI_ZERO_QUESTIONS' };
                     }
                 }
                 
-                // Select the appropriate set for this worker
-                const selectedSet = threeSets[setForWorker] || [];
-                
-                if (selectedSet.length === 0) {
-                    taskResult = { workerId, workerName: worker.name, success: false, reason: 'No questions generated for set' };
-                    return;
-                }
+                if (!taskResult) {
+                    // Select the appropriate set for this worker
+                    const selectedSet = (threeSets && threeSets[setForWorker]) || [];
+                    
+                    if (selectedSet.length === 0) {
+                        taskResult = { workerId, workerName: worker.name, success: false, reason: 'No questions generated for set', reasonCode: 'AI_ZERO_QUESTIONS' };
+                    } else {
+                        // Deterministically validate questions for relevance and structure
+                        const { validQuestions } = validateAndFilterQuestions(selectedSet, combinedTopicString);
+                        const questionsToProcess = validQuestions.length > 0 ? validQuestions : selectedSet;
 
-
-                const questionsToSave = selectedSet.map(q => {
+                const questionsToSave = questionsToProcess.map(q => {
                     // Clean options by removing internal letters like (a), (b), (c), (d)
                     const cleanedOptions = q.options.map(option => {
                         // Remove patterns like "(a) ", "(b) ", etc. from the beginning of options
                         return option.replace(/^\([a-d]\)\s*/i, '').trim();
                     });
                     
-                    // Also clean the correctAnswer
-                    const cleanedCorrectAnswer = q.correctAnswer.replace(/^\([a-d]\)\s*/i, '').trim();
+                    // Also clean the correctAnswer safely whether string or number
+                    const rawCorrectAnswer = typeof q.correctAnswer === 'number'
+                        ? (cleanedOptions[q.correctAnswer] || String(q.correctAnswer))
+                        : String(q.correctAnswer || '');
+                    const cleanedCorrectAnswer = rawCorrectAnswer.replace(/^\([a-d]\)\s*/i, '').trim();
                     
                     // Programmatically shuffle options to guarantee randomness
                     const shuffledOptions = [...cleanedOptions];
@@ -453,6 +776,9 @@ const processThreeSetQuestionGeneration = async (jobData, jobId) => {
                     );
                     
                     return {
+                        _id: new mongoose.Types.ObjectId(),
+                        batchId: jobId,
+                        subdomain: effectiveSubdomain,
                         worker: worker._id,
                         topic: combinedTopicString,
                         questionText: q.questionText || q.question,
@@ -468,14 +794,54 @@ const processThreeSetQuestionGeneration = async (jobData, jobId) => {
                     };
                 }).filter(Boolean);
 
-                // SUPER OPTIMIZATION: Use bulk insert for better database performance
-                if (questionsToSave.length > 0) {
-                    await Question.insertMany(questionsToSave, { 
-                        session,
-                        ordered: false // Allow parallel insertion
-                    });
-                }
+            // SUPER OPTIMIZATION: Use bulk insert for better database performance
+            // Only wrap database persistence in transaction, keeping external AI calls outside
+            if (questionsToSave.length > 0) {
+                await runWithOptionalTransaction(session, async (activeSession) => {
+                    try {
+                        await Question.insertMany(questionsToSave, activeSession ? { 
+                            session: activeSession,
+                            ordered: false // Allow parallel insertion in transaction
+                        } : { ordered: true });
+                    } catch (insertErr) {
+                        if (!activeSession) {
+                            // On standalone MongoDB, transactions cannot rollback automatically.
+                            // Clean up any partially inserted questions from this batch to prevent orphan records.
+                            try {
+                                const questionIds = questionsToSave.map(q => q._id).filter(Boolean);
+                                if (questionIds.length > 0) {
+                                    await Question.deleteMany({ _id: { $in: questionIds } });
+                                }
+                            } catch (cleanupErr) {
+                                log.warn('Could not clean up partial writes on standalone MongoDB:', cleanupErr.message);
+                            }
+                        }
+                        throw insertErr;
+                    }
+                });
+            }
 
+            if (questionsToSave.length === 0) {
+                log.warn('DIAGNOSTIC_PERSISTENCE', {
+                    batchId: jobId,
+                    workerId: String(workerId),
+                    persistedQuestionsCount: 0,
+                    reasonCode: 'ZERO_QUESTIONS_PERSISTED'
+                });
+                taskResult = {
+                    workerId,
+                    workerName: worker.name,
+                    success: false,
+                    reason: `No valid questions could be generated or persisted for topics: "${combinedTopicString}".`,
+                    reasonCode: 'ZERO_QUESTIONS_PERSISTED'
+                };
+            } else {
+                log.info('DIAGNOSTIC_PERSISTENCE', {
+                    batchId: jobId,
+                    workerId: String(workerId),
+                    persistedQuestionsCount: questionsToSave.length,
+                    reasonCode: 'QUESTIONS_PERSISTED'
+                });
                 taskResult = { 
                     workerId, 
                     workerName: worker.name, 
@@ -483,12 +849,15 @@ const processThreeSetQuestionGeneration = async (jobData, jobId) => {
                     questionsGenerated: questionsToSave.length,
                     targetQuestions: targetQuestions,
                     topics: combinedTopicString,
-                    questionSet: setForWorker
+                    questionSet: setForWorker,
+                    reasonCode: 'GENERATION_SUCCESS'
                 };
-                
-                // Track total questions for progress reporting
                 totalQuestionsGenerated += questionsToSave.length;
-            });
+            }
+                    }
+                }
+                }
+            }
         } catch (error) {
             const workerName = workerMap.get(workerId)?.name || 'Unknown';
             log.error(`Transaction failed for worker ${workerName}:`, error.message);
@@ -513,15 +882,40 @@ const processThreeSetQuestionGeneration = async (jobData, jobId) => {
     const successfulWorkers = results.filter(r => r && r.success);
     const failedWorkers = results.filter(r => r && !r.success);
 
+    const hasSuccesses = successfulWorkers.length > 0;
+    const hasFailures = failedWorkers.length > 0;
+
+    let finalState = 'completed';
+    let primaryReason = null;
+
+    if (!hasSuccesses || totalQuestionsGenerated === 0) {
+        finalState = 'failed';
+        primaryReason = failedWorkers.length > 0
+            ? failedWorkers.map(f => `${f.workerName || 'Worker'}: ${f.reason || 'Failed to generate questions'}`).join('; ')
+            : 'Zero questions were generated or persisted.';
+    } else if (hasFailures) {
+        finalState = 'partial_failure';
+        primaryReason = `Generated questions for ${successfulWorkers.length} worker(s), but failed for: ${failedWorkers.map(f => f.workerName).join(', ')}`;
+    }
+
     const returnValue = {
-        success: true,
+        success: hasSuccesses && totalQuestionsGenerated > 0,
         results: successfulWorkers,
         failedWorkers,
-        totalQuestionsGenerated
+        totalQuestionsGenerated,
+        state: finalState,
+        reason: primaryReason
     };
 
-    jobManager.completeJob(jobId, returnValue);
+    if (finalState === 'failed') {
+        jobManager.failJob(jobId, primaryReason, returnValue);
+    } else if (finalState === 'partial_failure') {
+        jobManager.partialFailJob(jobId, primaryReason, returnValue);
+    } else {
+        jobManager.completeJob(jobId, returnValue);
+    }
+
     return returnValue;
 };
 
-module.exports = { processQuestionGeneration, processThreeSetQuestionGeneration };
+module.exports = { processQuestionGeneration, processThreeSetQuestionGeneration, runWithOptionalTransaction };

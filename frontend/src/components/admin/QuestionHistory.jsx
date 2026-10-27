@@ -3,6 +3,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import api from '../../services/api';
 import { getWorkers } from '../../services/workerService';
 import appContext from '../../context/AppContext';
+import { AuthContext } from '../../context/AuthContext';
 import Button from '../common/Button';
 import Table from '../common/Table';
 import Card from '../common/Card';
@@ -15,6 +16,8 @@ import CustomDatePicker from '../common/CustomDatePicker';
 
 const QuestionHistory = () => {
     const { subdomain } = useContext(appContext);
+    const { user } = useContext(AuthContext);
+    const effectiveSubdomain = (subdomain && subdomain !== 'main') ? subdomain : (user?.subdomain || subdomain);
     const [questions, setQuestions] = useState([]);
     const [workers, setWorkers] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -28,22 +31,15 @@ const QuestionHistory = () => {
 
     useEffect(() => {
         fetchWorkers();
-
-    }, []);
+    }, [effectiveSubdomain]);
 
     useEffect(() => {
-        // Only fetch questions if at least one filter is applied
-        if (filters.workerId || filters.topic || filters.date) {
-            fetchQuestions();
-        } else {
-            // If no filters, clear questions
-            setQuestions([]);
-        }
+        fetchQuestions();
     }, [filters]);
 
     const fetchWorkers = async () => {
         try {
-            const workersData = await getWorkers({ subdomain });
+            const workersData = await getWorkers({ subdomain: effectiveSubdomain });
             setWorkers(workersData || []);
         } catch (error) {
             console.error('Error fetching workers:', error);

@@ -17,9 +17,14 @@ import { getTestDetails } from '../../services/testService';
 import CustomDatePicker from '../common/CustomDatePicker';
 
 const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test state changes
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
     const [step, setStep] = useState('dashboard'); // 'dashboard', 'test', 'result', 'scoreboard'
     const [availableTests, setAvailableTests] = useState([]);
+    const [testStatus, setTestStatus] = useState({
+        state: 'initial', // 'initial', 'available', 'already_completed', 'no_topics_recorded', 'topics_not_found_for_period', 'generation_in_progress', 'generation_failed', 'questions_available_not_returned', 'no_questions', 'auth_error'
+        message: '',
+        reason: ''
+    });
     const [testHistory, setTestHistory] = useState([]);
     const [filteredTestHistory, setFilteredTestHistory] = useState([]);
     const [currentTest, setCurrentTest] = useState(null);
@@ -32,6 +37,7 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
     const [showWarning, setShowWarning] = useState(false);
     const [testResults, setTestResults] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [testInitializing, setTestInitializing] = useState(false);
     const [activeTab, setActiveTab] = useState('available'); // 'available', 'history'
     const [scoreboard, setScoreboard] = useState([]);
     const [scoreboardLoading, setScoreboardLoading] = useState(false);
@@ -51,9 +57,11 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
     const [testReviewPage, setTestReviewPage] = useState(1); // For pagination in test review
 
     useEffect(() => {
-        fetchAvailableTests();
-        fetchTestHistory();
-    }, []);
+        if (user && (user._id || user.id)) {
+            fetchAvailableTests();
+            fetchTestHistory();
+        }
+    }, [user]);
 
     useEffect(() => {
         if (selectedDate) {
@@ -166,33 +174,122 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
     const fetchAvailableTests = async () => {
         try {
             setLoading(true);
-            // Debug log to check user object
-            console.log('User object:', user);
-            console.log('User ID:', user._id);
-            console.log('User type:', typeof user._id);
-            
-            // Ensure we're using the correct user ID
-            const userId = user._id || user.id;
+            const userId = user?._id || user?.id;
             if (!userId) {
-                throw new Error('User ID not found');
+                setTestStatus({
+                    state: 'auth_error',
+                    message: 'User authentication details not found. Please log in again.',
+                    reason: 'auth_missing'
+                });
+                setAvailableTests([]);
+                return;
             }
             
-            console.log('Making request with userId:', userId);
-            const response = await api.get(`/test/questions/${userId}`);
-            console.log('Response received:', response.data);
-            setAvailableTests([response.data]);
+            const response = await api.get(`/test/available/${userId}`);
+            const batches = Array.isArray(response.data) ? response.data : [];
+
+            if (batches.length > 0) {
+                setAvailableTests(batches);
+                setTestStatus({
+                    state: 'available',
+                    message: `${batches.length} test${batches.length > 1 ? 's' : ''} available`,
+                    reason: 'tests_available'
+                });
+            } else {
+                setAvailableTests([]);
+                // Check if worker has specific non-available reason (e.g. no topics recorded or already completed)
+                try {
+                    await api.get(`/test/questions/${userId}`);
+                } catch (subErr) {
+                    throw subErr;
+                }
+                setTestStatus({
+                    state: 'no_questions',
+                    message: 'No tests have been assigned to you yet. Please check back later or contact your administrator.',
+                    reason: 'no_questions'
+                });
+            }
         } catch (error) {
             console.error('Error fetching available tests:', error);
-            // Show a more user-friendly error message
-            if (error.response && error.response.status === 403) {
-                console.error('Access denied - check if you are authorized to access this resource');
-                console.error('Response data:', error.response.data);
-            } else if (error.response && error.response.status === 401) {
-                console.error('Authentication required - please log in again');
-            } else {
-                console.error('Other error:', error.message);
-            }
             setAvailableTests([]);
+            const status = error.response?.status;
+            const data = error.response?.data;
+            const reason = data?.reason;
+            const message = data?.message;
+
+            if (status === 403 && reason === 'already_completed') {
+                setTestStatus({
+                    state: 'already_completed',
+                    message: message || 'You have already completed the test for your latest topics.',
+                    reason: 'already_completed'
+                });
+            } else if (reason === 'all_tests_completed') {
+                setTestStatus({
+                    state: 'all_tests_completed',
+                    message: message || 'All assigned tests have been completed. Please contact your administrator if a new test needs to be assigned.',
+                    reason: 'all_tests_completed'
+                });
+            } else if (status === 404 && reason === 'no_topics_recorded') {
+                setTestStatus({
+                    state: 'no_topics_recorded',
+                    message: message || 'No daily topics recorded yet. Please submit your daily topics before taking a test.',
+                    reason: 'no_topics_recorded'
+                });
+            } else if (status === 404 && reason === 'topics_not_found_for_period') {
+                setTestStatus({
+                    state: 'topics_not_found_for_period',
+                    message: message || 'Topics were recorded, but no test questions were found for the selected period.',
+                    reason: 'topics_not_found_for_period'
+                });
+            } else if (status === 404 && reason === 'generation_in_progress') {
+                setTestStatus({
+                    state: 'generation_in_progress',
+                    message: message || 'Question generation is currently in progress. Please check back shortly.',
+                    reason: 'generation_in_progress'
+                });
+            } else if (status === 404 && reason === 'generation_failed') {
+                setTestStatus({
+                    state: 'generation_failed',
+                    message: message || 'Question generation encountered an error. Please contact your administrator.',
+                    reason: 'generation_failed'
+                });
+            } else if (status === 404 && reason === 'questions_available_not_returned') {
+                setTestStatus({
+                    state: 'questions_available_not_returned',
+                    message: message || 'Questions are recorded for your account, but could not be returned for this batch.',
+                    reason: 'questions_available_not_returned'
+                });
+            } else if (status === 401) {
+                setTestStatus({
+                    state: 'auth_error',
+                    message: 'Authentication session expired. Please log in again.',
+                    reason: 'unauthorized'
+                });
+            } else if (status === 400) {
+                setTestStatus({
+                    state: 'invalid_request',
+                    message: message || 'Invalid test or employee identification.',
+                    reason: reason || 'invalid_request'
+                });
+            } else if (status === 403) {
+                setTestStatus({
+                    state: 'access_denied',
+                    message: message || 'Access denied: You do not have permission to view these test questions.',
+                    reason: reason || 'access_denied'
+                });
+            } else if (status === 500) {
+                setTestStatus({
+                    state: 'server_error',
+                    message: message || 'A server error occurred while retrieving test questions.',
+                    reason: 'server_error'
+                });
+            } else {
+                setTestStatus({
+                    state: 'no_questions',
+                    message: message || 'No tests have been assigned to you yet. Please check back later or contact your administrator.',
+                    reason: reason || 'no_questions'
+                });
+            }
         } finally {
             setLoading(false);
         }
@@ -297,16 +394,32 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
     }, [step, onTestStateChange]);
 
     const startTest = async (test) => {
+        if (loading || testInitializing) return;
         try {
+            setTestInitializing(true);
             setLoading(true);
-            setCurrentTest(test);
-            setCurrentQuestionIndex(0);
-            setAnswers(new Array(test.questions.length).fill(null));
-            setTimeLeft(test.durationPerQuestion);
+
+            let fullTestData = test;
+            // Fetch questions for this exact batch if not already loaded
+            if (!fullTestData?.questions || !Array.isArray(fullTestData.questions) || fullTestData.questions.length === 0) {
+                const userId = user?._id || user?.id;
+                const batchParam = test?.batchId ? `?batchId=${encodeURIComponent(test.batchId)}` : '';
+                const questionRes = await api.get(`/test/questions/${userId}${batchParam}`);
+                fullTestData = questionRes.data;
+            }
+
+            if (!fullTestData || !Array.isArray(fullTestData.questions) || fullTestData.questions.length === 0) {
+                alert('No questions found for this test batch. Please contact your administrator.');
+                return;
+            }
+
+            setCurrentTest(fullTestData);
+            setCurrentQuestionIndex(fullTestData.currentQuestionIndex || 0);
+            setAnswers(new Array(fullTestData.questions.length).fill(null));
+            setTimeLeft(fullTestData.durationPerQuestion || 15);
             
             // Ensure totalTestDuration is in seconds (convert if needed)
-            const totalDuration = parseInt(test.totalTestDuration);
-            // If it's a small value like 10, it might be in minutes - convert to seconds
+            const totalDuration = parseInt(fullTestData.totalTestDuration);
             if (totalDuration < 100) {
                 setTotalTimeLeft(totalDuration * 60);
                 console.log(`Converting ${totalDuration} minutes to ${totalDuration * 60} seconds for total time`);
@@ -327,10 +440,11 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
             }
         } catch (error) {
             console.error('Error starting test:', error);
-            // Show a more user-friendly message instead of an alert
-            alert('Unable to start test in fullscreen mode. Please ensure your browser supports fullscreen.');
+            const errorMsg = error.response?.data?.message || 'Unable to start test in fullscreen mode. Please ensure your browser supports fullscreen.';
+            alert(errorMsg);
         } finally {
             setLoading(false);
+            setTestInitializing(false);
         }
     };
 
@@ -1205,71 +1319,284 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                     {/* Available Tests Tab */}
                     {activeTab === 'available' && (
                         <div>
-                            {loading ? (
+                            {(loading || authLoading) ? (
                                 <div className="flex justify-center py-12">
                                     <Spinner size="lg" />
                                 </div>
                             ) : availableTests.length > 0 ? (
                                 <div className="space-y-4">
-                                    {availableTests.map((test, index) => (
-                                        <div key={index} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
-                                            <div className="flex justify-between items-start mb-4">
-                                                <div className="flex-1">
-                                                    <div className="flex items-center mb-2">
-                                                        <h3 className="text-xl font-semibold text-gray-800 mr-3">
-                                                            {test.latestTopic}
-                                                        </h3>
-                                                        {test.isDefaultTopic && (
-                                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                                                General Topics
-                                                            </span>
-                                                        )}
+                                    {availableTests.map((test, index) => {
+                                        const isInProgress = test.status === 'in-progress' || test.isResumed;
+                                        const topicDisplay = test.latestTopic || test.topic || 'General Assessment';
+                                        const totalQ = test.questionCount || test.questions?.length || 0;
+                                        const duration = test.durationPerQuestion || 15;
+                                        const totalDuration = test.totalTestDuration || 600;
+
+                                        return (
+                                            <div key={test.batchId || index} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow bg-white">
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center mb-2 flex-wrap gap-2">
+                                                            <h3 className="text-xl font-semibold text-gray-800 mr-2">
+                                                                {topicDisplay}
+                                                            </h3>
+                                                            {isInProgress && (
+                                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                                                    In Progress
+                                                                </span>
+                                                            )}
+                                                            {test.isDefaultTopic && (
+                                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                                    General Topics
+                                                                </span>
+                                                            )}
+                                                            {test.createdAt && (
+                                                                <span className="text-xs text-gray-500">
+                                                                    Assigned: {new Date(test.createdAt).toLocaleDateString()}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
+                                                            <div className="flex items-center">
+                                                                <FaBook className="mr-2 text-blue-500" />
+                                                                <span>{totalQ} Questions</span>
+                                                            </div>
+                                                            <div className="flex items-center">
+                                                                <FaClock className="mr-2 text-green-500" />
+                                                                <span>{duration}s per question</span>
+                                                            </div>
+                                                            <div className="flex items-center">
+                                                                <FaClock className="mr-2 text-orange-500" />
+                                                                <span>
+                                                                    {isInProgress ? 'Remaining: ' : 'Total: '}
+                                                                    {totalDuration < 100 
+                                                                        ? `${totalDuration} min (${totalDuration * 60} sec)` 
+                                                                        : formatTime(totalDuration)}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center">
+                                                                <FaAward className="mr-2 text-purple-500" />
+                                                                <span>{isInProgress ? 'Resume Attempt' : 'Test Assessment'}</span>
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
-                                                        <div className="flex items-center">
-                                                            <FaBook className="mr-2 text-blue-500" />
-                                                            <span>{test.questions?.length || 0} Questions</span>
-                                                        </div>
-                                                        <div className="flex items-center">
-                                                            <FaClock className="mr-2 text-green-500" />
-                                                            <span>{test.durationPerQuestion}s per question</span>
-                                                        </div>
-                                                        <div className="flex items-center">
-                                                            <FaClock className="mr-2 text-orange-500" />
-                                                            <span>Total: {test.totalTestDuration < 100 
-                                                                ? `${test.totalTestDuration} min (${test.totalTestDuration * 60} sec)` 
-                                                                : formatTime(test.totalTestDuration)}</span>
-                                                        </div>
-                                                        <div className="flex items-center">
-                                                            <FaAward className="mr-2 text-purple-500" />
-                                                            <span>Test Assessment</span>
-                                                        </div>
+                                                    <div className="ml-4">
+                                                        <Button
+                                                            onClick={() => startTest(test)}
+                                                            disabled={loading || testInitializing}
+                                                            variant={isInProgress ? "secondary" : "primary"}
+                                                            size="lg"
+                                                            className="min-w-32"
+                                                        >
+                                                            <FaPlay className="mr-2" />
+                                                            {isInProgress ? 'Resume Test' : 'Start Test'}
+                                                        </Button>
                                                     </div>
                                                 </div>
-                                                <div className="ml-4">
-                                                    <Button
-                                                        onClick={() => startTest(test)}
-                                                        disabled={loading}
-                                                        variant="primary"
-                                                        size="lg"
-                                                        className="min-w-32"
-                                                    >
-                                                        <FaPlay className="mr-2" />
-                                                        Start Test
-                                                    </Button>
-                                                </div>
+                                                
+                                                {test.notification && (
+                                                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                                        <p className="text-blue-800 text-sm flex items-center">
+                                                            <FaBook className="mr-2" />
+                                                            {test.notification}
+                                                        </p>
+                                                    </div>
+                                                )}
                                             </div>
-                                            
-                                            {test.notification && (
-                                                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                                    <p className="text-blue-800 text-sm flex items-center">
-                                                        <FaBook className="mr-2" />
-                                                        {test.notification}
-                                                    </p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
+                                </div>
+                            ) : testStatus.state === 'all_tests_completed' ? (
+                                <div className="text-center py-12 bg-white rounded-lg border border-gray-200 p-8 shadow-sm">
+                                    <div className="mb-4">
+                                        <FaCheckCircle className="mx-auto text-blue-500 text-6xl mb-4" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-2">All Assigned Tests Completed</h3>
+                                    <p className="text-gray-600 max-w-lg mx-auto mb-6">
+                                        {testStatus.message || "You have completed all tests currently assigned to you. When a new test is assigned by your administrator, it will appear here."}
+                                    </p>
+                                    <Button
+                                        onClick={() => setActiveTab('history')}
+                                        variant="primary"
+                                        className="inline-flex items-center"
+                                    >
+                                        <FaHistory className="mr-2" />
+                                        View Test History & Scores
+                                    </Button>
+                                </div>
+                            ) : testStatus.state === 'already_completed' ? (
+                                <div className="text-center py-12 bg-white rounded-lg border border-gray-200 p-8 shadow-sm">
+                                    <div className="mb-4">
+                                        <FaCheckCircle className="mx-auto text-green-500 text-6xl mb-4" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-2">Test Already Completed</h3>
+                                    <p className="text-gray-600 max-w-lg mx-auto mb-6">
+                                        {testStatus.message || "You have already completed the test for your latest topics."}
+                                    </p>
+                                    <Button
+                                        onClick={() => setActiveTab('history')}
+                                        variant="primary"
+                                        className="inline-flex items-center"
+                                    >
+                                        <FaHistory className="mr-2" />
+                                        View Test History & Scores
+                                    </Button>
+                                </div>
+                            ) : testStatus.state === 'no_topics_recorded' ? (
+                                <div className="text-center py-12 bg-white rounded-lg border border-amber-200 bg-amber-50/30 p-8 shadow-sm">
+                                    <div className="mb-4">
+                                        <FaBook className="mx-auto text-amber-500 text-6xl mb-4" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-2">No Daily Topics Recorded</h3>
+                                    <p className="text-gray-600 max-w-lg mx-auto mb-6">
+                                        You have not recorded any daily topics yet. Test questions are generated dynamically from the topics you study each day.
+                                    </p>
+                                    <Button
+                                        onClick={() => { window.location.href = '/worker/daily-topics'; }}
+                                        variant="primary"
+                                        className="inline-flex items-center"
+                                    >
+                                        <FaBook className="mr-2" />
+                                        Go to Daily Topics
+                                    </Button>
+                                </div>
+                            ) : testStatus.state === 'topics_not_found_for_period' ? (
+                                <div className="text-center py-12 bg-white rounded-lg border border-blue-200 bg-blue-50/30 p-8 shadow-sm">
+                                    <div className="mb-4">
+                                        <FaCalendarAlt className="mx-auto text-blue-500 text-6xl mb-4" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-2">Topics Not Found for Test Period</h3>
+                                    <p className="text-gray-600 max-w-lg mx-auto mb-6">
+                                        {testStatus.message || "No topics were recorded for the specific date period selected for this test batch. Please make sure your daily topics for this period are submitted."}
+                                    </p>
+                                    <Button
+                                        onClick={() => { window.location.href = '/worker/daily-topics'; }}
+                                        variant="primary"
+                                        className="inline-flex items-center"
+                                    >
+                                        <FaCalendarAlt className="mr-2" />
+                                        Submit Daily Topics
+                                    </Button>
+                                </div>
+                            ) : testStatus.state === 'generation_in_progress' ? (
+                                <div className="text-center py-12 bg-white rounded-lg border border-blue-200 p-8 shadow-sm">
+                                    <div className="mb-4">
+                                        <FaClock className="mx-auto text-blue-500 text-6xl mb-4 animate-spin" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-2">Questions Are Being Generated</h3>
+                                    <p className="text-gray-600 max-w-lg mx-auto mb-6">
+                                        Your test questions are currently being generated by the system. Please check back in a moment.
+                                    </p>
+                                    <Button
+                                        onClick={fetchAvailableTests}
+                                        variant="primary"
+                                        className="inline-flex items-center"
+                                    >
+                                        <FaPlay className="mr-2" />
+                                        Refresh Available Tests
+                                    </Button>
+                                </div>
+                            ) : testStatus.state === 'generation_failed' ? (
+                                <div className="text-center py-12 bg-white rounded-lg border border-red-200 bg-red-50/30 p-8 shadow-sm">
+                                    <div className="mb-4">
+                                        <FaTimesCircle className="mx-auto text-red-500 text-6xl mb-4" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-2">Question Generation Failed</h3>
+                                    <p className="text-gray-600 max-w-lg mx-auto mb-6">
+                                        An error occurred while generating questions. Please inform your administrator to regenerate test questions.
+                                    </p>
+                                    <Button
+                                        onClick={fetchAvailableTests}
+                                        variant="outline"
+                                        className="inline-flex items-center"
+                                    >
+                                        Check Again
+                                    </Button>
+                                </div>
+                            ) : testStatus.state === 'questions_available_not_returned' ? (
+                                <div className="text-center py-12 bg-white rounded-lg border border-purple-200 bg-purple-50/30 p-8 shadow-sm">
+                                    <div className="mb-4">
+                                        <FaAward className="mx-auto text-purple-500 text-6xl mb-4" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-2">Questions Awaiting Assignment</h3>
+                                    <p className="text-gray-600 max-w-lg mx-auto mb-6">
+                                        {testStatus.message || "Questions were generated for your account, but could not be returned for this batch. Please contact your administrator."}
+                                    </p>
+                                    <Button
+                                        onClick={fetchAvailableTests}
+                                        variant="outline"
+                                        className="inline-flex items-center"
+                                    >
+                                        Check Again
+                                    </Button>
+                                </div>
+                            ) : testStatus.state === 'auth_error' ? (
+                                <div className="text-center py-12 bg-white rounded-lg border border-red-200 p-8 shadow-sm">
+                                    <div className="mb-4">
+                                        <FaTimesCircle className="mx-auto text-red-500 text-6xl mb-4" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-2">Session Expired</h3>
+                                    <p className="text-gray-600 max-w-lg mx-auto mb-6">
+                                        {testStatus.message || "Authentication credentials missing or expired. Please log in again."}
+                                    </p>
+                                    <Button
+                                        onClick={() => { window.location.href = '/login'; }}
+                                        variant="primary"
+                                        className="inline-flex items-center"
+                                    >
+                                        Log In
+                                    </Button>
+                                </div>
+                            ) : testStatus.state === 'invalid_request' ? (
+                                <div className="text-center py-12 bg-white rounded-lg border border-amber-200 bg-amber-50/20 p-8 shadow-sm">
+                                    <div className="mb-4">
+                                        <FaTimesCircle className="mx-auto text-amber-500 text-6xl mb-4" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-2">Invalid Test Request</h3>
+                                    <p className="text-gray-600 max-w-lg mx-auto mb-6">
+                                        {testStatus.message || "Invalid test or employee identification provided."}
+                                    </p>
+                                    <Button
+                                        onClick={fetchAvailableTests}
+                                        variant="outline"
+                                        className="inline-flex items-center"
+                                    >
+                                        Try Again
+                                    </Button>
+                                </div>
+                            ) : testStatus.state === 'access_denied' ? (
+                                <div className="text-center py-12 bg-white rounded-lg border border-red-200 bg-red-50/20 p-8 shadow-sm">
+                                    <div className="mb-4">
+                                        <FaTimesCircle className="mx-auto text-red-600 text-6xl mb-4" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-2">Access Denied</h3>
+                                    <p className="text-gray-600 max-w-lg mx-auto mb-6">
+                                        {testStatus.message || "You do not have authorization to view this employee's test questions."}
+                                    </p>
+                                    <Button
+                                        onClick={fetchAvailableTests}
+                                        variant="outline"
+                                        className="inline-flex items-center"
+                                    >
+                                        Refresh
+                                    </Button>
+                                </div>
+                            ) : testStatus.state === 'server_error' ? (
+                                <div className="text-center py-12 bg-white rounded-lg border border-red-300 bg-red-50/30 p-8 shadow-sm">
+                                    <div className="mb-4">
+                                        <FaTimesCircle className="mx-auto text-red-600 text-6xl mb-4" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-2">Server Error</h3>
+                                    <p className="text-gray-600 max-w-lg mx-auto mb-6">
+                                        {testStatus.message || "An unexpected error occurred on the server while loading your test questions."}
+                                    </p>
+                                    <Button
+                                        onClick={fetchAvailableTests}
+                                        variant="outline"
+                                        className="inline-flex items-center"
+                                    >
+                                        Retry
+                                    </Button>
                                 </div>
                             ) : (
                                 <div className="text-center py-12">
@@ -1277,9 +1604,17 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                                         <FaBook className="mx-auto text-gray-300 text-6xl mb-4" />
                                     </div>
                                     <h3 className="text-lg font-medium text-gray-600 mb-2">No Tests Available</h3>
-                                    <p className="text-gray-500 max-w-md mx-auto">
-                                        No tests have been assigned to you yet. Please check back later or contact your administrator.
+                                    <p className="text-gray-500 max-w-md mx-auto mb-4">
+                                        {testStatus.message || "No tests have been assigned to you yet. Please check back later or contact your administrator."}
                                     </p>
+                                    <Button
+                                        onClick={fetchAvailableTests}
+                                        variant="outline"
+                                        size="sm"
+                                        className="inline-flex items-center"
+                                    >
+                                        Refresh
+                                    </Button>
                                 </div>
                             )}
                             

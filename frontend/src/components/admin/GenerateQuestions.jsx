@@ -35,8 +35,29 @@ const ProgressIndicator = ({ progress, onCancel, selectedWorkers, numQuestions =
     questionsGenerated = progress.result.totalQuestionsGenerated || 0;
     
     // Calculate target questions based on selected workers and numQuestions
-    // This is more accurate than trying to parse from results
     targetQuestions = totalWorkers * (progress.result.results?.[0]?.targetQuestions || numQuestions);
+  }
+
+  const isFailed = progress.state === 'failed' || (isFinished && questionsGenerated === 0);
+  const isPartial = progress.state === 'partial_failure' || (isFinished && !isFailed && failedWorkers > 0 && completedWorkers > 0);
+  const isSuccess = isFinished && !isFailed && !isPartial && questionsGenerated > 0;
+
+  let borderColor = "border-blue-500";
+  let title = "Generation In Progress";
+  let StatusIcon = <Loader2 className="animate-spin text-blue-600" size={24} />;
+
+  if (isFailed) {
+    borderColor = "border-red-500";
+    title = "Generation Failed";
+    StatusIcon = <AlertCircle className="text-red-600" size={24} />;
+  } else if (isPartial) {
+    borderColor = "border-amber-500";
+    title = "Generation Completed with Issues";
+    StatusIcon = <AlertTriangle className="text-amber-600" size={24} />;
+  } else if (isSuccess) {
+    borderColor = "border-green-500";
+    title = "Generation Complete!";
+    StatusIcon = <CheckCircle className="text-green-600" size={24} />;
   }
 
   return (
@@ -44,18 +65,14 @@ const ProgressIndicator = ({ progress, onCancel, selectedWorkers, numQuestions =
       initial={{ opacity: 0, y: 50 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 50 }}
-      className="fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl p-6 z-50 w-full max-w-md border-t-4 border-green-500"
+      className={`fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl p-6 z-50 w-full max-w-md border-t-4 ${borderColor}`}
     >
       <div className="flex items-center justify-between mb-4">
         <h4 className="font-bold text-gray-800 text-lg">
-          {isFinished ? 'Generation Complete!' : 'Generation In Progress'}
+          {title}
         </h4>
         <div className="flex items-center space-x-2">
-          {isFinished ? (
-            <CheckCircle className="text-green-600" size={24} />
-          ) : (
-            <Loader2 className="animate-spin text-green-600" size={24} />
-          )}
+          {StatusIcon}
           <button 
             onClick={onCancel}
             className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -69,11 +86,18 @@ const ProgressIndicator = ({ progress, onCancel, selectedWorkers, numQuestions =
         <div>
           <div className="flex justify-between text-sm font-medium text-gray-600 mb-1">
             <span>Overall Progress</span>
-            <span className="font-semibold text-green-700">{Math.round(progress.percentage)}%</span>
+            <span className={`font-semibold ${isFailed ? 'text-red-700' : isPartial ? 'text-amber-700' : 'text-green-700'}`}>
+              {Math.round(progress.percentage)}%
+            </span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
             <div
-              className="bg-gradient-to-r from-green-400 to-emerald-500 h-full rounded-full transition-all duration-500"
+              className={`h-full rounded-full transition-all duration-500 ${
+                isFailed ? 'bg-red-500' :
+                isPartial ? 'bg-amber-500' :
+                isSuccess ? 'bg-gradient-to-r from-green-400 to-emerald-500' :
+                'bg-gradient-to-r from-blue-400 to-emerald-500'
+              }`}
               style={{ width: `${progress.percentage}%` }}
             ></div>
           </div>
@@ -102,6 +126,19 @@ const ProgressIndicator = ({ progress, onCancel, selectedWorkers, numQuestions =
         </div>
       </div>
 
+      {/* Show failure diagnostic */}
+      {isFailed && (
+        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+          <div className="font-semibold mb-1 flex items-center">
+            <AlertCircle size={14} className="mr-1 inline text-red-600" />
+            <span>Failure Diagnostic:</span>
+          </div>
+          <p>
+            {progress.reason || progress.result?.reason || progress.details?.failureReason || 'Zero questions were generated or persisted. Please verify that employees have recorded daily topics.'}
+          </p>
+        </div>
+      )}
+
       {/* Show recently completed workers */}
       {progress.details?.completedWorkers && progress.details.completedWorkers.length > 0 && (
         <div className="mt-3 max-h-32 overflow-y-auto">
@@ -115,7 +152,7 @@ const ProgressIndicator = ({ progress, onCancel, selectedWorkers, numQuestions =
         </div>
       )}
 
-      {failedWorkers > 0 && (
+      {failedWorkers > 0 && !isFailed && (
         <div className="mt-3 text-xs text-red-600 font-semibold">
           {failedWorkers} employee(s) encountered an issue.
         </div>
@@ -123,7 +160,7 @@ const ProgressIndicator = ({ progress, onCancel, selectedWorkers, numQuestions =
       
       <div className="flex justify-between mt-4">
         <p className="text-xs text-gray-500">
-          {isFinished ? 'Process finished. Closing in 5 seconds...' : 
+          {isFinished ? (isFailed ? 'Generation failed. Click close to dismiss.' : 'Process finished. Closing in 5 seconds...') : 
            'This is running in the background. You can navigate away from this page.'}
         </p>
         {progress.isGenerating && (
@@ -217,6 +254,7 @@ const GenerateQuestions = () => {
   const [showTopicDetails, setShowTopicDetails] = useState(false);
   const { subdomain } = useContext(appContext);
   const { user, isAdmin } = useContext(AuthContext);
+  const effectiveSubdomain = (subdomain && subdomain !== 'main') ? subdomain : (user?.subdomain || subdomain || 'default');
   const [generationProgress, setGenerationProgress] = useState({
     isGenerating: false,
     percentage: 0,
@@ -227,6 +265,7 @@ const GenerateQuestions = () => {
   const [isPolling, setIsPolling] = useState(false);
   const [questionFormat, setQuestionFormat] = useState('mcq'); // Add question format state here
   const [answerFeedback, setAnswerFeedback] = useState(true); // Add answer feedback state here
+  const [allowHistoricalFallback, setAllowHistoricalFallback] = useState(false); // Explicit admin choice; default false
   const cancelRef = useRef(false);
 
   const dropdownRef = useRef(null);
@@ -281,12 +320,19 @@ const GenerateQuestions = () => {
   // --- Effects (Original) ---
   useEffect(() => {
     fetchWorkers();
-    const now = new Date();
-    const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
-    const endOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + 6));
+    const today = new Date();
+    const day = today.getDay();
+    const startOfWeek = new Date(today.getFullYear(), today.getMonth(), today.getDate() - day);
+    const endOfWeek = new Date(today.getFullYear(), today.getMonth(), today.getDate() + (6 - day));
+    const formatLocalDate = (d) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const date = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${date}`;
+    };
     setDateRange({
-      startDate: startOfWeek.toISOString().split('T')[0],
-      endDate: endOfWeek.toISOString().split('T')[0]
+      startDate: formatLocalDate(startOfWeek),
+      endDate: formatLocalDate(endOfWeek)
     });
   }, []);
 
@@ -332,7 +378,7 @@ const GenerateQuestions = () => {
   const fetchWorkers = async () => {
     try {
       setLoading(true);
-      const workersData = await getWorkers({ subdomain });
+      const workersData = await getWorkers({ subdomain: effectiveSubdomain });
       // Ensure department information is properly handled
       const transformedWorkers = Array.isArray(workersData) ? workersData.map(worker => ({
         ...worker,
@@ -361,7 +407,7 @@ const GenerateQuestions = () => {
             workerId,
             startDate: dateRange.startDate,
             endDate: dateRange.endDate,
-            subdomain
+            subdomain: effectiveSubdomain
           });
           return { workerId, data };
         } catch (err) {
@@ -464,6 +510,10 @@ const GenerateQuestions = () => {
       setError('Please enter common topics.');
       return false;
     }
+    if (topicMode === 'individual' && loadingTopics) {
+      setError('Please wait for employee daily topics to finish loading.');
+      return false;
+    }
     if (!numQuestions || numQuestions < 1) {
       setError('Please enter a valid number of questions.');
       return false;
@@ -490,7 +540,7 @@ const GenerateQuestions = () => {
         topicMode,
         questionFormat, // Add question format to payload
         answerFeedback, // Add answer feedback to payload
-        subdomain, // Tenant subdomain for settings and AI rate limits
+        subdomain: effectiveSubdomain, // Tenant subdomain for settings and AI rate limits
         totalWorkers: selectedWorkers.length,
         totalQuestions: selectedWorkers.length * parseInt(numQuestions)
       };
@@ -501,6 +551,9 @@ const GenerateQuestions = () => {
         payload.topic = commonTopics;
         payload.commonTopics = commonTopics.split(',').map(t => t.trim()).filter(Boolean);
       } else {
+        payload.startDate = dateRange.startDate;
+        payload.endDate = dateRange.endDate;
+        payload.allowHistoricalFallback = allowHistoricalFallback;
         payload.individualTopics = {};
         selectedWorkers.forEach(workerId => {
           const dbTopics = individualTopics[workerId]?.topics || [];
@@ -563,44 +616,63 @@ const GenerateQuestions = () => {
         }
 
         const { state, progress, reason, returnValue, completedWorkers = [], failedWorkers = [], totalWorkers = 0 } = res.data;
+        const totalGen = returnValue?.totalQuestionsGenerated || 0;
+        const finalReason = reason || returnValue?.reason || (returnValue?.failedWorkers?.[0]?.reason);
         
         // Enhanced progress tracking with more detailed information
         const enhancedProgress = {
-          isGenerating: true,
+          isGenerating: state === 'queued' || state === 'processing',
           percentage: progress || 0,
           result: returnValue,
           state: state,
+          reason: finalReason,
           details: {
             completedWorkers: completedWorkers.length || returnValue?.results?.length || 0,
             failedWorkers: failedWorkers.length || returnValue?.failedWorkers?.length || 0,
             totalWorkers: totalWorkers || selectedWorkers.length,
-            recentlyCompleted: completedWorkers.slice(-3) // Last 3 completed workers
+            recentlyCompleted: completedWorkers.slice(-3),
+            failureReason: finalReason
           }
         };
         
         setGenerationProgress(enhancedProgress);
 
-        if (state === 'completed' || state === 'failed') {
+        if (state === 'completed' || state === 'failed' || state === 'partial_failure') {
           setIsPolling(false);
           setJobId(null);
+
+          const isActualSuccess = (state === 'completed' || state === 'partial_failure') && totalGen > 0;
+          const finalState = isActualSuccess ? state : 'failed';
+
           setGenerationProgress(prev => ({
             ...prev,
             isGenerating: false,
             percentage: 100,
             result: returnValue,
-            state: state
+            state: finalState,
+            reason: finalReason,
+            details: {
+              ...prev?.details,
+              completedWorkers: completedWorkers.length || returnValue?.results?.length || 0,
+              failedWorkers: failedWorkers.length || returnValue?.failedWorkers?.length || 0,
+              totalWorkers: totalWorkers || selectedWorkers.length,
+              failureReason: finalReason
+            }
           }));
           
-          if (state === 'completed') {
+          if (finalState === 'completed') {
             const failedCount = returnValue?.failedWorkers?.length || 0;
             if (failedCount > 0) {
                const failedNames = returnValue.failedWorkers.map(fw => fw.workerName).join(', ');
-               setMessage(`Generation completed, but failed for: ${failedNames}.`);
+               setMessage(`Generation completed with issues. Failed for: ${failedNames}.`);
             } else {
               setMessage('All questions generated successfully!');
             }
+          } else if (finalState === 'partial_failure') {
+            const failedNames = returnValue?.failedWorkers?.map(fw => fw.workerName).join(', ') || 'some employees';
+            setMessage(`Partial success: questions generated, but failed for: ${failedNames}.`);
           } else {
-            setError(`Job failed: ${reason || 'An unknown error occurred.'}`);
+            setError(`Generation failed: ${finalReason || 'Zero questions were generated or persisted. Please check employee daily topics.'}`);
           }
         }
       } catch (err) {
@@ -988,6 +1060,17 @@ const GenerateQuestions = () => {
                                     </>
                                 )}
                             </p>
+                            <div className="mt-3 pt-3 border-t border-blue-200">
+                                <label className="flex items-center text-xs text-blue-900 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={allowHistoricalFallback}
+                                        onChange={(e) => setAllowHistoricalFallback(e.target.checked)}
+                                        className="rounded border-blue-300 text-[#0d9488] focus:ring-[#0d9488] mr-2 h-4 w-4"
+                                    />
+                                    <span>Explicitly allow fallback to historical topics if an employee has no topics recorded in the selected period (default: disabled)</span>
+                                </label>
+                            </div>
                         </div>
                         {/* Individual Topics Display Area */}
                         {selectedWorkers.length > 0 && Object.keys(individualTopics).length > 0 && (

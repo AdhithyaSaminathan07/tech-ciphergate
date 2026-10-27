@@ -6,11 +6,15 @@ const {
     getScoreboard,
     getGlobalScoreboard,
     getIndividualScores,
-    getTestDetails
+    getTestDetails,
+    getAvailableTests
 } = require('../controllers/testController');
-const { protect, adminOnly } = require('../middleware/authMiddleware');
+const { protect, adminOnly, adminOrWorker } = require('../middleware/authMiddleware');
 
 const router = express.Router();
+
+// Available tests list
+router.get('/available/:workerId', protect, adminOrWorker, getAvailableTests);
 
 // Test submission routes
 router.post('/submit/:testAttemptId', protect, submitTest);

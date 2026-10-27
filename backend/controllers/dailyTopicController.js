@@ -2,12 +2,24 @@ const DailyTopic = require('../models/DailyTopic');
 const Worker = require('../models/Worker');
 const mongoose = require('mongoose');
 
+// Helper to resolve subdomain consistently from req.user
+const resolveSubdomain = (subdomain, user) => {
+  if (user?.subdomain && user.subdomain !== 'main') {
+    return user.subdomain;
+  }
+  if ((!subdomain || subdomain === 'main') && user?.subdomain) {
+    return user.subdomain;
+  }
+  return subdomain;
+};
+
 // @desc    Add a daily topic for a worker
 // @route   POST /api/topics
 // @access  Private/Worker
 const addDailyTopic = async (req, res) => {
   try {
-    const { workerId, date, topic, subdomain } = req.body;
+    let { workerId, date, topic, subdomain } = req.body;
+    subdomain = resolveSubdomain(subdomain, req.user);
 
     // Validation
     if (!workerId || !date || !topic || !subdomain) {
@@ -38,14 +50,14 @@ const addDailyTopic = async (req, res) => {
       });
     }
 
-    // Validate that the date is not in the future
-    const inputDate = new Date(date);
-    const today = new Date();
-    today.setHours(23, 59, 59, 999); // Set to end of today
+    // Validate that the date is within the global timezone window for "today" (UTC-12 to UTC+14)
+    const serverNow = new Date();
+    const minAllowed = new Date(serverNow.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const maxAllowed = new Date(serverNow.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     
-    if (inputDate > today) {
+    if (date < minAllowed || date > maxAllowed) {
       return res.status(400).json({
-        message: 'Cannot add topics for future dates'
+        message: 'You can only add a daily topic for today'
       });
     }
 
@@ -115,13 +127,15 @@ const addDailyTopic = async (req, res) => {
   }
 };
 
+
 // @desc    Get weekly topics for a worker
 // @route   GET /api/topics/weekly/:workerId
 // @access  Private/Admin and Worker
 const getWeeklyTopics = async (req, res) => {
   try {
     const { workerId } = req.params;
-    const { startDate, endDate, subdomain } = req.query;
+    let { startDate, endDate, subdomain } = req.query;
+    subdomain = resolveSubdomain(subdomain, req.user);
 
     // Validation
     if (!mongoose.Types.ObjectId.isValid(workerId)) {
@@ -214,7 +228,8 @@ const getWeeklyTopics = async (req, res) => {
 const getWorkerTopics = async (req, res) => {
   try {
     const { workerId } = req.params;
-    const { subdomain, limit = 30 } = req.query;
+    let { subdomain, limit = 30 } = req.query;
+    subdomain = resolveSubdomain(subdomain, req.user);
 
     // Validation
     if (!mongoose.Types.ObjectId.isValid(workerId)) {
@@ -274,7 +289,8 @@ const getWorkerTopics = async (req, res) => {
 const deleteDailyTopic = async (req, res) => {
   try {
     const { topicId } = req.params;
-    const { subdomain } = req.query;
+    let { subdomain } = req.query;
+    subdomain = resolveSubdomain(subdomain, req.user);
 
     // Validation
     if (!mongoose.Types.ObjectId.isValid(topicId)) {
@@ -331,7 +347,8 @@ const deleteDailyTopic = async (req, res) => {
 const getWeeklyTopicsAdmin = async (req, res) => {
   try {
     const { workerId } = req.params;
-    const { startDate, endDate, subdomain } = req.query;
+    let { startDate, endDate, subdomain } = req.query;
+    subdomain = resolveSubdomain(subdomain, req.user);
 
     // Validation
     if (!mongoose.Types.ObjectId.isValid(workerId)) {
@@ -369,10 +386,21 @@ const getWeeklyTopicsAdmin = async (req, res) => {
       });
     }
 
+    // Tenant check: tenant admin can only access workers in their own tenant
+    if (req.user.subdomain && req.user.subdomain !== 'main') {
+      if (worker.subdomain !== req.user.subdomain) {
+        return res.status(403).json({
+          message: 'Access denied: Worker belongs to a different tenant.'
+        });
+      }
+    }
+
+    const effectiveWorkerSubdomain = worker.subdomain || subdomain;
+
     // Fetch topics within date range
     const topics = await DailyTopic.find({
       workerId,
-      subdomain,
+      subdomain: effectiveWorkerSubdomain,
       date: {
         $gte: startDate,
         $lte: endDate
