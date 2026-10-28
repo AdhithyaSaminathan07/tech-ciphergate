@@ -15,9 +15,14 @@ const EmployeeHistory = require('../models/EmployeeHistory');
 const createWorker = asyncHandler(async (req, res) => {
   try {
     // Handle both object and string formats for subdomain
-    const subdomain = typeof req.body === 'object' && req.body.subdomain
+    let subdomain = typeof req.body === 'object' && req.body.subdomain
       ? req.body.subdomain.trim()
       : '';
+
+    // Enforce tenant isolation
+    if (req.user && req.user.subdomain && req.user.subdomain !== 'main') {
+      subdomain = req.user.subdomain;
+    }
 
     // Trim and validate name with extra checks
     const name = req.body.name ? req.body.name.trim() : '';
@@ -37,10 +42,18 @@ const createWorker = asyncHandler(async (req, res) => {
     const phoneNumber = req.body.phoneNumber ? req.body.phoneNumber.trim() : '';
     const joiningDate = req.body.joiningDate || new Date();
     const designation = req.body.designation ? req.body.designation.trim() : 'Developer';
+    
+    // Role validation & privilege protection
+    const allowedRoles = ['developer', 'manager', 'owner'];
     let role = req.body.role ? req.body.role.trim() : 'developer';
-    if (designation.toLowerCase().includes('manager')) {
+    if (designation.toLowerCase().includes('manager') && (!req.body.role || req.body.role === 'developer')) {
       role = 'manager';
     }
+    if (role && !allowedRoles.includes(role)) {
+      res.status(400);
+      throw new Error(`Invalid role. Allowed roles are: ${allowedRoles.join(', ')}`);
+    }
+
     const bankDetails = req.body.bankDetails || {};
     let perDaySalary = 0;
 
@@ -89,6 +102,12 @@ const createWorker = asyncHandler(async (req, res) => {
     if (!departmentDoc) {
       res.status(400);
       throw new Error('Invalid department');
+    }
+    if (req.user && req.user.subdomain && req.user.subdomain !== 'main') {
+      if (departmentDoc.subdomain && departmentDoc.subdomain !== req.user.subdomain) {
+        res.status(403);
+        throw new Error('Department belongs to another tenant');
+      }
     }
 
     // Hash password
@@ -151,6 +170,7 @@ const createWorker = asyncHandler(async (req, res) => {
       faceEmbeddings: worker.faceEmbeddings, // ADDED THIS
       faceEnrolled: worker.faceEnrolled,
       employeeType: worker.employeeType,
+      role: worker.role,
       class: worker.class,
       email: worker.email,
       phoneNumber: worker.phoneNumber,
@@ -209,12 +229,17 @@ const generateId = asyncHandler(async (req, res) => {
 const getWorkers = asyncHandler(async (req, res) => {
   try {
     // Handle both object and string formats for subdomain
-    const subdomain = typeof req.body === 'object' && req.body.subdomain
+    let subdomain = typeof req.body === 'object' && req.body.subdomain
       ? req.body.subdomain
       : req.body;
 
+    // Enforce tenant isolation
+    if (req.user && req.user.subdomain && req.user.subdomain !== 'main') {
+      subdomain = req.user.subdomain;
+    }
+
     const query = { subdomain };
-    const statusParam = req.query.status || req.body.status;
+    const statusParam = req.query.status || (typeof req.body === 'object' ? req.body.status : undefined);
     if (statusParam) {
       if (statusParam !== 'all') {
         query.status = statusParam;
@@ -224,12 +249,12 @@ const getWorkers = asyncHandler(async (req, res) => {
       query.status = 'Active';
     }
 
-    const page = parseInt(req.query.page) || parseInt(req.body.page) || null;
-    const limit = parseInt(req.query.limit) || parseInt(req.body.limit) || 10;
-    const searchTerm = req.query.searchTerm || req.body.searchTerm || '';
-    const departmentFilter = req.query.departmentFilter || req.body.departmentFilter || 'All';
-    const batchFilter = req.query.batchFilter || req.body.batchFilter || 'All';
-    const sortBy = req.query.sortBy || req.body.sortBy || 'newest';
+    const page = parseInt(req.query.page) || (typeof req.body === 'object' ? parseInt(req.body.page) : null) || null;
+    const limit = parseInt(req.query.limit) || (typeof req.body === 'object' ? parseInt(req.body.limit) : null) || 10;
+    const searchTerm = req.query.searchTerm || (typeof req.body === 'object' ? req.body.searchTerm : '') || '';
+    const departmentFilter = req.query.departmentFilter || (typeof req.body === 'object' ? req.body.departmentFilter : 'All') || 'All';
+    const batchFilter = req.query.batchFilter || (typeof req.body === 'object' ? req.body.batchFilter : 'All') || 'All';
+    const sortBy = req.query.sortBy || (typeof req.body === 'object' ? req.body.sortBy : 'newest') || 'newest';
 
     // Apply search term server-side
     if (searchTerm) {
@@ -274,13 +299,26 @@ const getWorkers = asyncHandler(async (req, res) => {
     let relievedCount = 0;
 
     if (page !== null) {
-      const activeQuery = { ...query, status: 'Active' };
-      const relievedQuery = { ...query, status: 'Relieved' };
+      // Calculate Active and Relieved counts using base filter (subdomain, search, department, batch)
+      const baseFilter = { subdomain };
+      if (query.$or) baseFilter.$or = query.$or;
+      if (query.department) baseFilter.department = query.department;
+      if (query.batch) baseFilter.batch = query.batch;
+
+      const activeQuery = { ...baseFilter, status: 'Active' };
+      const relievedQuery = { ...baseFilter, status: 'Relieved' };
       
       activeCount = await Worker.countDocuments(activeQuery);
       relievedCount = await Worker.countDocuments(relievedQuery);
       
-      total = statusParam === 'Active' ? activeCount : relievedCount;
+      if (query.status === 'Active') {
+        total = activeCount;
+      } else if (query.status === 'Relieved') {
+        total = relievedCount;
+      } else {
+        total = await Worker.countDocuments(query);
+      }
+
       workersQuery = workersQuery.skip((page - 1) * limit).limit(limit);
       workers = await workersQuery.lean();
       hasMore = page * limit < total;
@@ -365,6 +403,9 @@ const getWorkers = asyncHandler(async (req, res) => {
         workers: transformedWorkers,
         hasMore,
         total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
         activeCount,
         relievedCount
       });
@@ -428,10 +469,18 @@ const getWorkerById = asyncHandler(async (req, res) => {
       throw new Error('Worker not found');
     }
 
+    // Tenant isolation check
+    if (req.user && req.user.subdomain && req.user.subdomain !== 'main') {
+      if (worker.subdomain !== req.user.subdomain) {
+        res.status(403);
+        throw new Error('Not authorized to access worker from another tenant');
+      }
+    }
+
     res.json(worker);
   } catch (error) {
     console.error('Get Worker by ID Error:', error);
-    res.status(404);
+    res.status(res.statusCode === 403 ? 403 : 404);
     throw new Error(error.message || 'Worker not found');
   }
 });
@@ -448,11 +497,19 @@ const updateWorker = asyncHandler(async (req, res) => {
       throw new Error('Worker not found');
     }
 
+    // Tenant isolation check
+    if (req.user && req.user.subdomain && req.user.subdomain !== 'main') {
+      if (worker.subdomain !== req.user.subdomain) {
+        res.status(403);
+        throw new Error('Not authorized to update worker from another tenant');
+      }
+    }
+
     const { name, username, salary, department, password, photo, batch, faceEmbeddings, employeeType, role, class: classValue, status, email, phoneNumber, joiningDate, designation, bankDetails } = req.body; // ADDED status and new fields
     const updateData = {};
 
     const isAdmin = req.user && req.user.role === 'admin';
-    const isSelf = req.user && req.user._id.toString() === req.params.id;
+    const isSelf = Boolean(req.user && req.user._id && req.user._id.toString() === req.params.id);
 
     if (!isAdmin && !isSelf) {
       res.status(403);
@@ -477,6 +534,12 @@ const updateWorker = asyncHandler(async (req, res) => {
         if (!departmentExists) {
           res.status(400);
           throw new Error('Invalid department');
+        }
+        if (req.user && req.user.subdomain && req.user.subdomain !== 'main') {
+          if (departmentExists.subdomain && departmentExists.subdomain !== req.user.subdomain) {
+            res.status(403);
+            throw new Error('Department belongs to another tenant');
+          }
         }
         updateData.department = department;
       }
@@ -538,7 +601,12 @@ const updateWorker = asyncHandler(async (req, res) => {
       }
 
       // ADDED: Handle 3-tier role update (developer, manager, owner)
-      if (role) {
+      if (role !== undefined && role !== null && role !== '') {
+        const allowedRoles = ['developer', 'manager', 'owner'];
+        if (!allowedRoles.includes(role)) {
+          res.status(400);
+          throw new Error(`Invalid role. Allowed roles are: ${allowedRoles.join(', ')}`);
+        }
         updateData.role = role;
       }
 
@@ -622,7 +690,7 @@ const updateWorker = asyncHandler(async (req, res) => {
       actionType,
       performedBy: req.user ? req.user._id : null,
       beforeData,
-      afterData: updatedWorker.toObject()
+      afterData: (typeof updatedWorker.toObject === 'function') ? updatedWorker.toObject() : updatedWorker
     });
 
     res.json({
@@ -638,6 +706,7 @@ const updateWorker = asyncHandler(async (req, res) => {
       faceEmbeddings: updatedWorker.faceEmbeddings, // ADDED this to the response
       faceEnrolled: updatedWorker.faceEnrolled,
       employeeType: updatedWorker.employeeType,
+      role: updatedWorker.role,
       class: updatedWorker.class,
       email: updatedWorker.email,
       phoneNumber: updatedWorker.phoneNumber,
@@ -648,7 +717,7 @@ const updateWorker = asyncHandler(async (req, res) => {
     });
   } catch (error) {
     console.error('Update Worker Error:', error);
-    res.status(400);
+    res.status(res.statusCode && res.statusCode !== 200 ? res.statusCode : 400);
     throw new Error(error.message || 'Failed to update worker');
   }
 });
@@ -663,6 +732,14 @@ const deleteWorker = asyncHandler(async (req, res) => {
     if (!worker) {
       res.status(404);
       throw new Error('Worker not found');
+    }
+
+    // Tenant isolation check
+    if (req.user && req.user.subdomain && req.user.subdomain !== 'main') {
+      if (worker.subdomain !== req.user.subdomain) {
+        res.status(403);
+        throw new Error('Not authorized to delete worker from another tenant');
+      }
     }
 
     const beforeWorker = worker.toObject();
@@ -681,7 +758,7 @@ const deleteWorker = asyncHandler(async (req, res) => {
     res.json({ message: 'Worker soft-deleted successfully' });
   } catch (error) {
     console.error('Delete Worker Error:', error);
-    res.status(400);
+    res.status(res.statusCode && res.statusCode !== 200 ? res.statusCode : 400);
     throw new Error(error.message || 'Failed to delete worker');
   }
 });
@@ -691,6 +768,20 @@ const deleteWorker = asyncHandler(async (req, res) => {
 // @access  Private
 const getWorkerActivities = asyncHandler(async (req, res) => {
   try {
+    const worker = await Worker.findById(req.params.id);
+    if (!worker) {
+      res.status(404);
+      throw new Error('Worker not found');
+    }
+
+    // Tenant isolation check
+    if (req.user && req.user.subdomain && req.user.subdomain !== 'main') {
+      if (worker.subdomain !== req.user.subdomain) {
+        res.status(403);
+        throw new Error('Not authorized to access worker activities from another tenant');
+      }
+    }
+
     const tasks = await Task.find({ worker: req.params.id })
       .populate('topics', 'name points')
       .populate('department', 'name')
@@ -699,8 +790,8 @@ const getWorkerActivities = asyncHandler(async (req, res) => {
     res.json(tasks);
   } catch (error) {
     console.error('Get Worker Activities Error:', error);
-    res.status(500);
-    throw new Error('Failed to retrieve worker activities');
+    res.status(res.statusCode && res.statusCode !== 200 ? res.statusCode : 500);
+    throw new Error(error.message || 'Failed to retrieve worker activities');
   }
 });
 
@@ -716,6 +807,14 @@ const resetWorkerActivities = asyncHandler(async (req, res) => {
       throw new Error('Worker not found');
     }
 
+    // Tenant isolation check
+    if (req.user && req.user.subdomain && req.user.subdomain !== 'main') {
+      if (worker.subdomain !== req.user.subdomain) {
+        res.status(403);
+        throw new Error('Not authorized to reset activities for worker from another tenant');
+      }
+    }
+
     // Delete all tasks for this worker
     await Task.deleteMany({ worker: req.params.id });
 
@@ -728,7 +827,7 @@ const resetWorkerActivities = asyncHandler(async (req, res) => {
     res.json({ message: 'Worker activities reset successfully' });
   } catch (error) {
     console.error('Reset Worker Activities Error:', error);
-    res.status(400);
+    res.status(res.statusCode && res.statusCode !== 200 ? res.statusCode : 400);
     throw new Error(error.message || 'Failed to reset worker activities');
   }
 });
@@ -738,10 +837,15 @@ const resetWorkerActivities = asyncHandler(async (req, res) => {
 // @access  Private/Admin
 const getWorkersByDepartment = asyncHandler(async (req, res) => {
   try {
-    const workers = await Worker.find({ 
+    const query = { 
       department: req.params.departmentId,
-      status: { $ne: 'Relieved' }
-    })
+      status: { $nin: ['Relieved', 'Deleted'] }
+    };
+    if (req.user && req.user.subdomain && req.user.subdomain !== 'main') {
+      query.subdomain = req.user.subdomain;
+    }
+
+    const workers = await Worker.find(query)
       .select('-password')
       .populate('department', 'name')
       .lean();
@@ -772,7 +876,12 @@ const getWorkerByRfid = asyncHandler(async (req, res) => {
       throw new Error('RFID is required');
     }
 
-    const worker = await Worker.findOne({ rfid })
+    const query = { rfid };
+    if (req.user && req.user.subdomain && req.user.subdomain !== 'main') {
+      query.subdomain = req.user.subdomain;
+    }
+
+    const worker = await Worker.findOne(query)
       .select('-password')
       .populate('department', 'name');
 
@@ -797,7 +906,7 @@ const getWorkerByRfid = asyncHandler(async (req, res) => {
     });
   } catch (error) {
     console.error('Get Worker by RFID Error:', error);
-    res.status(400);
+    res.status(res.statusCode && res.statusCode !== 200 ? res.statusCode : 400);
     throw new Error(error.message || 'Failed to retrieve worker');
   }
 });
@@ -810,6 +919,19 @@ const getEmployeeHistory = asyncHandler(async (req, res) => {
     const filters = {};
     if (req.query.employee) filters.employee = req.query.employee;
     if (req.query.actionType) filters.actionType = req.query.actionType;
+
+    // Tenant isolation check
+    if (req.user && req.user.subdomain && req.user.subdomain !== 'main') {
+      const tenantWorkers = await Worker.find({ subdomain: req.user.subdomain }).select('_id');
+      const tenantWorkerIds = (tenantWorkers || []).map(w => w._id);
+      if (filters.employee) {
+        if (!tenantWorkerIds.some(id => String(id) === String(filters.employee))) {
+          return res.json([]);
+        }
+      } else {
+        filters.employee = { $in: tenantWorkerIds };
+      }
+    }
 
     const history = await EmployeeHistory.find(filters)
       .populate('employee', 'name username status')

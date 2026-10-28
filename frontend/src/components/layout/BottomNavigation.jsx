@@ -16,7 +16,7 @@ const BottomNavigation = ({ navItems = [], badges = {} }) => {
     { to: '/admin/work-allocation', icon: <FaTasks />, label: 'Work' },
     { to: '/admin/leaves', icon: <FaCalendarAlt />, label: 'Leave', badgeKey: 'leaves' },
     { to: '/admin/attendance', icon: <FaClipboardList />, label: 'Reports' },
-    { to: '/admin/test/generate-questions', icon: <FaGraduationCap />, label: 'Training' },
+    { to: '/admin/test/schedule', icon: <FaGraduationCap />, label: 'Training' },
   ];
 
   const items = navItems.length > 0 ? navItems : defaultItems;

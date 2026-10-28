@@ -26,7 +26,7 @@ const { createWorkerSchema, updateWorkerSchema } = require('../validations/worke
 router.route('/').post(protect, adminOnly, validateRequest(createWorkerSchema), createWorker);
 router.route('/all').post(protect, adminOrWorker, getWorkers);
 router.route('/generate-id').get(protect, generateId);
-router.route('/get-worker-by-rfid').post(getWorkerByRfid);
+router.route('/get-worker-by-rfid').post(protect, getWorkerByRfid);
 router.route('/history').get(protect, adminOnly, getEmployeeHistory);
 
 router.post('/public', getPublicWorkers);

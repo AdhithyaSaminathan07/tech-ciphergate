@@ -35,6 +35,25 @@ const submitTest = async (req, res) => {
             return res.status(400).json({ message: 'Test has already been submitted or is in an invalid state.' });
         }
 
+        const now = Date.now();
+        const startTime = testAttempt.testStartTime ? new Date(testAttempt.testStartTime).getTime() : now;
+        const elapsedSeconds = Math.max(0, Math.floor((now - startTime) / 1000));
+        const perQuestionDuration = testAttempt.durationPerQuestion || 30;
+        const totalQuestionsCount = (testAttempt.questions || []).length || 1;
+        const totalAllowedSeconds = testAttempt.totalTestDuration || (totalQuestionsCount * perQuestionDuration);
+        const gracePeriodSeconds = 15; // 15-second grace period for network latency
+
+        if (elapsedSeconds > (totalAllowedSeconds + gracePeriodSeconds)) {
+            testAttempt.status = 'completed';
+            if (typeof testAttempt.save === 'function') {
+                await testAttempt.save();
+            }
+            return res.status(400).json({
+                message: 'Test deadline has expired. Late submissions cannot be accepted.',
+                reason: 'test_expired'
+            });
+        }
+
         const questionIds = (testAttempt.questions || []).map(id => id.toString());
         const questionsInTest = await Question.find({
             _id: { $in: questionIds }
@@ -702,7 +721,7 @@ const getAvailableTests = async (req, res) => {
                     isMixed: !!q.isMixed,
                     allTopics: q.allTopics || [batchTopic],
                     questionCount: 0,
-                    durationPerQuestion: q.timeDuration || 15,
+                    durationPerQuestion: q.timeDuration || 30,
                     totalTestDuration: isProgress ? inProgressInfo.timeRemaining : (q.totalTestDuration || 600),
                     createdAt: q.createdAt ? new Date(q.createdAt) : new Date(),
                     status: isProgress ? 'in-progress' : 'available',
@@ -712,6 +731,51 @@ const getAvailableTests = async (req, res) => {
                 });
             }
             batchMap.get(q.batchId).questionCount += 1;
+        }
+
+        // 5. Enrich with TestSchedule information and enforce window timing
+        const batchIds = Array.from(batchMap.keys());
+        if (batchIds.length > 0) {
+            try {
+                const TestSchedule = require('../models/TestSchedule');
+                const schedules = await TestSchedule.find({ batchId: { $in: batchIds } }).lean();
+                const scheduleMap = new Map();
+                (schedules || []).forEach(s => scheduleMap.set(s.batchId, s));
+
+                const now = new Date();
+                for (const batchId of batchIds) {
+                    const sched = scheduleMap.get(batchId);
+                    if (sched) {
+                        const batch = batchMap.get(batchId);
+                        if (!batch) continue;
+                        batch.scheduleName = sched.name;
+                        batch.testDate = sched.testDate;
+                        batch.startTime = sched.startTime;
+                        batch.endTime = sched.endTime;
+                        batch.timezone = sched.timezone;
+                        batch.windowStartUtc = sched.windowStartUtc;
+                        batch.windowEndUtc = sched.windowEndUtc;
+                        batch.isScheduled = true;
+
+                        const start = new Date(sched.windowStartUtc);
+                        const end = new Date(sched.windowEndUtc);
+
+                        if (now < start) {
+                            batch.status = 'upcoming';
+                            batch.isUpcoming = true;
+                        } else if (now > end) {
+                            // Window has elapsed; remove from active available tests
+                            batchMap.delete(batchId);
+                        } else {
+                            if (batch.status !== 'in-progress') {
+                                batch.status = 'available';
+                            }
+                        }
+                    }
+                }
+            } catch (schedErr) {
+                console.warn('Could not enrich available tests with schedules:', schedErr.message);
+            }
         }
 
         const availableBatches = Array.from(batchMap.values())

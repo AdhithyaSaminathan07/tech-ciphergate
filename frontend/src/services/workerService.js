@@ -71,7 +71,7 @@ export const getWorkers = async (subdomainParam, params = {}) => {
     const data = response.data;
     const rawList = Array.isArray(data) ? data : (Array.isArray(data?.workers) ? data.workers : []);
 
-    return rawList.map(w => {
+    const transformedWorkers = rawList.map(w => {
       let deptName = 'N/A';
       let deptId = null;
 
@@ -97,6 +97,15 @@ export const getWorkers = async (subdomainParam, params = {}) => {
         departmentInfo: { _id: deptId || w.departmentId || null, name: deptName }
       };
     });
+
+    if (Array.isArray(data)) {
+      return transformedWorkers;
+    }
+
+    return {
+      ...data,
+      workers: transformedWorkers
+    };
   } catch (error) {
     console.error('Workers fetch error:', error);
     throw error.response ? error.response.data : new Error('Failed to fetch workers');

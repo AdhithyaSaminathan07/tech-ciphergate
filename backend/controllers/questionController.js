@@ -384,7 +384,7 @@ const getQuestionsForTest = async (req, res) => {
         }
 
         const latestCreationTime = latestQuestionEntry.createdAt;
-        const defaultDurationPerQuestion = latestQuestionEntry.timeDuration || 15;
+        const defaultDurationPerQuestion = latestQuestionEntry.timeDuration || 30;
         const totalDuration = latestQuestionEntry.totalTestDuration || 600;
         const isMixed = latestQuestionEntry.isMixed || false;
         const allTopics = latestQuestionEntry.allTopics || [latestQuestionEntry.topic];
@@ -470,6 +470,43 @@ const getQuestionsForTest = async (req, res) => {
             });
         }
 
+        // Schedule window enforcement: Check if batch is tied to a scheduled test window
+        if (latestQuestionEntry.batchId) {
+            try {
+                const TestSchedule = require('../models/TestSchedule');
+                let schedule = await TestSchedule.findOne({ batchId: latestQuestionEntry.batchId });
+                if (!schedule) {
+                    schedule = await TestSchedule.findOne({ 'occurrences.batchId': latestQuestionEntry.batchId });
+                }
+                if (schedule && req.user && req.user.role === 'worker') {
+                    const now = new Date();
+                    const occ = schedule.occurrences?.find(o => o.batchId === latestQuestionEntry.batchId);
+                    const winStart = occ ? occ.windowStartUtc : schedule.windowStartUtc;
+                    const winEnd = occ ? occ.windowEndUtc : schedule.windowEndUtc;
+                    const testDateStr = occ ? occ.occurrenceDate : schedule.testDate;
+
+                    if (winStart && now < new Date(winStart)) {
+                        return res.status(403).json({
+                            message: `Test is scheduled to start on ${testDateStr} at ${schedule.startTime}. Please wait until the start time.`,
+                            reason: 'test_not_started',
+                            windowStartUtc: winStart,
+                            windowEndUtc: winEnd
+                        });
+                    }
+                    if (winEnd && now > new Date(winEnd)) {
+                        return res.status(403).json({
+                            message: `Test window closed on ${testDateStr} at ${schedule.endTime}. You can no longer access this test.`,
+                            reason: 'test_window_closed',
+                            windowStartUtc: winStart,
+                            windowEndUtc: winEnd
+                        });
+                    }
+                }
+            } catch (schedErr) {
+                log.warn('Could not check schedule window:', schedErr.message);
+            }
+        }
+
         let testAttempt = null;
         if (latestQuestionEntry.batchId) {
             testAttempt = await TestAttempt.findOne({
@@ -485,20 +522,41 @@ const getQuestionsForTest = async (req, res) => {
             });
         }
 
-        // Check if an existing in-progress attempt for this batch has expired
+        let questionTimeRemaining = defaultDurationPerQuestion;
+
+        // Check if an existing in-progress attempt for this batch has expired or needs progress recalculation
         if (testAttempt) {
             const now = Date.now();
             const startTime = testAttempt.testStartTime ? new Date(testAttempt.testStartTime).getTime() : now;
-            const elapsedSeconds = Math.floor((now - startTime) / 1000);
-            const totalLimitSeconds = testAttempt.totalTestDuration || totalDuration || 600;
+            const elapsedTotalSeconds = Math.max(0, Math.floor((now - startTime) / 1000));
+            const perQuestionDuration = testAttempt.durationPerQuestion || defaultDurationPerQuestion || 30;
+            const totalQuestionsCount = (testAttempt.questions || []).length || 1;
+            const totalLimitSeconds = testAttempt.totalTestDuration || (totalQuestionsCount * perQuestionDuration);
 
-            if (elapsedSeconds >= totalLimitSeconds) {
+            if (elapsedTotalSeconds >= totalLimitSeconds) {
                 testAttempt.status = 'completed';
-                await testAttempt.save();
+                if (typeof testAttempt.save === 'function') {
+                    await testAttempt.save();
+                }
                 return res.status(403).json({
                     message: `Your test session for "${allTopics.join(', ')}" has expired.`,
                     reason: 'already_completed'
                 });
+            }
+
+            // Enforce per-question timing so refreshing/reopening cannot reset the question timer
+            const computedIndex = Math.min(Math.floor(elapsedTotalSeconds / perQuestionDuration), totalQuestionsCount - 1);
+            const secondsIntoQuestion = elapsedTotalSeconds % perQuestionDuration;
+            questionTimeRemaining = Math.max(1, perQuestionDuration - secondsIntoQuestion);
+
+            testAttempt.currentQuestionIndex = Math.max(testAttempt.currentQuestionIndex || 0, computedIndex);
+            testAttempt.questionStartTime = new Date(now - secondsIntoQuestion * 1000);
+            if (typeof testAttempt.save === 'function') {
+                try {
+                    await testAttempt.save();
+                } catch (saveErr) {
+                    log.warn('Could not update testAttempt timing on resume:', saveErr.message);
+                }
             }
         }
 
@@ -517,6 +575,8 @@ const getQuestionsForTest = async (req, res) => {
             }
 
             const shuffledQuestionIds = questions.sort(() => 0.5 - Math.random()).map(q => q._id);
+            const perQuestionDuration = defaultDurationPerQuestion || 30;
+            const calculatedTotalDuration = totalDuration || (shuffledQuestionIds.length * perQuestionDuration);
 
             testAttempt = await TestAttempt.create({
                 worker: workerId,
@@ -524,14 +584,15 @@ const getQuestionsForTest = async (req, res) => {
                 subdomain: worker.subdomain || effectiveSubdomain,
                 topic: testTopicId,
                 questions: shuffledQuestionIds,
-                durationPerQuestion: defaultDurationPerQuestion,
-                totalTestDuration: totalDuration,
+                durationPerQuestion: perQuestionDuration,
+                totalTestDuration: calculatedTotalDuration,
                 status: 'in-progress',
                 currentQuestionIndex: 0,
                 testStartTime: Date.now(),
                 questionStartTime: Date.now()
             });
 
+            questionTimeRemaining = perQuestionDuration;
             log.info(`New test attempt created with ID: ${testAttempt._id}`);
 
         } else {
@@ -552,7 +613,7 @@ const getQuestionsForTest = async (req, res) => {
             questionText: q.questionText,
             options: q.options,
             correctOption: q.correctAnswer,
-            timeDuration: q.timeDuration,
+            timeDuration: q.timeDuration || testAttempt.durationPerQuestion || defaultDurationPerQuestion,
             questionFormat: q.questionFormat, // Add question format to response
             upscFormat: q.upscFormat, // Add UPSC format to response
             questionSet: q.questionSet // Add question set to response
@@ -564,7 +625,8 @@ const getQuestionsForTest = async (req, res) => {
             questions: questionsToSend,
             currentQuestionIndex: testAttempt.currentQuestionIndex,
             questionStartTime: testAttempt.questionStartTime,
-            durationPerQuestion: testAttempt.durationPerQuestion,
+            durationPerQuestion: testAttempt.durationPerQuestion || defaultDurationPerQuestion,
+            questionTimeRemaining: questionTimeRemaining,
             totalTestDuration: effectiveTotalDuration,
             testStartTime: testAttempt.testStartTime,
             status: testAttempt.status,

@@ -137,6 +137,8 @@ const AuditLogs = React.lazy(() => import('../server/AuditLogs'));
 const ServerSettings = React.lazy(() => import('../server/Settings'));
 
 // Lazy load test management components
+const DailyTopicsLog = React.lazy(() => import('../admin/DailyTopicsLog'));
+const TestScheduleManagement = React.lazy(() => import('../admin/TestScheduleManagement'));
 const GenerateQuestions = React.lazy(() => import('../admin/GenerateQuestions'));
 const QuestionHistory = React.lazy(() => import('../admin/QuestionHistory'));
 const EmployeeScores = React.lazy(() => import('../admin/EmployeeScores'));
@@ -291,7 +293,8 @@ const AdminLayout = () => {
       isDropdown: true,
       children: [
         { isSubHeader: true, label: 'Training' },
-        { to: '/admin/test/generate-questions', label: 'Test Management', icon: <FaGraduationCap /> },
+        { to: '/admin/daily-topics', label: 'Daily Topics Log', icon: <FaBook /> },
+        { to: '/admin/test/schedule', label: 'Test Management', icon: <FaGraduationCap /> },
         { to: '/admin/test/question-history', label: 'Question History', icon: <FaHistory /> },
         { to: '/admin/test/employee-scores', label: 'Developer Scores', icon: <FaStar /> },
         { to: '/admin/test/global-scoreboard', label: 'Global Scoreboard', icon: <FaTrophy /> },
@@ -322,7 +325,7 @@ const AdminLayout = () => {
     { to: '/admin/work-allocation', icon: <FaTasks />, label: 'Work' },
     { to: '/admin/leaves', icon: <FaCalendarAlt />, label: 'Leave', badgeKey: 'leaves' },
     { to: '/admin/attendance', icon: <FaClipboardList />, label: 'Reports' },
-    { to: '/admin/test/generate-questions', icon: <FaGraduationCap />, label: 'Training' },
+    { to: '/admin/test/schedule', icon: <FaGraduationCap />, label: 'Training' },
   ];
 
   const bottomNavPaths = bottomNavItems.map(item => item.to);
@@ -461,7 +464,9 @@ const AdminLayout = () => {
 
 
               {/* Test Management Routes */}
-              <Route path="test/generate-questions" element={<GenerateQuestions />} />
+              <Route path="daily-topics" element={<DailyTopicsLog />} />
+              <Route path="test/schedule" element={<TestScheduleManagement />} />
+              <Route path="test/generate-questions" element={<Navigate to="/admin/test/schedule?tab=generate" replace />} />
               <Route path="test/question-history" element={<QuestionHistory />} />
               <Route path="test/employee-scores" element={<EmployeeScores />} />
               <Route path="test/global-scoreboard" element={<GlobalScoreboard />} />

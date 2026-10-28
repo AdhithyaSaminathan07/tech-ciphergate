@@ -37,6 +37,8 @@ const OfferLetter = lazy(() => import('./components/admin/OfferLetter'));
 const RenewalManagement = lazy(() => import('./components/admin/RenewalManagement'));
 
 // Test Management Components
+const DailyTopicsLog = lazy(() => import('./components/admin/DailyTopicsLog'));
+const TestScheduleManagement = lazy(() => import('./components/admin/TestScheduleManagement'));
 const GenerateQuestions = lazy(() => import('./components/admin/GenerateQuestions'));
 const QuestionHistory = lazy(() => import('./components/admin/QuestionHistory'));
 const EmployeeScores = lazy(() => import('./components/admin/EmployeeScores'));
@@ -231,7 +233,9 @@ function App() {
                     <Route path="server/settings" element={<ServerSettings />} />
 
                     {/* Test Management Routes */}
-                    <Route path="test/generate-questions" element={<GenerateQuestions />} />
+                    <Route path="daily-topics" element={<DailyTopicsLog />} />
+                    <Route path="test/schedule" element={<TestScheduleManagement />} />
+                    <Route path="test/generate-questions" element={<Navigate to="/admin/test/schedule?tab=generate" replace />} />
                     <Route path="test/question-history" element={<QuestionHistory />} />
                     <Route path="test/employee-scores" element={<EmployeeScores />} />
                     <Route path="test/global-scoreboard" element={<GlobalScoreboard />} />

@@ -4,14 +4,24 @@ const { checkAndRecordAiUsage } = require('../services/claudeService');
 
 // Configure for DeepSeek API
 // Security: API key must be provided via environment variable
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
-
-if (!DEEPSEEK_API_KEY) {
-    throw new Error('DEEPSEEK_API_KEY environment variable is required. Please set it in your .env file.');
+function getActiveDeepSeekKey() {
+    const rawKey = process.env.DEEPSEEK_API_KEY;
+    const cleanKey = typeof rawKey === 'string' ? rawKey.trim().replace(/^['"]|['"]$/g, '') : '';
+    if (!cleanKey || cleanKey === 'placeholder_pending_env') {
+        throw new Error('DEEPSEEK_API_KEY environment variable is required. Please set it in your .env file.');
+    }
+    if (openai && openai.apiKey !== cleanKey) {
+        openai.apiKey = cleanKey;
+    }
+    return cleanKey;
 }
 
+const initialKey = (typeof process.env.DEEPSEEK_API_KEY === 'string' 
+    ? process.env.DEEPSEEK_API_KEY.trim().replace(/^['"]|['"]$/g, '') 
+    : '') || 'placeholder_pending_env';
+
 const openai = new OpenAI({
-    apiKey: DEEPSEEK_API_KEY,
+    apiKey: initialKey,
     baseURL: 'https://api.deepseek.com/v1'
 });
 
@@ -119,6 +129,7 @@ function normalizeMCQQuestion(question) {
 }
 
 const generateSingleBatch = async (topics, numQuestionsPerTopic, difficulty = 'Medium', attempt = 1, subdomain = '') => {
+    getActiveDeepSeekKey();
     await rateLimiter.waitIfNeeded();
     // NOTE: checkAndRecordAiUsage is called by the orchestrator (generateMCQQuestions) before retry loops.
     // Do NOT call it here to avoid double-counting on retries.
@@ -205,6 +216,7 @@ const generateSingleBatch = async (topics, numQuestionsPerTopic, difficulty = 'M
 
 // New function for generating UPSC/GK style questions with multiple formats
 const generateUPSCSingleBatch = async (topics, numQuestionsPerTopic, difficulty = 'Medium', attempt = 1, subdomain = '') => {
+    getActiveDeepSeekKey();
     await rateLimiter.waitIfNeeded();
     // NOTE: checkAndRecordAiUsage is called by the orchestrator (generateUPSCQuestions) before retry loops.
     // Do NOT call it here to avoid double-counting on retries.
@@ -385,6 +397,7 @@ Response format:
 
 // New function for generating THREE SEPARATE QUESTION SETS for common mode
 const generateThreeUPSCSets = async (topics, numQuestionsPerSet, difficulty = 'Medium', attempt = 1, subdomain = '') => {
+    getActiveDeepSeekKey();
     await rateLimiter.waitIfNeeded();
     // Count usage only once per logical call, not per retry attempt.
     await checkAndRecordAiUsage(subdomain);
@@ -717,4 +730,4 @@ const generateUPSCQuestions = async (topics, numQuestionsPerTopic, difficulty = 
     }
 };
 
-module.exports = { generateMCQQuestions, generateUPSCQuestions, generateThreeUPSCSets, extractQuestionsForTopic };
+module.exports = { generateMCQQuestions, generateUPSCQuestions, generateThreeUPSCSets, extractQuestionsForTopic, getActiveDeepSeekKey };

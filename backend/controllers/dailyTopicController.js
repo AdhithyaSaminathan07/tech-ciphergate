@@ -69,6 +69,14 @@ const addDailyTopic = async (req, res) => {
       });
     }
 
+    // Check if worker is active
+    const workerStatus = String(worker.status || 'Active').trim().toLowerCase();
+    if (workerStatus === 'relieved' || workerStatus === 'deleted' || workerStatus === 'inactive' || workerStatus === 'resigned' || workerStatus === 'terminated' || Boolean(worker.relievedAt)) {
+      return res.status(403).json({
+        message: 'Relieved or inactive employees cannot submit daily topics.'
+      });
+    }
+
     // Sanitize topic input
     const sanitizedTopic = topic.trim();
     if (sanitizedTopic.length === 0) {
@@ -386,6 +394,15 @@ const getWeeklyTopicsAdmin = async (req, res) => {
       });
     }
 
+    // Exclude relieved or inactive workers
+    const statusStr = String(worker.status || 'Active').trim().toLowerCase();
+    const isRelievedOrInactive = statusStr === 'relieved' || statusStr === 'deleted' || statusStr === 'inactive' || statusStr === 'resigned' || statusStr === 'terminated' || Boolean(worker.relievedAt);
+    if (isRelievedOrInactive) {
+      return res.status(403).json({
+        message: 'Access denied: Cannot retrieve topics for inactive or relieved employee.'
+      });
+    }
+
     // Tenant check: tenant admin can only access workers in their own tenant
     if (req.user.subdomain && req.user.subdomain !== 'main') {
       if (worker.subdomain !== req.user.subdomain) {
@@ -446,10 +463,217 @@ const getWeeklyTopicsAdmin = async (req, res) => {
   }
 };
 
+// @desc    Get aggregated daily topics log for all workers (Admin only)
+// @route   GET /api/daily-topics/admin/log
+// @access  Private/Admin
+const getDailyTopicsAdminLog = async (req, res) => {
+  try {
+    let { startDate, endDate, department, workerId, subdomain } = req.query;
+    subdomain = resolveSubdomain(subdomain, req.user);
+
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied: Admin privileges required.' });
+    }
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ message: 'Start date and end date are required.' });
+    }
+
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
+      return res.status(400).json({ message: 'Dates must be in YYYY-MM-DD format.' });
+    }
+
+    // Build worker query with tenant isolation
+    const workerQuery = {};
+    if (subdomain && subdomain !== 'main') {
+      workerQuery.subdomain = subdomain;
+    }
+    if (department && department !== 'all') {
+      if (mongoose.Types.ObjectId.isValid(department)) {
+        workerQuery.department = department;
+      } else {
+        try {
+          const Department = require('../models/Department');
+          const deptDoc = await Department.findOne({
+            name: { $regex: new RegExp(`^${department}$`, 'i') },
+            ...(subdomain && subdomain !== 'main' ? { subdomain } : {})
+          }).select('_id').lean();
+          if (deptDoc) {
+            workerQuery.$or = [
+              { department: deptDoc._id },
+              { department: department }
+            ];
+          } else {
+            workerQuery.department = department;
+          }
+        } catch (dErr) {
+          workerQuery.department = department;
+        }
+      }
+    }
+    if (workerId && mongoose.Types.ObjectId.isValid(workerId)) {
+      workerQuery._id = new mongoose.Types.ObjectId(workerId);
+    }
+
+    // Authoritative Active Developer Filter:
+    // Only workers with active status ('Active' or 'active'), excluding Relieved, Deleted, Inactive, Resigned, Terminated
+    // AND excluding any workers with relievedAt date set.
+    workerQuery.status = { $in: ['Active', 'active'] };
+    workerQuery.relievedAt = null;
+
+    let queryObj = Worker.find(workerQuery)
+      .select('name email department subdomain rfid username status relievedAt');
+    if (typeof queryObj.populate === 'function') {
+      queryObj = queryObj.populate('department', 'name');
+    }
+    if (typeof queryObj.sort === 'function') {
+      queryObj = queryObj.sort({ name: 1 });
+    }
+    let rawWorkers = typeof queryObj.lean === 'function' ? await queryObj.lean() : await queryObj;
+
+    // Additional in-memory guard to guarantee strict exclusion across all edge cases / lifecycle fields
+    const workers = (rawWorkers || []).filter(w => {
+      const s = String(w.status || (w.relievedAt ? 'Relieved' : 'Active')).trim().toLowerCase();
+      const isExplicitlyActive = s === 'active';
+      const isRelievedOrInactive = s === 'relieved' || s === 'deleted' || s === 'inactive' || s === 'resigned' || s === 'terminated';
+      const hasRelievedAt = Boolean(w.relievedAt && !isNaN(new Date(w.relievedAt).getTime()));
+      return isExplicitlyActive && !isRelievedOrInactive && !hasRelievedAt;
+    });
+
+    const workerIds = workers.map(w => w._id);
+
+    // Build date array for range
+    const dates = [];
+    const curr = new Date(startDate);
+    const end = new Date(endDate);
+    while (curr <= end) {
+      dates.push(curr.toISOString().split('T')[0]);
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    // Fetch all topics recorded in this window for these workers
+    const topicQuery = {
+      workerId: { $in: workerIds },
+      date: { $gte: startDate, $lte: endDate }
+    };
+    if (subdomain && subdomain !== 'main') {
+      topicQuery.subdomain = subdomain;
+    }
+
+    const topics = await DailyTopic.find(topicQuery).lean();
+
+    // Index topics by `${workerId}_${date}`
+    const topicMap = new Map();
+    topics.forEach(t => {
+      topicMap.set(`${t.workerId.toString()}_${t.date}`, t);
+    });
+
+    // 1. Worker-wise view
+    const workerWise = workers.map(w => {
+      const wId = w._id.toString();
+      const dailyMap = {};
+      let submittedCount = 0;
+      const empIdBadge = w.rfid || w.username || `EMP-${wId.slice(-4).toUpperCase()}`;
+      const deptName = (typeof w.department === 'object' && w.department?.name)
+        ? w.department.name
+        : (w.department ? String(w.department) : 'N/A');
+
+      dates.forEach(d => {
+        const item = topicMap.get(`${wId}_${d}`);
+        if (item) {
+          submittedCount++;
+          dailyMap[d] = {
+            _id: item._id,
+            topic: item.topic,
+            date: d,
+            subdomain: item.subdomain || w.subdomain,
+            status: 'submitted'
+          };
+        } else {
+          dailyMap[d] = {
+            _id: null,
+            topic: null,
+            date: d,
+            subdomain: w.subdomain,
+            status: 'missing'
+          };
+        }
+      });
+
+      return {
+        worker: {
+          _id: w._id,
+          name: w.name,
+          email: w.email,
+          employeeId: empIdBadge,
+          subdomain: w.subdomain,
+          department: deptName
+        },
+        dates: dailyMap,
+        submittedCount,
+        missingCount: dates.length - submittedCount,
+        submissionRate: dates.length > 0 ? Math.round((submittedCount / dates.length) * 100) : 0
+      };
+    });
+
+    // 2. Date-wise view
+    const dateWise = dates.map(d => {
+      let dateSubmitted = 0;
+      const workerSubmissions = workers.map(w => {
+        const wId = w._id.toString();
+        const item = topicMap.get(`${wId}_${d}`);
+        const isSubmitted = !!item;
+        if (isSubmitted) dateSubmitted++;
+        const empIdBadge = w.rfid || w.username || `EMP-${wId.slice(-4).toUpperCase()}`;
+        const deptName = (typeof w.department === 'object' && w.department?.name)
+          ? w.department.name
+          : (w.department ? String(w.department) : 'N/A');
+
+        return {
+          worker: {
+            _id: w._id,
+            name: w.name,
+            email: w.email,
+            employeeId: empIdBadge,
+            subdomain: w.subdomain,
+            department: deptName
+          },
+          status: isSubmitted ? 'submitted' : 'missing',
+          topic: item ? item.topic : null,
+          topicId: item ? item._id : null,
+          subdomain: item ? item.subdomain : w.subdomain
+        };
+      });
+
+      return {
+        date: d,
+        submittedCount: dateSubmitted,
+        missingCount: workers.length - dateSubmitted,
+        workers: workerSubmissions
+      };
+    });
+
+    return res.status(200).json({
+      startDate,
+      endDate,
+      totalWorkers: workers.length,
+      totalDates: dates.length,
+      dates,
+      workerWise,
+      dateWise
+    });
+  } catch (error) {
+    console.error('Error fetching admin daily topics log:', error);
+    return res.status(500).json({ message: error.message || 'Server error fetching daily topics log.' });
+  }
+};
+
 module.exports = {
   addDailyTopic,
   getWeeklyTopics,
   getWeeklyTopicsAdmin,
+  getDailyTopicsAdminLog,
   getWorkerTopics,
   deleteDailyTopic
 };

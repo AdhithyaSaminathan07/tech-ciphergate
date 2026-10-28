@@ -231,7 +231,7 @@ const Loader = () => (
 
 
 // --- Main Component ---
-const GenerateQuestions = () => {
+const GenerateQuestions = ({ hideHeader = false }) => {
   // --- State Management (Original) ---
   const [workers, setWorkers] = useState([]);
   const [selectedWorkers, setSelectedWorkers] = useState([]);
@@ -749,12 +749,14 @@ const GenerateQuestions = () => {
             )}
         </AnimatePresence>
 
-        <div className="text-center mb-4 md:mb-8">
-            <h1 className="text-2xl md:text-4xl font-bold text-gray-800 mb-2 md:mb-4">
-                AI Question Generator
-            </h1>
-            <p className="text-gray-600 text-sm md:text-lg">Create intelligent assessments for your employees with advanced AI</p>
-        </div>
+        {!hideHeader && (
+          <div className="text-center mb-4 md:mb-8">
+              <h1 className="text-2xl md:text-4xl font-bold text-gray-800 mb-2 md:mb-4">
+                  AI Question Generator
+              </h1>
+              <p className="text-gray-600 text-sm md:text-lg">Create intelligent assessments for your employees with advanced AI</p>
+          </div>
+        )}
         
         <AnimatePresence>
             <Alert type="error" message={error} onClose={() => setError('')} />

@@ -395,6 +395,13 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
 
     const startTest = async (test) => {
         if (loading || testInitializing) return;
+
+        // Front-end check for scheduled tests: cannot start before windowStartUtc
+        if (test.isUpcoming || test.status === 'upcoming' || (test.windowStartUtc && new Date() < new Date(test.windowStartUtc))) {
+            alert(`This test is scheduled to open on ${test.testDate || 'the configured date'} at ${test.startTime || 'the start time'} (${test.timezone || 'IST'}). Please return during the test window.`);
+            return;
+        }
+
         try {
             setTestInitializing(true);
             setLoading(true);
@@ -415,8 +422,17 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
 
             setCurrentTest(fullTestData);
             setCurrentQuestionIndex(fullTestData.currentQuestionIndex || 0);
-            setAnswers(new Array(fullTestData.questions.length).fill(null));
-            setTimeLeft(fullTestData.durationPerQuestion || 15);
+            const questionDuration = fullTestData.durationPerQuestion || 30;
+            let initialQTime = fullTestData.questionTimeRemaining;
+            if (initialQTime === undefined || initialQTime === null) {
+                if (fullTestData.questionStartTime) {
+                    const elapsed = Math.max(0, Math.floor((Date.now() - new Date(fullTestData.questionStartTime).getTime()) / 1000));
+                    initialQTime = Math.max(1, questionDuration - elapsed);
+                } else {
+                    initialQTime = questionDuration;
+                }
+            }
+            setTimeLeft(Math.max(1, initialQTime));
             
             // Ensure totalTestDuration is in seconds (convert if needed)
             const totalDuration = parseInt(fullTestData.totalTestDuration);
@@ -483,7 +499,7 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                 if (currentQuestionIndex < currentTest.questions.length - 1) {
                     // Move to next question
                     setCurrentQuestionIndex(prev => prev + 1);
-                    setTimeLeft(currentTest.durationPerQuestion);
+                    setTimeLeft(currentTest.durationPerQuestion || 30);
                 } else {
                     // Last question - auto submit
                     console.log('Last question answered, auto-submitting test');
@@ -502,7 +518,7 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                 setSelectedAnswerIndex(null);
                 if (currentQuestionIndex < currentTest.questions.length - 1) {
                     setCurrentQuestionIndex(prev => prev + 1);
-                    setTimeLeft(currentTest.durationPerQuestion);
+                    setTimeLeft(currentTest.durationPerQuestion || 30);
                 } else {
                     console.log('Last question answered (no feedback), auto-submitting test');
                     handleSubmitTest(newAnswers);
@@ -517,7 +533,7 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
         
         if (currentQuestionIndex < currentTest.questions.length - 1) {
             setCurrentQuestionIndex(prev => prev + 1);
-            setTimeLeft(currentTest.durationPerQuestion);
+            setTimeLeft(currentTest.durationPerQuestion || 30);
         } else {
             console.log('Last question reached via handleNextQuestion, auto-submitting test');
             
@@ -1350,6 +1366,12 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                                                                     General Topics
                                                                 </span>
                                                             )}
+                                                            {test.isScheduled && (
+                                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                                                                    <FaCalendarAlt className="mr-1" />
+                                                                    Scheduled: {test.testDate} ({test.startTime} - {test.endTime})
+                                                                </span>
+                                                            )}
                                                             {test.createdAt && (
                                                                 <span className="text-xs text-gray-500">
                                                                     Assigned: {new Date(test.createdAt).toLocaleDateString()}
@@ -1381,16 +1403,34 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                                                         </div>
                                                     </div>
                                                     <div className="ml-4">
-                                                        <Button
-                                                            onClick={() => startTest(test)}
-                                                            disabled={loading || testInitializing}
-                                                            variant={isInProgress ? "secondary" : "primary"}
-                                                            size="lg"
-                                                            className="min-w-32"
-                                                        >
-                                                            <FaPlay className="mr-2" />
-                                                            {isInProgress ? 'Resume Test' : 'Start Test'}
-                                                        </Button>
+                                                        {test.isUpcoming || test.status === 'upcoming' ? (
+                                                            <div className="text-right space-y-1">
+                                                                <span className="inline-block px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold whitespace-nowrap">
+                                                                    Opens at {test.startTime}
+                                                                </span>
+                                                                <div>
+                                                                    <Button
+                                                                        onClick={() => startTest(test)}
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        className="opacity-75"
+                                                                    >
+                                                                        <FaClock className="mr-1.5" /> Upcoming
+                                                                    </Button>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <Button
+                                                                onClick={() => startTest(test)}
+                                                                disabled={loading || testInitializing}
+                                                                variant={isInProgress ? "secondary" : "primary"}
+                                                                size="lg"
+                                                                className="min-w-32"
+                                                            >
+                                                                <FaPlay className="mr-2" />
+                                                                {isInProgress ? 'Resume Test' : 'Start Test'}
+                                                            </Button>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 

@@ -72,6 +72,25 @@ export const getWeeklyTopicsAdmin = async ({ workerId, startDate, endDate, subdo
   }
 };
 
+// Get aggregated daily topics log for all workers (Admin only)
+export const getDailyTopicsAdminLog = async ({ startDate, endDate, department, workerId, subdomain }) => {
+  try {
+    const response = await api.get('/daily-topics/admin/log', {
+      params: {
+        startDate,
+        endDate,
+        department,
+        workerId,
+        subdomain
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching admin daily topics log:', error);
+    throw error;
+  }
+};
+
 // Get all topics for a worker (for worker's own viewing/editing)
 export const getWorkerTopics = async ({ workerId, subdomain, limit = 30 }) => {
   try {

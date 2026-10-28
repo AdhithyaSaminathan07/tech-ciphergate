@@ -159,12 +159,21 @@ const WorkerManagement = () => {
       );
 
       if (response && response.workers) {
-        setWorkers(prev => pageNumber === 1 ? response.workers : [...prev, ...response.workers]);
-        setHasMore(response.hasMore);
+        setWorkers(prev => {
+          if (pageNumber === 1) return response.workers;
+          const existingIds = new Set(prev.map(w => String(w._id)));
+          const uniqueNew = response.workers.filter(w => !existingIds.has(String(w._id)));
+          return [...prev, ...uniqueNew];
+        });
+        setHasMore(Boolean(response.hasMore));
         setPage(pageNumber);
-        setTotalCount(response.total || response.workers.length);
-        setActiveCount(response.activeCount !== undefined ? response.activeCount : (activeTab === 'active' ? response.total : 0));
-        setRelievedCount(response.relievedCount !== undefined ? response.relievedCount : (activeTab === 'archived' ? response.total : 0));
+        setTotalCount(response.total !== undefined ? response.total : response.workers.length);
+        if (response.activeCount !== undefined) {
+          setActiveCount(response.activeCount);
+        }
+        if (response.relievedCount !== undefined) {
+          setRelievedCount(response.relievedCount);
+        }
       } else {
         const safeWorkers = Array.isArray(response) ? response : [];
         setWorkers(prev => pageNumber === 1 ? safeWorkers : [...prev, ...safeWorkers]);
@@ -243,7 +252,7 @@ const WorkerManagement = () => {
 
     // Since the server already did the filtering and sorting, we just separate them
     const active = workers.filter(w => w.status === 'Active' || !w.status);
-    const archived = workers.filter(w => w.status === 'Relieved');
+    const archived = workers.filter(w => w.status === 'Relieved' || w.status === 'Deleted' || w.status === 'Archived');
 
     return { active, archived };
   }, [workers]);

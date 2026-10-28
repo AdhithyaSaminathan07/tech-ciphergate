@@ -4,10 +4,16 @@ const {
   addDailyTopic,
   getWeeklyTopics,
   getWeeklyTopicsAdmin,
+  getDailyTopicsAdminLog,
   getWorkerTopics,
   deleteDailyTopic
 } = require('../controllers/dailyTopicController');
 const { protect, adminOrWorker, adminOnly } = require('../middleware/authMiddleware');
+
+// @desc    Get aggregated daily topics log for all workers (admin-only)
+// @route   GET /api/daily-topics/admin/log
+// @access  Private/Admin Only
+router.get('/admin/log', protect, adminOnly, getDailyTopicsAdminLog);
 
 // @desc    Add a daily topic for a worker
 // @route   POST /api/topics

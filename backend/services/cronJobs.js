@@ -60,6 +60,19 @@ const startCronJobs = () => {
     timezone: "Asia/Kolkata"
   });
 
+  // Test Scheduler — check every 2 minutes for due test schedules and active windows
+  cron.schedule('*/2 * * * *', async () => {
+    try {
+      const { checkAndExecuteDueSchedules } = require('./testScheduler');
+      await checkAndExecuteDueSchedules();
+    } catch (err) {
+      console.error('[Cron] Test schedule execution check failed:', err);
+    }
+  }, {
+    scheduled: true,
+    timezone: "Asia/Kolkata"
+  });
+
   console.log('Cron jobs started successfully');
 };
 
