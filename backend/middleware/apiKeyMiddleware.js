@@ -5,7 +5,18 @@ const asyncHandler = require('express-async-handler');
  * Middleware to validate API key from request headers
  */
 const validateApiKey = asyncHandler(async (req, res, next) => {
-    const key = req.header('x-api-key');
+    let key = req.header('x-api-key');
+
+    // Fallback to Authorization: Bearer <API_KEY> if x-api-key header is not supplied
+    if (!key && req.headers && req.headers.authorization && typeof req.headers.authorization === 'string') {
+        const parts = req.headers.authorization.trim().split(/\s+/);
+        if (parts.length === 2 && parts[0].toLowerCase() === 'bearer') {
+            const token = parts[1];
+            if (token && typeof token === 'string' && token.startsWith('cg_')) {
+                key = token;
+            }
+        }
+    }
 
     if (!key) {
         return res.status(401).json({

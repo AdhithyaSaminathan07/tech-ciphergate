@@ -549,11 +549,48 @@ router.get('/invoices', authorizeApi('invoices', 'read'), async (req, res) => {
                 }
             })
             .sort({ createdAt: -1 });
+
+        const formattedInvoices = (invoices || []).map(inv => {
+            const doc = (typeof inv.toObject === 'function') ? inv.toObject() : { ...inv };
+            const items = Array.isArray(doc.items) ? doc.items : [];
+            const gstEnabled = doc.gstEnabled !== false;
+
+            let subtotal = 0;
+            let taxTotal = 0;
+
+            for (const item of items) {
+                if (!item) continue;
+                const qty = Number(item.qty) || 0;
+                const rate = Number(item.rate) || 0;
+                const rawTotal = Number(item.total);
+                const isOverridden = Boolean(item.isTotalOverridden && !isNaN(rawTotal));
+                const taxableAmount = isOverridden ? rawTotal : (qty * rate);
+
+                subtotal += isNaN(taxableAmount) ? 0 : taxableAmount;
+
+                if (gstEnabled) {
+                    const gstRate = Number(item.gst) || 0;
+                    const itemTax = (taxableAmount * gstRate) / 100;
+                    taxTotal += isNaN(itemTax) ? 0 : itemTax;
+                }
+            }
+
+            subtotal = Math.round(subtotal * 100) / 100;
+            taxTotal = gstEnabled ? Math.round(taxTotal * 100) / 100 : 0;
+            const grandTotal = Math.round((subtotal + taxTotal) * 100) / 100;
+
+            return {
+                ...doc,
+                subtotal,
+                taxTotal,
+                grandTotal
+            };
+        });
             
         res.status(200).json({
             success: true,
             message: 'Invoices retrieved successfully',
-            data: invoices
+            data: formattedInvoices
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
+import appContext from '../../context/AppContext';
 import {
     FiKey, FiPlus, FiTrash2, FiCopy, FiCheck, FiShield,
     FiCalendar, FiActivity, FiToggleLeft, FiToggleRight,
@@ -49,6 +50,7 @@ const formatPermissions = (permissions) => {
 };
 
 const ApiKeyManagement = () => {
+    const { subdomain } = useContext(appContext);
     const [keys, setKeys] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -104,10 +106,16 @@ const ApiKeyManagement = () => {
     // Form state
     const [formData, setFormData] = useState({
         clientName: '',
-        subdomain: localStorage.getItem('tasktracker-subdomain') || 'ciphergate',
+        subdomain: subdomain || localStorage.getItem('tasktracker-subdomain') || 'ciphergate',
         permissions: ['read'],
         expiryDays: 30
     });
+
+    useEffect(() => {
+        if (subdomain) {
+            setFormData(prev => ({ ...prev, subdomain }));
+        }
+    }, [subdomain]);
 
     useEffect(() => {
         fetchKeys();
@@ -119,7 +127,7 @@ const ApiKeyManagement = () => {
             const res = await axios.get('/api/admin/keys', {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setKeys(res.data.data);
+            setKeys(Array.isArray(res.data?.data) ? res.data.data : []);
             setLoading(false);
         } catch (error) {
             toast.error('Failed to fetch API keys');
@@ -215,7 +223,7 @@ const ApiKeyManagement = () => {
                         onClick={() => {
                             setFormData(prev => ({
                                 ...prev,
-                                subdomain: prev.subdomain || localStorage.getItem('tasktracker-subdomain') || 'ciphergate'
+                                subdomain: subdomain || prev.subdomain || localStorage.getItem('tasktracker-subdomain') || 'ciphergate'
                             }));
                             setShowCreateModal(true);
                         }}
