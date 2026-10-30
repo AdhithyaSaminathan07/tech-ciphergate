@@ -254,12 +254,166 @@ const getQuestionsForTest = async (req, res) => {
         let selectedQuestionEntry = null;
 
         if (requestedBatchId) {
-            selectedQuestionEntry = await Question.findOne({ worker: workerId, batchId: requestedBatchId })
+            let questionQuery = Question.findOne({ worker: workerId, batchId: requestedBatchId })
                 .sort({ createdAt: -1 })
-                .select('topic timeDuration totalTestDuration createdAt isMixed allTopics questionSet showFeedback batchId')
-                .lean();
+                .select('topic timeDuration totalTestDuration createdAt isMixed allTopics questionSet showFeedback batchId');
+            selectedQuestionEntry = typeof questionQuery?.lean === 'function' ? await questionQuery.lean() : await questionQuery;
+
+            if (!selectedQuestionEntry && mongoose.Types.ObjectId.isValid(workerId)) {
+                let objQuestionQuery = Question.findOne({ worker: new mongoose.Types.ObjectId(workerId), batchId: requestedBatchId })
+                    .sort({ createdAt: -1 })
+                    .select('topic timeDuration totalTestDuration createdAt isMixed allTopics questionSet showFeedback batchId');
+                selectedQuestionEntry = typeof objQuestionQuery?.lean === 'function' ? await objQuestionQuery.lean() : await objQuestionQuery;
+            }
 
             if (!selectedQuestionEntry) {
+                // Check if this batch belongs to a test schedule that is scheduled, upcoming, generating, or closed
+                try {
+                    const TestSchedule = require('../models/TestSchedule');
+                    if (TestSchedule && (TestSchedule.findOne !== mongoose.Model.findOne || mongoose.connection.readyState === 1)) {
+                        const schedFindQuery = TestSchedule.findOne({
+                            $or: [
+                                { batchId: requestedBatchId },
+                                { 'occurrences.batchId': requestedBatchId }
+                            ]
+                        });
+                        const matchingSchedule = typeof schedFindQuery?.lean === 'function'
+                            ? await schedFindQuery.lean()
+                            : await schedFindQuery;
+
+                        if (matchingSchedule) {
+                            // 1. Tenant validation: Ensure schedule belongs to worker's organization
+                            if (matchingSchedule.subdomain && matchingSchedule.subdomain !== 'main') {
+                                if (effectiveSubdomain !== 'main' && matchingSchedule.subdomain !== effectiveSubdomain) {
+                                    return res.status(403).json({
+                                        message: 'Access denied: Test schedule belongs to a different organization.',
+                                        reason: 'tenant_mismatch'
+                                    });
+                                }
+                                if (worker.subdomain && worker.subdomain !== 'main' && matchingSchedule.subdomain !== worker.subdomain) {
+                                    return res.status(403).json({
+                                        message: 'Access denied: Test schedule belongs to a different organization.',
+                                        reason: 'tenant_mismatch'
+                                    });
+                                }
+                            }
+
+                            // 2. Assignment validation: Ensure worker is directly assigned or in assigned department
+                            const assignedWorkerIds = (matchingSchedule.workers || []).map(w => String(w?._id || w));
+                            const assignedDepts = (matchingSchedule.departments || []).map(d => String(d).trim().toLowerCase());
+                            const workerDept = worker.department ? String(worker.department).trim().toLowerCase() : '';
+                            const isAssigned = assignedWorkerIds.includes(String(workerId)) || (workerDept && assignedDepts.includes(workerDept));
+
+                            if (!isAssigned) {
+                                return res.status(403).json({
+                                    message: 'Access denied: You are not assigned to this scheduled test.',
+                                    reason: 'not_assigned'
+                                });
+                            }
+
+                            // 3. Window checks
+                            const now = new Date();
+                            const occ = matchingSchedule.occurrences?.find(o => o.batchId === requestedBatchId);
+                            const winStart = occ ? occ.windowStartUtc : matchingSchedule.windowStartUtc;
+                            const winEnd = occ ? occ.windowEndUtc : matchingSchedule.windowEndUtc;
+                            const testDateStr = occ ? occ.occurrenceDate : matchingSchedule.testDate;
+
+                            if (winStart && now < new Date(winStart)) {
+                                return res.status(403).json({
+                                    message: `Test is scheduled to start on ${testDateStr} at ${matchingSchedule.startTime}. Please wait until the start time.`,
+                                    reason: 'test_not_started',
+                                    windowStartUtc: winStart,
+                                    windowEndUtc: winEnd
+                                });
+                            }
+                            if (winEnd && now > new Date(winEnd)) {
+                                return res.status(403).json({
+                                    message: `Test window closed on ${testDateStr} at ${matchingSchedule.endTime}. You can no longer access this test.`,
+                                    reason: 'test_window_closed',
+                                    windowStartUtc: winStart,
+                                    windowEndUtc: winEnd
+                                });
+                            }
+
+                            // 4. In-progress / scheduled generation check
+                            let job = null;
+                            if (typeof jobManager?.getJob === 'function') {
+                                job = jobManager.getJob(requestedBatchId);
+                            }
+                            if (!job && global.jobs && typeof global.jobs.get === 'function') {
+                                job = global.jobs.get(requestedBatchId);
+                            }
+                            if (!job && global.jobs && typeof global.jobs.values === 'function') {
+                                for (const j of global.jobs.values()) {
+                                    if (j.id === requestedBatchId || j.batchId === requestedBatchId) {
+                                        job = j;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            const isJobRunning = job && (
+                                job.state === 'queued' ||
+                                job.state === 'processing' ||
+                                job.status === 'running'
+                            );
+
+                            const isSchedGenerating = (
+                                matchingSchedule.status === 'Generating' ||
+                                matchingSchedule.status === 'Scheduled' ||
+                                occ?.status === 'Generating' ||
+                                occ?.status === 'Scheduled' ||
+                                Boolean(matchingSchedule.executionLock)
+                            );
+
+                            if (isJobRunning || isSchedGenerating) {
+                                return res.status(404).json({
+                                    message: 'Question generation is currently in progress for this scheduled test. Please check back shortly.',
+                                    reason: 'generation_in_progress',
+                                    progress: job?.progress || 0
+                                });
+                            }
+
+                            // 5. Failed generation check
+                            const isJobFailed = job && (job.state === 'failed' || job.status === 'failed');
+                            const isSchedFailed = matchingSchedule.status === 'Failed' || occ?.status === 'Failed';
+
+                            if (isJobFailed || isSchedFailed) {
+                                return res.status(404).json({
+                                    message: `Question generation failed for this test schedule: ${job?.reason || matchingSchedule.failureReason || 'Failed to generate questions.'}`,
+                                    reason: 'generation_failed'
+                                });
+                            }
+                        }
+                    }
+                } catch (schedLookupErr) {
+                    log.warn('Could not lookup schedule for requestedBatchId:', schedLookupErr.message);
+                }
+
+                // Check standalone job in jobManager even if no matchingSchedule was found
+                let fallbackJob = null;
+                if (typeof jobManager?.getJob === 'function') {
+                    fallbackJob = jobManager.getJob(requestedBatchId);
+                }
+                if (!fallbackJob && global.jobs && typeof global.jobs.get === 'function') {
+                    fallbackJob = global.jobs.get(requestedBatchId);
+                }
+                if (fallbackJob) {
+                    if (fallbackJob.state === 'queued' || fallbackJob.state === 'processing' || fallbackJob.status === 'running') {
+                        return res.status(404).json({
+                            message: 'Question generation is currently in progress for this scheduled test. Please check back shortly.',
+                            reason: 'generation_in_progress',
+                            progress: fallbackJob.progress || 0
+                        });
+                    }
+                    if (fallbackJob.state === 'failed' || fallbackJob.status === 'failed') {
+                        return res.status(404).json({
+                            message: `Question generation failed for this test schedule: ${fallbackJob.reason || 'Failed to generate questions.'}`,
+                            reason: 'generation_failed'
+                        });
+                    }
+                }
+
                 return res.status(404).json({
                     message: `Test batch "${requestedBatchId}" was not found for this employee.`,
                     reason: 'batch_not_found'
@@ -400,6 +554,11 @@ const getQuestionsForTest = async (req, res) => {
             const batchQuery = { worker: workerId, batchId: latestQuestionEntry.batchId };
             if (questionSet) batchQuery.questionSet = questionSet;
             questions = await Question.find(batchQuery);
+            if ((!questions || questions.length === 0) && mongoose.Types.ObjectId.isValid(workerId)) {
+                const objBatchQuery = { worker: new mongoose.Types.ObjectId(workerId), batchId: latestQuestionEntry.batchId };
+                if (questionSet) objBatchQuery.questionSet = questionSet;
+                questions = await Question.find(objBatchQuery);
+            }
         }
 
         // Fallback for legacy records or unbatched questions
@@ -474,32 +633,64 @@ const getQuestionsForTest = async (req, res) => {
         if (latestQuestionEntry.batchId) {
             try {
                 const TestSchedule = require('../models/TestSchedule');
-                let schedule = await TestSchedule.findOne({ batchId: latestQuestionEntry.batchId });
-                if (!schedule) {
-                    schedule = await TestSchedule.findOne({ 'occurrences.batchId': latestQuestionEntry.batchId });
-                }
-                if (schedule && req.user && req.user.role === 'worker') {
-                    const now = new Date();
-                    const occ = schedule.occurrences?.find(o => o.batchId === latestQuestionEntry.batchId);
-                    const winStart = occ ? occ.windowStartUtc : schedule.windowStartUtc;
-                    const winEnd = occ ? occ.windowEndUtc : schedule.windowEndUtc;
-                    const testDateStr = occ ? occ.occurrenceDate : schedule.testDate;
-
-                    if (winStart && now < new Date(winStart)) {
-                        return res.status(403).json({
-                            message: `Test is scheduled to start on ${testDateStr} at ${schedule.startTime}. Please wait until the start time.`,
-                            reason: 'test_not_started',
-                            windowStartUtc: winStart,
-                            windowEndUtc: winEnd
-                        });
+                if (TestSchedule.findOne !== mongoose.Model.findOne || mongoose.connection.readyState === 1) {
+                    let schedule = await TestSchedule.findOne({ batchId: latestQuestionEntry.batchId });
+                    if (!schedule) {
+                        schedule = await TestSchedule.findOne({ 'occurrences.batchId': latestQuestionEntry.batchId });
                     }
-                    if (winEnd && now > new Date(winEnd)) {
-                        return res.status(403).json({
-                            message: `Test window closed on ${testDateStr} at ${schedule.endTime}. You can no longer access this test.`,
-                            reason: 'test_window_closed',
-                            windowStartUtc: winStart,
-                            windowEndUtc: winEnd
-                        });
+                    if (schedule && req.user && req.user.role === 'worker') {
+                        // 1. Tenant validation
+                        if (schedule.subdomain && schedule.subdomain !== 'main') {
+                            if (effectiveSubdomain !== 'main' && schedule.subdomain !== effectiveSubdomain) {
+                                return res.status(403).json({
+                                    message: 'Access denied: Test schedule belongs to a different organization.',
+                                    reason: 'tenant_mismatch'
+                                });
+                            }
+                            if (worker.subdomain && worker.subdomain !== 'main' && schedule.subdomain !== worker.subdomain) {
+                                return res.status(403).json({
+                                    message: 'Access denied: Test schedule belongs to a different organization.',
+                                    reason: 'tenant_mismatch'
+                                });
+                            }
+                        }
+
+                        // 2. Assignment validation
+                        const assignedWorkerIds = (schedule.workers || []).map(w => String(w?._id || w));
+                        const assignedDepts = (schedule.departments || []).map(d => String(d).trim().toLowerCase());
+                        const workerDept = worker.department ? String(worker.department).trim().toLowerCase() : '';
+                        const isAssigned = assignedWorkerIds.includes(String(workerId)) || (workerDept && assignedDepts.includes(workerDept));
+
+                        if (!isAssigned) {
+                            return res.status(403).json({
+                                message: 'Access denied: You are not assigned to this scheduled test.',
+                                reason: 'not_assigned'
+                            });
+                        }
+
+                        // 3. Window checks
+                        const now = new Date();
+                        const occ = schedule.occurrences?.find(o => o.batchId === latestQuestionEntry.batchId);
+                        const winStart = occ ? occ.windowStartUtc : schedule.windowStartUtc;
+                        const winEnd = occ ? occ.windowEndUtc : schedule.windowEndUtc;
+                        const testDateStr = occ ? occ.occurrenceDate : schedule.testDate;
+
+                        if (winStart && now < new Date(winStart)) {
+                            return res.status(403).json({
+                                message: `Test is scheduled to start on ${testDateStr} at ${schedule.startTime}. Please wait until the start time.`,
+                                reason: 'test_not_started',
+                                windowStartUtc: winStart,
+                                windowEndUtc: winEnd
+                            });
+                        }
+                        if (winEnd && now > new Date(winEnd)) {
+                            return res.status(403).json({
+                                message: `Test window closed on ${testDateStr} at ${schedule.endTime}. You can no longer access this test.`,
+                                reason: 'test_window_closed',
+                                windowStartUtc: winStart,
+                                windowEndUtc: winEnd
+                            });
+                        }
                     }
                 }
             } catch (schedErr) {

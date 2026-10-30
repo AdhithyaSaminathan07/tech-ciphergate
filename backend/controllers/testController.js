@@ -700,7 +700,17 @@ const getAvailableTests = async (req, res) => {
             questionsQuery.batchId = { $nin: completedBatchIds };
         }
 
-        const questions = await Question.find(questionsQuery);
+        let questions = await Question.find(questionsQuery);
+        if ((!questions || questions.length === 0) && workerId.toString() !== validWorkerId.toString()) {
+            const strQuestionsQuery = {
+                worker: workerId.toString(),
+                batchId: { $exists: true, $ne: null }
+            };
+            if (completedBatchIds.length > 0) {
+                strQuestionsQuery.batchId = { $nin: completedBatchIds };
+            }
+            questions = await Question.find(strQuestionsQuery);
+        }
 
         // 4. Group questions into distinct batches
         const batchMap = new Map();
@@ -734,20 +744,36 @@ const getAvailableTests = async (req, res) => {
         }
 
         // 5. Enrich with TestSchedule information and enforce window timing
+        const TestSchedule = require('../models/TestSchedule');
         const batchIds = Array.from(batchMap.keys());
-        if (batchIds.length > 0) {
-            try {
-                const TestSchedule = require('../models/TestSchedule');
-                const schedules = await TestSchedule.find({ batchId: { $in: batchIds } }).lean();
-                const scheduleMap = new Map();
-                (schedules || []).forEach(s => scheduleMap.set(s.batchId, s));
+        const now = new Date();
 
-                const now = new Date();
+        if (batchIds.length > 0 && (TestSchedule.find !== mongoose.Model.find || mongoose.connection.readyState === 1)) {
+            try {
+                const schedFindQuery = TestSchedule.find({
+                    $or: [
+                        { batchId: { $in: batchIds } },
+                        { 'occurrences.batchId': { $in: batchIds } }
+                    ]
+                });
+                const schedules = typeof schedFindQuery?.lean === 'function'
+                    ? await schedFindQuery.lean()
+                    : await schedFindQuery;
+
+                const scheduleMap = new Map();
+                (schedules || []).forEach(s => {
+                    if (s.batchId) scheduleMap.set(s.batchId, s);
+                    (s.occurrences || []).forEach(o => {
+                        if (o.batchId) scheduleMap.set(o.batchId, { ...s, ...o, _id: s._id });
+                    });
+                });
+
                 for (const batchId of batchIds) {
                     const sched = scheduleMap.get(batchId);
                     if (sched) {
                         const batch = batchMap.get(batchId);
                         if (!batch) continue;
+                        batch.scheduleId = sched._id;
                         batch.scheduleName = sched.name;
                         batch.testDate = sched.testDate;
                         batch.startTime = sched.startTime;
@@ -775,6 +801,120 @@ const getAvailableTests = async (req, res) => {
                 }
             } catch (schedErr) {
                 console.warn('Could not enrich available tests with schedules:', schedErr.message);
+            }
+        }
+
+        // 6. Discover upcoming or currently open scheduled tests assigned to this worker that may not have generated batches yet
+        if (TestSchedule.find !== mongoose.Model.find || mongoose.connection.readyState === 1) {
+            try {
+                const workerIdStr = workerId.toString();
+                const workerDepartment = worker.department?.name || (typeof worker.department === 'string' ? worker.department : null);
+
+                const workerOrConditions = [
+                    { workers: validWorkerId },
+                    { workers: workerIdStr }
+                ];
+                if (workerDepartment) {
+                    workerOrConditions.push({ departments: workerDepartment });
+                }
+
+                const scheduleQuery = {
+                    $or: workerOrConditions,
+                    status: { $in: ['Scheduled', 'Generating', 'Ready', 'In Progress'] }
+                };
+
+                const targetSubdomain = worker.subdomain || (effectiveSubdomain !== 'main' ? effectiveSubdomain : null);
+                if (targetSubdomain && targetSubdomain !== 'main') {
+                    scheduleQuery.subdomain = targetSubdomain;
+                }
+
+                const schedFindQuery = TestSchedule.find(scheduleQuery);
+                const assignedSchedules = typeof schedFindQuery?.lean === 'function'
+                    ? await schedFindQuery.lean()
+                    : await schedFindQuery;
+
+                for (const sched of (assignedSchedules || [])) {
+                    if (sched.status === 'Failed' || sched.status === 'Cancelled' || sched.status === 'Paused') {
+                        continue;
+                    }
+
+                    // Gather occurrences or fallback to single schedule window
+                    const occurrencesToCheck = [];
+                    if (Array.isArray(sched.occurrences) && sched.occurrences.length > 0) {
+                        for (const occ of sched.occurrences) {
+                            occurrencesToCheck.push({
+                                batchId: occ.batchId || `${sched.batchId || sched._id}_${occ.occurrenceDate}`,
+                                testDate: occ.occurrenceDate || sched.testDate,
+                                startTime: sched.startTime,
+                                endTime: sched.endTime,
+                                timezone: sched.timezone,
+                                windowStartUtc: occ.windowStartUtc || sched.windowStartUtc,
+                                windowEndUtc: occ.windowEndUtc || sched.windowEndUtc,
+                                status: occ.status || sched.status,
+                                questionsCount: occ.questionsCount || sched.questionsPerWorker
+                            });
+                        }
+                    } else {
+                        occurrencesToCheck.push({
+                            batchId: sched.batchId || `sched_${sched._id}_${sched.testDate}`,
+                            testDate: sched.testDate,
+                            startTime: sched.startTime,
+                            endTime: sched.endTime,
+                            timezone: sched.timezone,
+                            windowStartUtc: sched.windowStartUtc,
+                            windowEndUtc: sched.windowEndUtc,
+                            status: sched.status,
+                            questionsCount: sched.questionsPerWorker
+                        });
+                    }
+
+                    for (const item of occurrencesToCheck) {
+                        const start = new Date(item.windowStartUtc);
+                        const end = new Date(item.windowEndUtc);
+
+                        // Window check: exclude expired windows
+                        if (now > end) {
+                            continue;
+                        }
+                        if (item.status === 'Failed' || item.status === 'Cancelled') {
+                            continue;
+                        }
+
+                        const batchKey = item.batchId;
+                        if (!batchMap.has(batchKey) && !completedBatchIds.includes(batchKey)) {
+                            const schedTopic = sched.topicSource === 'manual' && sched.manualTopics?.length > 0
+                                ? sched.manualTopics.join(', ')
+                                : `Daily Topics (${sched.topicDateRange?.startDate || ''} to ${sched.topicDateRange?.endDate || ''})`;
+
+                            const isOpen = now >= start && now <= end;
+                            const isGenerating = item.status === 'Generating' || sched.status === 'Generating';
+
+                            batchMap.set(batchKey, {
+                                batchId: item.batchId,
+                                scheduleId: sched._id,
+                                topic: schedTopic,
+                                isMixed: sched.topicSource === 'manual' ? (sched.manualTopics?.length > 1) : false,
+                                allTopics: sched.topicSource === 'manual' ? sched.manualTopics : [schedTopic],
+                                questionCount: item.questionsCount || sched.questionsPerWorker || 10,
+                                durationPerQuestion: sched.timePerQuestion || 30,
+                                totalTestDuration: sched.totalTestDuration || ((sched.questionsPerWorker || 10) * (sched.timePerQuestion || 30)),
+                                createdAt: sched.createdAt ? new Date(sched.createdAt) : new Date(),
+                                status: isGenerating ? 'generating' : (isOpen ? 'available' : 'upcoming'),
+                                isUpcoming: !isOpen || isGenerating,
+                                isScheduled: true,
+                                scheduleName: sched.name,
+                                testDate: item.testDate,
+                                startTime: item.startTime,
+                                endTime: item.endTime,
+                                timezone: item.timezone,
+                                windowStartUtc: item.windowStartUtc,
+                                windowEndUtc: item.windowEndUtc
+                            });
+                        }
+                    }
+                }
+            } catch (upSchedErr) {
+                console.warn('Could not discover schedules for worker:', upSchedErr.message);
             }
         }
 

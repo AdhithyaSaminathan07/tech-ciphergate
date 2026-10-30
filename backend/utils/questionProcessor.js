@@ -129,7 +129,7 @@ const processQuestionGeneration = async (jobData, jobId) => {
             }
 
             // Strict tenant validation: Target worker must belong to requesting admin's organization
-            const adminTenant = jobData.adminSubdomain;
+            const adminTenant = jobData.adminSubdomain || jobData.subdomain;
             if (adminTenant && adminTenant !== 'main' && worker.subdomain && worker.subdomain !== adminTenant) {
                 log.warn('DIAGNOSTIC_WORKER_SKIPPED', {
                     batchId: jobId,
@@ -258,7 +258,7 @@ const processQuestionGeneration = async (jobData, jobId) => {
                     if (questionsForThisTopic > 0) {
                         topicTasks.push(async () => {
                             try {
-                                const { subdomain } = jobData;
+                                const subdomain = jobData.subdomain || jobData.adminSubdomain || effectiveSubdomain;
                                 // SUPER OPTIMIZATION: Check cache first for common topics and deduplicate parallel requests
                                 if (ENABLE_TOPIC_CACHING && topicMode === 'common') {
                                     const cacheKey = `${currentTopic}-${difficulty}-${questionsForThisTopic}-${questionFormat}`;

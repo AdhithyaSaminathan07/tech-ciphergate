@@ -322,6 +322,7 @@ async function generateQuestionsForSchedule(schedule) {
     const isManual = schedule.topicSource === 'manual';
     const jobData = {
         workerIds,
+        subdomain: schedule.subdomain,
         adminSubdomain: schedule.subdomain,
         topicMode: isManual ? 'common' : 'individual',
         commonTopics: isManual ? schedule.manualTopics : undefined,
@@ -358,10 +359,19 @@ async function generateQuestionsForSchedule(schedule) {
         const persistedCount = await Question.countDocuments({ batchId });
 
         if (persistedCount === 0 || (jobStatus && jobStatus.status === 'failed')) {
-            const failReason = jobStatus?.reason || 'Zero questions were generated or persisted for the assigned topics.';
+            let failReason = jobStatus?.reason || 'Zero questions were generated or persisted for the assigned topics.';
+            if (jobStatus?.failedWorkers && jobStatus.failedWorkers.length > 0) {
+                const workerFailures = jobStatus.failedWorkers.map(f => `${f.workerName || f.workerId}: ${f.reason}`).join('; ');
+                if (workerFailures) {
+                    failReason = workerFailures;
+                }
+            } else if (persistedCount === 0 && (!jobStatus || jobStatus.status !== 'failed')) {
+                failReason = 'Persistence verification failed: Zero questions were persisted in database.';
+            }
+
             schedule.status = 'Failed';
             schedule.failureReason = failReason;
-            schedule.failureDiagnostic = jobStatus?.diagnostic || null;
+            schedule.failureDiagnostic = jobStatus?.diagnostic || { reason: failReason, persistedCount };
             schedule.executionLock = null;
 
             const occIndex = (schedule.occurrences || []).findIndex(

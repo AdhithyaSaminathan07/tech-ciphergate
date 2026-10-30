@@ -186,7 +186,16 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
             }
             
             const response = await api.get(`/test/available/${userId}`);
-            const batches = Array.isArray(response.data) ? response.data : [];
+            const rawData = response.data;
+            const batches = Array.isArray(rawData)
+                ? rawData
+                : (Array.isArray(rawData?.tests)
+                    ? rawData.tests
+                    : (Array.isArray(rawData?.batches)
+                        ? rawData.batches
+                        : (Array.isArray(rawData?.data)
+                            ? rawData.data
+                            : [])));
 
             if (batches.length > 0) {
                 setAvailableTests(batches);
@@ -197,9 +206,28 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                 });
             } else {
                 setAvailableTests([]);
-                // Check if worker has specific non-available reason (e.g. no topics recorded or already completed)
+                // Check if worker has questions or specific non-available reason (e.g. no topics recorded or already completed)
                 try {
-                    await api.get(`/test/questions/${userId}`);
+                    const fallbackRes = await api.get(`/test/questions/${userId}`);
+                    if (fallbackRes.data && Array.isArray(fallbackRes.data.questions) && fallbackRes.data.questions.length > 0) {
+                        const fallbackBatch = {
+                            batchId: fallbackRes.data.batchId || fallbackRes.data._id,
+                            topic: fallbackRes.data.topic || 'General Assessment',
+                            questionCount: fallbackRes.data.questions.length,
+                            durationPerQuestion: fallbackRes.data.durationPerQuestion || 30,
+                            totalTestDuration: fallbackRes.data.totalTestDuration || 600,
+                            createdAt: fallbackRes.data.createdAt || new Date(),
+                            status: 'available',
+                            questions: fallbackRes.data.questions
+                        };
+                        setAvailableTests([fallbackBatch]);
+                        setTestStatus({
+                            state: 'available',
+                            message: '1 test available',
+                            reason: 'tests_available'
+                        });
+                        return;
+                    }
                 } catch (subErr) {
                     throw subErr;
                 }
@@ -272,11 +300,25 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                     reason: reason || 'invalid_request'
                 });
             } else if (status === 403) {
-                setTestStatus({
-                    state: 'access_denied',
-                    message: message || 'Access denied: You do not have permission to view these test questions.',
-                    reason: reason || 'access_denied'
-                });
+                if (reason === 'test_not_started') {
+                    setTestStatus({
+                        state: 'test_not_started',
+                        message: message || 'This test is scheduled for a future time window. Please wait until the start time.',
+                        reason: 'test_not_started'
+                    });
+                } else if (reason === 'test_window_closed') {
+                    setTestStatus({
+                        state: 'test_window_closed',
+                        message: message || 'This scheduled test window has ended. You can no longer access this test.',
+                        reason: 'test_window_closed'
+                    });
+                } else {
+                    setTestStatus({
+                        state: 'access_denied',
+                        message: message || 'Access denied: You do not have permission to view these test questions.',
+                        reason: reason || 'access_denied'
+                    });
+                }
             } else if (status === 500) {
                 setTestStatus({
                     state: 'server_error',
@@ -421,7 +463,17 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
             }
 
             setCurrentTest(fullTestData);
-            setCurrentQuestionIndex(fullTestData.currentQuestionIndex || 0);
+            const initialQIndex = fullTestData.currentQuestionIndex || 0;
+            setCurrentQuestionIndex(initialQIndex);
+            
+            // Initialize answers array for the full question set
+            const qCount = fullTestData.questions?.length || 0;
+            const initialAnswers = Array.isArray(fullTestData.savedAnswers)
+                ? fullTestData.savedAnswers
+                : new Array(qCount).fill(null);
+            setAnswers(initialAnswers);
+            setSelectedAnswerIndex(initialAnswers[initialQIndex] !== null && initialAnswers[initialQIndex] !== undefined ? initialAnswers[initialQIndex] : null);
+            setShowFeedback(false);
             const questionDuration = fullTestData.durationPerQuestion || 30;
             let initialQTime = fullTestData.questionTimeRemaining;
             if (initialQTime === undefined || initialQTime === null) {
@@ -470,9 +522,10 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
             return;
         }
         
-        // If answer already selected, don't process again
-        if (answers[currentQuestionIndex] !== null && answers[currentQuestionIndex] !== undefined) {
-            console.log('Answer already selected for this question');
+        const isFeedbackEnabled = currentTest.showFeedback !== false;
+
+        // Block selection if test is currently submitting or active visual feedback is displaying
+        if (loading || (isFeedbackEnabled && showFeedback)) {
             return;
         }
         
@@ -484,14 +537,11 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
         newAnswers[currentQuestionIndex] = optionIndex;
         setAnswers(newAnswers);
         
-        // Check if answerFeedback is enabled (defaults to true)
-        const isFeedbackEnabled = currentTest.showFeedback !== false;
-        
         if (isFeedbackEnabled) {
             // Show feedback for the selected answer (correct/incorrect)
             setShowFeedback(true);
             
-            // Wait 2-3 seconds before moving to the next question or submitting
+            // Wait 2.5 seconds before moving to the next question or auto-submitting
             setTimeout(() => {
                 setShowFeedback(false);
                 setSelectedAnswerIndex(null);
@@ -512,18 +562,6 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                     }, 300); // Shorter delay to ensure it runs before other potential submit calls
                 }
             }, 2500); // 2.5 seconds delay for visual feedback
-        } else {
-            // No feedback: advance immediately after a short 300ms delay for click registration
-            setTimeout(() => {
-                setSelectedAnswerIndex(null);
-                if (currentQuestionIndex < currentTest.questions.length - 1) {
-                    setCurrentQuestionIndex(prev => prev + 1);
-                    setTimeLeft(currentTest.durationPerQuestion || 30);
-                } else {
-                    console.log('Last question answered (no feedback), auto-submitting test');
-                    handleSubmitTest(newAnswers);
-                }
-            }, 300);
         }
     };
 
@@ -532,7 +570,10 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
         clearTimeout(timerRef.current);
         
         if (currentQuestionIndex < currentTest.questions.length - 1) {
-            setCurrentQuestionIndex(prev => prev + 1);
+            const nextIdx = currentQuestionIndex + 1;
+            setCurrentQuestionIndex(nextIdx);
+            setSelectedAnswerIndex(answers[nextIdx] !== null && answers[nextIdx] !== undefined ? answers[nextIdx] : null);
+            setShowFeedback(false);
             setTimeLeft(currentTest.durationPerQuestion || 30);
         } else {
             console.log('Last question reached via handleNextQuestion, auto-submitting test');
@@ -540,7 +581,7 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
             // Directly submit without setting the flag first to avoid race conditions
             setTimeout(() => {
                 console.log('Auto-submitting test after delay');
-                handleSubmitTest();
+                handleSubmitTest(answers);
             }, 300); // Short delay to ensure UI updates complete
         }
     };
@@ -1361,6 +1402,11 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                                                                     In Progress
                                                                 </span>
                                                             )}
+                                                            {test.status === 'generating' && (
+                                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                                    <FaClock className="mr-1 animate-spin" /> Generating Questions...
+                                                                </span>
+                                                            )}
                                                             {test.isDefaultTopic && (
                                                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                                                                     General Topics
@@ -1403,7 +1449,23 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                                                         </div>
                                                     </div>
                                                     <div className="ml-4">
-                                                        {test.isUpcoming || test.status === 'upcoming' ? (
+                                                        {test.status === 'generating' ? (
+                                                            <div className="text-right space-y-1">
+                                                                <span className="inline-block px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold whitespace-nowrap">
+                                                                    Generating Questions
+                                                                </span>
+                                                                <div>
+                                                                    <Button
+                                                                        onClick={fetchAvailableTests}
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        className="opacity-75"
+                                                                    >
+                                                                        Refresh
+                                                                    </Button>
+                                                                </div>
+                                                            </div>
+                                                        ) : test.isUpcoming || test.status === 'upcoming' ? (
                                                             <div className="text-right space-y-1">
                                                                 <span className="inline-block px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold whitespace-nowrap">
                                                                     Opens at {test.startTime}
@@ -1602,6 +1664,40 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                                         className="inline-flex items-center"
                                     >
                                         Try Again
+                                    </Button>
+                                </div>
+                            ) : testStatus.state === 'test_not_started' ? (
+                                <div className="text-center py-12 bg-white rounded-lg border border-blue-200 bg-blue-50/20 p-8 shadow-sm">
+                                    <div className="mb-4">
+                                        <FaCalendarAlt className="mx-auto text-blue-600 text-6xl mb-4" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-2">Scheduled Test Upcoming</h3>
+                                    <p className="text-gray-600 max-w-lg mx-auto mb-6">
+                                        {testStatus.message || "This test is scheduled for a future time window. Please return during the test window."}
+                                    </p>
+                                    <Button
+                                        onClick={fetchAvailableTests}
+                                        variant="outline"
+                                        className="inline-flex items-center"
+                                    >
+                                        Check Schedule
+                                    </Button>
+                                </div>
+                            ) : testStatus.state === 'test_window_closed' ? (
+                                <div className="text-center py-12 bg-white rounded-lg border border-amber-200 bg-amber-50/20 p-8 shadow-sm">
+                                    <div className="mb-4">
+                                        <FaClock className="mx-auto text-amber-600 text-6xl mb-4" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-2">Test Window Closed</h3>
+                                    <p className="text-gray-600 max-w-lg mx-auto mb-6">
+                                        {testStatus.message || "This scheduled test window has closed. Please contact your administrator if a new window needs to be scheduled."}
+                                    </p>
+                                    <Button
+                                        onClick={() => setActiveTab('history')}
+                                        variant="outline"
+                                        className="inline-flex items-center"
+                                    >
+                                        View History
                                     </Button>
                                 </div>
                             ) : testStatus.state === 'access_denied' ? (
@@ -1858,8 +1954,8 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                                             let divStyle = 'w-full p-4 md:p-5 text-left rounded-xl border-2 transition-all duration-200 cursor-pointer flex justify-between items-center bg-[#1e293b]/40 border-slate-800 hover:border-slate-600 hover:bg-[#1e293b]/60 hover:translate-y-[-1px]';
                                             
                                             // When an answer is selected
-                                            if (answers[currentQuestionIndex] === index) {
-                                                if (isFeedbackEnabled) {
+                                            if (answers[currentQuestionIndex] === index || selectedAnswerIndex === index) {
+                                                if (isFeedbackEnabled && showFeedback) {
                                                     // If the selected answer is correct
                                                     if (index === currentQuestion.correctOption || index === currentQuestion.correctAnswer) {
                                                         divStyle = 'w-full p-4 md:p-5 text-left rounded-xl border-2 transition-all duration-200 cursor-pointer flex justify-between items-center bg-emerald-950/60 border-emerald-500 text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.15)]';
@@ -1877,10 +1973,12 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                                             }
                                             
                                             return (
-                                                <div 
+                                                <button
+                                                    type="button" 
                                                     key={index} 
                                                     className={divStyle}
                                                     onClick={() => handleAnswerSelect(index)}
+                                                    disabled={loading || (isFeedbackEnabled && showFeedback)}
                                                 >
                                                     <div className="flex items-center">
                                                         <span className="font-semibold text-slate-400 mr-3">{String.fromCharCode(65 + index)}.</span>
@@ -1888,17 +1986,17 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                                                     </div>
                                                     <div>
                                                         {/* Show indicators for selected answers */}
-                                                        {isFeedbackEnabled && answers[currentQuestionIndex] === index && (
-                                                            index === currentQuestion.correctOption || index === currentQuestion.correctAnswer ? 
+                                                        {isFeedbackEnabled && showFeedback && (answers[currentQuestionIndex] === index || selectedAnswerIndex === index) && (
+                                                            (index === currentQuestion.correctOption || index === currentQuestion.correctAnswer) ? 
                                                             <span className="font-bold text-emerald-400 text-sm tracking-wider">✓ CORRECT</span> : 
                                                             <span className="font-bold text-orange-400 text-sm tracking-wider">✗ WRONG</span>
                                                         )}
                                                         {/* Show correct answer indicator when feedback is shown */}
-                                                        {isFeedbackEnabled && showFeedback && (index === currentQuestion.correctOption || index === currentQuestion.correctAnswer) && answers[currentQuestionIndex] !== index && (
+                                                        {isFeedbackEnabled && showFeedback && (index === currentQuestion.correctOption || index === currentQuestion.correctAnswer) && answers[currentQuestionIndex] !== index && selectedAnswerIndex !== index && (
                                                             <span className="font-bold text-emerald-400 text-sm tracking-wider">✓ CORRECT ANSWER</span>
                                                         )}
                                                     </div>
-                                                </div>
+                                                </button>
                                             );
                                         });
                                     })()}
@@ -1938,16 +2036,17 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                                                     }
                                                 } 
                                                 // When not showing feedback but an answer is selected
-                                                else if (answers[currentQuestionIndex] === index) {
+                                                else if (answers[currentQuestionIndex] === index || selectedAnswerIndex === index) {
                                                     buttonStyle = 'border-blue-500 bg-blue-950/60 text-blue-200 shadow-[0_0_15px_rgba(59,130,246,0.15)] scale-[1.01]';
                                                 }
                                                 
                                                 return (
                                                     <button
                                                         key={index}
+                                                        type="button"
                                                         className={`w-full p-4 md:p-5 text-left rounded-xl border-2 transition-all duration-200 shadow-md ${buttonStyle} flex justify-between items-center`}
                                                         onClick={() => handleAnswerSelect(index)}
-                                                        disabled={selectedAnswerIndex !== null || answers[currentQuestionIndex] !== null}
+                                                        disabled={loading || (isFeedbackEnabled && showFeedback)}
                                                     >
                                                         <div className="flex items-center">
                                                             <span className="font-semibold text-slate-400 mr-3">{String.fromCharCode(65 + index)}.</span>
@@ -1964,6 +2063,46 @@ const WorkerTest = ({ onTestStateChange }) => { // Add prop for notifying test s
                                 })()}
                             </>
                         )}
+
+                        {/* Navigation and Submission Bar */}
+                        {(() => {
+                            const isFeedbackEnabled = currentTest.showFeedback !== false;
+                            return (
+                                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-8 pt-6 border-t border-slate-800/80">
+                                    <div className="text-sm text-slate-400">
+                                        {answers[currentQuestionIndex] !== null && answers[currentQuestionIndex] !== undefined
+                                            ? <span className="text-blue-400 font-medium">Selected: Option {String.fromCharCode(65 + answers[currentQuestionIndex])}</span>
+                                            : <span className="text-slate-500">Select an option to proceed</span>}
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        {currentQuestionIndex > 0 && !(isFeedbackEnabled && showFeedback) && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    clearTimeout(timerRef.current);
+                                                    const prevIndex = currentQuestionIndex - 1;
+                                                    setCurrentQuestionIndex(prevIndex);
+                                                    setSelectedAnswerIndex(answers[prevIndex] !== null && answers[prevIndex] !== undefined ? answers[prevIndex] : null);
+                                                    setShowFeedback(false);
+                                                    setTimeLeft(currentTest.durationPerQuestion || 30);
+                                                }}
+                                                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-xl transition duration-200"
+                                            >
+                                                Previous
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={handleNextQuestion}
+                                            disabled={loading || (isFeedbackEnabled && showFeedback) || answers[currentQuestionIndex] === null || answers[currentQuestionIndex] === undefined}
+                                            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium rounded-xl transition duration-200 shadow-lg shadow-blue-500/20"
+                                        >
+                                            {currentQuestionIndex < currentTest.questions.length - 1 ? 'Next Question' : 'Submit Test'}
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })()}
                     </div>
                 </div>
 

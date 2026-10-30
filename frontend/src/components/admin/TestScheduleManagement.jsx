@@ -1,5 +1,4 @@
-// components/admin/TestScheduleManagement.jsx
-import React, { useState, useEffect, useContext, useMemo } from 'react';
+import React, { useState, useEffect, useContext, useMemo, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   FaCalendarPlus,
@@ -194,7 +193,10 @@ const TestScheduleManagement = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { subdomain } = useContext(appContext);
-  const effectiveSubdomain = (subdomain && subdomain !== 'main') ? subdomain : (user?.subdomain || subdomain || 'default');
+  // Authoritative tenant resolution: prefer authenticated user subdomain, then non-main context, then main
+  const effectiveSubdomain = (user?.subdomain && user.subdomain !== 'main')
+    ? user.subdomain
+    : ((subdomain && subdomain !== 'main') ? subdomain : (user?.subdomain || subdomain || 'main'));
 
   // Active Tab state
   const currentTabParam = searchParams.get('tab');
@@ -229,7 +231,7 @@ const TestScheduleManagement = () => {
     startDate: getLocalDateYMD(-5, 'Asia/Kolkata'),
     endDate: getLocalDateYMD(0, 'Asia/Kolkata'),
     manualTopics: '',
-    allowHistoricalFallback: false,
+    allowHistoricalFallback: true,
     repeatSchedule: 'weekly',
     recurrenceDay: 'Wednesday',
     repeatUntilDisabled: true,
@@ -252,10 +254,6 @@ const TestScheduleManagement = () => {
 
   const [formData, setFormData] = useState(initialFormState);
 
-  useEffect(() => {
-    fetchMetadata();
-    fetchSchedules();
-  }, [effectiveSubdomain]);
 
   // Sync tab with URL
   useEffect(() => {
@@ -302,28 +300,57 @@ const TestScheduleManagement = () => {
         getWorkers({ subdomain: effectiveSubdomain }),
         getDepartments({ subdomain: effectiveSubdomain })
       ]);
-      setWorkers(Array.isArray(workersRes) ? workersRes : []);
-      setDepartments(Array.isArray(deptsRes) ? deptsRes : []);
+      const rawWorkers = Array.isArray(workersRes)
+        ? workersRes
+        : (Array.isArray(workersRes?.workers) ? workersRes.workers : []);
+      const rawDepts = Array.isArray(deptsRes)
+        ? deptsRes
+        : (Array.isArray(deptsRes?.departments) ? deptsRes.departments : []);
+      setWorkers(rawWorkers);
+      setDepartments(rawDepts);
     } catch (err) {
       console.warn('Metadata fetch error:', err.message);
     }
   };
 
-  const fetchSchedules = async () => {
+  const fetchSchedules = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getSchedules({
-        subdomain: effectiveSubdomain,
-        status: statusFilter !== 'all' ? statusFilter : undefined
+        subdomain: effectiveSubdomain
       });
-      setSchedules(Array.isArray(data) ? data : []);
+
+      // Verify response structure strictly
+      if (Array.isArray(data)) {
+        setSchedules(data);
+      } else if (Array.isArray(data?.schedules)) {
+        setSchedules(data.schedules);
+      } else if (Array.isArray(data?.data)) {
+        setSchedules(data.data);
+      } else {
+        // Unexpected format: do not silently swallow, surface actionable error
+        console.error('Invalid schedules response structure:', data);
+        setActionError('Received unexpected data format from server when loading test schedules.');
+        setSchedules([]);
+      }
     } catch (err) {
       console.error('Failed to fetch schedules:', err);
       setActionError(err.message || 'Failed to fetch test schedules.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [effectiveSubdomain]);
+
+  useEffect(() => {
+    fetchMetadata();
+  }, [effectiveSubdomain]);
+
+  // Refresh schedules whenever effectiveSubdomain changes or when entering manage or overview tabs
+  useEffect(() => {
+    if (activeTab === 'manage' || activeTab === 'overview') {
+      fetchSchedules();
+    }
+  }, [activeTab, fetchSchedules]);
 
   const handleSaveSchedule = async (e) => {
     if (e) e.preventDefault();
@@ -724,27 +751,35 @@ const TestScheduleManagement = () => {
         )}
 
         <div className="max-h-44 overflow-y-auto border border-slate-200 rounded-xl p-2.5 divide-y divide-slate-100 bg-white">
-          {filteredFormWorkers.map((w) => {
-            const isChecked = formData.workers.includes(w._id);
-            return (
-              <label
-                key={w._id}
-                className="flex items-center gap-2.5 py-1.5 px-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
-              >
-                <input
-                  type="checkbox"
-                  checked={isChecked}
-                  onChange={() => toggleWorkerInForm(w._id)}
-                  className="w-4 h-4 text-[#087443] rounded border-slate-300 focus:ring-[#087443]"
-                />
-                <span className="text-xs font-bold text-slate-800">{w.name}</span>
-                <span className="text-[11px] text-slate-400 font-mono">
-                  {w.rfid || w.username || `EMP-${String(w._id).slice(-4).toUpperCase()}`}
-                </span>
-                <span className="text-[11px] text-slate-500 ml-auto">({w.department || 'N/A'})</span>
-              </label>
-            );
-          })}
+          {filteredFormWorkers.length === 0 ? (
+            <div className="p-4 text-center text-slate-500 text-xs">
+              {workerSearchQuery.trim()
+                ? `No developers found matching "${workerSearchQuery}".`
+                : `No active developers found for organization "${effectiveSubdomain}". Please ensure active developers exist in Worker Management.`}
+            </div>
+          ) : (
+            filteredFormWorkers.map((w) => {
+              const isChecked = formData.workers.includes(w._id);
+              return (
+                <label
+                  key={w._id}
+                  className="flex items-center gap-2.5 py-1.5 px-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => toggleWorkerInForm(w._id)}
+                    className="w-4 h-4 text-[#087443] rounded border-slate-300 focus:ring-[#087443]"
+                  />
+                  <span className="text-xs font-bold text-slate-800">{w.name}</span>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    {w.rfid || w.username || `EMP-${String(w._id).slice(-4).toUpperCase()}`}
+                  </span>
+                  <span className="text-[11px] text-slate-500 ml-auto">({w.department || 'N/A'})</span>
+                </label>
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -1087,12 +1122,13 @@ const TestScheduleManagement = () => {
         )}
         <Button
           type="submit"
-          disabled={saving || formData.workers.length === 0}
+          disabled={saving || formData.workers.length === 0 || !formData.name.trim()}
           className={`font-bold px-5 py-2.5 rounded-xl text-xs sm:text-sm flex items-center gap-2 shadow-sm ${
-            formData.workers.length === 0
+            formData.workers.length === 0 || !formData.name.trim()
               ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
               : 'bg-[#087443] hover:bg-[#065b34] text-white cursor-pointer'
           }`}
+          title={!formData.name.trim() ? 'Please provide a schedule name' : (formData.workers.length === 0 ? 'Please select at least one developer' : '')}
         >
           {saving && <Spinner size="sm" />}
           {editingScheduleId ? 'Save Changes' : 'Save & Schedule Test'}

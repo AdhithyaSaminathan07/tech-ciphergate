@@ -2,6 +2,7 @@
 const mongoose = require('mongoose');
 const TestSchedule = require('../models/TestSchedule');
 const Worker = require('../models/Worker');
+const Admin = require('../models/Admin');
 const TestAttempt = require('../models/TestAttempt');
 const {
     parseTimeToUtc,
@@ -12,13 +13,15 @@ const {
 } = require('../services/testScheduler');
 
 const resolveSubdomain = (subdomain, user) => {
+    // 1. Authenticated tenant context strictly supersedes client-supplied value for non-main admins
     if (user?.subdomain && user.subdomain !== 'main') {
         return user.subdomain;
     }
-    if ((!subdomain || subdomain === 'main') && user?.subdomain) {
-        return user.subdomain;
+    // 2. Superadmin ('main') can act within a specific requested tenant subdomain, or defaults to their own subdomain
+    if (subdomain && subdomain !== 'main' && subdomain !== 'default') {
+        return subdomain;
     }
-    return subdomain || 'default';
+    return user?.subdomain || 'main';
 };
 
 // @desc    Create a new test schedule
@@ -142,7 +145,11 @@ const createSchedule = async (req, res) => {
             }
         }
 
+        const scheduleId = new mongoose.Types.ObjectId();
+        const initialBatchId = generationTiming === 'in_advance' ? `sched_${scheduleId}_${testDate}` : undefined;
+
         const newSchedule = new TestSchedule({
+            _id: scheduleId,
             name: name.trim(),
             subdomain: effectiveSubdomain,
             workers: targetWorkerIds,
@@ -169,6 +176,16 @@ const createSchedule = async (req, res) => {
             recurrenceDay,
             repeatUntilDisabled: repeatUntilDisabled !== false,
             status: 'Scheduled',
+            batchId: initialBatchId,
+            occurrences: initialBatchId ? [{
+                occurrenceId: `${scheduleId}_${testDate}`,
+                occurrenceDate: testDate,
+                batchId: initialBatchId,
+                status: 'Scheduled',
+                windowStartUtc,
+                windowEndUtc,
+                questionsCount: 0
+            }] : [],
             createdBy: req.user?._id
         });
 
@@ -224,7 +241,7 @@ const getSchedules = async (req, res) => {
 
         const schedules = await TestSchedule.find(query)
             .populate('workers', 'name email department')
-            .populate('createdBy', 'name email')
+            .populate('createdBy', 'username email')
             .sort({ windowStartUtc: -1, createdAt: -1 });
 
         return res.status(200).json(schedules);
@@ -246,7 +263,7 @@ const getScheduleById = async (req, res) => {
 
         const schedule = await TestSchedule.findById(id)
             .populate('workers', 'name email department')
-            .populate('createdBy', 'name email');
+            .populate('createdBy', 'username email');
 
         if (!schedule) {
             return res.status(404).json({ message: 'Test schedule not found.' });
