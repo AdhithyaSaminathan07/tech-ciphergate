@@ -41,11 +41,11 @@ export const resetSalaryAmount = async (salaryData) => {
   }
 };
 
-export const getSalaryReport = async (workerId, fromDate, toDate) => { // ADD THIS
+export const getSalaryReport = async (workerId, fromDate, toDate, filters = {}) => {
   try {
     const token = getAuthToken();
     const response = await api.get(`/salary/report/${workerId}`, {
-      params: { fromDate, toDate },
+      params: { fromDate, toDate, ...filters },
       headers: { Authorization: `Bearer ${token}` }
     });
     return response.data;

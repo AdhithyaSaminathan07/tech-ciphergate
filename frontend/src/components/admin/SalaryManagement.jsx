@@ -159,12 +159,61 @@ const SalaryManagement = () => {
     });
     const [showDetailedBreakdown, setShowDetailedBreakdown] = useState(false);
 
-    // Stage 2C: Pure helper for effective displayed payout based on deductionView toggle
-    const getEffectivePayableSalary = (record, isDeductionView) => {
+    // Enterprise Payroll: Authoritative Salary Resolver
+    const getEffectivePayableSalary = (record, options = null) => {
         if (!record) return 0;
-        const base = record.payableSalary !== undefined ? record.payableSalary : (record.totalFinalSalary || 0);
-        const penalty = isDeductionView ? (record.taskPenalty || 0) : 0;
-        return Math.max(0, base - penalty);
+
+        // 1. Authoritative Backend Finalization:
+        // The backend's finalizeSalaryCalculation() is the single authoritative source of truth.
+        // If the backend has already finalized the salary, return that amount directly.
+        // Never add the 4X surcharge again in the frontend.
+        const backendFinal = record.finalPayableSalary !== undefined && !isNaN(Number(record.finalPayableSalary))
+            ? Number(record.finalPayableSalary)
+            : (record.fullReport?.finalPayableSalary !== undefined && !isNaN(Number(record.fullReport.finalPayableSalary))
+                ? Number(record.fullReport.finalPayableSalary)
+                : null);
+
+        // Check if payroll record snapshot is protected
+        const isSnapshotProtected = record.payrollRecord &&
+            ['Locked', 'Paid'].includes(record.payrollRecord.status) &&
+            record.payrollRecord.attendanceSalarySnapshot !== null &&
+            record.payrollRecord.attendanceSalarySnapshot !== undefined &&
+            !isNaN(Number(record.payrollRecord.attendanceSalarySnapshot));
+
+        // Resolve active task toggle value (uses options override if provided, else component state)
+        const useTask = options?.deductionView !== undefined
+            ? options.deductionView
+            : (typeof options === 'boolean' ? options : deductionView);
+
+        const taskPenalty = Number(record.taskPenalty || record.fullReport?.taskPenalty || 0);
+
+        if (backendFinal !== null) {
+            if (isSnapshotProtected) {
+                return parseFloat(backendFinal.toFixed(2));
+            }
+
+            // Sync task deduction if explicitly overridden via options
+            const backendTaskDeducted = record.appliedPenaltyPolicy === 'Deducted' || record.fullReport?.appliedPenaltyPolicy === 'Deducted';
+            if (backendTaskDeducted && !useTask) {
+                return parseFloat((backendFinal + taskPenalty).toFixed(2));
+            }
+            if (!backendTaskDeducted && useTask && taskPenalty > 0) {
+                return parseFloat(Math.max(0, backendFinal - taskPenalty).toFixed(2));
+            }
+
+            return parseFloat(backendFinal.toFixed(2));
+        }
+
+        // 2. Fallback for un-finalized records (legacy / mock)
+        let basePayable = record.payableSalary !== undefined
+            ? Number(record.payableSalary)
+            : (record.fullReport?.payableSalary !== undefined
+                ? Number(record.fullReport.payableSalary)
+                : Number(record.totalFinalSalary || 0));
+
+        const effectiveTaskPenalty = useTask ? taskPenalty : 0;
+        const finalAmount = Math.max(0, basePayable - effectiveTaskPenalty);
+        return parseFloat(finalAmount.toFixed(2));
     };
     const [showTaskDeductionBreakdown, setShowTaskDeductionBreakdown] = useState(false);
     const [penaltyExplanation, setPenaltyExplanation] = useState(null);
@@ -298,6 +347,8 @@ const SalaryManagement = () => {
             const response = await getBulkSalaryReport(subdomain, fromDateStr, toDateStr, {
                 page: pageNumber,
                 limit: 10,
+                month: selectedMonth,
+                year: selectedYear,
                 searchTerm: debouncedSearchTerm,
                 filterDepartment,
                 filterMinSalary,
@@ -680,7 +731,12 @@ const SalaryManagement = () => {
         setIsReportLoading(true);
         setReportData(null);
         try {
-            const data = await getSalaryReport(selectedWorker._id, fromDate, toDate);
+            const data = await getSalaryReport(selectedWorker._id, fromDate, toDate, {
+                taskDeduction: deductionView,
+                unauthorizedDeduction: unauthorizedDeductionView,
+                leaveDeduction: leaveDeductionView,
+                permissionDeduction: permissionDeductionView
+            });
             setReportData(data);
         } catch (error) {
             toast.error(error.message || 'Failed to fetch report');
@@ -710,7 +766,7 @@ const SalaryManagement = () => {
         const perDaySalary = summary.perDaySalary || (workingDaysCount ? grossSalary / workingDaysCount : 0);
         const actualWorked = summary.actualWorkingDays || 0;
         const earnedAttendanceSalary = summary.earnedAttendanceSalary || (actualWorked * perDaySalary);
-        const netPayout = reportObj.finalSalaryWithFines ?? reportObj.totalFinalSalary ?? summary.finalSalary ?? 0;
+        const netPayout = getEffectivePayableSalary(reportObj, deductionView);
 
         const pageWidth = doc.internal.pageSize.getWidth();
 
@@ -895,7 +951,12 @@ const SalaryManagement = () => {
             const fromDate = formatDate(firstDay);
             const toDate = formatDate(lastDay);
 
-            const data = await getSalaryReport(worker._id, fromDate, toDate);
+            const data = await getSalaryReport(worker._id, fromDate, toDate, {
+                taskDeduction: deductionView,
+                unauthorizedDeduction: unauthorizedDeductionView,
+                leaveDeduction: leaveDeductionView,
+                permissionDeduction: permissionDeductionView
+            });
             if (!data) throw new Error("No data returned from API");
 
             generatePDFReport(worker, data, fromDate);
@@ -1048,7 +1109,15 @@ const SalaryManagement = () => {
             const fromDate = formatDate(firstDay);
             const toDate = formatDate(lastDay);
 
-            const response = await getBulkSalaryReport(subdomain, fromDate, toDate, { isExport: true });
+            const response = await getBulkSalaryReport(subdomain, fromDate, toDate, {
+                isExport: true,
+                month: selectedMonth,
+                year: selectedYear,
+                taskDeduction: deductionView,
+                unauthorizedDeduction: unauthorizedDeductionView,
+                leaveDeduction: leaveDeductionView,
+                permissionDeduction: permissionDeductionView
+            });
             if (response && response.reports) {
                 // Filter to only include the selected workers
                 const filteredReports = response.reports.filter(r => selectedWorkersForReport.includes(r.workerId));
@@ -1097,7 +1166,12 @@ const SalaryManagement = () => {
             const fromDate = formatDate(firstDay);
             const toDate = formatDate(lastDay);
 
-            const report = await getSalaryReport(worker.workerId, fromDate, toDate);
+            const report = await getSalaryReport(worker.workerId, fromDate, toDate, {
+                taskDeduction: deductionView,
+                unauthorizedDeduction: unauthorizedDeductionView,
+                leaveDeduction: leaveDeductionView,
+                permissionDeduction: permissionDeductionView
+            });
             setIndividualReportData(report);
         } catch (error) {
             toast.error('Failed to fetch individual report');
@@ -1153,7 +1227,7 @@ const SalaryManagement = () => {
             headerAlign: 'text-center',
             render: (record) => (
                 <span className="font-extrabold text-[#0d9488]">
-                    ₹{(record?.finalSalary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₹{(getEffectivePayableSalary(record, deductionView)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
             )
         },
@@ -1366,8 +1440,8 @@ const SalaryManagement = () => {
                 ['Total Deductions', formatCurrency(reportData.report.totalSalaryDeduction)],
                 ['Bonus Applied', formatCurrency(reportData.totalBonusAmount)],
                 ['Fines Applied', formatCurrency(reportData.totalFinesAmount)],
-                ['Task Penalty', formatCurrency(deductionView ? (data.taskPenalty || 0) : 0)],
-                ['Net Payout', formatCurrency(getEffectivePayableSalary(data, deductionView))]
+                ['Task Penalty', formatCurrency(data.taskPenalty || 0)],
+                ['Net Payout', formatCurrency(getEffectivePayableSalary(data))]
             ];
 
             autoTable(doc, {
@@ -2150,7 +2224,7 @@ const SalaryManagement = () => {
                         style={{ willChange: 'transform, opacity' }}
                     >
                         {/* ── Sticky Header ── */}
-                        <div className="flex-none bg-white/80 backdrop-blur-xl border-b border-slate-100 px-6 md:px-8 py-4 flex items-center justify-between shadow-sm gap-4">
+                        <div className="flex-none bg-white/80 backdrop-blur-xl border-b border-slate-100 px-6 md:px-8 py-3.5 flex flex-wrap items-center justify-between shadow-sm gap-4">
                             {/* Left: Back + Title */}
                             <div className="flex items-center gap-4 min-w-0">
                                 <button
@@ -2163,6 +2237,99 @@ const SalaryManagement = () => {
                                     <h1 className="text-lg font-black text-slate-900 tracking-tight leading-tight">Bulk Salary Reports</h1>
                                     <p className="text-[10px] font-black text-slate-400 tracking-widest">Payroll Overview</p>
                                 </div>
+                            </div>
+
+                            {/* Center: Global Deduction Toggles Bar */}
+                            <div className="flex items-center gap-3 bg-slate-50 border border-slate-200/80 px-4 py-2 rounded-2xl shadow-sm flex-wrap">
+                                {/* 1. Task Deduction Toggle */}
+                                <label className="flex items-center gap-2 cursor-pointer group select-none">
+                                    <span className={`text-[11px] font-black tracking-widest transition-colors ${deductionView ? 'text-amber-600' : 'text-slate-400 group-hover:text-slate-600'}`}>
+                                        Task Deduction
+                                    </span>
+                                    <div className="relative">
+                                        <input
+                                            type="checkbox"
+                                            className="sr-only"
+                                            checked={deductionView}
+                                            onChange={() => {
+                                                const next = !deductionView;
+                                                setDeductionView(next);
+                                                localStorage.setItem('deductionView', String(next));
+                                            }}
+                                        />
+                                        <div className={`w-8 h-4 rounded-full transition-colors ${deductionView ? 'bg-amber-500' : 'bg-slate-200'}`}></div>
+                                        <div className={`absolute left-0.5 top-0.5 bg-white w-3 h-3 rounded-full transition-transform ${deductionView ? 'translate-x-4' : ''}`}></div>
+                                    </div>
+                                </label>
+
+                                <div className="w-px h-3 bg-slate-200 hidden sm:block"></div>
+
+                                {/* 2. Unauthorized Leave Deductions (5X) Toggle */}
+                                <label className="flex items-center gap-2 cursor-pointer group select-none">
+                                    <span className={`text-[11px] font-black tracking-widest transition-colors ${unauthorizedDeductionView ? 'text-rose-600' : 'text-slate-400 group-hover:text-slate-600'}`}>
+                                        Unauthorized (5X)
+                                    </span>
+                                    <div className="relative">
+                                        <input
+                                            type="checkbox"
+                                            className="sr-only"
+                                            checked={unauthorizedDeductionView}
+                                            onChange={() => {
+                                                const next = !unauthorizedDeductionView;
+                                                setUnauthorizedDeductionView(next);
+                                                localStorage.setItem('unauthorizedDeductionView', String(next));
+                                            }}
+                                        />
+                                        <div className={`w-8 h-4 rounded-full transition-colors ${unauthorizedDeductionView ? 'bg-rose-500' : 'bg-slate-200'}`}></div>
+                                        <div className={`absolute left-0.5 top-0.5 bg-white w-3 h-3 rounded-full transition-transform ${unauthorizedDeductionView ? 'translate-x-4' : ''}`}></div>
+                                    </div>
+                                </label>
+
+                                <div className="w-px h-3 bg-slate-200 hidden sm:block"></div>
+
+                                {/* 3. Leave Deductions Toggle */}
+                                <label className="flex items-center gap-2 cursor-pointer group select-none">
+                                    <span className={`text-[11px] font-black tracking-widest transition-colors ${leaveDeductionView ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600'}`}>
+                                        Leave Deduction
+                                    </span>
+                                    <div className="relative">
+                                        <input
+                                            type="checkbox"
+                                            className="sr-only"
+                                            checked={leaveDeductionView}
+                                            onChange={() => {
+                                                const next = !leaveDeductionView;
+                                                setLeaveDeductionView(next);
+                                                localStorage.setItem('leaveDeductionView', String(next));
+                                            }}
+                                        />
+                                        <div className={`w-8 h-4 rounded-full transition-colors ${leaveDeductionView ? 'bg-indigo-500' : 'bg-slate-200'}`}></div>
+                                        <div className={`absolute left-0.5 top-0.5 bg-white w-3 h-3 rounded-full transition-transform ${leaveDeductionView ? 'translate-x-4' : ''}`}></div>
+                                    </div>
+                                </label>
+
+                                <div className="w-px h-3 bg-slate-200 hidden sm:block"></div>
+
+                                {/* 4. Daily Delay Toggle */}
+                                <label className="flex items-center gap-2 cursor-pointer group select-none">
+                                    <span className={`text-[11px] font-black tracking-widest transition-colors ${permissionDeductionView ? 'text-teal-600' : 'text-slate-400 group-hover:text-slate-600'}`}>
+                                        Daily Delay
+                                    </span>
+                                    <div className="relative">
+                                        <input
+                                            type="checkbox"
+                                            className="sr-only"
+                                            checked={permissionDeductionView}
+                                            onChange={() => {
+                                                const next = !permissionDeductionView;
+                                                setPermissionDeductionView(next);
+                                                localStorage.setItem('permissionDeductionView', String(next));
+                                            }}
+                                        />
+                                        <div className={`w-8 h-4 rounded-full transition-colors ${permissionDeductionView ? 'bg-teal-500' : 'bg-slate-200'}`}></div>
+                                        <div className={`absolute left-0.5 top-0.5 bg-white w-3 h-3 rounded-full transition-transform ${permissionDeductionView ? 'translate-x-4' : ''}`}></div>
+                                    </div>
+                                </label>
                             </div>
 
                             {/* Right: Month/Year + Generate */}
@@ -2614,7 +2781,12 @@ const SalaryManagement = () => {
                                                                                                 if (day.length < 2) day = '0' + day;
                                                                                                 return [yr, m, day].join('-');
                                                                                             };
-                                                                                            const data = await getSalaryReport(report.workerId, formatDate(firstDay), formatDate(lastDay));
+                                                                                            const data = await getSalaryReport(report.workerId, formatDate(firstDay), formatDate(lastDay), {
+                                                                                                taskDeduction: deductionView,
+                                                                                                unauthorizedDeduction: unauthorizedDeductionView,
+                                                                                                leaveDeduction: leaveDeductionView,
+                                                                                                permissionDeduction: permissionDeductionView
+                                                                                            });
                                                                                             setSelectedWorker(workers.find(w => w._id === report.workerId));
                                                                                             setReportData(data);
                                                                                             setTimeout(() => downloadPDF(), 100);
@@ -2742,10 +2914,10 @@ const SalaryManagement = () => {
                                         </label>
                                     </div>
 
-                                    {/* Permission Deduction */}
+                                    {/* Daily Delay */}
                                     <div className="flex items-center gap-1.5 bg-white/5 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10">
                                         <div className={`w-1.5 h-1.5 rounded-full ${permissionDeductionView ? 'bg-teal-400 animate-pulse' : 'bg-slate-500'}`}></div>
-                                        <span className="text-[10px] font-black tracking-widest text-slate-300 mr-1">Permission</span>
+                                        <span className="text-[10px] font-black tracking-widest text-slate-300 mr-1">Daily Delay</span>
                                         <label className="relative inline-flex items-center cursor-pointer">
                                             <input
                                                 type="checkbox"
@@ -2767,29 +2939,8 @@ const SalaryManagement = () => {
                                 {[
                                     { label: 'Working Days', value: selectedIndividualWorker?.totalWorkingDays, sub: 'Total Scheduled', icon: <Calendar size={14} />, color: 'text-teal-400' },
                                     { label: 'Absent Days', value: selectedIndividualWorker?.totalAbsentDays, sub: 'Deductions Applied', icon: <Calendar size={14} />, color: 'text-rose-400' },
-                                    { label: 'Base Earnings', value: `₹${individualReportData?.report?.summary?.netBaseSalary?.toLocaleString('en-IN', { minimumFractionDigits: 0 })}`, sub: 'After Attendance', icon: <Coins size={14} />, color: 'text-white' },
-                                    { label: 'Final Settlement', value: `₹${(() => {
-                                        const rawUnauth = individualReportData?.totalUnauthorizedPenalty > 0
-                                            ? individualReportData.totalUnauthorizedPenalty
-                                            : (individualReportData?.report?.summary?.absentDeduction || 0);
-                                        const rawLeave = individualReportData?.report?.summary?.leaveDeduction || 0;
-                                        const rawPerm = individualReportData?.report?.summary?.permissionDeduction || 0;
-                                        const rawFines = individualReportData?.totalFinesAmount || 0;
-                                        const rawTask = individualReportData?.taskPenalty || 0;
-
-                                        const actUnauth = unauthorizedDeductionView ? rawUnauth : 0;
-                                        const actLeave = leaveDeductionView ? rawLeave : 0;
-                                        const actPerm = permissionDeductionView ? rawPerm : 0;
-                                        const actTask = deductionView ? rawTask : 0;
-                                        const actFines = rawFines;
-
-                                        const totalDed = actUnauth + actLeave + actPerm + actFines + actTask;
-                                        const baseSal = individualReportData?.report?.summary?.expectedSaaSSalary !== undefined
-                                            ? individualReportData.report.summary.expectedSaaSSalary
-                                            : (individualReportData?.report?.summary?.originalSalary || individualReportData?.payableSalary || 0);
-                                        const net = Math.max(0, baseSal - totalDed + (individualReportData?.projectAdjustment || 0));
-                                        return net.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                                    })()}`, sub: 'Current Balance', icon: <Wallet size={14} />, color: 'text-teal-400' }
+                                    { label: 'Base Earnings', value: `₹${(individualReportData?.report?.summary?.netBaseSalary || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: 'After Attendance', icon: <Coins size={14} />, color: 'text-white' },
+                                    { label: 'Final Settlement', value: `₹${getEffectivePayableSalary(individualReportData, deductionView).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: 'Current Balance', icon: <Wallet size={14} />, color: 'text-teal-400' }
                                 ].map((stat, i) => (
                                     <div key={i} className="space-y-1">
                                         <div className="flex items-center gap-2 text-slate-400">
@@ -2887,7 +3038,10 @@ const SalaryManagement = () => {
                                                 const indRawPerm = individualReportData.report?.summary?.permissionDeduction || 0;
                                                 const indRawFines = individualReportData.totalFinesAmount || 0;
 
-                                                const indActUnauth = unauthorizedDeductionView ? indRawUnauth : 0;
+                                                const ind1XAmount = Number(individualReportData?.totalNormal1XAmount || (indRawUnauth > 0 ? indRawUnauth * 0.2 : 0));
+                                                const indActUnauth = unauthorizedDeductionView
+                                                    ? indRawUnauth
+                                                    : (leaveDeductionView ? ind1XAmount : 0);
                                                 const indActLeave = leaveDeductionView ? indRawLeave : 0;
                                                 const indActPerm = permissionDeductionView ? indRawPerm : 0;
                                                 const indActFines = indRawFines;
@@ -2897,28 +3051,35 @@ const SalaryManagement = () => {
                                                 return (
                                                     <div className="bg-rose-50/40 p-4 rounded-2xl border border-rose-100/60 space-y-2">
                                                         <div className="flex justify-between items-center pb-2 border-b border-rose-100/80">
-                                                            <span className="text-xs font-bold text-rose-700">📅 Daily Breakdown</span>
-                                                            <span className="text-xs font-black text-rose-600">- ₹{indTotalDaily.toFixed(2)}</span>
-                                                        </div>
-                                                        <div className="space-y-1.5 text-xs text-rose-600/90">
-                                                            <div className="flex justify-between">
-                                                                <div>
-                                                                    <span className={unauthorizedDeductionView ? '' : 'line-through text-slate-400'}>Unauthorized Leaves {individualReportData.totalUnauthorizedPenalty > 0 ? `(${individualReportData.unauthorizedAbsencePenalties?.[0]?.penaltyFactor || 5}X)` : ''}</span>
-                                                                    {individualReportData.unauthorizedAbsencePenalties?.length > 0 && (
-                                                                        <span className="text-[9px] text-slate-400 block">
-                                                                            {(() => {
-                                                                                const dayCount = individualReportData.unauthorizedAbsencePenalties.filter(p => p.status !== 'Unauthorized Permission').length;
-                                                                                const permCount = individualReportData.unauthorizedAbsencePenalties.filter(p => p.status === 'Unauthorized Permission').length;
-                                                                                const parts = [];
-                                                                                if (dayCount > 0) parts.push(`${dayCount} day(s)`);
-                                                                                if (permCount > 0) parts.push(`${permCount} permission(s)`);
-                                                                                return parts.join(', ');
-                                                                            })()}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                                <span className={`font-bold ${unauthorizedDeductionView ? '' : 'text-slate-400'}`}>{unauthorizedDeductionView ? `- ₹${indRawUnauth.toFixed(2)}` : '₹0.00 (Off)'}</span>
-                                                            </div>
+                                                             <span className="text-xs font-bold text-rose-700">📅 Daily Breakdown</span>
+                                                             <span className="text-xs font-black text-rose-600">- ₹{indTotalDaily.toFixed(2)}</span>
+                                                         </div>
+                                                         <div className="space-y-1.5 text-xs text-rose-600/90">
+                                                             <div className="flex justify-between">
+                                                                 <div>
+                                                                     <span className={unauthorizedDeductionView ? '' : (leaveDeductionView && ind1XAmount > 0 ? 'text-slate-600' : 'line-through text-slate-400')}>
+                                                                         Unauthorized Leaves {unauthorizedDeductionView ? (individualReportData.totalUnauthorizedPenalty > 0 ? `(${individualReportData.unauthorizedAbsencePenalties?.[0]?.penaltyFactor || 5}X)` : '') : (leaveDeductionView && ind1XAmount > 0 ? '(1X Base)' : '')}
+                                                                     </span>
+                                                                     {individualReportData.unauthorizedAbsencePenalties?.length > 0 && (
+                                                                         <span className="text-[9px] text-slate-400 block">
+                                                                             {(() => {
+                                                                                 const dayCount = individualReportData.unauthorizedAbsencePenalties.filter(p => p.status !== 'Unauthorized Permission').length;
+                                                                                 const permCount = individualReportData.unauthorizedAbsencePenalties.filter(p => p.status === 'Unauthorized Permission').length;
+                                                                                 const parts = [];
+                                                                                 if (dayCount > 0) parts.push(`${dayCount} day(s)`);
+                                                                                 if (permCount > 0) parts.push(`${permCount} permission(s)`);
+                                                                                 return parts.join(', ');
+                                                                             })()}
+                                                                         </span>
+                                                                     )}
+                                                                 </div>
+                                                                 <span className={`font-bold ${unauthorizedDeductionView ? '' : 'text-slate-500'}`}>
+                                                                     {unauthorizedDeductionView
+                                                                         ? `- ₹${indRawUnauth.toFixed(2)}`
+                                                                         : (leaveDeductionView && ind1XAmount > 0 ? `- ₹${ind1XAmount.toFixed(2)} (1X)` : '₹0.00 (Off)')
+                                                                     }
+                                                                 </span>
+                                                             </div>
                                                             <div className="flex justify-between">
                                                                 <div>
                                                                     <span className={leaveDeductionView ? '' : 'line-through text-slate-400'}>Approved Leaves</span>
@@ -2930,7 +3091,7 @@ const SalaryManagement = () => {
                                                             </div>
                                                             <div className="flex justify-between">
                                                                 <div>
-                                                                    <span className={permissionDeductionView ? '' : 'line-through text-slate-400'}>Permissions</span>
+                                                                    <span className={permissionDeductionView ? '' : 'line-through text-slate-400'}>Daily Delay</span>
                                                                     <span className="text-[9px] text-slate-400 block">
                                                                         {individualReportData.report?.totalPermissionTime ? `${individualReportData.report.totalPermissionTime} mins (${(individualReportData.report.totalPermissionTime / 60).toFixed(1)} hrs)` : '0 mins'}
                                                                     </span>
@@ -3316,10 +3477,10 @@ const SalaryManagement = () => {
 
                             <div className="w-px h-3 bg-slate-200 hidden sm:block"></div>
 
-                            {/* 4. Permission Deductions Toggle */}
+                            {/* 4. Daily Delay Toggle */}
                             <label className="flex items-center gap-2 cursor-pointer group select-none">
                                 <span className={`text-[11px] font-black tracking-widest transition-colors ${permissionDeductionView ? 'text-teal-600' : 'text-slate-400 group-hover:text-slate-600'}`}>
-                                    Permission Deduction
+                                    Daily Delay
                                 </span>
                                 <div className="relative">
                                     <input
@@ -3424,7 +3585,10 @@ const SalaryManagement = () => {
                         const rawFines = reportData.totalFinesAmount || 0;
                         const rawTask = reportData.taskPenalty || 0;
 
-                        const activeUnauthorized = unauthorizedDeductionView ? rawUnauthorized : 0;
+                        const modal1XAmount = Number(reportData?.totalNormal1XAmount || (rawUnauthorized > 0 ? rawUnauthorized * 0.2 : 0));
+                        const activeUnauthorized = unauthorizedDeductionView
+                            ? rawUnauthorized
+                            : (leaveDeductionView ? modal1XAmount : 0);
                         const activeLeave = leaveDeductionView ? rawLeave : 0;
                         const activePermission = permissionDeductionView ? rawPermission : 0;
                         const activeTask = deductionView ? rawTask : 0;
@@ -3443,34 +3607,77 @@ const SalaryManagement = () => {
                         <div className="space-y-6">
                             {/* Summary Section - Primary Focus */}
                             <div className="bg-slate-50/50 rounded-[2.5rem] p-4 border border-slate-200/60 shadow-inner flex flex-col gap-4">
-                                {/* Top Metrics Row */}
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                {/* Notice Banner when employee was relieved or rejoined mid-month */}
+                                {reportData.report?.summary?.hasRelievedPeriod && (
+                                    <div className="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-4 flex items-start gap-3.5 shadow-sm">
+                                        <div className="p-2 bg-amber-100 rounded-xl text-amber-700 mt-0.5 shrink-0">
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </div>
+                                        <div className="text-xs text-amber-900 space-y-1.5 flex-1">
+                                            <div className="flex items-center justify-between">
+                                                <p className="font-black uppercase tracking-wider text-[11px] text-amber-800">Employment Lifecycle Notice</p>
+                                                <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-200/70 text-amber-900 rounded-md">
+                                                    {reportData.report?.summary?.saasWorkingDaysCount ?? 0} / {reportData.report?.summary?.totalWorkingDaysInPeriod || 27} Eligible Days
+                                                </span>
+                                            </div>
+                                            <p className="text-amber-700 leading-relaxed text-[11px]">
+                                                This employee was relieved for part of this month. Dates outside active employment are classified as <span className="font-semibold text-slate-800">Relieved / Not Employed</span> with zero salary credit, zero LOP, and zero penalties. Base salary is prorated strictly for the active employment period.
+                                            </p>
+                                            {reportData.report?.summary?.activePeriods && reportData.report.summary.activePeriods.length > 0 && (
+                                                <div className="pt-1 flex flex-wrap gap-2 text-[10px]">
+                                                    {reportData.report.summary.activePeriods.map((period, idx) => (
+                                                        <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/80 border border-amber-200 rounded-md font-medium text-amber-900">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                                            Active Employment: {period.startDate} to {period.endDate || 'Active'}
+                                                        </span>
+                                                    ))}
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/80 border border-amber-200 rounded-md font-medium text-amber-800">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                                                        Outside Period: Relieved / Not Employed
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Metrics Cards Grid */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
                                     {/* Monthly Base Salary */}
                                     <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm relative overflow-hidden">
                                         <div className="absolute top-0 right-0 w-16 h-16 bg-blue-50/50 rounded-full -mr-8 -mt-8"></div>
-                                        <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-1 relative z-10">Monthly Base Salary</p>
-                                        <p className="text-xl font-bold text-slate-800 tracking-tight relative z-10">₹{reportData.report.summary.originalSalary?.toFixed(2) || '0.00'}</p>
+                                        <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-1 relative z-10">Monthly Base</p>
+                                        <p className="text-lg font-bold text-slate-800 tracking-tight relative z-10">₹{reportData.report?.summary?.originalSalary?.toFixed(2) || '0.00'}</p>
+                                    </div>
+
+                                    {/* Eligible Working Days */}
+                                    <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-16 h-16 bg-cyan-50/50 rounded-full -mr-8 -mt-8"></div>
+                                        <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-1 relative z-10">Eligible Working Days</p>
+                                        <p className="text-lg font-bold text-slate-800 tracking-tight relative z-10">{reportData.report?.summary?.saasWorkingDaysCount ?? reportData.report?.summary?.eligibleWorkingDays ?? 0} / {reportData.report?.summary?.totalWorkingDaysInPeriod || 27} Days</p>
                                     </div>
                                     
-                                    {/* Base Salary (SaaS) */}
+                                    {/* Prorated Base Salary (SaaS) */}
                                     <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm relative overflow-hidden">
                                         <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-50/50 rounded-full -mr-8 -mt-8"></div>
-                                        <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-1 relative z-10">Base Salary (SaaS)</p>
-                                        <p className="text-xl font-bold text-slate-800 tracking-tight relative z-10">₹{reportData.report.summary.expectedSaaSSalary?.toFixed(2) || reportData.report.summary.originalSalary?.toFixed(2) || '0.00'}</p>
+                                        <p className="text-[10px] font-black text-slate-400 tracking-[0.15em] mb-1 relative z-10">Prorated Base (SaaS)</p>
+                                        <p className="text-lg font-bold text-indigo-700 tracking-tight relative z-10">₹{reportData.report?.summary?.expectedSaaSSalary?.toFixed(2) || reportData.report?.summary?.originalSalary?.toFixed(2) || '0.00'}</p>
                                     </div>
 
                                     {/* Total Deductions */}
                                     <div className="bg-rose-50/40 rounded-2xl p-4 border border-rose-100/60 shadow-sm relative overflow-hidden">
                                         <div className="absolute top-0 right-0 w-16 h-16 bg-rose-100/50 rounded-full -mr-8 -mt-8"></div>
                                         <p className="text-[10px] font-black text-rose-400/80 tracking-[0.15em] mb-1 relative z-10">Total Deductions</p>
-                                        <p className="text-xl font-bold text-rose-600 tracking-tight relative z-10">- ₹{totalActiveDeduction.toFixed(2)}</p>
+                                        <p className="text-lg font-bold text-rose-600 tracking-tight relative z-10">- ₹{totalActiveDeduction.toFixed(2)}</p>
                                     </div>
 
                                     {/* Net Salary */}
-                                    <div className="bg-emerald-50/40 rounded-2xl p-4 border border-emerald-100/60 shadow-sm relative overflow-hidden">
+                                    <div className="bg-emerald-50/40 rounded-2xl p-4 border border-emerald-100/60 shadow-sm relative overflow-hidden col-span-2 md:col-span-4 lg:col-span-1">
                                         <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-100/50 rounded-full -mr-8 -mt-8"></div>
-                                        <p className="text-[10px] font-black text-emerald-600/70 tracking-[0.15em] mb-1 relative z-10">Net Salary</p>
-                                        <p className="text-xl font-bold text-emerald-700 tracking-tight relative z-10">₹{currentNetSalary.toFixed(2)}</p>
+                                        <p className="text-[10px] font-black text-emerald-600/70 tracking-[0.15em] mb-1 relative z-10">Net Payable Salary</p>
+                                        <p className="text-lg font-black text-emerald-700 tracking-tight relative z-10">₹{currentNetSalary.toFixed(2)}</p>
                                     </div>
                                 </div>
 
@@ -3491,10 +3698,12 @@ const SalaryManagement = () => {
                                             {/* Unauthorized Leave Deductions */}
                                             <div className="flex justify-between items-center text-slate-600">
                                                 <div>
-                                                    <span className={unauthorizedDeductionView ? '' : 'line-through text-slate-400'}>Unauthorized Leave Deductions</span>
+                                                    <span className={unauthorizedDeductionView ? '' : (leaveDeductionView && modal1XAmount > 0 ? 'text-slate-600' : 'line-through text-slate-400')}>
+                                                        Unauthorized Leave Deductions {unauthorizedDeductionView ? '' : (leaveDeductionView && modal1XAmount > 0 ? '(1X Base)' : '')}
+                                                    </span>
                                                     {rawUnauthorized > 0 && (
-                                                        <span className={`text-[10px] font-bold ml-1.5 ${unauthorizedDeductionView ? 'text-rose-500' : 'text-slate-400'}`}>
-                                                            ({reportData.unauthorizedAbsencePenalties?.[0]?.penaltyFactor || 5}X)
+                                                        <span className={`text-[10px] font-bold ml-1.5 ${unauthorizedDeductionView ? 'text-rose-500' : (leaveDeductionView && modal1XAmount > 0 ? 'text-slate-500' : 'text-slate-400')}`}>
+                                                            ({unauthorizedDeductionView ? (reportData.unauthorizedAbsencePenalties?.[0]?.penaltyFactor || 5) + 'X' : (leaveDeductionView && modal1XAmount > 0 ? '1X' : 'Off')})
                                                         </span>
                                                     )}
                                                     {reportData.unauthorizedAbsencePenalties?.length > 0 && (
@@ -3510,8 +3719,11 @@ const SalaryManagement = () => {
                                                         </span>
                                                     )}
                                                 </div>
-                                                <span className={`font-bold ${unauthorizedDeductionView ? 'text-rose-500' : 'text-slate-400'}`}>
-                                                    {unauthorizedDeductionView ? `- ₹${rawUnauthorized.toFixed(2)}` : '₹0.00 (Off)'}
+                                                <span className={`font-bold ${unauthorizedDeductionView ? 'text-rose-500' : (leaveDeductionView && modal1XAmount > 0 ? 'text-slate-600' : 'text-slate-400')}`}>
+                                                    {unauthorizedDeductionView
+                                                        ? `- ₹${rawUnauthorized.toFixed(2)}`
+                                                        : (leaveDeductionView && modal1XAmount > 0 ? `- ₹${modal1XAmount.toFixed(2)} (1X)` : '₹0.00 (Off)')
+                                                    }
                                                 </span>
                                             </div>
 
@@ -3528,10 +3740,10 @@ const SalaryManagement = () => {
                                                 </span>
                                             </div>
 
-                                            {/* Permission Deductions */}
+                                            {/* Daily Delay */}
                                             <div className="flex justify-between items-center text-slate-600">
                                                 <div>
-                                                    <span className={permissionDeductionView ? '' : 'line-through text-slate-400'}>Permission Deductions</span>
+                                                    <span className={permissionDeductionView ? '' : 'line-through text-slate-400'}>Daily Delay</span>
                                                     <span className="text-[9px] text-slate-400 block">
                                                         {reportData.report?.totalPermissionTime ? `${reportData.report.totalPermissionTime} mins (${(reportData.report.totalPermissionTime / 60).toFixed(1)} hrs)` : '0 mins'}
                                                     </span>
@@ -3916,7 +4128,7 @@ const SalaryManagement = () => {
                                                     { label: 'Permission Time', value: `${reportData.report.totalPermissionTime || 0}m` },
                                                     { label: `Unauth. Leave Ded. ${reportData.totalUnauthorizedPenalty > 0 ? `(${reportData.unauthorizedAbsencePenalties?.[0]?.penaltyFactor || 2}X)` : ''}`, value: `₹${(reportData.totalUnauthorizedPenalty > 0 ? reportData.totalUnauthorizedPenalty : (reportData.report.summary.absentDeduction || 0)).toFixed(2)}`, color: 'text-rose-500' },
                                                     { label: 'Leave Deduction', value: `₹${reportData.report.summary.leaveDeduction?.toFixed(2)}`, color: 'text-rose-500' },
-                                                    { label: 'Permission Ded.', value: `₹${reportData.report.summary.permissionDeduction?.toFixed(2)}`, color: 'text-rose-500' },
+                                                    { label: 'Daily Delay', value: `₹${reportData.report.summary.permissionDeduction?.toFixed(2)}`, color: 'text-rose-500' },
                                                     { label: 'Total Deductions', value: `₹${reportData.report.totalSalaryDeduction?.toFixed(2)}`, color: 'text-rose-500' },
                                                     { label: 'Attendance Rate', value: `${reportData.report.summary.attendanceRate?.toFixed(2)}%` },
                                                     { label: 'Per Min Salary', value: `₹${reportData.report.summary.perMinuteSalary?.toFixed(4)}` }
@@ -3987,7 +4199,17 @@ const SalaryManagement = () => {
                                                             )}
                                                         </td>
                                                         <td className="px-4 py-3">
-                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-bold text-[10px] tracking-tight ${row.status === 'Present' ? 'bg-emerald-50 text-emerald-600' : row.status === 'Absent' ? 'bg-rose-50 text-rose-500' : row.status === 'Sunday' ? 'bg-slate-50 text-slate-400' : row.status === 'Holiday' ? 'bg-amber-50 text-amber-600' : 'bg-sky-50 text-sky-600'}`}>
+                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-bold text-[10px] tracking-tight ${
+                                                                row.status === 'Present' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200/60' :
+                                                                row.status === 'Absent' ? 'bg-rose-50 text-rose-500 border border-rose-200/60' :
+                                                                row.status === 'Approved Paid Leave' || row.status === 'Paid Leave' ? 'bg-cyan-50 text-cyan-600 border border-cyan-200/60' :
+                                                                row.status === 'Approved Unpaid Leave' || row.status === 'Leave' ? 'bg-amber-50 text-amber-600 border border-amber-200/60' :
+                                                                row.status === 'Unauthorized Absence' ? 'bg-purple-50 text-purple-600 border border-purple-200/60' :
+                                                                row.status === 'Relieved' || row.status === 'Not Employed' ? 'bg-slate-100 text-slate-500 border border-slate-200' :
+                                                                row.status === 'Sunday' ? 'bg-slate-50 text-slate-400 border border-slate-200/40' :
+                                                                row.status === 'Holiday' ? 'bg-amber-50 text-amber-600 border border-amber-200/60' :
+                                                                'bg-sky-50 text-sky-600 border border-sky-200/60'
+                                                            }`}>
                                                                 {row.status}
                                                             </span>
                                                         </td>

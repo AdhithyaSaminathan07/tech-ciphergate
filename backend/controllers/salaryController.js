@@ -1,4 +1,5 @@
 // backend/controllers/salaryController.js
+const mongoose = require('mongoose');
 const asyncHandler = require('express-async-handler');
 const Worker = require('../models/Worker');
 const Attendance = require('../models/Attendance');
@@ -11,6 +12,7 @@ const ProjectPaymentLedger = require('../models/ProjectPaymentLedger');
 const { calculateWorkerProductivity, calculateUnauthorizedAbsencePenalty } = require('../utils/productivityCalculator');
 const Ticket = require('../models/ticketModel');
 const { calculateTaskPenalties } = require('../utils/salaryPenaltyCalculator');
+const { finalizeSalaryCalculation } = require('../utils/salaryFinalizer');
 const DashboardSalaryStat = require('../models/DashboardSalaryStat');
 const WalletTransaction = require('../models/WalletTransaction');
 
@@ -421,6 +423,8 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
     const currentReportMonth = reportFromDate.getMonth() + 1;
     const currentReportYear = reportFromDate.getFullYear();
     const PayrollRecord = require('../models/PayrollRecord');
+    const EmployeeHistory = require('../models/EmployeeHistory');
+    const isValidObjectId = (val) => mongoose.isValidObjectId ? mongoose.isValidObjectId(val) : /^[0-9a-fA-F]{24}$/.test(String(val));
 
     // Run all independent queries in parallel using Promise.all
     const [
@@ -430,7 +434,8 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
       settings,
       salaryProjects,
       allTasks,
-      payrollRecord
+      payrollRecord,
+      employeeHistory
     ] = await Promise.all([
       Attendance.find({ worker: id, date: { $gte: fromDate, $lte: toDate } }),
       Leave.find({ worker: id }),
@@ -451,7 +456,13 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
         workerId: id,
         month: currentReportMonth,
         year: currentReportYear
-      }).populate('adjustments.addedBy', 'name')
+      }).populate('adjustments.addedBy', 'name'),
+      isValidObjectId(id)
+        ? EmployeeHistory.find({
+            employee: id,
+            actionType: { $in: ['Restored', 'Reactivated', 'Relieved', 'Created', 'Updated', 'Rejoined'] }
+          }).catch(() => [])
+        : Promise.resolve([])
     ]);
 
     const leaveData = allLeavesForPenalty.filter(l => l.status === 'Approved');
@@ -487,6 +498,39 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
       return { ...pObj, perDeveloperShare: share, totalWorkingDays: workingDays, perDayValue: workingDays > 0 ? share / workingDays : 0 };
     });
 
+    // ── 5X Unauthorized Absence Penalty ──
+    const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
+    const enableUnauthorizedPermissionPenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty === true;
+    const {
+      penalties: unauthorizedAbsencePenalties,
+      totalUnauthorizedPenalty,
+      totalNormal1XAmount,
+      totalExtra4XPenalty,
+      normal1XLeaveAmount,
+      normal1XPermissionAmount,
+      unauthorizedDates,
+      unauthorizedPermissions
+    } = (enableUnauthorizedLeavePenalty || enableUnauthorizedPermissionPenalty)
+      ? calculateUnauthorizedAbsencePenalty(
+        worker,
+        fromDate,
+        toDate,
+        allLeavesForPenalty,
+        attendanceData,
+        holidays,
+        { ...(settings ? (settings.toObject ? settings.toObject() : settings) : {}), employeeHistory }
+      )
+      : {
+        penalties: [],
+        totalUnauthorizedPenalty: 0,
+        totalNormal1XAmount: 0,
+        totalExtra4XPenalty: 0,
+        normal1XLeaveAmount: 0,
+        normal1XPermissionAmount: 0,
+        unauthorizedDates: new Set(),
+        unauthorizedPermissions: []
+      };
+
     const report = calculateWorkerProductivity({
       worker,
       attendanceData,
@@ -504,7 +548,10 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
         companyPenaltyMap,
         deptPenaltyMap,
         includePermission: settings?.includePermission || false,
-        paidLeaveConfig: settings ? settings.paidLeaveConfig : null
+        paidLeaveConfig: settings ? settings.paidLeaveConfig : null,
+        unauthorizedAbsenceDates: unauthorizedDates,
+        unauthorizedPermissions,
+        employeeHistory
       }
     });
 
@@ -577,22 +624,6 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
       };
     });
 
-    // ── 5X Unauthorized Absence Penalty ──
-    const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
-    const enableUnauthorizedPermissionPenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty === true;
-    const { penalties: unauthorizedAbsencePenalties, totalUnauthorizedPenalty } =
-      (enableUnauthorizedLeavePenalty || enableUnauthorizedPermissionPenalty)
-        ? calculateUnauthorizedAbsencePenalty(
-          worker,
-          fromDate,
-          toDate,
-          allLeavesForPenalty,
-          attendanceData,
-          holidays,
-          settings
-        )
-        : { penalties: [], totalUnauthorizedPenalty: 0 };
-
     // Final salary after subtracting unauthorized absence penalty
     const finalSalaryAfterUnauthorizedPenalty = Math.max(0, finalSalaryWithFines - totalUnauthorizedPenalty);
 
@@ -604,57 +635,78 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
     // Apply project adjustment to final salary (adjustment may be negative for overpayments)
     const finalSalaryWithAdjustment = Math.max(0, finalSalaryAfterUnauthorizedPenalty + projectAdjustment);
 
-    // Enterprise Payroll Module: payrollRecord already fetched via Promise.all above
-    let totalAdditions = 0;
-    let totalDeductions = 0;
+    // Read global deduction toggle preferences (defaults to true)
+    const taskToggle = req.query.taskDeduction !== 'false';
+    const unauthToggle = req.query.unauthorizedDeduction !== 'false';
+    const leaveToggle = req.query.leaveDeduction !== 'false';
+    const permToggle = req.query.permissionDeduction !== 'false';
 
-    if (payrollRecord && payrollRecord.adjustments) {
-      payrollRecord.adjustments.forEach(adj => {
-        if (!adj.isDeleted) {
-          if (adj.type === 'addition') totalAdditions += adj.amount;
-          if (adj.type === 'deduction') totalDeductions += adj.amount;
-        }
-      });
-    }
-
-    const attendanceSalary = payrollRecord && ['Locked', 'Paid'].includes(payrollRecord.status) && payrollRecord.attendanceSalarySnapshot !== null
-      ? payrollRecord.attendanceSalarySnapshot
-      : finalSalaryWithAdjustment;
-
-    const payableSalary = Math.max(0, attendanceSalary + totalAdditions - totalDeductions);
-    const finalSalaryCalculated = Math.max(0, finalSalaryWithAdjustment - taskPenalty);
+    // Enterprise Payroll Module: Authoritative calculation via finalizeSalaryCalculation
+    const finalized = finalizeSalaryCalculation({
+      finalSalaryWithAdjustment,
+      payrollRecord,
+      taskPenalty,
+      totalUnauthorizedPenalty,
+      totalExtra4XPenalty,
+      totalNormal1XAmount,
+      normal1XLeaveAmount,
+      normal1XPermissionAmount,
+      leaveDeduction: report.summary?.leaveDeduction || 0,
+      permissionDeduction: report.summary?.permissionDeduction || 0,
+      toggles: {
+        taskDeduction: taskToggle,
+        unauthorizedDeduction: unauthToggle,
+        leaveDeduction: leaveToggle,
+        permissionDeduction: permToggle
+      }
+    });
 
     res.status(200).json({
       message: 'Salary report generated successfully',
       baseSalary: worker.salary,
-      finalSalary: finalSalaryCalculated,
+      finalSalary: finalized.finalPayableSalary,
+      finalPayableSalary: finalized.finalPayableSalary,
+      payableSalary: finalized.payableSalary,
+      attendanceSalary: finalized.attendanceSalary,
+      totalAdditions: finalized.totalAdditions,
+      totalDeductions: finalized.totalDeductions,
+      taskPenalty: finalized.taskPenalty,
+      appliedPenaltyPolicy: finalized.appliedPenaltyPolicy,
+      appliedToggles: {
+        taskDeduction: taskToggle,
+        unauthorizedDeduction: unauthToggle,
+        leaveDeduction: leaveToggle,
+        permissionDeduction: permToggle
+      },
+      totalUnauthorizedPenalty,
+      totalExtra4XPenalty,
+      totalNormal1XAmount,
+      normal1XLeaveAmount,
+      normal1XPermissionAmount,
+      leaveDeduction: report.summary?.leaveDeduction || 0,
+      permissionDeduction: report.summary?.permissionDeduction || 0,
       actualEarnedSalary: report.summary.finalSalary || 0,
-      totalDeductions: (report.summary.totalSalaryDeduction || 0) + totalFinesAmount,
+      totalSalaryDeductions: (report.summary.totalSalaryDeduction || 0) + totalFinesAmount,
       report,
       bonuses: bonusesForPeriod,
       totalBonusAmount: totalBonusAmount,
       totalFinesAmount: totalFinesAmount,
       finalSalaryWithBonus: finalSalaryWithBonus,
-      finalSalaryWithFines: finalSalaryWithAdjustment, // includes unauthorized penalty and project adjustment
+      finalSalaryWithFines: finalized.finalPayableSalary, // includes unauthorized penalty, project adjustment, adjustments & task penalty
       projectAdjustment,
       projectAdjustmentDetails,
       isCurrentlyViolating,
       earliestDeadline,
       delayedTasks,
-      taskPenalty,
       projectBreakdown,
       // 5X Unauthorized Absence Penalty — stored separately for display
       unauthorizedAbsencePenalties,
       totalUnauthorizedPenalty,
       payrollRecord: payrollRecord || null,
-      payableSalary: payableSalary,
-      attendanceSalary: attendanceSalary,
-      totalAdditions,
-      totalDeductions,
       worker: {
         name: worker.name,
         salary: worker.salary,
-        finalSalary: worker.finalSalary,
+        finalSalary: finalized.finalPayableSalary,
         perDaySalary: worker.perDaySalary,
         fines: worker.fines
       }
@@ -781,6 +833,47 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
       return { ...pObj, perDeveloperShare: share, totalWorkingDays: totalWorkingDays, perDayValue: perDayValue };
     });
 
+    let workerHistory = [];
+    try {
+      const EmployeeHistory = require('../models/EmployeeHistory');
+      workerHistory = await EmployeeHistory.find({ employee: id }).sort({ createdAt: 1 }).lean();
+    } catch (e) {
+      workerHistory = [];
+    }
+
+    // ── 5X Unauthorized Absence Penalty ──
+    const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
+    const enableUnauthorizedPermissionPenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty === true;
+    const {
+      penalties: unauthorizedAbsencePenalties,
+      totalUnauthorizedPenalty,
+      totalNormal1XAmount,
+      totalExtra4XPenalty,
+      normal1XLeaveAmount,
+      normal1XPermissionAmount,
+      unauthorizedDates,
+      unauthorizedPermissions
+    } = (enableUnauthorizedLeavePenalty || enableUnauthorizedPermissionPenalty)
+      ? calculateUnauthorizedAbsencePenalty(
+        worker,
+        start,
+        end,
+        allLeavesForPenalty,
+        attendanceData,
+        holidays,
+        { ...(settings ? (settings.toObject ? settings.toObject() : settings) : {}), employeeHistory: workerHistory }
+      )
+      : {
+        penalties: [],
+        totalUnauthorizedPenalty: 0,
+        totalNormal1XAmount: 0,
+        totalExtra4XPenalty: 0,
+        normal1XLeaveAmount: 0,
+        normal1XPermissionAmount: 0,
+        unauthorizedDates: new Set(),
+        unauthorizedPermissions: []
+      };
+
     const report = calculateWorkerProductivity({
       worker,
       attendanceData,
@@ -799,6 +892,9 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
         deptPenaltyMap,
         includePermission: settings?.includePermission || false,
         paidLeaveConfig: settings ? settings.paidLeaveConfig : null,
+        unauthorizedAbsenceDates: unauthorizedDates,
+        unauthorizedPermissions,
+        employeeHistory: workerHistory,
         isEmployeeDashboard: true
       }
     });
@@ -878,22 +974,6 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
     const currentReportMonth = startDateObj.getMonth() + 1;
     const currentReportYear = startDateObj.getFullYear();
 
-    // ── 5X Unauthorized Absence Penalty (separate from all existing calculations) ──
-    const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
-    const enableUnauthorizedPermissionPenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty === true;
-    const { penalties: unauthorizedAbsencePenalties, totalUnauthorizedPenalty } =
-      (enableUnauthorizedLeavePenalty || enableUnauthorizedPermissionPenalty)
-        ? calculateUnauthorizedAbsencePenalty(
-          worker,
-          start,
-          end,
-          allLeavesForPenalty,
-          attendanceData,
-          holidays,
-          settings
-        )
-        : { penalties: [], totalUnauthorizedPenalty: 0 };
-
     const finalSalaryAfterUnauthorizedPenalty = Math.max(0, finalSalaryWithFines - totalUnauthorizedPenalty);
 
     // ─── PROJECT ADJUSTMENT LEDGER: Recalculate past overpayments/underpayments ──
@@ -927,6 +1007,10 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
       // 5X Unauthorized Absence Penalty — stored separately for display
       unauthorizedAbsencePenalties,
       totalUnauthorizedPenalty,
+      totalExtra4XPenalty,
+      totalNormal1XAmount,
+      normal1XLeaveAmount,
+      normal1XPermissionAmount,
       worker: {
         name: worker.name,
         salary: worker.salary,
@@ -1593,9 +1677,20 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
 
     const workers = await workersQuery;
     const reportYear = fromDateObj.getFullYear();
-    const bulkFromDate = new Date(fromDate);
-    const bulkMonth = bulkFromDate.getMonth() + 1;
-    const bulkYear = bulkFromDate.getFullYear();
+    // Safely parse month and year without UTC timezone boundary bleed
+    let bulkMonth = parseInt(req.query.month, 10);
+    let bulkYear = parseInt(req.query.year, 10);
+    if (isNaN(bulkMonth) || isNaN(bulkYear) || bulkMonth < 1 || bulkMonth > 12) {
+      const fromParts = String(fromDate).split('-');
+      if (fromParts.length >= 2 && !isNaN(parseInt(fromParts[0], 10)) && !isNaN(parseInt(fromParts[1], 10))) {
+        bulkYear = parseInt(fromParts[0], 10);
+        bulkMonth = parseInt(fromParts[1], 10);
+      } else {
+        const bulkFromDate = new Date(fromDate);
+        bulkMonth = bulkFromDate.getMonth() + 1;
+        bulkYear = bulkFromDate.getFullYear();
+      }
+    }
     const PayrollRecord = require('../models/PayrollRecord');
 
     const now = new Date();
@@ -1672,6 +1767,21 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
     while (curD <= eD) {
       datesArr.push(curD.toISOString().split('T')[0]);
       curD.setDate(curD.getDate() + 1);
+    }
+
+    const EmployeeHistory = require('../models/EmployeeHistory');
+    const isValidObjectId = (val) => mongoose.isValidObjectId ? mongoose.isValidObjectId(val) : /^[0-9a-fA-F]{24}$/.test(String(val));
+    const validWorkerObjectIds = workers.map(w => w._id).filter(id => isValidObjectId(id));
+    let allEmployeeHistory = [];
+    if (validWorkerObjectIds.length > 0) {
+      try {
+        allEmployeeHistory = await EmployeeHistory.find({
+          employee: { $in: validWorkerObjectIds },
+          actionType: { $in: ['Restored', 'Reactivated', 'Relieved', 'Created', 'Updated', 'Rejoined'] }
+        });
+      } catch (e) {
+        allEmployeeHistory = [];
+      }
     }
 
     const buildPenaltyMapsForWorker = (wId, wDeptId, thresh, dArr) => {
@@ -1751,13 +1861,48 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         deptPenaltyMap = penaltyMaps.deptPenaltyMap;
       }
 
+      const workerHistory = (allEmployeeHistory || []).filter(h => h.employee?.toString() === workerId);
+
+      // Calculate 5X Unauthorized Absence Penalty
+      const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
+      const enableUnauthorizedPermissionPenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty === true;
+      const {
+        penalties: unauthorizedAbsencePenalties,
+        totalUnauthorizedPenalty,
+        totalNormal1XAmount,
+        totalExtra4XPenalty,
+        normal1XLeaveAmount,
+        normal1XPermissionAmount,
+        unauthorizedDates,
+        unauthorizedPermissions
+      } = (enableUnauthorizedLeavePenalty || enableUnauthorizedPermissionPenalty)
+        ? calculateUnauthorizedAbsencePenalty(
+          worker,
+          fromDate,
+          toDate,
+          workerLeaves,
+          workerAttendance,
+          holidays,
+          { ...(settings ? (settings.toObject ? settings.toObject() : settings) : {}), employeeHistory: workerHistory }
+        )
+        : {
+          penalties: [],
+          totalUnauthorizedPenalty: 0,
+          totalNormal1XAmount: 0,
+          totalExtra4XPenalty: 0,
+          normal1XLeaveAmount: 0,
+          normal1XPermissionAmount: 0,
+          unauthorizedDates: new Set(),
+          unauthorizedPermissions: []
+        };
+
       // Calculate productivity (filtering only approved/paid leaves for standard logic)
       const report = calculateWorkerProductivity({
         worker,
         attendanceData: workerAttendance,
         fromDate,
         toDate,
-        leaveData: workerLeaves.filter(l => l.status === 'Approved' || l.leaveType === 'Paid Leave'),
+        leaveData: workerLeaves.filter(l => l.status === 'Approved'),
         projects: enrichedProjects,
         options: {
           batches,
@@ -1769,7 +1914,10 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
           companyPenaltyMap,
           deptPenaltyMap,
           includePermission: settings?.includePermission || false,
-          paidLeaveConfig: settings ? settings.paidLeaveConfig : null
+          paidLeaveConfig: settings ? settings.paidLeaveConfig : null,
+          unauthorizedAbsenceDates: unauthorizedDates,
+          unauthorizedPermissions,
+          employeeHistory: workerHistory
         }
       });
 
@@ -1796,22 +1944,6 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         .reduce((sum, f) => sum + (f.amount || 0), 0);
 
       const finalSalaryWithFines = Math.max(0, finalSalaryWithBonus - totalFinesAmount);
-
-      // Calculate 5X Unauthorized Absence Penalty
-      const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
-      const enableUnauthorizedPermissionPenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty === true;
-      const { penalties: unauthorizedAbsencePenalties, totalUnauthorizedPenalty } =
-        (enableUnauthorizedLeavePenalty || enableUnauthorizedPermissionPenalty)
-          ? calculateUnauthorizedAbsencePenalty(
-            worker,
-            fromDate,
-            toDate,
-            workerLeaves,
-            workerAttendance,
-            holidays,
-            settings
-          )
-          : { penalties: [], totalUnauthorizedPenalty: 0 };
 
       const finalSalaryAfterUnauthorizedPenalty = Math.max(0, finalSalaryWithFines - totalUnauthorizedPenalty);
 
@@ -1846,6 +1978,11 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
         grossFinalSalary: finalSalaryAfterUnauthorizedPenalty,
         taskPenalty: taskPenalty,
         totalFinalSalary: finalSalaryAfterUnauthorizedPenalty,
+        totalUnauthorizedPenalty,
+        totalExtra4XPenalty,
+        totalNormal1XAmount,
+        normal1XLeaveAmount,
+        normal1XPermissionAmount,
         subdomain: worker.subdomain,
         fullReport: {
           report,
@@ -1857,6 +1994,10 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
           delayedTasks,
           unauthorizedAbsencePenalties,
           totalUnauthorizedPenalty,
+          totalExtra4XPenalty,
+          totalNormal1XAmount,
+          normal1XLeaveAmount,
+          normal1XPermissionAmount,
           worker: {
             name: worker.name,
             salary: worker.salary,
@@ -1930,6 +2071,12 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
       return { totalAdjustment, adjustmentDetails };
     };
 
+    // Read global deduction toggle preferences (defaults to true)
+    const bulkTaskToggle = req.query.taskDeduction !== 'false';
+    const bulkUnauthToggle = req.query.unauthorizedDeduction !== 'false';
+    const bulkLeaveToggle = req.query.leaveDeduction !== 'false';
+    const bulkPermToggle = req.query.permissionDeduction !== 'false';
+
     const adjustedResults = await Promise.all(results.map(async (result) => {
       try {
         const { totalAdjustment, adjustmentDetails } = await calculateProjectAdjustmentsOptimized(result.workerId);
@@ -1937,56 +2084,147 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
 
         // Enterprise Payroll Module: Attach Payroll Record
         const payrollRecord = allPayrollRecords.find(pr => pr.workerId?.toString() === result.workerId);
+        const unauthPenalty = result.fullReport?.totalUnauthorizedPenalty || 0;
+        const extra4XPenalty = result.fullReport?.totalExtra4XPenalty || 0;
+        const normal1XAmount = result.fullReport?.totalNormal1XAmount || 0;
+        const normal1XLeave = result.fullReport?.normal1XLeaveAmount || 0;
+        const normal1XPerm = result.fullReport?.normal1XPermissionAmount || 0;
+        const leaveDed = result.fullReport?.report?.summary?.leaveDeduction || 0;
+        const permDed = result.fullReport?.report?.summary?.permissionDeduction || 0;
 
-        let totalAdditions = 0;
-        let totalDeductions = 0;
-
-        if (payrollRecord && payrollRecord.adjustments) {
-          payrollRecord.adjustments.forEach(adj => {
-            if (!adj.isDeleted) {
-              if (adj.type === 'addition') totalAdditions += adj.amount;
-              if (adj.type === 'deduction') totalDeductions += adj.amount;
-            }
-          });
-        }
-
-        const attendanceSalary = payrollRecord && ['Locked', 'Paid'].includes(payrollRecord.status) && payrollRecord.attendanceSalarySnapshot !== null
-          ? payrollRecord.attendanceSalarySnapshot
-          : finalSalaryWithAdjustment;
-
-        const payableSalary = Math.max(0, attendanceSalary + totalAdditions - totalDeductions);
-
-        const finalSalaryCalculated = Math.max(0, finalSalaryWithAdjustment - (result.taskPenalty || 0));
+        const finalized = finalizeSalaryCalculation({
+          finalSalaryWithAdjustment,
+          payrollRecord,
+          taskPenalty: result.taskPenalty,
+          totalUnauthorizedPenalty: unauthPenalty,
+          totalExtra4XPenalty: extra4XPenalty,
+          totalNormal1XAmount: normal1XAmount,
+          normal1XLeaveAmount: normal1XLeave,
+          normal1XPermissionAmount: normal1XPerm,
+          leaveDeduction: leaveDed,
+          permissionDeduction: permDed,
+          toggles: {
+            taskDeduction: bulkTaskToggle,
+            unauthorizedDeduction: bulkUnauthToggle,
+            leaveDeduction: bulkLeaveToggle,
+            permissionDeduction: bulkPermToggle
+          }
+        });
 
         return {
           ...result,
           projectAdjustment: totalAdjustment,
-          totalFinalSalary: finalSalaryWithAdjustment, // Treat as original base/Attendance Salary
+          totalFinalSalary: finalized.attendanceSalary, // Base / Attendance Salary
           payrollRecord: payrollRecord || null,
-          payableSalary: payableSalary,
-          attendanceSalary: attendanceSalary,
-          totalAdditions,
-          totalDeductions,
-          finalSalary: finalSalaryCalculated,
+          payableSalary: finalized.payableSalary,
+          finalPayableSalary: finalized.finalPayableSalary,
+          attendanceSalary: finalized.attendanceSalary,
+          totalAdditions: finalized.totalAdditions,
+          totalDeductions: finalized.totalDeductions,
+          taskPenalty: finalized.taskPenalty,
+          totalUnauthorizedPenalty: unauthPenalty,
+          totalExtra4XPenalty: extra4XPenalty,
+          totalNormal1XAmount: normal1XAmount,
+          normal1XLeaveAmount: normal1XLeave,
+          normal1XPermissionAmount: normal1XPerm,
+          leaveDeduction: leaveDed,
+          permissionDeduction: permDed,
+          appliedPenaltyPolicy: finalized.appliedPenaltyPolicy,
+          appliedToggles: {
+            taskDeduction: bulkTaskToggle,
+            unauthorizedDeduction: bulkUnauthToggle,
+            leaveDeduction: bulkLeaveToggle,
+            permissionDeduction: bulkPermToggle
+          },
+          finalSalary: finalized.finalPayableSalary,
           fullReport: {
             ...result.fullReport,
             projectAdjustment: totalAdjustment,
             projectAdjustmentDetails: adjustmentDetails,
-            finalSalaryWithFines: finalSalaryWithAdjustment
+            finalSalaryWithFines: finalized.finalPayableSalary,
+            payableSalary: finalized.payableSalary,
+            finalPayableSalary: finalized.finalPayableSalary,
+            attendanceSalary: finalized.attendanceSalary,
+            totalAdditions: finalized.totalAdditions,
+            totalDeductions: finalized.totalDeductions,
+            payrollRecord: payrollRecord || null,
+            taskPenalty: finalized.taskPenalty,
+            totalUnauthorizedPenalty: unauthPenalty,
+            totalExtra4XPenalty: extra4XPenalty,
+            totalNormal1XAmount: normal1XAmount,
+            normal1XLeaveAmount: normal1XLeave,
+            normal1XPermissionAmount: normal1XPerm,
+            leaveDeduction: leaveDed,
+            permissionDeduction: permDed,
+            appliedPenaltyPolicy: finalized.appliedPenaltyPolicy
           }
         };
       } catch (err) {
-        // If adjustment calculation fails, return original result
-        const finalSalaryCalculated = Math.max(0, result.totalFinalSalary - (result.taskPenalty || 0));
+        // If adjustment calculation fails, return safe finalized result
+        const unauthPenalty = result.fullReport?.totalUnauthorizedPenalty || 0;
+        const extra4XPenalty = result.fullReport?.totalExtra4XPenalty || 0;
+        const normal1XAmount = result.fullReport?.totalNormal1XAmount || 0;
+        const normal1XLeave = result.fullReport?.normal1XLeaveAmount || 0;
+        const normal1XPerm = result.fullReport?.normal1XPermissionAmount || 0;
+        const leaveDed = result.fullReport?.report?.summary?.leaveDeduction || 0;
+        const permDed = result.fullReport?.report?.summary?.permissionDeduction || 0;
+        const finalized = finalizeSalaryCalculation({
+          finalSalaryWithAdjustment: result.totalFinalSalary,
+          payrollRecord: null,
+          taskPenalty: result.taskPenalty,
+          totalUnauthorizedPenalty: unauthPenalty,
+          totalExtra4XPenalty: extra4XPenalty,
+          totalNormal1XAmount: normal1XAmount,
+          normal1XLeaveAmount: normal1XLeave,
+          normal1XPermissionAmount: normal1XPerm,
+          leaveDeduction: leaveDed,
+          permissionDeduction: permDed,
+          toggles: {
+            taskDeduction: bulkTaskToggle,
+            unauthorizedDeduction: bulkUnauthToggle,
+            leaveDeduction: bulkLeaveToggle,
+            permissionDeduction: bulkPermToggle
+          }
+        });
         return {
           ...result,
           projectAdjustment: 0,
-          finalSalary: finalSalaryCalculated,
+          payableSalary: finalized.payableSalary,
+          finalPayableSalary: finalized.finalPayableSalary,
+          attendanceSalary: finalized.attendanceSalary,
+          totalAdditions: 0,
+          totalDeductions: 0,
+          taskPenalty: finalized.taskPenalty,
+          totalUnauthorizedPenalty: unauthPenalty,
+          totalExtra4XPenalty: extra4XPenalty,
+          totalNormal1XAmount: normal1XAmount,
+          normal1XLeaveAmount: normal1XLeave,
+          normal1XPermissionAmount: normal1XPerm,
+          leaveDeduction: leaveDed,
+          permissionDeduction: permDed,
+          appliedPenaltyPolicy: finalized.appliedPenaltyPolicy,
+          appliedToggles: {
+            taskDeduction: bulkTaskToggle,
+            unauthorizedDeduction: bulkUnauthToggle,
+            leaveDeduction: bulkLeaveToggle,
+            permissionDeduction: bulkPermToggle
+          },
+          finalSalary: finalized.finalPayableSalary,
           fullReport: {
             ...result.fullReport,
             projectAdjustment: 0,
             projectAdjustmentDetails: [],
-            finalSalaryWithFines: result.totalFinalSalary
+            finalSalaryWithFines: finalized.finalPayableSalary,
+            payableSalary: finalized.payableSalary,
+            finalPayableSalary: finalized.finalPayableSalary,
+            attendanceSalary: finalized.attendanceSalary,
+            totalAdditions: 0,
+            totalDeductions: 0,
+            taskPenalty: finalized.taskPenalty,
+            totalUnauthorizedPenalty: unauthPenalty,
+            leaveDeduction: leaveDed,
+            permissionDeduction: permDed,
+            appliedPenaltyPolicy: finalized.appliedPenaltyPolicy
           }
         };
       }
@@ -2112,7 +2350,7 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
         attendanceData: workerAttendance,
         fromDate: calcFromDate,
         toDate: calcToDate,
-        leaveData: workerLeaves.filter(l => l.status === 'Approved' || l.leaveType === 'Paid Leave'),
+        leaveData: workerLeaves.filter(l => l.status === 'Approved'),
         projects: enrichedProjects,
         options: {
           batches,

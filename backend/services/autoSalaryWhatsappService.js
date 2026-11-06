@@ -12,8 +12,68 @@ const Leave = require('../models/Leave');
 const Holiday = require('../models/Holiday');
 const SalaryProject = require('../models/SalaryProject');
 const Ticket = require('../models/ticketModel');
-const { calculateWorkerProductivity, calculateUnauthorizedAbsencePenalty } = require('../utils/productivityCalculator');
-const { sendWhatsApp } = require('./whatsappService');
+const PayrollRecord = require('../models/PayrollRecord');
+const ProjectPaymentLedger = require('../models/ProjectPaymentLedger');
+const mongoose = require('mongoose');
+const { calculateWorkerProductivity, calculateUnauthorizedAbsencePenalty, getValidatedEmploymentDates, toIndiaDateString } = require('../utils/productivityCalculator');
+const { calculateTaskPenalties } = require('../utils/salaryPenaltyCalculator');
+const { finalizeSalaryCalculation } = require('../utils/salaryFinalizer');
+const whatsappService = require('./whatsappService');
+
+/**
+ * Helper to determine if a worker is currently active based on employment status & relievedAt timestamp
+ */
+const isWorkerCurrentlyActive = (worker, workerHistory = [], fromDateStr, toDateStr) => {
+  if (!worker) return false;
+  const s = String(worker.status || '').trim().toLowerCase();
+  const isExplicitlyActive = s === 'active';
+  const isRelievedOrInactive = s === 'relieved' || s === 'deleted' || s === 'inactive' || s === 'resigned' || s === 'terminated';
+  if (!isExplicitlyActive || isRelievedOrInactive) return false;
+
+  // If worker has relievedAt, check if a valid rejoining event occurred
+  if (worker.relievedAt) {
+    if (typeof getValidatedEmploymentDates === 'function') {
+      const { relievedDateStr } = getValidatedEmploymentDates(worker, fromDateStr, toDateStr, { employeeHistory: workerHistory });
+      if (relievedDateStr && fromDateStr && relievedDateStr < fromDateStr) {
+        return false;
+      }
+    } else {
+      return false;
+    }
+  }
+  return true;
+};
+
+/**
+ * Filter an array of workers strictly to currently active employees
+ */
+const filterActiveWorkers = (workers, allEmployeeHistory = [], fromDateStr, toDateStr) => {
+  return (workers || []).filter(w => {
+    const wHistory = (allEmployeeHistory || []).filter(h => (h.employee?._id || h.employee)?.toString() === (w._id || w.id)?.toString());
+    return isWorkerCurrentlyActive(w, wHistory, fromDateStr, toDateStr);
+  });
+};
+
+/**
+ * Sanitize error message to ensure zero exposure of tokens, secrets, or credentials
+ */
+const sanitizeErrorMessage = (msg) => {
+  if (!msg || typeof msg !== 'string') return 'Unknown provider error';
+  return msg
+    .replace(/Bearer\s+[A-Za-z0-9_\-.]+/gi, 'Bearer [REDACTED]')
+    .replace(/(?:access_token|token|apiKey|api_key|password|secret)[=:]\s*["']?[A-Za-z0-9_\-.]+["']?/gi, '$1=[REDACTED]')
+    .replace(/EA[A-Za-z0-9]+/g, '[REDACTED_TOKEN]')
+    .trim();
+};
+
+/**
+ * Mask phone number for safe non-sensitive reporting
+ */
+const maskPhoneNumber = (phone) => {
+  const str = String(phone || '').replace(/\D/g, '');
+  if (str.length <= 4) return '****';
+  return str.slice(0, 2) + '****' + str.slice(-4);
+};
 
 /**
  * Helper to generate Single PDF for all employees on backend
@@ -22,7 +82,7 @@ const generateAllEmployeesPdfBuffer = async (reportsData, monthName, year) => {
   const doc = new jsPDF('portrait', 'mm', 'a4');
   const formatCurr = (val) => {
     if (typeof val === 'string') {
-      const num = parseFloat(val.replace(/[₹Rs,\s]/g, ''));
+      const num = parseFloat(val.replace(/[â‚¹Rs,\s]/g, ''));
       return isNaN(num) ? 'Rs. 0.00' : `Rs. ${num.toFixed(2)}`;
     }
     return `Rs. ${Number(val || 0).toFixed(2)}`;
@@ -44,7 +104,9 @@ const generateAllEmployeesPdfBuffer = async (reportsData, monthName, year) => {
     const perDaySalary = summary.perDaySalary || (workingDaysCount ? grossSalary / workingDaysCount : 0);
     const actualWorked = summary.actualWorkingDays || 0;
     const earnedAttendanceSalary = summary.earnedAttendanceSalary || (actualWorked * perDaySalary);
-    const netPayout = reportObj.finalSalaryWithFines ?? item.totalFinalSalary ?? summary.finalSalary ?? 0;
+    const netPayout = item.finalPayableSalary !== undefined
+      ? item.finalPayableSalary
+      : (item.payableSalary ?? item.totalFinalSalary ?? reportObj.finalSalaryWithFines ?? summary.finalSalary ?? 0);
 
     const pageWidth = doc.internal.pageSize.getWidth();
 
@@ -54,7 +116,7 @@ const generateAllEmployeesPdfBuffer = async (reportsData, monthName, year) => {
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(10.5);
     doc.setFont('helvetica', 'bold');
-    doc.text(`${empIndex + 1}. SALARY & ATTENDANCE SLIP — ${name}`, 10, 10.5);
+    doc.text(`${empIndex + 1}. SALARY & ATTENDANCE SLIP â€” ${name}`, 10, 10.5);
 
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
@@ -134,8 +196,8 @@ const generateAllEmployeesPdfBuffer = async (reportsData, monthName, year) => {
         row.inTime || '-',
         row.outTime || '-',
         row.delayTime || '-',
-        String(row.deductionAmount || 'Rs. 0.00').replace('₹', 'Rs. '),
-        String(row.totalSalary || 'Rs. 0.00').replace('₹', 'Rs. ')
+        String(row.deductionAmount || 'Rs. 0.00').replace('â‚¹', 'Rs. '),
+        String(row.totalSalary || 'Rs. 0.00').replace('â‚¹', 'Rs. ')
       ];
     });
 
@@ -204,7 +266,11 @@ const generateBankStatementXlsxBuffer = async (reportsData, monthName, year) => 
   reportsData.forEach((item, index) => {
     const w = item.worker || {};
     const b = w.bankDetails || {};
-    const netSalary = item.totalFinalSalary || item.fullReport?.finalSalaryWithFines || 0;
+    const netSalary = item.finalPayableSalary !== undefined
+      ? item.finalPayableSalary
+      : (item.payableSalary !== undefined
+        ? item.payableSalary
+        : (item.totalFinalSalary || item.fullReport?.finalSalaryWithFines || 0));
     const seq = String(index + 1).padStart(3, '0');
     const refNo = `SAL${dateNumStr}${seq}`;
 
@@ -242,7 +308,7 @@ const generateBankStatementXlsxBuffer = async (reportsData, monthName, year) => 
 /**
  * Core Dispatch Function: Calculates previous month salary data, generates PDF + XLSX, and dispatches via WhatsApp
  */
-const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = null) => {
+const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = null, customMonth = null, customYear = null) => {
   try {
     let tenantSubdomain = (subdomain && subdomain !== 'main' && subdomain !== 'undefined') ? subdomain : null;
     let settings = null;
@@ -274,7 +340,7 @@ const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = nul
       }
       if (gowhatsConfig && Array.isArray(gowhatsConfig.adminWhatsappNumbers) && gowhatsConfig.adminWhatsappNumbers.length > 0) {
         phoneList = gowhatsConfig.adminWhatsappNumbers.map(p => String(p).trim()).filter(p => p.length > 0);
-        console.log(`ℹ️ [WhatsApp Salary Dispatch] Using ${phoneList.length} leave request admin WhatsApp numbers from GoWhats config.`);
+        console.log(`â„¹ï¸ [WhatsApp Salary Dispatch] Using ${phoneList.length} leave request admin WhatsApp numbers from GoWhats config.`);
       }
     }
 
@@ -282,11 +348,11 @@ const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = nul
       throw new Error('No WhatsApp admin phone numbers configured. Please add admin numbers in GoWhats Integration or WhatsApp Salary Settings.');
     }
 
-    // Determine target month & year (Previous month relative to now)
+    // Determine target month & year (Previous month relative to now, or customMonth/customYear if specified)
     const now = new Date();
-    let targetMonth = now.getMonth(); // 0-indexed: current month - 1 = previous month
-    let targetYear = now.getFullYear();
-    if (targetMonth === 0) {
+    let targetMonth = (typeof customMonth === 'number' && customMonth >= 1 && customMonth <= 12) ? customMonth : now.getMonth(); // 0-indexed: current month - 1 = previous month
+    let targetYear = (typeof customYear === 'number' && customYear > 2000) ? customYear : now.getFullYear();
+    if (!customMonth && targetMonth === 0) {
       targetMonth = 12;
       targetYear -= 1;
     }
@@ -294,48 +360,151 @@ const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = nul
     const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const monthName = MONTH_NAMES[targetMonth - 1];
 
+    // Deterministic local calendar dates without UTC toISOString() boundary bleed
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const lastDayNum = new Date(targetYear, targetMonth, 0).getDate();
+    const fromDateStr = `${targetYear}-${pad2(targetMonth)}-01`;
+    const toDateStr = `${targetYear}-${pad2(targetMonth)}-${pad2(lastDayNum)}`;
     const fromDateObj = new Date(targetYear, targetMonth - 1, 1, 0, 0, 0, 0);
-    const toDateObj = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
-    const fromDateStr = fromDateObj.toISOString().split('T')[0];
-    const toDateStr = toDateObj.toISOString().split('T')[0];
+    const toDateObj = new Date(targetYear, targetMonth - 1, lastDayNum, 23, 59, 59, 999);
 
-    // Fetch all active workers
-    let workers = await Worker.find({ subdomain: tenantSubdomain, status: { $ne: 'Relieved' } })
+    // Fetch all active workers strictly for this tenant
+    const activeWorkerQuery = {
+      subdomain: tenantSubdomain,
+      status: { $in: ['Active', 'active'] }
+    };
+
+    let workers = await Worker.find(activeWorkerQuery)
       .populate('department')
       .lean();
 
-    if (workers.length === 0) {
-      workers = await Worker.find({ status: { $ne: 'Relieved' } })
-        .populate('department')
-        .lean();
+    const EmployeeHistory = require('../models/EmployeeHistory');
+    const isValidObjectId = (val) => mongoose.isValidObjectId ? mongoose.isValidObjectId(val) : /^[0-9a-fA-F]{24}$/.test(String(val));
+    const validWorkerObjectIds = workers.map(w => w._id).filter(id => isValidObjectId(id));
+    let allEmployeeHistory = [];
+    if (validWorkerObjectIds.length > 0) {
+      try {
+        allEmployeeHistory = await EmployeeHistory.find({
+          employee: { $in: validWorkerObjectIds },
+          actionType: { $in: ['Restored', 'Reactivated', 'Relieved', 'Created', 'Updated', 'Rejoined'] }
+        }).lean();
+      } catch (e) {
+        allEmployeeHistory = [];
+      }
     }
+
+    // Secondary in-memory defense-in-depth filter using strict employment-status rule and rejoining validation
+    workers = filterActiveWorkers(workers, allEmployeeHistory, fromDateStr, toDateStr);
 
     if (workers.length === 0) {
       throw new Error('No active employees found to generate monthly salary report');
     }
 
-    // Calculate report data for all workers
-    const allAttendanceData = await Attendance.find({
-      subdomain,
-      date: { $gte: fromDateStr, $lte: toDateStr }
-    }).lean();
+    // Parallelize data fetching for the subdomain
+    const [
+      allAttendanceData,
+      allLeaveData,
+      holidays,
+      allSalaryProjects,
+      allTickets,
+      allPayrollRecords,
+      allPastLedgers
+    ] = await Promise.all([
+      Attendance.find({
+        subdomain: tenantSubdomain || subdomain,
+        date: { $gte: fromDateStr, $lte: toDateStr }
+      }).lean(),
+      Leave.find({ subdomain: tenantSubdomain || subdomain }).lean(),
+      Holiday.find({}).lean(),
+      SalaryProject.find({
+        subdomain: tenantSubdomain || subdomain,
+        $or: [{ startDate: { $lte: toDateObj }, endDate: { $gte: fromDateObj } }]
+      }).populate('developers', 'name rfid').lean(),
+      Ticket.find({ subdomain: tenantSubdomain || subdomain, isDeleted: { $ne: true } }).lean(),
+      PayrollRecord.find({
+        subdomain: tenantSubdomain || subdomain,
+        month: targetMonth,
+        year: targetYear
+      }).populate('adjustments.addedBy', 'name').lean().catch(() => []),
+      ProjectPaymentLedger.find({
+        subdomain: tenantSubdomain || subdomain,
+        isSettled: true,
+        $or: [{ year: { $lt: targetYear } }, { year: targetYear, month: { $lt: targetMonth } }]
+      }).lean().catch(() => [])
+    ]);
 
-    const allLeaveData = await Leave.find({ subdomain }).lean();
-    const holidays = await Holiday.find({}).lean();
     const batches = settings.batches || [];
-    const allSalaryProjects = await SalaryProject.find({
-      subdomain,
-      $or: [{ startDate: { $lte: toDateObj }, endDate: { $gte: fromDateObj } }]
-    }).populate('developers', 'name rfid').lean();
 
-    const allTickets = await Ticket.find({ subdomain, isDeleted: { $ne: true } }).lean();
+    // Helper for past project reconciliations (ProjectPaymentLedger)
+    const uniqueProjectIdsForLedgers = [...new Set((allPastLedgers || []).map(l => l.projectId?.toString()).filter(Boolean))];
+    const allPastProjects = uniqueProjectIdsForLedgers.length > 0
+      ? await SalaryProject.find({ _id: { $in: uniqueProjectIdsForLedgers } }).populate('developers', 'name rfid').lean().catch(() => [])
+      : [];
+    const pastProjectsMap = {};
+    (allPastProjects || []).forEach(p => {
+      if (p?._id) pastProjectsMap[p._id.toString()] = p;
+    });
+
+    const calculateProjectAdjustmentsOptimized = (wId) => {
+      const workerLedgers = (allPastLedgers || []).filter(l => l.employeeId?.toString() === wId.toString());
+      if (workerLedgers.length === 0) return { totalAdjustment: 0, adjustmentDetails: [] };
+
+      const projectMap = {};
+      workerLedgers.forEach(entry => {
+        const pStr = entry.projectId?.toString();
+        if (pStr && pastProjectsMap[pStr] && !projectMap[pStr]) {
+          const project = pastProjectsMap[pStr];
+          const devCount = project.developers?.length || 1;
+          const share = (project.projectProfit || 0) / devCount;
+          const start = new Date(project.startDate);
+          const end = new Date(project.endDate);
+          let workingDays = 0;
+          const cur = new Date(start);
+          while (cur <= end) {
+            if (cur.getDay() !== 0) workingDays++;
+            cur.setDate(cur.getDate() + 1);
+          }
+          projectMap[pStr] = {
+            projectName: project.projectName,
+            currentTotalWorkingDays: workingDays,
+            currentPerDayValue: workingDays > 0 ? share / workingDays : 0
+          };
+        }
+      });
+
+      let totalAdjustment = 0;
+      const adjustmentDetails = [];
+      for (const entry of workerLedgers) {
+        const project = projectMap[entry.projectId?.toString()];
+        if (!project) continue;
+        const currentEntitlement = (entry.paidWorkingDays || 0) * project.currentPerDayValue;
+        const adjustment = currentEntitlement - (entry.paidAmount || 0);
+
+        totalAdjustment += adjustment;
+        adjustmentDetails.push({
+          projectId: entry.projectId,
+          projectName: project.projectName,
+          month: entry.month,
+          year: entry.year,
+          paidAmount: entry.paidAmount,
+          paidPerDayValue: entry.paidPerDayValue,
+          paidWorkingDays: entry.paidWorkingDays,
+          currentPerDayValue: project.currentPerDayValue,
+          currentEntitlement,
+          adjustment,
+          originalTotalDays: entry.projectTotalWorkingDaysAtPayment,
+          currentTotalDays: project.currentTotalWorkingDays
+        });
+      }
+      return { totalAdjustment, adjustmentDetails };
+    };
 
     const reportsData = [];
     for (const worker of workers) {
       const workerId = worker._id.toString();
-      const workerAttendance = allAttendanceData.filter(r => r.worker.toString() === workerId);
-      const workerLeaves = allLeaveData.filter(l => l.worker.toString() === workerId);
-      const workerProjects = allSalaryProjects.filter(p => p.developers.some(d => d._id.toString() === workerId));
+      const workerAttendance = allAttendanceData.filter(r => (r.worker?._id ? r.worker._id.toString() : r.worker?.toString()) === workerId);
+      const workerLeaves = allLeaveData.filter(l => (l.worker?._id ? l.worker._id.toString() : l.worker?.toString()) === workerId);
+      const workerProjects = allSalaryProjects.filter(p => Array.isArray(p.developers) && p.developers.some(d => (d?._id ? d._id.toString() : d?.toString()) === workerId));
 
       const enrichedProjects = workerProjects.map(p => {
         const devCount = p.developers.length || 1;
@@ -351,6 +520,34 @@ const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = nul
         return { ...p, perDeveloperShare: share, totalWorkingDays: workingDays, perDayValue: workingDays > 0 ? share / workingDays : 0 };
       });
 
+      const workerHistory = (allEmployeeHistory || []).filter(h => (h.employee?._id || h.employee)?.toString() === workerId);
+
+      const enableUnauthorizedLeavePenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
+      const enableUnauthorizedPermissionPenalty = settings?.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty === true;
+      const {
+        penalties: unauthorizedAbsencePenalties,
+        totalUnauthorizedPenalty,
+        totalNormal1XAmount,
+        totalExtra4XPenalty,
+        normal1XLeaveAmount,
+        normal1XPermissionAmount,
+        unauthorizedDates,
+        unauthorizedPermissions
+      } = (enableUnauthorizedLeavePenalty || enableUnauthorizedPermissionPenalty)
+        ? calculateUnauthorizedAbsencePenalty(
+          worker, fromDateStr, toDateStr, workerLeaves, workerAttendance, holidays, { ...settings, employeeHistory: workerHistory }
+        )
+        : {
+          penalties: [],
+          totalUnauthorizedPenalty: 0,
+          totalNormal1XAmount: 0,
+          totalExtra4XPenalty: 0,
+          normal1XLeaveAmount: 0,
+          normal1XPermissionAmount: 0,
+          unauthorizedDates: new Set(),
+          unauthorizedPermissions: []
+        };
+
       const report = calculateWorkerProductivity({
         worker,
         attendanceData: workerAttendance,
@@ -364,7 +561,12 @@ const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = nul
           permissionTimeMinutes: settings.permissionTimeMinutes || 15,
           deductSalary: settings.deductSalary !== false,
           intervals: settings.intervals || [],
-          advancedLeaveDeduction: settings.advancedLeaveDeduction || null
+          advancedLeaveDeduction: settings.advancedLeaveDeduction || null,
+          includePermission: settings.includePermission || false,
+          paidLeaveConfig: settings.paidLeaveConfig || null,
+          unauthorizedAbsenceDates: unauthorizedDates,
+          unauthorizedPermissions,
+          employeeHistory: workerHistory
         }
       });
 
@@ -379,14 +581,43 @@ const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = nul
         })
         .reduce((sum, f) => sum + (f.amount || 0), 0);
 
-      const finalSalaryWithBonus = (report.summary.finalSalary || 0) + totalBonusAmount;
+      const finalSalaryWithBonus = (report.summary?.finalSalary || 0) + totalBonusAmount;
       const finalSalaryWithFines = Math.max(0, finalSalaryWithBonus - totalFinesAmount);
 
-      const { totalUnauthorizedPenalty } = calculateUnauthorizedAbsencePenalty(
-        worker, fromDateStr, toDateStr, workerLeaves, workerAttendance, holidays, settings
-      );
+      const finalSalaryAfterUnauthorizedPenalty = Math.max(0, finalSalaryWithFines - totalUnauthorizedPenalty);
 
-      const totalFinalSalary = Math.max(0, finalSalaryWithFines - totalUnauthorizedPenalty);
+      // Project Adjustments (prior month project reconciliations)
+      const { totalAdjustment: projectAdjustment, adjustmentDetails: projectAdjustmentDetails } = calculateProjectAdjustmentsOptimized(workerId);
+      const finalSalaryWithAdjustment = Math.max(0, finalSalaryAfterUnauthorizedPenalty + projectAdjustment);
+
+      // Task Penalty Calculation
+      const workerTickets = (allTickets || []).filter(task => {
+        return (task.assignee?._id ? task.assignee._id.toString() : task.assignee?.toString()) === workerId ||
+          (Array.isArray(task.assignees) && task.assignees.some(a => (a?._id ? a._id.toString() : a?.toString()) === workerId));
+      });
+
+      const { taskPenalties: delayedTasks, totalTaskPenalty: rawTaskPenalty } = calculateTaskPenalties({
+        worker,
+        tickets: workerTickets,
+        report,
+        fromDate: fromDateStr,
+        toDate: toDateStr
+      });
+
+      // Enterprise Payroll Module: Authoritative calculation via finalizeSalaryCalculation
+      const payrollRecord = (allPayrollRecords || []).find(pr => pr.workerId?.toString() === workerId);
+      const finalized = finalizeSalaryCalculation({
+        finalSalaryWithAdjustment,
+        payrollRecord,
+        taskPenalty: rawTaskPenalty,
+        totalUnauthorizedPenalty,
+        totalExtra4XPenalty,
+        totalNormal1XAmount,
+        normal1XLeaveAmount,
+        normal1XPermissionAmount,
+        leaveDeduction: report.summary?.leaveDeduction || 0,
+        permissionDeduction: report.summary?.permissionDeduction || 0
+      });
 
       reportsData.push({
         worker,
@@ -394,12 +625,32 @@ const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = nul
         name: worker.name,
         rfid: worker.rfid,
         department: worker.department?.name || 'N/A',
-        totalFinalSalary,
+        totalFinalSalary: finalized.attendanceSalary,
+        payableSalary: finalized.payableSalary,
+        finalPayableSalary: finalized.finalPayableSalary,
+        attendanceSalary: finalized.attendanceSalary,
+        taskPenalty: finalized.taskPenalty,
+        appliedPenaltyPolicy: finalized.appliedPenaltyPolicy,
+        projectAdjustment,
+        totalAdditions: finalized.totalAdditions,
+        totalDeductions: finalized.totalDeductions,
+        payrollRecord: payrollRecord || null,
         fullReport: {
           report,
           totalBonusAmount,
           totalFinesAmount,
-          finalSalaryWithFines: totalFinalSalary,
+          finalSalaryWithBonus,
+          finalSalaryWithFines: finalized.finalPayableSalary,
+          projectAdjustment,
+          projectAdjustmentDetails,
+          totalUnauthorizedPenalty,
+          unauthorizedAbsencePenalties,
+          payableSalary: finalized.payableSalary,
+          finalPayableSalary: finalized.finalPayableSalary,
+          attendanceSalary: finalized.attendanceSalary,
+          taskPenalty: finalized.taskPenalty,
+          appliedPenaltyPolicy: finalized.appliedPenaltyPolicy,
+          delayedTasks,
           worker
         }
       });
@@ -473,54 +724,132 @@ const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = nul
       };
 
       console.log(`[WhatsApp Salary Dispatch] Sending template monthly_salary_report (Bank NEFT Statement) to ${phone}...`);
-      let templateRes = await sendWhatsApp(subdomain, phone, templatePayload);
+      let templateRes = await whatsappService.sendWhatsApp(subdomain, phone, templatePayload);
 
       // If template fails (e.g. template review or param mismatch), fallback to direct text + XLSX & PDF
+      let textRes = null;
       let xlsxRes = templateRes;
       if (!templateRes.success) {
         console.warn(`[WhatsApp Salary Dispatch] Template send failed (${templateRes.error}). Falling back to direct message & documents...`);
-        const textMsg = `📊 *MONTHLY SALARY REPORT & BANK NEFT STATEMENT*\n\n` +
-          `• *Period:* ${monthName} ${targetYear}\n` +
-          `• *Total Employees:* ${reportsData.length}\n` +
-          `• *Generated On:* ${generatedOnStr}\n\n` +
+        const textMsg = `ðŸ“Š *MONTHLY SALARY REPORT & BANK NEFT STATEMENT*\n\n` +
+          `â€¢ *Period:* ${monthName} ${targetYear}\n` +
+          `â€¢ *Total Employees:* ${reportsData.length}\n` +
+          `â€¢ *Generated On:* ${generatedOnStr}\n\n` +
           `Attached below are your **Corporate Bank NEFT Upload Statement (XLSX)** and **All Employees Salary Report PDF**.`;
 
-        await sendWhatsApp(subdomain, phone, { type: 'text', text: textMsg });
+        textRes = await whatsappService.sendWhatsApp(subdomain, phone, { type: 'text', text: textMsg });
 
-        xlsxRes = await sendWhatsApp(subdomain, phone, {
+        xlsxRes = await whatsappService.sendWhatsApp(subdomain, phone, {
           type: 'document',
           link: xlsxUrl,
           filePath: xlsxPath,
           filename: xlsxFilename,
-          caption: `📊 Bank NEFT Statement XLSX (${monthName} ${targetYear})`
+          caption: `ðŸ“Š Bank NEFT Statement XLSX (${monthName} ${targetYear})`
         });
       }
 
       // 2. Also Send All Employees Single PDF Salary Report Document
-      const pdfRes = await sendWhatsApp(subdomain, phone, {
+      const pdfRes = await whatsappService.sendWhatsApp(subdomain, phone, {
         type: 'document',
         link: pdfUrl,
         filePath: pdfPath,
         filename: pdfFilename,
-        caption: `📄 All Employees Salary Report PDF (${monthName} ${targetYear})`
+        caption: `ðŸ“„ All Employees Salary Report PDF (${monthName} ${targetYear})`
       });
 
-      dispatchResults.push({ phone, templateRes, xlsxRes, pdfRes });
+      dispatchResults.push({ phone, templateRes, textRes, xlsxRes, pdfRes });
     }
 
-    // Update settings lastDispatchedAt
-    settings.autoSalaryWhatsappConfig.lastDispatchedAt = new Date();
-    await settings.save();
+    // Evaluate provider acceptance for each recipient across the two required deliverables:
+    // Deliverable 1: Corporate Bank Bulk NEFT Statement (XLSX via template or fallback document)
+    // Deliverable 2: All Employees Salary Report (PDF document)
+    const recipientOutcomes = dispatchResults.map(item => {
+      const masked = maskPhoneNumber(item.phone);
+
+      const xlsxAccepted = Boolean((item.templateRes && item.templateRes.success) || (item.xlsxRes && item.xlsxRes.success));
+      const pdfAccepted = Boolean(item.pdfRes && item.pdfRes.success);
+      const textAccepted = item.textRes ? Boolean(item.textRes.success) : null;
+
+      const allDeliverablesAccepted = xlsxAccepted && pdfAccepted;
+      const anyDeliverableAccepted = xlsxAccepted || pdfAccepted;
+
+      const failureReasons = [];
+      if (item.templateRes && !item.templateRes.success) {
+        failureReasons.push(`Template: ${sanitizeErrorMessage(item.templateRes.error)}`);
+      }
+      if (item.textRes && !item.textRes.success) {
+        failureReasons.push(`Text Notice: ${sanitizeErrorMessage(item.textRes.error)}`);
+      }
+      if (item.xlsxRes && !item.xlsxRes.success && (!item.templateRes || !item.templateRes.success)) {
+        failureReasons.push(`XLSX: ${sanitizeErrorMessage(item.xlsxRes.error)}`);
+      }
+      if (item.pdfRes && !item.pdfRes.success) {
+        failureReasons.push(`PDF: ${sanitizeErrorMessage(item.pdfRes.error)}`);
+      }
+
+      return {
+        phone: masked,
+        rawPhone: item.phone,
+        xlsxAccepted,
+        pdfAccepted,
+        textAccepted,
+        allDeliverablesAccepted,
+        anyDeliverableAccepted,
+        failureReasons
+      };
+    });
+
+    const totalRecipients = recipientOutcomes.length;
+    const fullySuccessfulRecipients = recipientOutcomes.filter(r => r.allDeliverablesAccepted);
+    const partiallySuccessfulRecipients = recipientOutcomes.filter(r => !r.allDeliverablesAccepted && r.anyDeliverableAccepted);
+    const completelyFailedRecipients = recipientOutcomes.filter(r => !r.anyDeliverableAccepted);
+
+    // Scenario A: Total Failure â€” All attempted message types failed across all recipients
+    if (fullySuccessfulRecipients.length === 0 && partiallySuccessfulRecipients.length === 0) {
+      const failureSummary = recipientOutcomes
+        .map(r => `${r.phone} (${r.failureReasons.join('; ') || 'Provider rejected request'})`)
+        .join(' | ');
+
+      return {
+        success: false,
+        error: `WhatsApp salary dispatch failed. Provider rejected all attempted deliverables: ${failureSummary}`,
+        pdfUrl,
+        xlsxUrl,
+        monthName,
+        year: targetYear,
+        totalEmployees: reportsData.length,
+        dispatchResults,
+        recipientOutcomes
+      };
+    }
+
+    // Scenario B: Success or Partial Acceptance â€” At least some deliverables were accepted by Meta Cloud
+    // Update settings lastDispatchedAt ONLY when at least one recipient received all required deliverables
+    if (fullySuccessfulRecipients.length > 0 && settings && typeof settings.save === 'function') {
+      if (settings.autoSalaryWhatsappConfig) {
+        settings.autoSalaryWhatsappConfig.lastDispatchedAt = new Date();
+      }
+      await settings.save();
+    }
+
+    const isAllFullyAccepted = fullySuccessfulRecipients.length === totalRecipients;
+    const partialSummary = isAllFullyAccepted
+      ? `Salary reports successfully accepted for dispatch to ${totalRecipients} phone number${totalRecipients > 1 ? 's' : ''}`
+      : `âš ï¸ Partial dispatch: ${fullySuccessfulRecipients.length} of ${totalRecipients} recipients accepted all deliverables` +
+        (partiallySuccessfulRecipients.length > 0 ? `, ${partiallySuccessfulRecipients.length} partially accepted` : '') +
+        (completelyFailedRecipients.length > 0 ? `, ${completelyFailedRecipients.length} failed` : '');
 
     return {
       success: true,
-      message: `Salary reports successfully dispatched to ${phoneList.length} phone numbers`,
+      partial: !isAllFullyAccepted,
+      message: partialSummary,
       pdfUrl,
       xlsxUrl,
       monthName,
       year: targetYear,
       totalEmployees: reportsData.length,
-      dispatchResults
+      dispatchResults,
+      recipientOutcomes
     };
 
   } catch (error) {
@@ -533,5 +862,11 @@ const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = nul
 };
 
 module.exports = {
-  executeSalaryWhatsappDispatch
+  executeSalaryWhatsappDispatch,
+  generateAllEmployeesPdfBuffer,
+  generateBankStatementXlsxBuffer,
+  isWorkerCurrentlyActive,
+  filterActiveWorkers,
+  sanitizeErrorMessage,
+  maskPhoneNumber
 };

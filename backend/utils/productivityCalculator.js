@@ -1,6 +1,313 @@
 
 // backend/utils/productivityCalculator.js
 
+const indiaDateFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Kolkata',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit'
+});
+
+const toIndiaDateString = (val) => {
+  if (!val) return null;
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return trimmed;
+    }
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) {
+      return indiaDateFormatter.format(parsed);
+    }
+    return null;
+  }
+  if (val instanceof Date || (val && typeof val.getTime === 'function')) {
+    if (isNaN(val.getTime())) return null;
+    return indiaDateFormatter.format(val);
+  }
+  const parsed = new Date(val);
+  return isNaN(parsed.getTime()) ? null : indiaDateFormatter.format(parsed);
+};
+
+/**
+ * Validates the authoritative employment window for a worker.
+ * Rules & Business Lifecycle:
+ * 1. joiningDate is formatted using Asia/Kolkata timezone.
+ * 2. relievedAt is formatted using Asia/Kolkata timezone.
+ * 3. Employees can leave the company (relieved) and subsequently REJOIN in the middle of a month.
+ * 4. When a verified rejoining event is established on D_rejoin after a relieving event D_relieved:
+ *    - effectiveJoiningDateStr is set to D_rejoin.
+ *    - Dates prior to D_rejoin are classified as Relieved / Not Employed with zero salary and zero deductions.
+ *    - From D_rejoin onward, working days, attendance, and applicable deductions are calculated normally.
+ * 5. Do not assume an employee has rejoined merely because worker.status is Active.
+ *    A genuine rejoining event must be established via explicit worker fields or EmployeeHistory.
+ * 6. Authoritative Rejoining Date order of preference:
+ *    - afterData.rejoiningDate / afterData.rehireDate / afterData.reactivatedAt / afterData.restoredAt
+ *    - worker.rejoiningDate / worker.rehireDate / worker.reactivatedAt / worker.restoredAt
+ *    - afterData.joiningDate or worker.joiningDate (when > relieving date)
+ *    - EmployeeHistory.createdAt / timestamp (only when confirmed to represent the actual reactivation event)
+ * 7. Preserves all previous relieving and rejoining history.
+ */
+const getValidatedEmploymentDates = (worker, fromDate, toDate, options = {}) => {
+  if (!worker) return { joiningDateStr: null, relievedDateStr: null, wasRelievedBefore: false, effectiveJoiningDateStr: null };
+
+  const fromDateStr = toIndiaDateString(fromDate);
+  const toDateStr = toIndiaDateString(toDate);
+
+  // 1. Initial Joining Date (Asia/Kolkata timezone)
+  const initialJoiningDateStr = toIndiaDateString(worker.joiningDate);
+
+  // 2. Raw Relieved Date (Asia/Kolkata timezone)
+  const rawRelievedDateStr = toIndiaDateString(worker.relievedAt);
+
+  // 3. Status normalization
+  const statusStr = String(worker.status || 'Active').trim().toLowerCase();
+  const isExplicitlyRelievedOrDeleted = statusStr === 'relieved' || statusStr === 'deleted';
+
+  // 4. Gather history records
+  const history = options.employeeHistory || worker.history || [];
+
+  // Build a timeline of lifecycle events
+  const timelineEvents = [];
+
+  // Add initial joining date if recorded on worker
+  if (initialJoiningDateStr) {
+    timelineEvents.push({
+      type: 'joined',
+      date: initialJoiningDateStr,
+      source: 'worker.joiningDate',
+      rawTime: new Date(worker.joiningDate).getTime() || 0
+    });
+  }
+
+  // Add rawRelievedDateStr if recorded on worker
+  if (rawRelievedDateStr) {
+    timelineEvents.push({
+      type: 'relieved',
+      date: rawRelievedDateStr,
+      source: 'worker.relievedAt',
+      rawTime: new Date(worker.relievedAt).getTime() || 0
+    });
+  }
+
+  // Add explicit worker rejoining fields if present
+  const explicitWorkerRejoin = toIndiaDateString(
+    worker.rejoiningDate || worker.rehireDate || worker.reactivatedAt || worker.restoredAt
+  );
+  if (explicitWorkerRejoin) {
+    timelineEvents.push({
+      type: 'rejoined',
+      date: explicitWorkerRejoin,
+      source: 'worker.rejoinField',
+      rawTime: new Date(worker.rejoiningDate || worker.rehireDate || worker.reactivatedAt || worker.restoredAt).getTime() || 0
+    });
+  } else if (initialJoiningDateStr && rawRelievedDateStr && initialJoiningDateStr > rawRelievedDateStr) {
+    timelineEvents.push({
+      type: 'rejoined',
+      date: initialJoiningDateStr,
+      source: 'worker.joiningDate_after_relieved',
+      rawTime: new Date(worker.joiningDate).getTime() || 0
+    });
+  }
+
+  // Parse history records chronologically
+  if (Array.isArray(history) && history.length > 0) {
+    for (const h of history) {
+      if (!h || typeof h !== 'object') continue;
+      const action = String(h.actionType || h.action || '').trim().toLowerCase();
+      const hRawTime = new Date(h.createdAt || h.date || h.timestamp || 0).getTime() || 0;
+
+      // Check if history record is a Relieving event
+      const isRelieveEvent = action === 'relieved' ||
+        (action === 'updated' && String(h.beforeData?.status || '').toLowerCase() !== 'relieved' && String(h.afterData?.status || '').toLowerCase() === 'relieved') ||
+        (action !== 'updated' && String(h.afterData?.status || '').toLowerCase() === 'relieved');
+      if (isRelieveEvent) {
+        const relDate = toIndiaDateString(h.afterData?.relievedAt || h.createdAt || h.date || h.timestamp);
+        if (relDate) {
+          timelineEvents.push({
+            type: 'relieved',
+            date: relDate,
+            source: 'history.relieved',
+            rawTime: hRawTime
+          });
+        }
+      }
+
+      // Check if history record is a Rejoining / Restoration event
+      const isReactivationAction = ['restored', 'reactivated', 'rejoined'].includes(action);
+      const beforeStatus = String(h.beforeData?.status || '').trim().toLowerCase();
+      const afterStatus = String(h.afterData?.status || '').trim().toLowerCase();
+
+      // Only treat 'updated' as a rejoining event if it represents a genuine transition from Relieved or Deleted to Active.
+      // Routine updates where status was already Active (beforeStatus: 'active' && afterStatus: 'active') must NEVER reset rejoining date.
+      const isStatusTransitionToActive = (action === 'updated' || action === 'restored') &&
+        (beforeStatus === 'relieved' || beforeStatus === 'deleted') &&
+        afterStatus === 'active';
+
+      const isRecreation = action === 'created' && rawRelievedDateStr && hRawTime > new Date(worker.relievedAt || 0).getTime();
+
+      if (isReactivationAction || isStatusTransitionToActive || isRecreation) {
+        // Extract candidate rejoining date with strict preference:
+        // 1. Explicit rejoining/rehire/reactivation date in afterData
+        // 2. Updated joiningDate in afterData ONLY IF newer than initial joining date
+        // 3. Confirmed event createdAt/timestamp
+        let candidateDate = toIndiaDateString(
+          h.afterData?.rejoiningDate ||
+          h.afterData?.rehireDate ||
+          h.afterData?.reactivatedAt ||
+          h.afterData?.restoredAt
+        );
+
+        if (!candidateDate && h.afterData?.joiningDate) {
+          const afterJoin = toIndiaDateString(h.afterData.joiningDate);
+          if (afterJoin && (!initialJoiningDateStr || afterJoin > initialJoiningDateStr)) {
+            candidateDate = afterJoin;
+          }
+        }
+
+        if (!candidateDate) {
+          const eventDate = toIndiaDateString(h.createdAt || h.date || h.timestamp);
+          if (eventDate) {
+            candidateDate = eventDate;
+          }
+        }
+
+        if (candidateDate) {
+          timelineEvents.push({
+            type: 'rejoined',
+            date: candidateDate,
+            source: 'history.restored',
+            rawTime: hRawTime
+          });
+        }
+      }
+    }
+  }
+
+  // Deduplicate and sort events chronologically
+  // On the same day: 'joined' (start of stint) -> 'relieved' (end of stint) -> 'rejoined' (new stint starts)
+  timelineEvents.sort((a, b) => {
+    if (a.date !== b.date) {
+      return a.date.localeCompare(b.date);
+    }
+    if (a.rawTime !== b.rawTime) {
+      return a.rawTime - b.rawTime;
+    }
+    const order = { joined: 1, relieved: 2, rejoined: 3 };
+    return (order[a.type] || 0) - (order[b.type] || 0);
+  });
+
+  // Evaluate lifecycle progression
+  let currentRelievedDate = null;
+  let currentRejoiningDate = null;
+  let currentRelievedDateAfterRejoin = null;
+  let wasRelievedBefore = false;
+
+  for (const ev of timelineEvents) {
+    if (ev.type === 'relieved') {
+      currentRelievedDate = ev.date;
+      wasRelievedBefore = true;
+      if (currentRejoiningDate && ev.date > currentRejoiningDate) {
+        currentRelievedDateAfterRejoin = ev.date;
+      }
+    } else if (ev.type === 'rejoined') {
+      if (currentRelievedDate && ev.date >= currentRelievedDate) {
+        currentRejoiningDate = ev.date;
+        currentRelievedDate = null;
+        currentRelievedDateAfterRejoin = null;
+      } else if (!currentRelievedDate) {
+        currentRejoiningDate = ev.date;
+      }
+    }
+  }
+
+  // Case 1: Employee was relieved and subsequently rejoined
+  if (currentRejoiningDate && wasRelievedBefore) {
+    let finalRelieve = currentRelievedDateAfterRejoin || null;
+    if (!finalRelieve && isExplicitlyRelievedOrDeleted && rawRelievedDateStr && rawRelievedDateStr >= currentRejoiningDate) {
+      finalRelieve = rawRelievedDateStr;
+    }
+    const activePeriods = [{ startDate: currentRejoiningDate, endDate: finalRelieve }];
+
+    return {
+      joiningDateStr: currentRejoiningDate,
+      relievedDateStr: finalRelieve,
+      wasRelievedBefore: true,
+      effectiveJoiningDateStr: currentRejoiningDate,
+      initialJoiningDateStr,
+      activePeriods
+    };
+  }
+
+  // Case 2: Employee is explicitly Relieved or Deleted (with NO valid subsequent rejoining)
+  if (isExplicitlyRelievedOrDeleted || currentRelievedDate) {
+    const finalRelievedDate = currentRelievedDate || rawRelievedDateStr;
+    const effJoin = initialJoiningDateStr;
+    const activePeriods = [];
+    if (effJoin && finalRelievedDate && effJoin <= finalRelievedDate) {
+      activePeriods.push({ startDate: effJoin, endDate: finalRelievedDate });
+    } else if (effJoin && !finalRelievedDate) {
+      activePeriods.push({ startDate: effJoin, endDate: null });
+    }
+    return {
+      joiningDateStr: effJoin,
+      relievedDateStr: finalRelievedDate,
+      wasRelievedBefore: true,
+      effectiveJoiningDateStr: effJoin,
+      initialJoiningDateStr,
+      activePeriods
+    };
+  }
+
+  // Case 3: Standard active worker with no relieving history
+  const activePeriods = [];
+  if (initialJoiningDateStr) {
+    activePeriods.push({ startDate: initialJoiningDateStr, endDate: null });
+  }
+
+  return {
+    joiningDateStr: initialJoiningDateStr,
+    relievedDateStr: null,
+    wasRelievedBefore: false,
+    effectiveJoiningDateStr: initialJoiningDateStr,
+    initialJoiningDateStr,
+    activePeriods
+  };
+};
+
+/**
+ * Multiple Employment Periods Helper
+ * Evaluates whether a given date falls inside an employee's validated active employment period.
+ */
+const evaluateDateEmployment = (dateStr, employmentDates) => {
+  if (!employmentDates || !dateStr) return { isEmployed: true, statusText: 'Active' };
+
+  const { activePeriods, joiningDateStr, relievedDateStr, wasRelievedBefore, initialJoiningDateStr } = employmentDates;
+
+  if (Array.isArray(activePeriods) && activePeriods.length > 0) {
+    for (const period of activePeriods) {
+      const afterStart = !period.startDate || dateStr >= period.startDate;
+      const beforeEnd = !period.endDate || dateStr <= period.endDate;
+      if (afterStart && beforeEnd) {
+        return { isEmployed: true, statusText: 'Active' };
+      }
+    }
+    const isBeforeInitial = initialJoiningDateStr && dateStr < initialJoiningDateStr;
+    const statusText = isBeforeInitial ? 'Not Employed' : (wasRelievedBefore ? 'Relieved' : 'Not Employed');
+    return { isEmployed: false, statusText };
+  }
+
+  const isPreEmployment = joiningDateStr && dateStr < joiningDateStr;
+  const isPostEmployment = relievedDateStr && dateStr > relievedDateStr;
+
+  if (isPreEmployment || isPostEmployment) {
+    const statusText = isPostEmployment ? 'Relieved' : (wasRelievedBefore ? 'Relieved' : 'Not Employed');
+    return { isEmployed: false, statusText };
+  }
+
+  return { isEmployed: true, statusText: 'Active' };
+};
+
 const calculateWorkerProductivity = (productivityParameters) => {
   const {
     attendanceData,
@@ -82,7 +389,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
   };
 
   const formatCurrency = (amount) => {
-    return `₹${amount.toFixed(2)}`;
+    return `\u20B9${Number(amount || 0).toFixed(2)}`;
   };
 
   const formatDate = (dateStr) => {
@@ -447,7 +754,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
     const lunchStart = timeToMinutes(lunchFrom);
     const lunchEnd = timeToMinutes(lunchTo);
 
-    // ✅ FIX 1: Ignore invalid or zero-duration sessions
+    // âœ… FIX 1: Ignore invalid or zero-duration sessions
     if (inPunch.time === outPunch.time) {
       return { totalDelayMinutes: 0, delayDetails: [] };
     }
@@ -741,13 +1048,13 @@ const calculateWorkerProductivity = (productivityParameters) => {
         }
 
         // NEVER skip the inter-session gap for auto-out next sessions.
-        // The gap (prevOUT → nextIN) and auto-out penalty (nextIN → workEnd)
+        // The gap (prevOUT â†’ nextIN) and auto-out penalty (nextIN â†’ workEnd)
         // cover DIFFERENT, non-overlapping time periods:
-        //   Gap:     S3 OUT ──────── S4 IN   (employee was absent)
-        //   Penalty: S4 IN  ──────── workEnd (forgot to punch out → 0 salary)
+        //   Gap:     S3 OUT â”€â”€â”€â”€â”€â”€â”€â”€ S4 IN   (employee was absent)
+        //   Penalty: S4 IN  â”€â”€â”€â”€â”€â”€â”€â”€ workEnd (forgot to punch out â†’ 0 salary)
         // Both must be penalized independently.
         if (false) {
-          // Gap skip removed — previously skipped when next session was auto-out,
+          // Gap skip removed â€” previously skipped when next session was auto-out,
           // but that caused the gap to go unpenalized.
         }
         // If current session ends during lunch period, no inter-work permission is calculated
@@ -792,7 +1099,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
     // If it's an auto-generated OUT (missed punch), deduct for unworked time
     // Important: DO NOT deduct if the session is currently ongoing (recorded today)
     if (outPunch.record.isAutoGenerated && !outPunch.record.isOngoing) {
-      // ✅ FIX 3: Skip penalty if session is a valid short session (< 30 mins)
+      // âœ… FIX 3: Skip penalty if session is a valid short session (< 30 mins)
       // This prevents fake huge delay (e.g. 328 mins) for a 2-minute session
       const workedMinutes = outPunch.time - inPunch.time;
       if (workedMinutes > 0 && workedMinutes < 30) {
@@ -824,9 +1131,9 @@ const calculateWorkerProductivity = (productivityParameters) => {
 
         unworkedMinutes = totalWorkTime;
       } else {
-        // SPLIT SESSION: Employee forgot to punch out → 0 salary for this session.
+        // SPLIT SESSION: Employee forgot to punch out â†’ 0 salary for this session.
         // The penalty (workEnd - IN) cancels the work credit given by
-        // calculatePairWorkingTime. The inter-session GAP (prevOUT → IN) is
+        // calculatePairWorkingTime. The inter-session GAP (prevOUT â†’ IN) is
         // calculated separately as inter-work permission on the previous session.
         // NEW: Ensure penalty only counts time WITHIN shift hours
         let remainingShiftTime = workEnd - Math.max(inPunch.time, workStart);
@@ -969,16 +1276,16 @@ const calculateWorkerProductivity = (productivityParameters) => {
   const perDaySalary = salaryDivisorWorkingDays > 0 ? originalSalary / salaryDivisorWorkingDays : 0;
   const perMinuteSalary = standardWorkingMinutes > 0 ? perDaySalary / standardWorkingMinutes : 0;
 
-  const joiningDateStr = worker.joiningDate ? new Date(worker.joiningDate).toISOString().split('T')[0] : null;
-  const relievedDateStr = worker.relievedAt ? new Date(worker.relievedAt).toISOString().split('T')[0] : null;
+  const employmentDates = getValidatedEmploymentDates(worker, fromDate, toDate, options);
+  const { joiningDateStr, relievedDateStr, wasRelievedBefore } = employmentDates;
 
   // NEW: Calculate expected SAAS Base Salary (SAAS Days Only during active employment)
   let saasWorkingDaysCount = 0;
   let projectWorkingDaysCount = 0;
   allDates.forEach(date => {
-    const dStr = date.toISOString().split('T')[0];
-    const isOutsideEmployment = (joiningDateStr && dStr < joiningDateStr) || (relievedDateStr && dStr > relievedDateStr);
-    if (!isSunday(date) && !isOutsideEmployment) {
+    const dStr = toIndiaDateString(date);
+    const empStatus = evaluateDateEmployment(dStr, employmentDates);
+    if (!isSunday(date) && empStatus.isEmployed) {
       if (getProjectForDate(date)) {
         projectWorkingDaysCount++;
       } else {
@@ -988,6 +1295,59 @@ const calculateWorkerProductivity = (productivityParameters) => {
   });
   const expectedSaaSSalary = saasWorkingDaysCount * perDaySalary;
   const totalExpectedMinutes = totalWorkingDaysInPeriod * standardWorkingMinutes;
+
+  // Phase 4 Option B: Identify unauthorized absence dates to prevent duplicate LOP deduction
+  let unauthorizedAbsenceDates = options.unauthorizedAbsenceDates || null;
+  if (!unauthorizedAbsenceDates) {
+    const enableUnauthorizedLeavePenalty = advancedLeaveDeduction?.enableUnauthorizedLeavePenalty !== false;
+    if (enableUnauthorizedLeavePenalty) {
+      const punchInDateSet = new Set();
+      (attendanceData || []).forEach(att => {
+        if (att.presence === true) {
+          const dStr = typeof att.date === 'string' ? att.date : toIndiaDateString(att.date);
+          punchInDateSet.add(dStr);
+        }
+      });
+
+      const holidayDateSet = new Set();
+      (holidays || []).forEach(h => {
+        const hDate = typeof h.date === 'string' ? h.date.split('T')[0] : toIndiaDateString(h.date);
+        holidayDateSet.add(hDate);
+      });
+
+      unauthorizedAbsenceDates = new Set();
+      allDates.forEach(date => {
+        const dStr = toIndiaDateString(date);
+        const empStatus = evaluateDateEmployment(dStr, employmentDates);
+        if (empStatus.isEmployed && dStr <= todayStr && !isSunday(date) && !holidayDateSet.has(dStr)) {
+          if (!punchInDateSet.has(dStr)) {
+            const fullDayLeaves = (leaveData || []).filter(l => {
+              if (l.leaveType === 'Permission') return false;
+              const start = typeof l.startDate === 'string' ? l.startDate.split('T')[0] : indiaTimezoneDate.format(new Date(l.startDate));
+              const end = typeof l.endDate === 'string' ? l.endDate.split('T')[0] : indiaTimezoneDate.format(new Date(l.endDate));
+              return dStr >= start && dStr <= end;
+            });
+            const hasApproved = fullDayLeaves.some(l => l.status === 'Approved');
+            if (!hasApproved) {
+              unauthorizedAbsenceDates.add(dStr);
+            }
+          }
+        }
+      });
+    } else {
+      unauthorizedAbsenceDates = new Set();
+    }
+  }
+
+  // Phase 4 Option B: Identify unauthorized permissions to prevent duplicate permission deduction
+  const unauthorizedPermissionMap = {};
+  if (Array.isArray(options.unauthorizedPermissions)) {
+    options.unauthorizedPermissions.forEach(up => {
+      if (up && up.date) {
+        unauthorizedPermissionMap[up.date] = up;
+      }
+    });
+  }
   let totalWorkingMinutes = 0;
   let totalPermissionMinutes = 0;
   let dailyBreakdown = [];
@@ -1022,7 +1382,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
 
   let runningWorkingDays = 0;
 
-  // ── Hybrid Salary Pools ──────────────────────────────────────────────────────
+  // â”€â”€ Hybrid Salary Pools â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Gross and deductions are tracked SEPARATELY so that large penalties (e.g. 2X
   // absence) are never silently dropped by a per-day Math.max(0, ...) clamp.
   // The clamp is applied once, at the POOL level, in the final aggregation.
@@ -1035,10 +1395,13 @@ const calculateWorkerProductivity = (productivityParameters) => {
   const groupedByDate = {};
   filteredData.forEach(record => {
     // Parse the string date and convert to consistent YYYY-MM-DD format for grouping
-    const recordDate = new Date(record.date);
-    const dateKey = recordDate.toISOString().split('T')[0];
-    if (!groupedByDate[dateKey]) groupedByDate[dateKey] = [];
-    groupedByDate[dateKey].push(record);
+    const dateKey = typeof record.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(record.date.trim())
+      ? record.date.trim()
+      : toIndiaDateString(record.date);
+    if (dateKey) {
+      if (!groupedByDate[dateKey]) groupedByDate[dateKey] = [];
+      groupedByDate[dateKey].push(record);
+    }
   });
 
   const processDay = (punches, date) => {
@@ -1122,7 +1485,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
 
     // Process each IN-OUT pair
     pairs.forEach((pair, index) => {
-      // ✅ FIX 2: Ignore lunch-only sessions (both IN and OUT within lunch period)
+      // âœ… FIX 2: Ignore lunch-only sessions (both IN and OUT within lunch period)
       // These sessions should not earn salary and should not incur delay
       const isInsideLunch =
         pair.in.time >= lunchStart &&
@@ -1221,12 +1584,12 @@ const calculateWorkerProductivity = (productivityParameters) => {
       });
     });
 
-    // ═══════════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // ZERO VALID WORK CHECK: If the employee punched in but ALL sessions
     // produced 0 valid working minutes (e.g., only punched during lunch,
     // only punched outside shift hours), treat the day as ABSENT.
-    // Apply full-day deduction — no salary for invalid sessions.
-    // ═══════════════════════════════════════════════════════════════════════
+    // Apply full-day deduction â€” no salary for invalid sessions.
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     const hasAnyPunches = pairs.length > 0;
     const allSessionsInvalid = hasAnyPunches && dayTotalWorkingMinutes === 0 && dayTotalPermissionMinutes === 0;
 
@@ -1234,7 +1597,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
       // Override: full day deduction as if absent
       dayTotalPermissionMinutes = standardWorkingMinutes;
       dayTotalDeduction = standardWorkingMinutes * perMinuteSalary * penaltyFactor;
-      dayData.issues = ['No valid work — all sessions during lunch/outside shift hours'];
+      dayData.issues = ['No valid work â€” all sessions during lunch/outside shift hours'];
 
       // Clear any existing pair reports and replace with an Absent-style entry
       pairReports = [{
@@ -1283,7 +1646,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
       }
     }
 
-    // ── Hybrid: determine if this day is a PROJECT day ──
+    // â”€â”€ Hybrid: determine if this day is a PROJECT day â”€â”€
     const activeProject = getProjectForDate(date);
     const isProjectDayFlag = !!activeProject;
     const workType = isProjectDayFlag ? 'PROJECT' : 'SAAS';
@@ -1293,13 +1656,20 @@ const calculateWorkerProductivity = (productivityParameters) => {
       ? perDaySalary / standardWorkingMinutes
       : perMinuteSalary;
 
-    const baseDayTotalDeduction = dayTotalPermissionMinutes * basePerMinuteSalary * penaltyFactor;
+    // Phase 4 Option B: For unauthorized permission minutes, the 5X penalty replaces the normal 1X permission deduction.
+    // Waive up to unauthPermMinutes from daily 1X delay deduction to prevent double deduction (never 6X).
+    const dateStr = typeof date === 'string' ? date : toIndiaDateString(date);
+    const unauthPermForDay = unauthorizedPermissionMap[dateStr];
+    const unauthPermMinutes = unauthPermForDay ? (unauthPermForDay.minutes || 0) : 0;
+    const chargeablePermissionMinutes = Math.max(0, dayTotalPermissionMinutes - unauthPermMinutes);
 
-    // ✅ PROJECT DAY: gross = project per-day value, NO base salary added
-    // ✅ SAAS DAY:    gross = per-day base salary
+    const baseDayTotalDeduction = chargeablePermissionMinutes * basePerMinuteSalary * penaltyFactor;
+
+    // âœ… PROJECT DAY: gross = project per-day value, NO base salary added
+    // âœ… SAAS DAY:    gross = per-day base salary
     const grossEarning = isProjectDayFlag ? (activeProject.perDayValue || 0) : perDaySalary;
 
-    // ⚠️ Do NOT apply Math.max(0) here — accumulate gross and deductions separately
+    // âš ï¸ Do NOT apply Math.max(0) here â€” accumulate gross and deductions separately
     // so that 2X penalties exceeding a single day's gross are NOT silently forgiven.
     if (isProjectDayFlag) {
       grossProjectSalary += grossEarning;
@@ -1316,11 +1686,11 @@ const calculateWorkerProductivity = (productivityParameters) => {
       totalSaaSDeductions += baseDayTotalDeduction;
     }
 
-    // dayFinalSalary is used only for the UI report row — still clamped at 0 for display
+    // dayFinalSalary is used only for the UI report row â€” still clamped at 0 for display
     const dayFinalSalary = Math.max(0, grossEarning - baseDayTotalDeduction);
 
     // Now create the report entries with the correct total salary
-    // Skip if allSessionsInvalid — the absent report entry was already created above
+    // Skip if allSessionsInvalid â€” the absent report entry was already created above
     if (!allSessionsInvalid) pairs.forEach((pair, index) => {
       // DISPLAY BUG FIX: For lone auto-out / lone orphaned-out sessions,
       // calculatePairDelayTime returns 0 via FIX 3 (short session < 30 min),
@@ -1345,9 +1715,23 @@ const calculateWorkerProductivity = (productivityParameters) => {
         delayTimeResult = { totalDelayMinutes: standardWorkingMinutes, delayDetails: [] };
       } else {
         delayTimeResult = calculatePairDelayTime(pair.in, pair.out, workStart, workEnd, pairs, index, pair.isOrphanedOut);
-        pairDeduction = delayTimeResult.totalDelayMinutes * basePerMinuteSalary * penaltyFactor;
-        delayTimeString = `${Math.round(delayTimeResult.totalDelayMinutes)} mins${penaltyFactor > 1 ? ` (${penaltyFactor}X)` : ''}`;
-        delayTypeString = delayTimeResult.delayDetails.map(d => d.description).join(', ');
+        let pairDelayMins = delayTimeResult.totalDelayMinutes;
+        let isCoveredByUnauthPerm5X = false;
+        if (unauthPermMinutes > 0 && pairDelayMins > 0) {
+          if (pairDelayMins <= unauthPermMinutes) {
+            isCoveredByUnauthPerm5X = true;
+            pairDelayMins = 0;
+          } else {
+            pairDelayMins = Math.max(0, pairDelayMins - unauthPermMinutes);
+          }
+        }
+        pairDeduction = pairDelayMins * basePerMinuteSalary * penaltyFactor;
+        delayTimeString = isCoveredByUnauthPerm5X && pairDelayMins === 0
+          ? `${Math.round(delayTimeResult.totalDelayMinutes)} mins (5X Penalty)`
+          : `${Math.round(pairDelayMins)} mins${penaltyFactor > 1 ? ` (${penaltyFactor}X)` : ''}`;
+        delayTypeString = isCoveredByUnauthPerm5X && pairDelayMins === 0
+          ? 'Unauthorized Permission (5X Penalty Replaces 1X Permission Deduction)'
+          : delayTimeResult.delayDetails.map(d => d.description).join(', ');
       }
 
       // Factory workers use day-level calculations entirely.
@@ -1387,7 +1771,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
           // For the total salary, we show the day's final salary after all deductions
           totalSalary: formatCurrency(dayFinalSalary),
           status: pair.isOrphanedOut ? 'Absent' : (pair.out.record.isAutoGenerated && !pair.out.record.isOngoing ? 'Auto-Out' : 'Present'),
-          // ── NEW ──
+          // â”€â”€ NEW â”€â”€
           workType,
           projectName: isProjectDayFlag ? activeProject.projectName : null,
           projectId: isProjectDayFlag ? activeProject._id : null,
@@ -1421,17 +1805,16 @@ const calculateWorkerProductivity = (productivityParameters) => {
 
 
   const processMissedDay = (date) => {
-    const dateString = date.toISOString().split('T')[0];
+    const dateString = toIndiaDateString(date);
     const isSundayDay = isSunday(date);
     // NEW: Check if holiday applies to this specific worker
     const holidayInfo = isHolidayForWorker(date, worker._id);
 
-    // Fix 1: Check if date is before joiningDate or after relievedAt
-    const isPreEmployment = joiningDateStr && dateString < joiningDateStr;
-    const isPostEmployment = relievedDateStr && dateString > relievedDateStr;
+    // Multiple Employment Periods: Check whether date falls inside active employment period
+    const empStatus = evaluateDateEmployment(dateString, employmentDates);
 
-    if (isPreEmployment || isPostEmployment) {
-      const statusText = isPreEmployment ? 'Not Employed' : 'Relieved';
+    if (!empStatus.isEmployed) {
+      const statusText = empStatus.statusText;
       const dayData = {
         date: dateString,
         punchTime: '-',
@@ -1488,7 +1871,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
         delayTime: '-',
         delayType: 'Sunday - Weekly off',
         deductionAmount: formatCurrency(0),
-        totalSalary: formatCurrency(0), // Sundays are always ₹0 pay (excluded from project per-day share)
+        totalSalary: formatCurrency(0), // Sundays are always â‚¹0 pay (excluded from project per-day share)
         status: 'Sunday',
         workType: missedActiveProject ? 'PROJECT' : 'SAAS',
         projectName: missedActiveProject ? missedActiveProject.projectName : null,
@@ -1520,7 +1903,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
         projectId: missedProjectId
       };
 
-      // Aggregate hybrid totals — holidays are fully paid, no deduction
+      // Aggregate hybrid totals â€” holidays are fully paid, no deduction
       if (missedActiveProject) {
         const salary = (missedActiveProject.perDayValue || 0);
         grossProjectSalary += salary;
@@ -1625,14 +2008,14 @@ const calculateWorkerProductivity = (productivityParameters) => {
           delayType: isActuallyPaid ? 'Paid Leave' : `${leaveInfo.leaveType}${factor > 1 ? ` (${factor}X)` : ''}${isPaidLeaveType ? ' (Unpaid - Over Limit)' : ''}`,
           deductionAmount: formatCurrency(deductionAmount),
           totalSalary: formatCurrency(isActuallyPaid ? (missedActiveProject ? missedActiveProject.perDayValue : perDaySalary) : Math.max(0, (missedActiveProject ? missedActiveProject.perDayValue : 0) - deductionAmount)),
-          status: isActuallyPaid ? 'Paid Leave' : 'Leave',
+          status: isActuallyPaid ? 'Approved Paid Leave' : 'Approved Unpaid Leave',
           workType: missedWorkType,
           projectId: missedProjectId,
           penaltyFactor: isActuallyPaid ? 1 : factor,
           penaltyReason: (!isActuallyPaid && factor > 1) ? (penaltyReasons.join(', ') || (baseDeductionFactor > 1 ? 'Leave Policy base deduction factor' : 'Leave policy rules')) : null
         };
 
-        // Aggregate hybrid totals — gross and deductions SEPARATE
+        // Aggregate hybrid totals â€” gross and deductions SEPARATE
         if (missedActiveProject) {
           // PROJECT leave day
           if (isActuallyPaid) {
@@ -1675,10 +2058,13 @@ const calculateWorkerProductivity = (productivityParameters) => {
         totalAbsentDays++;
         currentMonthMissedCount++;
 
+        // Phase 4 Option B: Check if this absent date is covered by the 5X Unauthorized Absence Penalty
+        const isUnauthorizedAbsence = unauthorizedAbsenceDates && unauthorizedAbsenceDates.has(dateString);
+
         let factor = 1;
         let penaltyReasons = [];
         // Apply penalties for absences if rules are triggered
-        if (advancedLeaveDeduction) {
+        if (advancedLeaveDeduction && !isUnauthorizedAbsence) {
           let isPenaltyTriggered = false;
 
           // Monthly Limit Rule
@@ -1710,13 +2096,13 @@ const calculateWorkerProductivity = (productivityParameters) => {
           }
         }
 
-        // Core Rule for Absent Days:
-        // Deduct ONLY the base per-day salary from project earnings (penalize only by base salary).
-        const deductionAmount = perDaySalary * factor;
+        // Phase 4 Option B: For unauthorized absence dates, the 5X penalty replaces the normal 1X LOP deduction.
+        // Set deductionAmount = 0 so that LOP is not double-counted with the 5X penalty.
+        const deductionAmount = isUnauthorizedAbsence ? 0 : perDaySalary * factor;
 
         // PROJECT absent day: earn full project value gross, deduct base salary
         // SAAS absent day: no gross earned, deduct base salary
-        const grossEarningForMissedDay = missedActiveProject ? (missedActiveProject.perDayValue || 0) : 0;
+        const grossEarningForMissedDay = (missedActiveProject && !isUnauthorizedAbsence) ? (missedActiveProject.perDayValue || 0) : 0;
         const finalSalaryForMissedDay = Math.max(0, grossEarningForMissedDay - deductionAmount);
 
         const dayData = {
@@ -1725,44 +2111,48 @@ const calculateWorkerProductivity = (productivityParameters) => {
           workingMinutes: 0,
           permissionMinutes: 0,
           salaryDeduction: deductionAmount,
-          issues: [`Absent - ${factor}X salary deducted`],
+          issues: isUnauthorizedAbsence
+            ? ['Unauthorized Absence (5X Penalty Replaces LOP)']
+            : [`Absent - ${factor}X salary deducted`],
           detailedBreakdown: { intervals: [], deductions: [], permissionDetails: [] }
         };
         const reportEntry = {
           date: formatDate(dateString),
           outTime: 'Absent',
           inTime: 'Absent',
-          delayTime: factor > 1 ? `${factor} Days` : 'Full Day',
-          delayType: `Absent - ${factor}X deduction`,
+          delayTime: isUnauthorizedAbsence ? '5X Penalty' : (factor > 1 ? `${factor} Days` : 'Full Day'),
+          delayType: isUnauthorizedAbsence ? 'Unauthorized Absence (5X Penalty)' : `Absent - ${factor}X deduction`,
           deductionAmount: formatCurrency(deductionAmount),
           totalSalary: formatCurrency(finalSalaryForMissedDay),
-          status: 'Absent',
+          status: isUnauthorizedAbsence ? 'Unauthorized Absence' : 'Absent',
           workType: missedWorkType,
           projectName: missedProjectName,
           projectId: missedProjectId,
-          penaltyFactor: factor,
-          penaltyReason: factor > 1 ? (penaltyReasons.join(', ') || 'Absent policy rules') : null
+          penaltyFactor: isUnauthorizedAbsence ? 5 : factor,
+          penaltyReason: isUnauthorizedAbsence ? 'Covered by 5X Unauthorized Absence Penalty' : (factor > 1 ? (penaltyReasons.join(', ') || 'Absent policy rules') : null)
         };
 
         // Aggregate hybrid totals — keep gross and deductions SEPARATE
         if (missedActiveProject) {
-          // Absent project day: gross = project per-day value, deduction = project per-day value * factor
-          grossProjectSalary += (missedActiveProject.perDayValue || 0);
+          if (!isUnauthorizedAbsence) {
+            grossProjectSalary += (missedActiveProject.perDayValue || 0);
+          }
           totalProjectDeductions += deductionAmount;
           const pid = missedActiveProject._id.toString();
           if (!projectBreakdownMap[pid]) {
             projectBreakdownMap[pid] = { grossEarned: 0, totalDeduction: 0, daysCount: 0 };
           }
-          projectBreakdownMap[pid].grossEarned += (missedActiveProject.perDayValue || 0);
+          if (!isUnauthorizedAbsence) {
+            projectBreakdownMap[pid].grossEarned += (missedActiveProject.perDayValue || 0);
+          }
           projectBreakdownMap[pid].totalDeduction += deductionAmount;
           projectBreakdownMap[pid].daysCount += 1;
         } else {
-          // SaaS absent: no gross earned for this day, only a deduction
           totalSaaSDeductions += deductionAmount;
         }
 
         totalAbsentDeduction += deductionAmount;
-        if (factor > 1) {
+        if (factor > 1 && !isUnauthorizedAbsence) {
           penalizedAbsentDays++;
           penalizedAbsentDeduction += deductionAmount;
         }
@@ -1910,8 +2300,18 @@ const calculateWorkerProductivity = (productivityParameters) => {
     }
 
     // Use consistent date format (YYYY-MM-DD) for matching to match groupedByDate keys
-    const dateKey = date.toISOString().split('T')[0];
-    const dateString = date.toISOString().split('T')[0];
+    const dateKey = toIndiaDateString(date);
+    const dateString = dateKey;
+
+    // Requirement 4 & 5: Ensure processDay, processMissedDay and expected SaaS salary calculation
+    // use the exact same validated employment window.
+    // Stray punches outside active employment window do not extend employment or credit active salary.
+    const empStatus = evaluateDateEmployment(dateString, employmentDates);
+    if (!empStatus.isEmployed) {
+      processMissedDay(date);
+      return;
+    }
+
     if (groupedByDate[dateKey]) {
       const punches = groupedByDate[dateKey];
       if (punches.length > 0) {
@@ -1930,76 +2330,79 @@ const calculateWorkerProductivity = (productivityParameters) => {
   });
 
   const totalDays = dailyBreakdown.length;
-  // Actual working days are days when the worker was physically present (subtract both absences and leaves)
-  const actualWorkingDays = totalWorkingDaysInPeriod - totalAbsentDays - totalLeaveDays;
+  // Actual working days are days when the worker was physically present during active employment
+  const activeWorkingDaysInPeriod = saasWorkingDaysCount + projectWorkingDaysCount;
+  const effectiveTotalWorkingDays = (joiningDateStr || relievedDateStr || wasRelievedBefore) ? activeWorkingDaysInPeriod : totalWorkingDaysInPeriod;
+  const actualWorkingDays = Math.max(0, effectiveTotalWorkingDays - totalAbsentDays - totalLeaveDays);
   const productivityPercentage = totalExpectedMinutes > 0 ? (totalWorkingMinutes / totalExpectedMinutes) * 100 : 0;
   const averageWorkingHours = actualWorkingDays > 0 ? (totalWorkingMinutes / actualWorkingDays) / 60 : 0;
   const punctualityScore = actualWorkingDays > 0 ? ((actualWorkingDays - punctualityViolations) / actualWorkingDays) * 100 : 0;
-  const attendanceRate = totalWorkingDaysInPeriod > 0 ? (actualWorkingDays / totalWorkingDaysInPeriod) * 100 : 0;
+  const attendanceRate = effectiveTotalWorkingDays > 0 ? (actualWorkingDays / effectiveTotalWorkingDays) * 100 : 0;
   const salaryFromWorkingMinutes = totalWorkingMinutes * perMinuteSalary;
   // totalAbsentDeduction is now calculated incrementally in processMissedDay
 
   // Calculate permission deduction by summing only non-absent and non-leave entries
-  // Exclude absent/leave days which are already accounted for separately
+  // Exclude absent/leave/relieved day entries which are already accounted for separately
   const totalPermissionDeduction = report.reduce((sum, entry) => {
-    // Skip absent/leave day entries to avoid double counting
-    if ((entry.status === 'Absent' || entry.status === 'Leave') && (entry.delayTime === 'Full Day' || entry.delayTime.includes('Day'))) {
+    // Skip absent/leave/relieved day entries to avoid double counting
+    if ((entry.status === 'Absent' || entry.status === 'Leave' || entry.status === 'Relieved' || entry.status === 'Not Employed' || entry.status === 'Unauthorized Absence' || entry.status === 'Approved Paid Leave' || entry.status === 'Approved Unpaid Leave') && (entry.delayTime === 'Full Day' || entry.delayTime.includes('Day') || entry.delayTime.includes('Penalty') || entry.delayTime.includes('Leave'))) {
       return sum;
     }
-    const deduction = parseFloat(entry.deductionAmount.replace('₹', ''));
+    const cleanStr = String(entry.deductionAmount || '').replace(/[^\d.-]/g, '');
+    const deduction = parseFloat(cleanStr);
     return sum + (isNaN(deduction) ? 0 : deduction);
   }, 0);
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // FINAL AGGREGATION — Hybrid salary formula:
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // FINAL AGGREGATION â€” Hybrid salary formula:
   //
-  //   SaaS Pool     = grossSaaSSalary     − totalSaaSDeductions     (clamped ≥ 0)
-  //   Project Pool  = grossProjectSalary  − totalProjectDeductions  (clamped ≥ 0)
+  //   SaaS Pool     = grossSaaSSalary     âˆ’ totalSaaSDeductions     (clamped â‰¥ 0)
+  //   Project Pool  = grossProjectSalary  âˆ’ totalProjectDeductions  (clamped â‰¥ 0)
   //   Final Salary  = SaaS Pool + Project Pool
   //
   // Gross and deductions were accumulated SEPARATELY per day so that penalties
   // larger than a single day's gross (e.g. 2X absence) correctly spill over and
   // reduce the pool total instead of being silently dropped.
   //
-  // The clamp (Math.max 0) is applied ONCE here at the pool level — never per day.
-  // ─────────────────────────────────────────────────────────────────────────────
+  // The clamp (Math.max 0) is applied ONCE here at the pool level â€” never per day.
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const totalSalaryDeduction = totalSaaSDeductions + totalProjectDeductions;
 
-  // Net pool amounts (clamped at 0 — a pool cannot go negative)
-  // ⚠️  totalSaaSSalary (pool) is kept for display only.
+  // Net pool amounts (clamped at 0 â€” a pool cannot go negative)
+  // âš ï¸  totalSaaSSalary (pool) is kept for display only.
   //     It accumulates gross only for WORKED days, so heavy absences make it
-  //     look like ₹0 even when the employee is owed a small residual amount.
-  //     We do NOT use it directly in finalSalary — see netBaseSalary below.
+  //     look like â‚¹0 even when the employee is owed a small residual amount.
+  //     We do NOT use it directly in finalSalary â€” see netBaseSalary below.
   const totalSaaSSalary = Math.max(0, grossSaaSSalary - totalSaaSDeductions);
   const totalProjectSalary = Math.max(0, grossProjectSalary - totalProjectDeductions);
 
   // Net Base Salary (display field on payslip AND source of truth for SaaS pay):
-  // Base Salary = Per Day × SAAS Days Only
+  // Base Salary = Per Day Ã— SAAS Days Only
   // We subtract SaaS deductions from it to get the net SaaS take-home.
   const netBaseSalary = Math.max(0, expectedSaaSSalary - totalSaaSDeductions);
 
-  // ✅ Final salary — all penalties fully applied
+  // âœ… Final salary â€” all penalties fully applied
   // Final Salary = Base Salary + Project Earnings - All Deductions
   // This correctly spills over project deductions into base salary if project earnings are 0
   const finalSalary = Math.max(0, expectedSaaSSalary + grossProjectSalary - totalSalaryDeduction);
 
-  // ── DISPLAY-ONLY deduction total ──────────────────────────────────────────────
+  // â”€â”€ DISPLAY-ONLY deduction total â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // In the "true gross" model, absence reduces gross earnings directly rather
   // than being subtracted from a salary total. This means totalSaaSDeductions
   // (which only tracks permission-time penalties on worked days) looks like
-  // ~₹0 to HR even though 22 absent days effectively reduced the payout.
+  // ~â‚¹0 to HR even though 22 absent days effectively reduced the payout.
   //
   // displayTotalSalaryDeduction restores the HR-readable view:
   //   = absentDeduction + permissionDeduction + leaveDeduction
   //
-  // ⚠️  NEVER use this in any salary calculation.
+  // âš ï¸  NEVER use this in any salary calculation.
   //     It is only sent to the frontend for display purposes.
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const displayTotalSalaryDeduction =
     totalAbsentDeduction +
     totalPermissionDeduction +
-    totalLeaveDeduction;   // ← display only, not used in finalSalary
+    totalLeaveDeduction;   // â† display only, not used in finalSalary
 
   // Resolve per-project net earned for the breakdown map
   for (const pid in projectBreakdownMap) {
@@ -2026,7 +2429,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
     "Absent Deduction": formatCurrency(totalAbsentDeduction),
     "Leave Deduction": formatCurrency(totalLeaveDeduction),
     "Permission Deduction": formatCurrency(totalPermissionDeduction),
-    // display-only — what HR sees as "total deducted from base salary"
+    // display-only â€” what HR sees as "total deducted from base salary"
     "Total Deductions": formatCurrency(displayTotalSalaryDeduction),
     "Attendance Rate": `${attendanceRate.toFixed(1)}%`,
     "Net Base Salary": formatCurrency(netBaseSalary),
@@ -2065,6 +2468,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
       finalSalary,
       netBaseSalary,
       totalSaaSSalary,         // actual SaaS pool (deductions already applied)
+      grossSaaSSalary,         // actual SaaS gross earnings (no deductions)
       totalProjectSalary,      // actual project pool (deductions already applied)
       totalSaaSDeductions,     // display only
       totalProjectDeductions,  // display only
@@ -2074,6 +2478,15 @@ const calculateWorkerProductivity = (productivityParameters) => {
       expectedSaaSSalary,
       saasWorkingDaysCount,
       projectWorkingDaysCount,
+      eligibleWorkingDays: saasWorkingDaysCount + projectWorkingDaysCount,
+      hasRelievedPeriod: wasRelievedBefore || (saasWorkingDaysCount + projectWorkingDaysCount) < totalWorkingDaysInPeriod,
+      activePeriods: employmentDates.activePeriods || [],
+      employmentSummary: {
+        joiningDateStr: employmentDates.joiningDateStr,
+        relievedDateStr: employmentDates.relievedDateStr,
+        wasRelievedBefore: employmentDates.wasRelievedBefore,
+        activePeriods: employmentDates.activePeriods || []
+      },
       originalSalaryForPeriod: originalSalary,
       salaryFromWorkingMinutes,
       perMinuteSalary,
@@ -2088,7 +2501,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
       absentDeduction: totalAbsentDeduction,
       leaveDeduction: totalLeaveDeduction,
       permissionDeduction: totalPermissionDeduction,
-      // ⚠️ display-only — sum of absent + leave + permission deductions for HR UI
+      // âš ï¸ display-only â€” sum of absent + leave + permission deductions for HR UI
       // NEVER use this in salary calculation
       totalSalaryDeduction: displayTotalSalaryDeduction,
       penalizedLeaveDays,
@@ -2198,24 +2611,28 @@ function emptyResponse() {
       "Actual Working Days": 0,
       "Total Working Hours": "0 hours",
       "Total Permission Time": "0 minutes",
-      "Absent Deduction": "₹0.00",
-      "Permission Deduction": "₹0.00",
-      "Total Salary Deductions": "₹0.00",
+      "Absent Deduction": "â‚¹0.00",
+      "Permission Deduction": "â‚¹0.00",
+      "Total Salary Deductions": "â‚¹0.00",
       "Attendance Rate": "0%",
-      "Final Salary": "₹0.00"
+      "Final Salary": "â‚¹0.00"
     },
     report: []
   };
 }
 
-// ─── Helper: Calculate 5X Unauthorized Absence Penalty ─────────────────────
+// â”€â”€â”€ Helper: Calculate 5X Unauthorized Absence Penalty â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Applies ONLY to past days where employee was absent (no punch-in),
 // has no Approved leave, no Pending leave, AND either has a Rejected leave
 // or submitted no leave at all.
-// Permissions are completely excluded — this applies to full-day Leaves only.
+// Permissions are completely excluded â€” this applies to full-day Leaves only.
 const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves, attendanceData, holidays, settings) => {
   const penalties = [];
   let totalPenalty = 0;
+  let total1X = 0;
+  let total4X = 0;
+  let normalLeave1X = 0;
+  let normalPerm1X = 0;
 
   // Get today's date in IST (same timezone as the rest of the app)
   const now = new Date();
@@ -2256,8 +2673,8 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
 
   const perDaySalary = salaryDivisorWorkingDays > 0 ? (worker.salary || 0) / salaryDivisorWorkingDays : 0;
 
-  const joiningDateStr = worker.joiningDate ? new Date(worker.joiningDate).toISOString().split('T')[0] : null;
-  const relievedDateStr = worker.relievedAt ? new Date(worker.relievedAt).toISOString().split('T')[0] : null;
+  const employmentDates = getValidatedEmploymentDates(worker, fromDate, toDate, settings);
+  const { joiningDateStr, relievedDateStr } = employmentDates;
 
   // Build a set of dateStrings that have a punch-in (presence === true)
   const punchInDates = new Set();
@@ -2348,25 +2765,26 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
   while (d <= toDateObj) {
     const dateStr = indiaDateFormatter.format(d);
 
-    // ── Fix 1: Skip days outside active employment window ──
-    if ((joiningDateStr && dateStr < joiningDateStr) || (relievedDateStr && dateStr > relievedDateStr)) {
+    // â”€â”€ Fix 1: Skip days outside active employment window â”€â”€
+    const empStatus = evaluateDateEmployment(dateStr, employmentDates);
+    if (!empStatus.isEmployed) {
       d.setDate(d.getDate() + 1);
       continue;
     }
 
-    // ── Safety Rule: Only evaluate PAST and PRESENT days ──
+    // â”€â”€ Safety Rule: Only evaluate PAST and PRESENT days â”€â”€
     if (dateStr > todayStr) {
       d.setDate(d.getDate() + 1);
       continue;
     }
 
-    // ── Skip Sundays ──
+    // â”€â”€ Skip Sundays â”€â”€
     if (d.getDay() === 0) {
       d.setDate(d.getDate() + 1);
       continue;
     }
 
-    // ── Skip Holidays ──
+    // â”€â”€ Skip Holidays â”€â”€
     if (holidayDates.has(dateStr)) {
       d.setDate(d.getDate() + 1);
       continue;
@@ -2374,7 +2792,7 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
 
     let hasDeductedFullDay = false;
 
-    // ── 1. Full-day Penalty Check ──
+    // â”€â”€ 1. Full-day Penalty Check â”€â”€
     if (enableUnauthorizedLeavePenalty) {
       // Safety Rule: If employee punched in, NO full-day penalty
       if (!punchInDates.has(dateStr)) {
@@ -2386,7 +2804,7 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
           return dateStr >= start && dateStr <= end;
         });
 
-        // Safety Rule: Approved leave → normal processing, skip
+        // Safety Rule: Approved leave â†’ normal processing, skip
         const hasApprovedLeave = fullDayLeavesForDay.some(l => l.status === 'Approved');
 
         if (!hasApprovedLeave) {
@@ -2397,6 +2815,8 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
           if (hasRejectedLeave || hasPendingLeave || hasNoLeave) {
             const penaltyFactor = configuredMultiplier;
             const penaltyAmount = parseFloat((perDaySalary * penaltyFactor).toFixed(4));
+            const base1XAmount = parseFloat(perDaySalary.toFixed(4));
+            const extra4XAmount = parseFloat((perDaySalary * (penaltyFactor - 1)).toFixed(4));
 
             let leaveStatus = 'No Leave Request';
             let status = 'Unauthorized Absence';
@@ -2422,17 +2842,22 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
               leaveStatus,
               penaltyFactor,
               penaltyAmount,
+              base1XAmount,
+              extra4XAmount,
               perDaySalary: parseFloat(perDaySalary.toFixed(4)),
               reason
             });
             totalPenalty += penaltyAmount;
+            total1X += base1XAmount;
+            total4X += extra4XAmount;
+            normalLeave1X += base1XAmount;
             hasDeductedFullDay = true;
           }
         }
       }
     }
 
-    // ── 2. Permission Penalty Check ──
+    // â”€â”€ 2. Permission Penalty Check â”€â”€
     if (enableUnauthorizedPermissionPenalty && !hasDeductedFullDay) {
       // Find any permissions covering this date
       const permissionsForDay = allLeaves.filter(l => {
@@ -2479,6 +2904,8 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
           if (permMinutes > 0) {
             const penaltyFactor = configuredMultiplier;
             const penaltyAmount = parseFloat((permMinutes * perMinuteSalary * penaltyFactor).toFixed(4));
+            const base1XAmount = parseFloat((permMinutes * perMinuteSalary).toFixed(4));
+            const extra4XAmount = parseFloat((permMinutes * perMinuteSalary * (penaltyFactor - 1)).toFixed(4));
 
             const formatTime = (timeStr) => {
               if (!timeStr) return '';
@@ -2507,12 +2934,19 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
               }).format(new Date(dateStr + 'T00:00:00')),
               status: 'Unauthorized Permission',
               leaveStatus: perm.status,
+              minutes: permMinutes,
               penaltyFactor,
               penaltyAmount,
+              base1XAmount,
+              extra4XAmount,
+              perMinuteSalary: parseFloat(perMinuteSalary.toFixed(4)),
               perDaySalary: parseFloat(perDaySalary.toFixed(4)),
               reason
             });
             totalPenalty += penaltyAmount;
+            total1X += base1XAmount;
+            total4X += extra4XAmount;
+            normalPerm1X += base1XAmount;
           }
         }
       });
@@ -2523,11 +2957,22 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
 
   return {
     penalties,
-    totalUnauthorizedPenalty: parseFloat(totalPenalty.toFixed(4))
+    totalUnauthorizedPenalty: parseFloat(totalPenalty.toFixed(4)),
+    totalNormal1XAmount: parseFloat(total1X.toFixed(4)),
+    totalExtra4XPenalty: parseFloat(total4X.toFixed(4)),
+    normal1XLeaveAmount: parseFloat(normalLeave1X.toFixed(4)),
+    normal1XPermissionAmount: parseFloat(normalPerm1X.toFixed(4)),
+    unauthorizedDates: new Set(penalties.map(p => p.date)),
+    unauthorizedLeaveDates: new Set(penalties.filter(p => p.status !== 'Unauthorized Permission').map(p => p.date)),
+    unauthorizedPermissionDates: new Set(penalties.filter(p => p.status === 'Unauthorized Permission').map(p => p.date)),
+    unauthorizedPermissions: penalties.filter(p => p.status === 'Unauthorized Permission')
   };
 };
 
 module.exports = {
   calculateWorkerProductivity,
-  calculateUnauthorizedAbsencePenalty
+  calculateUnauthorizedAbsencePenalty,
+  getValidatedEmploymentDates,
+  evaluateDateEmployment,
+  toIndiaDateString
 };
