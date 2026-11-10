@@ -32,8 +32,14 @@ import {
     FiZap,
     FiLogOut,
     FiUpload,
-    FiCheckCircle
+    FiCheckCircle,
+    FiCoffee,
+    FiSearch,
+    FiUsers,
+    FiCheck
 } from 'react-icons/fi';
+import { getDepartments } from '../../services/departmentService';
+import { getWorkers } from '../../services/workerService';
 import Modal from '../common/Modal';
 import HolidayManagement from './HolidayManagement';
 import Spinner from '../common/Spinner';
@@ -50,6 +56,10 @@ const Settings = () => {
     const [hasChanges, setHasChanges] = useState(false);
     const [currentLocation, setCurrentLocation] = useState(null);
     const [activeTab, setActiveTab] = useState('profile');
+    const [availableDepartments, setAvailableDepartments] = useState([]);
+    const [availableWorkers, setAvailableWorkers] = useState([]);
+    const [loadingScopeData, setLoadingScopeData] = useState(false);
+    const [employeeSearchQuery, setEmployeeSearchQuery] = useState('');
 
     const { subdomain } = useContext(appContext);
     const { user, logout } = useAuth();
@@ -83,6 +93,26 @@ const Settings = () => {
         dinnerOpenTime: '18:00',
         dinnerCloseTime: '20:00',
         dinnerAutoSwitch: false,
+        lunchBreakManagement: {
+            enabled: false,
+            lunchOutTime: '13:30',
+            returnDeadline: '14:30',
+            gracePeriodMinutes: 0,
+            sessions: [
+                {
+                    id: 'default_lunch',
+                    name: 'Lunch Break',
+                    enabled: true,
+                    outTime: '13:30',
+                    returnDeadline: '14:30',
+                    gracePeriodMinutes: 0
+                }
+            ],
+            appliesTo: 'all',
+            applicableDepartments: [],
+            applicableShifts: [],
+            applicableEmployees: []
+        },
         emailReportsEnabled: false,
         considerOvertime: false,
         deductSalary: true,
@@ -217,9 +247,7 @@ const Settings = () => {
     };
 
     const fetchSettings = async () => {
-        const targetSubdomain = (subdomain && subdomain !== 'main' && subdomain !== 'undefined') 
-            ? subdomain 
-            : (user?.subdomain || localStorage.getItem('subdomain') || 'tech-vaseegrah');
+        const targetSubdomain = (subdomain && subdomain !== 'main' && subdomain !== 'undefined')            ? subdomain            : (user?.subdomain || localStorage.getItem('subdomain') || 'tech-vaseegrah');
 
         setLoading(true);
         try {
@@ -255,9 +283,30 @@ const Settings = () => {
                 enableUnauthorizedPermissionPenalty: fetchedSettings.advancedLeaveDeduction?.enableUnauthorizedPermissionPenalty !== undefined ? fetchedSettings.advancedLeaveDeduction.enableUnauthorizedPermissionPenalty : false
             };
 
+            const loadedLunch = fetchedSettings.lunchBreakManagement || {};
+            const loadedSessions = (Array.isArray(loadedLunch.sessions) && loadedLunch.sessions.length > 0)
+                ? loadedLunch.sessions
+                : [{
+                    id: 'default_lunch',
+                    name: 'Lunch Break',
+                    enabled: true,
+                    outTime: loadedLunch.lunchOutTime || '13:30',
+                    returnDeadline: loadedLunch.returnDeadline || '14:30',
+                    gracePeriodMinutes: loadedLunch.gracePeriodMinutes ?? 0
+                }];
+
+            const normalizedLunch = {
+                ...loadedLunch,
+                sessions: loadedSessions,
+                lunchOutTime: loadedSessions[0]?.outTime || loadedLunch.lunchOutTime || '13:30',
+                returnDeadline: loadedSessions[0]?.returnDeadline || loadedLunch.returnDeadline || '14:30',
+                gracePeriodMinutes: loadedSessions[0]?.gracePeriodMinutes ?? loadedLunch.gracePeriodMinutes ?? 0
+            };
+
             const finalSettings = {
                 ...settings,
                 ...fetchedSettings,
+                lunchBreakManagement: normalizedLunch,
                 advancedLeaveDeduction: mappedAdvanced,
                 attendanceAccessControl: {
                     admin: { ...settings.attendanceAccessControl.admin, ...(fetchedSettings.attendanceAccessControl?.admin || {}) },
@@ -310,6 +359,29 @@ const Settings = () => {
 
             setSettings(finalSettings);
             setOriginalSettings(finalSettings);
+
+            // Fetch tenant departments and active workers for policy scope selection
+            try {
+                setLoadingScopeData(true);
+                const [deptRes, workerRes] = await Promise.allSettled([
+                    getDepartments({ subdomain: targetSubdomain }),
+                    getWorkers({ subdomain: targetSubdomain, status: 'Active' })
+                ]);
+                if (deptRes.status === 'fulfilled' && deptRes.value) {
+                    const raw = deptRes.value;
+                    const depts = Array.isArray(raw) ? raw : (Array.isArray(raw?.departments) ? raw.departments : []);
+                    setAvailableDepartments(depts);
+                }
+                if (workerRes.status === 'fulfilled' && workerRes.value) {
+                    const raw = workerRes.value;
+                    const workers = Array.isArray(raw) ? raw : (Array.isArray(raw?.workers) ? raw.workers : []);
+                    setAvailableWorkers(workers);
+                }
+            } catch (scopeErr) {
+                console.error('Error fetching scope departments or workers:', scopeErr);
+            } finally {
+                setLoadingScopeData(false);
+            }
 
             // Fetch GoWhats admin WhatsApp numbers configured for leave requests
             try {
@@ -375,6 +447,157 @@ const Settings = () => {
 
         setSettings(updatedSettings);
         checkForChanges(updatedSettings);
+    };
+
+        const handleAddSession = () => {
+        const currentSessions = settings.lunchBreakManagement?.sessions || [];
+        const newSession = {
+            id: `session_${Date.now()}`,
+            name: currentSessions.length === 1 ? 'Tea Break' : `Break Session ${currentSessions.length + 1}`,
+            enabled: true,
+            outTime: '16:00',
+            returnDeadline: '16:15',
+            gracePeriodMinutes: 0
+        };
+        const updatedSessions = [...currentSessions, newSession];
+        const updatedLunch = {
+            ...(settings.lunchBreakManagement || {}),
+            sessions: updatedSessions
+        };
+        const updatedSettings = {
+            ...settings,
+            lunchBreakManagement: updatedLunch
+        };
+        setSettings(updatedSettings);
+        checkForChanges(updatedSettings);
+    };
+
+    const handleSessionChange = (index, field, value) => {
+        const currentSessions = [...(settings.lunchBreakManagement?.sessions || [])];
+        if (!currentSessions[index]) return;
+        currentSessions[index] = {
+            ...currentSessions[index],
+            [field]: value
+        };
+        const updatedLunch = {
+            ...(settings.lunchBreakManagement || {}),
+            sessions: currentSessions,
+            lunchOutTime: currentSessions[0]?.outTime || settings.lunchBreakManagement?.lunchOutTime || '13:30',
+            returnDeadline: currentSessions[0]?.returnDeadline || settings.lunchBreakManagement?.returnDeadline || '14:30',
+            gracePeriodMinutes: currentSessions[0]?.gracePeriodMinutes ?? settings.lunchBreakManagement?.gracePeriodMinutes ?? 0
+        };
+        const updatedSettings = {
+            ...settings,
+            lunchBreakManagement: updatedLunch
+        };
+        setSettings(updatedSettings);
+        checkForChanges(updatedSettings);
+    };
+
+    const handleRemoveSession = (index) => {
+        const currentSessions = (settings.lunchBreakManagement?.sessions || []).filter((_, i) => i !== index);
+        if (currentSessions.length === 0) {
+            toast.error('You must keep at least one session');
+            return;
+        }
+        const updatedLunch = {
+            ...(settings.lunchBreakManagement || {}),
+            sessions: currentSessions,
+            lunchOutTime: currentSessions[0]?.outTime || '13:30',
+            returnDeadline: currentSessions[0]?.returnDeadline || '14:30',
+            gracePeriodMinutes: currentSessions[0]?.gracePeriodMinutes ?? 0
+        };
+        const updatedSettings = {
+            ...settings,
+            lunchBreakManagement: updatedLunch
+        };
+        setSettings(updatedSettings);
+        checkForChanges(updatedSettings);
+    };
+
+    const handleLunchBreakChange = (field, value) => {
+        const updatedSettings = {
+            ...settings,
+            lunchBreakManagement: {
+                ...(settings.lunchBreakManagement || {}),
+                [field]: value
+            }
+        };
+        setSettings(updatedSettings);
+        checkForChanges(updatedSettings);
+    };
+
+    const isDeptSelected = (deptId) => {
+        const selected = settings.lunchBreakManagement?.applicableDepartments || [];
+        const idStr = deptId.toString();
+        return selected.some(item => (item?._id || item)?.toString() === idStr);
+    };
+
+    const handleToggleDepartment = (deptId) => {
+        const current = settings.lunchBreakManagement?.applicableDepartments || [];
+        const idStr = deptId.toString();
+        const exists = current.some(item => (item?._id || item)?.toString() === idStr);
+        const updated = exists
+            ? current.filter(item => (item?._id || item)?.toString() !== idStr)
+            : [...current.map(item => (item?._id || item)?.toString()), idStr];
+        handleLunchBreakChange('applicableDepartments', updated);
+    };
+
+    const handleSelectAllDepartments = () => {
+        const allIds = availableDepartments.map(d => d._id.toString());
+        handleLunchBreakChange('applicableDepartments', allIds);
+    };
+
+    const handleDeselectAllDepartments = () => {
+        handleLunchBreakChange('applicableDepartments', []);
+    };
+
+    const isShiftSelected = (batchName) => {
+        const selected = settings.lunchBreakManagement?.applicableShifts || [];
+        return selected.includes(batchName);
+    };
+
+    const handleToggleShift = (batchName) => {
+        const current = settings.lunchBreakManagement?.applicableShifts || [];
+        const exists = current.includes(batchName);
+        const updated = exists
+            ? current.filter(s => s !== batchName)
+            : [...current, batchName];
+        handleLunchBreakChange('applicableShifts', updated);
+    };
+
+    const handleSelectAllShifts = () => {
+        const allBatchNames = (settings.batches || []).map(b => b.batchName).filter(Boolean);
+        handleLunchBreakChange('applicableShifts', allBatchNames);
+    };
+
+    const handleDeselectAllShifts = () => {
+        handleLunchBreakChange('applicableShifts', []);
+    };
+
+    const isEmployeeSelected = (workerId) => {
+        const selected = settings.lunchBreakManagement?.applicableEmployees || [];
+        const idStr = workerId.toString();
+        return selected.some(item => (item?._id || item)?.toString() === idStr);
+    };
+
+    const handleToggleEmployee = (workerId) => {
+        const current = settings.lunchBreakManagement?.applicableEmployees || [];
+        const idStr = workerId.toString();
+        const exists = current.some(item => (item?._id || item)?.toString() === idStr);
+        const updated = exists
+            ? current.filter(item => (item?._id || item)?.toString() !== idStr)
+            : [...current.map(item => (item?._id || item)?.toString()), idStr];
+        handleLunchBreakChange('applicableEmployees', updated);
+    };
+
+    const handleSelectAllEmployees = () => {
+        const allIds = availableWorkers.map(w => w._id.toString());
+        handleLunchBreakChange('applicableEmployees', allIds);
+    };
+
+    const handleDeselectAllEmployees = () => {
+        handleLunchBreakChange('applicableEmployees', []);
     };
 
     const handleBatchChange = (index, field, value) => {
@@ -563,9 +786,7 @@ const Settings = () => {
         setTestingDispatch(true);
         toast.info('🚀 Triggering test dispatch of salary PDF & XLSX to WhatsApp...');
 
-        const targetSubdomain = (subdomain && subdomain !== 'main' && subdomain !== 'undefined') 
-            ? subdomain 
-            : (user?.subdomain || localStorage.getItem('subdomain') || 'tech-vaseegrah');
+        const targetSubdomain = (subdomain && subdomain !== 'main' && subdomain !== 'undefined')            ? subdomain            : (user?.subdomain || localStorage.getItem('subdomain') || 'tech-vaseegrah');
 
         try {
             const token = getAuthToken();
@@ -637,6 +858,52 @@ const Settings = () => {
             toast.error('Interval names must be unique. Please check for duplicate interval names.');
             return;
         }
+        if (settings.lunchBreakManagement?.enabled) {
+            const sessions = settings.lunchBreakManagement?.sessions || [];
+            if (sessions.length === 0) {
+                toast.error('Please configure at least one automatic OUT session');
+                return;
+            }
+            for (let i = 0; i < sessions.length; i++) {
+                const s = sessions[i];
+                if (!s.name || !s.name.trim()) {
+                    toast.error(`Session #${i + 1} requires a valid session name`);
+                    return;
+                }
+                if (!s.outTime) {
+                    toast.error(`Session "${s.name}" requires an automatic OUT time`);
+                    return;
+                }
+                if (!s.returnDeadline) {
+                    toast.error(`Session "${s.name}" requires a return deadline`);
+                    return;
+                }
+                if ((s.gracePeriodMinutes ?? 0) < 0) {
+                    toast.error(`Session "${s.name}" grace period cannot be negative`);
+                    return;
+                }
+            }
+            const appliesTo = settings.lunchBreakManagement.appliesTo || 'all';
+            if (appliesTo === 'departments') {
+                const depts = settings.lunchBreakManagement.applicableDepartments || [];
+                if (depts.length === 0) {
+                    toast.error('Please select at least one department under Lunch Break Management policy scope');
+                    return;
+                }
+            } else if (appliesTo === 'shifts') {
+                const shifts = settings.lunchBreakManagement.applicableShifts || [];
+                if (shifts.length === 0) {
+                    toast.error('Please select at least one work batch/shift under Lunch Break Management policy scope');
+                    return;
+                }
+            } else if (appliesTo === 'employees') {
+                const employees = settings.lunchBreakManagement.applicableEmployees || [];
+                if (employees.length === 0) {
+                    toast.error('Please select at least one employee under Lunch Break Management policy scope');
+                    return;
+                }
+            }
+        }
         setSaving(true);
         try {
             const token = getAuthToken();
@@ -646,9 +913,7 @@ const Settings = () => {
                 enabled: settings.bugBountyConfig?.popupFrequency !== 'disabled',
                 lastUpdated: hasBountyChanges ? new Date().toISOString() : (settings.bugBountyConfig?.lastUpdated || new Date().toISOString())
             };
-            const targetSubdomain = (subdomain && subdomain !== 'main' && subdomain !== 'undefined') 
-                ? subdomain 
-                : (user?.subdomain || localStorage.getItem('subdomain') || 'tech-vaseegrah');
+            const targetSubdomain = (subdomain && subdomain !== 'main' && subdomain !== 'undefined')                ? subdomain                : (user?.subdomain || localStorage.getItem('subdomain') || 'tech-vaseegrah');
 
             const payload = {
                 ...settings,
@@ -782,7 +1047,7 @@ const Settings = () => {
             }
         );
 
-        const sectionIds = ['profile', 'paymentDetails', 'meal', 'batches', 'intervals', 'location', 'face', 'access', 'whatsapp', 'whatsappSalary', 'advanced', 'ai', 'bounty'];
+        const sectionIds = ['profile', 'paymentDetails', 'meal', 'lunchBreak', 'batches', 'intervals', 'location', 'face', 'access', 'whatsapp', 'whatsappSalary', 'advanced', 'ai', 'bounty'];
         sectionIds.forEach((id) => {
             const el = document.getElementById(`section-${id}`);
             if (el) observer.observe(el);
@@ -812,6 +1077,7 @@ const Settings = () => {
         { id: 'profile', label: 'Profile', icon: FiUser },
         { id: 'paymentDetails', label: 'Invoice Payment & Dynamic UPI QR', icon: FiCreditCard },
         { id: 'meal', label: 'Meal Service', icon: FiSunrise },
+        { id: 'lunchBreak', label: 'Lunch Break Module', icon: FiCoffee },
         { id: 'batches', label: 'Work Batches', icon: FiClock },
         { id: 'intervals', label: 'Break Intervals', icon: FiSliders },
         { id: 'location', label: 'Location & GPS', icon: FiMapPin },
@@ -1412,6 +1678,477 @@ const Settings = () => {
                                         </div>
                                     </div>
                                 ))}
+                            </div>
+                        </section>
+
+                        {/* SECTION: LUNCH BREAK MANAGEMENT MODULE */}
+                        <section id="section-lunchBreak" className="scroll-mt-36 lg:scroll-mt-36">
+                            <div className="mb-4 sm:mb-5 pb-3 border-b border-slate-100 flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                                        <FiCoffee className="text-[#006666] h-4.5 w-4.5 sm:h-5 sm:w-5" />
+                                        Lunch Break Management Module
+                                    </h2>
+                                    <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
+                                        Configure automatic lunch-out timing, return deadlines, grace periods, and late return salary policies
+                                    </p>
+                                </div>
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${settings.lunchBreakManagement?.enabled ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
+                                    {settings.lunchBreakManagement?.enabled ? 'Enabled' : 'Disabled'}
+                                </span>
+                            </div>
+
+                            <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200/80 p-4 sm:p-6 shadow-2xs space-y-6">
+                                {/* Toggle & Mode Card */}
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-50/80 rounded-xl border border-slate-100">
+                                    <div>
+                                        <label className="text-xs sm:text-sm font-bold text-slate-900 block">
+                                            Enable Automated Lunch Break Management
+                                        </label>
+                                        <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
+                                            When enabled, employees will be automatically punched out and logged out at the configured lunch out time.
+                                        </p>
+                                    </div>
+                                    <CustomToggle
+                                        checked={settings.lunchBreakManagement?.enabled || false}
+                                        onChange={() => handleLunchBreakChange('enabled', !settings.lunchBreakManagement?.enabled)}
+                                    />
+                                </div>
+
+                                {/* Configured Sessions List */}
+                                <div className="space-y-4">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                                        <div>
+                                            <h3 className="text-xs sm:text-sm font-bold text-slate-800 flex items-center gap-2">
+                                                <FiClock className="h-4 w-4 text-[#006666]" />
+                                                Configured Automatic OUT Sessions
+                                            </h3>
+                                            <p className="text-[11px] text-slate-500 mt-0.5">
+                                                Each session triggers an automatic punch-out, session invalidation, and independent return deadline with late deduction.
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={handleAddSession}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#006666]/10 text-[#006666] hover:bg-[#006666]/20 transition-all self-start sm:self-auto active:scale-95"
+                                        >
+                                            <FiPlus className="h-3.5 w-3.5" />
+                                            <span>Add OUT Session</span>
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        {(settings.lunchBreakManagement?.sessions || []).map((session, sIdx) => (
+                                            <div
+                                                key={session.id || sIdx}
+                                                className="p-4 bg-slate-50/70 rounded-xl border border-slate-200/80 shadow-2xs space-y-3"
+                                            >
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div className="flex items-center gap-2 flex-1 max-w-sm">
+                                                        <span className="w-5 h-5 rounded-full bg-[#006666]/10 text-[#006666] font-bold text-[10px] flex items-center justify-center shrink-0">
+                                                            {sIdx + 1}
+                                                        </span>
+                                                        <input
+                                                            type="text"
+                                                            value={session.name || ''}
+                                                            onChange={(e) => handleSessionChange(sIdx, 'name', e.target.value)}
+                                                            placeholder="Session Name (e.g. Lunch Break, Tea Break)"
+                                                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                        />
+                                                    </div>
+
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="text-[10px] font-semibold text-slate-500">
+                                                                {session.enabled ? 'Active' : 'Paused'}
+                                                            </span>
+                                                            <CustomToggle
+                                                                checked={session.enabled !== false}
+                                                                onChange={() => handleSessionChange(sIdx, 'enabled', session.enabled === false)}
+                                                            />
+                                                        </div>
+
+                                                        {(settings.lunchBreakManagement?.sessions || []).length > 1 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRemoveSession(sIdx)}
+                                                                title="Remove session"
+                                                                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
+                                                            >
+                                                                <FiTrash2 className="h-4 w-4" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                                    <div className="p-3 bg-white rounded-lg border border-slate-200">
+                                                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                                            Automatic OUT Time
+                                                        </label>
+                                                        <input
+                                                            type="time"
+                                                            value={session.outTime || '13:30'}
+                                                            onChange={(e) => handleSessionChange(sIdx, 'outTime', e.target.value)}
+                                                            className="w-full px-2.5 py-1.5 bg-slate-50/50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                        />
+                                                        <p className="text-[10px] text-slate-500 mt-1 font-medium">
+                                                            {formatTimeTo12Hour(session.outTime || '13:30')} (IST)
+                                                        </p>
+                                                    </div>
+
+                                                    <div className="p-3 bg-white rounded-lg border border-slate-200">
+                                                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                                            Return Deadline
+                                                        </label>
+                                                        <input
+                                                            type="time"
+                                                            value={session.returnDeadline || '14:30'}
+                                                            onChange={(e) => handleSessionChange(sIdx, 'returnDeadline', e.target.value)}
+                                                            className="w-full px-2.5 py-1.5 bg-slate-50/50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                        />
+                                                        <p className="text-[10px] text-slate-500 mt-1 font-medium">
+                                                            {formatTimeTo12Hour(session.returnDeadline || '14:30')} (IST)
+                                                        </p>
+                                                    </div>
+
+                                                    <div className="p-3 bg-white rounded-lg border border-slate-200">
+                                                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                                            Grace Period (Minutes)
+                                                        </label>
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            value={session.gracePeriodMinutes ?? 0}
+                                                            onChange={(e) => handleSessionChange(sIdx, 'gracePeriodMinutes', parseInt(e.target.value) || 0)}
+                                                            className="w-full px-2.5 py-1.5 bg-slate-50/50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                        />
+                                                        <p className="text-[10px] text-slate-500 mt-1 font-medium">
+                                                            Late penalty starts after deadline + grace
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Applicability Setting */}
+                                <div className="p-4 bg-slate-50/50 rounded-xl border border-slate-100 space-y-4">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-800">
+                                                Applies To Policy Scope
+                                            </label>
+                                            <p className="text-[11px] text-slate-500 mt-0.5">
+                                                Select whether this lunch schedule applies company-wide or is restricted to targeted cohorts.
+                                            </p>
+                                        </div>
+                                        <select
+                                            value={settings.lunchBreakManagement?.appliesTo || 'all'}
+                                            onChange={(e) => handleLunchBreakChange('appliesTo', e.target.value)}
+                                            className="w-full sm:w-72 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                        >
+                                            <option value="all">All Active Employees (Company-wide)</option>
+                                            <option value="departments">Specific Departments Only</option>
+                                            <option value="shifts">Specific Work Batches / Shifts Only</option>
+                                            <option value="employees">Specific Employees Only</option>
+                                        </select>
+                                    </div>
+
+                                    {/* SCOPE 1: COMPANY WIDE */}
+                                    {(settings.lunchBreakManagement?.appliesTo || 'all') === 'all' && (
+                                        <div className="p-3 bg-emerald-50/70 rounded-lg border border-emerald-200/80 flex items-center gap-2">
+                                            <FiCheckCircle className="h-4 w-4 text-emerald-600 shrink-0" />
+                                            <span className="text-xs font-medium text-emerald-800">
+                                                <strong>Company-wide Policy Active:</strong> All active employees under this organization follow the lunch schedule and automatic logout rules.
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {/* SCOPE 2: DEPARTMENTS */}
+                                    {settings.lunchBreakManagement?.appliesTo === 'departments' && (
+                                        <div className="mt-3 pt-3 border-t border-slate-200/70 space-y-3">
+                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-bold text-slate-800">
+                                                        Select Applicable Departments
+                                                    </span>
+                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#006666]/10 text-[#006666]">
+                                                        {(settings.lunchBreakManagement?.applicableDepartments || []).length} of {availableDepartments.length} selected
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleSelectAllDepartments}
+                                                        className="text-[11px] font-semibold text-[#006666] hover:underline"
+                                                    >
+                                                        Select All
+                                                    </button>
+                                                    <span className="text-slate-300">|</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleDeselectAllDepartments}
+                                                        className="text-[11px] font-semibold text-slate-500 hover:underline"
+                                                    >
+                                                        Deselect All
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {loadingScopeData ? (
+                                                <div className="py-6 flex items-center justify-center gap-2 text-xs text-slate-500">
+                                                    <Spinner size="sm" />
+                                                    <span>Loading tenant departments...</span>
+                                                </div>
+                                            ) : availableDepartments.length === 0 ? (
+                                                <div className="p-3.5 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-800">
+                                                    No departments found for this tenant. Please create departments under Department Management or choose <strong>Company-wide</strong>.
+                                                </div>
+                                            ) : (
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-60 overflow-y-auto p-1">
+                                                    {availableDepartments.map(dept => {
+                                                        const selected = isDeptSelected(dept._id);
+                                                        return (
+                                                            <div
+                                                                key={dept._id}
+                                                                onClick={() => handleToggleDepartment(dept._id)}
+                                                                className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${
+                                                                    selected
+                                                                        ? 'bg-[#006666]/5 border-[#006666] text-[#006666] shadow-2xs'
+                                                                        : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                                                                }`}
+                                                            >
+                                                                <div className="flex items-center gap-2 truncate">
+                                                                    <div className={`w-4 h-4 rounded flex items-center justify-center border ${
+                                                                        selected ? 'bg-[#006666] border-[#006666] text-white' : 'border-slate-300 bg-white'
+                                                                    }`}>
+                                                                        {selected && <FiCheck className="w-3 h-3 stroke-[3]" />}
+                                                                    </div>
+                                                                    <span className="text-xs font-semibold truncate">{dept.name}</span>
+                                                                </div>
+                                                                {dept.workerCount !== undefined && (
+                                                                    <span className="text-[10px] text-slate-500 font-medium shrink-0 ml-1">
+                                                                        {dept.workerCount} {dept.workerCount === 1 ? 'employee' : 'employees'}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* SCOPE 3: SHIFTS / WORK BATCHES */}
+                                    {settings.lunchBreakManagement?.appliesTo === 'shifts' && (
+                                        <div className="mt-3 pt-3 border-t border-slate-200/70 space-y-3">
+                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-bold text-slate-800">
+                                                        Select Applicable Work Batches / Shifts
+                                                    </span>
+                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#006666]/10 text-[#006666]">
+                                                        {(settings.lunchBreakManagement?.applicableShifts || []).length} of {(settings.batches || []).length} selected
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleSelectAllShifts}
+                                                        className="text-[11px] font-semibold text-[#006666] hover:underline"
+                                                    >
+                                                        Select All
+                                                    </button>
+                                                    <span className="text-slate-300">|</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleDeselectAllShifts}
+                                                        className="text-[11px] font-semibold text-slate-500 hover:underline"
+                                                    >
+                                                        Deselect All
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {(!settings.batches || settings.batches.length === 0) ? (
+                                                <div className="p-3.5 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-800">
+                                                    No work batches configured. Please add batches in <strong>Section 3 (Work Batches)</strong> or choose <strong>Company-wide</strong>.
+                                                </div>
+                                            ) : (
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-60 overflow-y-auto p-1">
+                                                    {(settings.batches || []).map((batch, idx) => {
+                                                        const selected = isShiftSelected(batch.batchName);
+                                                        return (
+                                                            <div
+                                                                key={batch.batchName || idx}
+                                                                onClick={() => handleToggleShift(batch.batchName)}
+                                                                className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${
+                                                                    selected
+                                                                        ? 'bg-[#006666]/5 border-[#006666] text-[#006666] shadow-2xs'
+                                                                        : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                                                                }`}
+                                                            >
+                                                                <div className="flex items-center gap-2 truncate">
+                                                                    <div className={`w-4 h-4 rounded flex items-center justify-center border ${
+                                                                        selected ? 'bg-[#006666] border-[#006666] text-white' : 'border-slate-300 bg-white'
+                                                                    }`}>
+                                                                        {selected && <FiCheck className="w-3 h-3 stroke-[3]" />}
+                                                                    </div>
+                                                                    <span className="text-xs font-semibold truncate">{batch.batchName}</span>
+                                                                </div>
+                                                                <span className="text-[10px] text-slate-500 font-medium shrink-0 ml-1">
+                                                                    {batch.from} - {batch.to}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* SCOPE 4: EMPLOYEES */}
+                                    {settings.lunchBreakManagement?.appliesTo === 'employees' && (
+                                        <div className="mt-3 pt-3 border-t border-slate-200/70 space-y-3">
+                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-bold text-slate-800">
+                                                        Select Applicable Employees
+                                                    </span>
+                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#006666]/10 text-[#006666]">
+                                                        {(settings.lunchBreakManagement?.applicableEmployees || []).length} of {availableWorkers.length} selected
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleSelectAllEmployees}
+                                                        className="text-[11px] font-semibold text-[#006666] hover:underline"
+                                                    >
+                                                        Select All
+                                                    </button>
+                                                    <span className="text-slate-300">|</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleDeselectAllEmployees}
+                                                        className="text-[11px] font-semibold text-slate-500 hover:underline"
+                                                    >
+                                                        Deselect All
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Quick Search */}
+                                            <div className="relative">
+                                                <FiSearch className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                                                <input
+                                                    type="text"
+                                                    value={employeeSearchQuery}
+                                                    onChange={(e) => setEmployeeSearchQuery(e.target.value)}
+                                                    placeholder="Search employees by name, username, or batch..."
+                                                    className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs placeholder-slate-400 focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                />
+                                            </div>
+
+                                            {loadingScopeData ? (
+                                                <div className="py-6 flex items-center justify-center gap-2 text-xs text-slate-500">
+                                                    <Spinner size="sm" />
+                                                    <span>Loading active employees...</span>
+                                                </div>
+                                            ) : availableWorkers.length === 0 ? (
+                                                <div className="p-3.5 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-800">
+                                                    No active employees found for this tenant. Please add employees under Employee Management or choose <strong>Company-wide</strong>.
+                                                </div>
+                                            ) : (
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-60 overflow-y-auto p-1">
+                                                    {availableWorkers
+                                                        .filter(worker => {
+                                                            if (!employeeSearchQuery) return true;
+                                                            const q = employeeSearchQuery.toLowerCase();
+                                                            return (
+                                                                (worker.name || '').toLowerCase().includes(q) ||
+                                                                (worker.username || '').toLowerCase().includes(q) ||
+                                                                (worker.batch || '').toLowerCase().includes(q)
+                                                            );
+                                                        })
+                                                        .map(worker => {
+                                                            const selected = isEmployeeSelected(worker._id);
+                                                            return (
+                                                                <div
+                                                                    key={worker._id}
+                                                                    onClick={() => handleToggleEmployee(worker._id)}
+                                                                    className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${
+                                                                        selected
+                                                                            ? 'bg-[#006666]/5 border-[#006666] text-[#006666] shadow-2xs'
+                                                                            : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                                                                    }`}
+                                                                >
+                                                                    <div className="flex items-center gap-2 truncate">
+                                                                        <div className={`w-4 h-4 rounded flex items-center justify-center border ${
+                                                                            selected ? 'bg-[#006666] border-[#006666] text-white' : 'border-slate-300 bg-white'
+                                                                        }`}>
+                                                                            {selected && <FiCheck className="w-3 h-3 stroke-[3]" />}
+                                                                        </div>
+                                                                        <div className="truncate">
+                                                                            <p className="text-xs font-semibold truncate leading-tight">{worker.name}</p>
+                                                                            <p className="text-[10px] text-slate-400 truncate leading-tight font-normal">
+                                                                                @{worker.username} {worker.batch ? `• ${worker.batch}` : ''}
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Information banner */}
+                                <div className="p-3.5 bg-teal-50/60 rounded-xl border border-teal-100 flex items-start gap-2.5">
+                                    <FiInfo className="text-[#006666] h-4 w-4 mt-0.5 flex-shrink-0" />
+                                    <div className="text-[11px] text-teal-900 leading-relaxed font-medium">
+                                        <strong>Salary & Attendance Integration:</strong> At lunch out time, an attendance event with source <code>SYSTEM/AUTOMATIC</code> pauses work time and automatically logs out the employee. Upon return, the employee punches back in. Returning after the deadline plus grace period automatically calculates excess minutes and applies the standard Ciphergate late-coming deduction rate. Missing returns are flagged for admin review.
+                                    </div>
+                                </div>
+
+                                {/* Dedicated In-Section Save Lunch Settings */}
+                                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-100">
+                                    <div className="text-[11px]">
+                                        {hasChanges ? (
+                                            <span className="text-amber-700 font-semibold flex items-center gap-1.5">
+                                                <FiAlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                                                Unsaved changes detected. Click Save Lunch Settings below or Update at top.
+                                            </span>
+                                        ) : (
+                                            <span className="text-slate-500 font-medium flex items-center gap-1.5">
+                                                <FiCheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                                                Lunch settings are synchronized with the server.
+                                            </span>
+                                        )}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveSettings}
+                                        disabled={saving || !hasChanges}
+                                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#006666] hover:bg-[#004d4d] text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md shadow-[#006666]/15 active:scale-95"
+                                    >
+                                        {saving ? (
+                                            <>
+                                                <Spinner size="sm" color="white" />
+                                                <span>Saving Lunch Settings...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <FiSave className="h-3.5 w-3.5" />
+                                                <span>Save Lunch Settings</span>
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
                             </div>
                         </section>
 

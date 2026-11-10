@@ -38,9 +38,7 @@ const getSettings = async (req, res) => {
     const settingsObj = settings.toObject ? settings.toObject() : { ...settings };
     if (settingsObj.aiConfig && settingsObj.aiConfig.deepseekApiKey) {
       const key = settingsObj.aiConfig.deepseekApiKey;
-      settingsObj.aiConfig.deepseekApiKey = key.length > 8 
-        ? `${key.substring(0, 4)}****${key.substring(key.length - 4)}` 
-        : '****';
+      settingsObj.aiConfig.deepseekApiKey = key.length > 8        ? `${key.substring(0, 4)}****${key.substring(key.length - 4)}`        : '****';
     }
 
     res.json(settingsObj);
@@ -71,6 +69,7 @@ const getSettingsPublic = async (req, res) => {
     const publicSettings = {
       attendanceLocation: settings.attendanceLocation,
       attendanceAccessControl: settings.attendanceAccessControl,
+      lunchBreakManagement: settings.lunchBreakManagement,
       faceRecognition: settings.faceRecognition,
       paymentDetails: settings.paymentDetails || {
         bankName: 'ICICI Bank',

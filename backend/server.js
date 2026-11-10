@@ -234,10 +234,9 @@ const app = express();
       res.json({ message: 'Task Tracker API is running' });
     });
 
-    if (
-      process.env.NODE_ENV === 'production' ||
-      process.env.ENABLE_SCHEDULERS === 'true'
-    ) {
+    // STRICT GATE: Schedulers ONLY start when ENABLE_SCHEDULERS is explicitly 'true'.
+    // NODE_ENV=production must never independently activate schedulers.
+    if (process.env.ENABLE_SCHEDULERS === 'true') {
       console.log('🚀 Starting production schedulers...');
 
       // Food scheduler
@@ -262,9 +261,13 @@ const app = express();
       const { initAutoSalaryWhatsappScheduler } = require('./schedulers/autoSalaryWhatsappScheduler');
       initAutoSalaryWhatsappScheduler();
 
+      // Lunch Break Management Scheduler
+      const { initializeLunchBreakScheduler } = require('./schedulers/lunchBreakScheduler');
+      initializeLunchBreakScheduler();
+
     } else {
       console.log(
-        '⚠️ Schedulers disabled. Set NODE_ENV=production or ENABLE_SCHEDULERS=true to enable'
+        '⚠️ Schedulers disabled. Set ENABLE_SCHEDULERS=true to enable'
       );
     }
 

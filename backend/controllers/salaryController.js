@@ -302,7 +302,8 @@ const giveBonus = asyncHandler(async (req, res) => {
       holidays,
       permissionTimeMinutes: settings ? settings.permissionTimeMinutes : 15,
       deductSalary: settings ? settings.deductSalary : true,
-      intervals: settings ? settings.intervals : []
+      intervals: settings ? settings.intervals : [],
+      lunchBreakManagement: settings ? settings.lunchBreakManagement : null
     }
   });
 
@@ -549,6 +550,7 @@ const getWorkerSalaryReport = asyncHandler(async (req, res) => {
         deptPenaltyMap,
         includePermission: settings?.includePermission || false,
         paidLeaveConfig: settings ? settings.paidLeaveConfig : null,
+        lunchBreakManagement: settings ? settings.lunchBreakManagement : null,
         unauthorizedAbsenceDates: unauthorizedDates,
         unauthorizedPermissions,
         employeeHistory
@@ -892,6 +894,7 @@ const getMySalaryReport = asyncHandler(async (req, res) => {
         deptPenaltyMap,
         includePermission: settings?.includePermission || false,
         paidLeaveConfig: settings ? settings.paidLeaveConfig : null,
+        lunchBreakManagement: settings ? settings.lunchBreakManagement : null,
         unauthorizedAbsenceDates: unauthorizedDates,
         unauthorizedPermissions,
         employeeHistory: workerHistory,
@@ -2360,7 +2363,8 @@ const getTopTeamsEarnings = asyncHandler(async (req, res) => {
           intervals: settings ? settings.intervals : [],
           advancedLeaveDeduction: settings ? settings.advancedLeaveDeduction : null,
           includePermission: settings?.includePermission || false,
-          paidLeaveConfig: settings ? settings.paidLeaveConfig : null
+          paidLeaveConfig: settings ? settings.paidLeaveConfig : null,
+          lunchBreakManagement: settings ? settings.lunchBreakManagement : null
         }
       });
 

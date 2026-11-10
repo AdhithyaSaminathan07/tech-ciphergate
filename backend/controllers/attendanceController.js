@@ -3,6 +3,85 @@ const Worker = require('../models/Worker');
 const Department = require('../models/Department');
 const Settings = require('../models/Settings');
 
+// Helper: Resolve lunch / break return details when punching in
+const resolveLunchReturnDetails = async (rfid, subdomain, newPresence, currentDateFormatted, workerId) => {
+    let punchType = 'REGULAR';
+    let isLunchPunch = false;
+    let lunchLateMinutes = 0;
+    let outSessionId = null;
+    let outSessionName = null;
+
+    if (newPresence === true) {
+        const query = workerId
+            ? { worker: workerId, subdomain, date: currentDateFormatted }
+            : { rfid, subdomain, date: currentDateFormatted };
+
+        const lastPunchToday = await Attendance.findOne(query).sort({ createdAt: -1 });
+
+        if (lastPunchToday && (lastPunchToday.punchType === 'LUNCH_OUT' || lastPunchToday.isLunchPunch) && !lastPunchToday.presence) {
+            punchType = 'LUNCH_IN';
+            isLunchPunch = true;
+            outSessionId = lastPunchToday.outSessionId || null;
+            outSessionName = lastPunchToday.outSessionName || null;
+
+            if (lastPunchToday.isMissingLunchReturn) {
+                lastPunchToday.isMissingLunchReturn = false;
+                await lastPunchToday.save();
+            }
+
+            const settings = await Settings.findOne({ subdomain });
+            const lunchConfig = settings?.lunchBreakManagement;
+
+            if (lunchConfig && lunchConfig.enabled) {
+                // Find matching session from sessions array or fallback to legacy top-level fields
+                let matchedSession = null;
+                const sessions = Array.isArray(lunchConfig.sessions) && lunchConfig.sessions.length > 0
+                    ? lunchConfig.sessions
+                    : null;
+
+                if (sessions && outSessionId) {
+                    matchedSession = sessions.find(s => s.id === outSessionId);
+                }
+
+                if (!matchedSession && sessions && outSessionName) {
+                    matchedSession = sessions.find(s => s.name === outSessionName);
+                }
+
+                if (!matchedSession && sessions && sessions.length > 0) {
+                    matchedSession = sessions[0];
+                }
+
+                const returnDeadline = matchedSession?.returnDeadline || lunchConfig.returnDeadline || '14:30';
+                const grace = matchedSession?.gracePeriodMinutes ?? lunchConfig.gracePeriodMinutes ?? 0;
+                if (!outSessionName) {
+                    outSessionName = matchedSession?.name || 'Lunch Break';
+                }
+
+                const timeFormatter24 = new Intl.DateTimeFormat('en-GB', {
+                    timeZone: 'Asia/Kolkata',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+                const current24 = timeFormatter24.format(new Date());
+                const [currH, currM] = current24.split(':').map(Number);
+                const currentMinutes = currH * 60 + currM;
+
+                const [deadH, deadM] = returnDeadline.split(':').map(Number);
+                const deadlineMinutes = deadH * 60 + deadM;
+                const threshold = deadlineMinutes + grace;
+
+                if (currentMinutes > threshold) {
+                    lunchLateMinutes = currentMinutes - threshold;
+                }
+            }
+        }
+    }
+
+    return { punchType, isLunchPunch, lunchLateMinutes, outSessionId, outSessionName };
+};
+
+
 // @desc    Update or create attendance record for a worker
 // @route   PUT /api/attendance
 // @access  Private
@@ -146,6 +225,14 @@ const putAttendance = async (req, res) => {
 
         console.log('Final presence value to be recorded:', newPresence);
 
+        const lunchDetails = await resolveLunchReturnDetails(
+            rfid,
+            subdomain,
+            newPresence,
+            currentDateFormatted,
+            worker._id
+        );
+
         const newAttendance = await Attendance.create({
             name: worker.name,
             username: worker.username,
@@ -157,7 +244,13 @@ const putAttendance = async (req, res) => {
             date: currentDateFormatted,
             time: currentTimeFormatted,
             presence: newPresence,
-            worker: worker._id
+            worker: worker._id,
+            punchType: lunchDetails.punchType,
+            isLunchPunch: lunchDetails.isLunchPunch,
+            lunchLateMinutes: lunchDetails.lunchLateMinutes,
+            outSessionId: lunchDetails.outSessionId,
+            outSessionName: lunchDetails.outSessionName,
+            source: 'MANUAL'
         });
 
         res.status(201).json({
@@ -290,6 +383,14 @@ const putRfidAttendance = async (req, res) => {
             }
         }
 
+        const lunchDetails = await resolveLunchReturnDetails(
+            rfid,
+            subdomain,
+            presence,
+            currentDateFormatted,
+            worker._id
+        );
+
         const newAttendance = await Attendance.create({
             name: worker.name,
             username: worker.username,
@@ -301,7 +402,13 @@ const putRfidAttendance = async (req, res) => {
             date: currentDateFormatted, // Use formatted date string for consistency
             time: currentTimeFormatted,
             presence,
-            worker: worker._id
+            worker: worker._id,
+            punchType: lunchDetails.punchType,
+            isLunchPunch: lunchDetails.isLunchPunch,
+            lunchLateMinutes: lunchDetails.lunchLateMinutes,
+            outSessionId: lunchDetails.outSessionId,
+            outSessionName: lunchDetails.outSessionName,
+            source: 'MANUAL'
         });
 
         res.status(201).json({
@@ -504,164 +611,93 @@ const recognizeFaceAndMarkAttendance = async (req, res) => {
 
         // Compare the provided face descriptor with all stored face embeddings
         for (const worker of workers) {
-            for (const embedding of worker.faceEmbeddings) {
-                // Calculate Euclidean distance between face descriptors
-                const distance = calculateEuclideanDistance(faceDescriptor, embedding);
+            const dayPunches = await Attendance.find({
+                worker: worker._id,
+                subdomain,
+                date: targetDate
+            }).sort({ createdAt: 1 });
 
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    bestMatch = worker;
+            if (dayPunches.length === 0) continue;
+
+            const sessionOutPunches = dayPunches.filter(p => p.punchType === 'LUNCH_OUT' || (p.isLunchPunch && !p.presence));
+
+            for (const outPunch of sessionOutPunches) {
+                const sessionInPunch = dayPunches.find(p =>                    p.createdAt > outPunch.createdAt && (p.punchType === 'LUNCH_IN' || (p.isLunchPunch && p.presence) || p.presence)
+                );
+
+                const sessionName = outPunch.outSessionName || 'Lunch Break';
+                const sessionId = outPunch.outSessionId;
+
+                // Match session configuration
+                let matchedSession = null;
+                if (Array.isArray(lunchConfig.sessions) && lunchConfig.sessions.length > 0) {
+                    matchedSession = lunchConfig.sessions.find(s => s.id === sessionId) ||                                     lunchConfig.sessions.find(s => s.name === sessionName) ||
+                                     lunchConfig.sessions[0];
                 }
+
+                const expectedReturn = matchedSession?.returnDeadline || lunchConfig.returnDeadline || '14:30';
+                const sessionGrace = matchedSession?.gracePeriodMinutes ?? grace;
+
+                const [deadH, deadM] = expectedReturn.split(':').map(Number);
+                const deadlineMinutes = deadH * 60 + deadM;
+                const sessionCutoff = deadlineMinutes + sessionGrace;
+
+                let status = 'Regular Work';
+                let lunchOutTime = outPunch.time;
+                let returnTime = '-';
+                let lateMinutes = 0;
+                let deductionStatus = 'No Deduction';
+
+                if (sessionInPunch) {
+                    returnTime = sessionInPunch.time;
+                    lateMinutes = sessionInPunch.lunchLateMinutes || 0;
+                    if (lateMinutes > 0) {
+                        status = 'Late Return';
+                        deductionStatus = `${lateMinutes} mins late-coming deduction`;
+                    } else {
+                        status = 'Returned On-Time';
+                        deductionStatus = 'Within Allowed Limit';
+                    }
+                } else {
+                    if (currentMinutes > sessionCutoff || targetDate < indiaTimezoneDate.format(new Date())) {
+                        status = 'Missing Lunch Return';
+                        deductionStatus = 'Unworked Session Review';
+                    } else {
+                        status = 'On Break';
+                        deductionStatus = 'In Progress';
+                    }
+                }
+
+                overview.push({
+                    workerId: worker._id,
+                    name: worker.name,
+                    username: worker.username,
+                    rfid: worker.rfid,
+                    department: worker.department ? worker.department.name : 'Unassigned',
+                    sessionId: sessionId || null,
+                    sessionName: sessionName,
+                    lunchOutTime,
+                    lunchOutSource: outPunch.source || 'SYSTEM/AUTOMATIC',
+                    expectedReturnTime: expectedReturn,
+                    gracePeriodMinutes: sessionGrace,
+                    actualReturnTime: returnTime,
+                    lateMinutes,
+                    status,
+                    deductionStatus,
+                    isMissingLunchReturn: status === 'Missing Lunch Return'
+                });
             }
         }
-
-        // Retrieve dynamic face recognition settings from database
-        const settings = await Settings.findOne({ subdomain });
-        const threshold = settings?.faceRecognition?.matchingThreshold ?? 0.50;
-
-        if (!bestMatch || minDistance > threshold) {
-            res.status(404);
-            throw new Error('No matching worker found');
-        }
-
-        if (bestMatch.status === 'Relieved') {
-            res.status(403);
-            throw new Error('This employee is relieved and cannot mark attendance');
-        }
-
-        // Get the worker's department
-        const department = await Department.findById(bestMatch.department);
-        if (!department) {
-            res.status(404);
-            throw new Error('Department not found');
-        }
-
-        // Get the current date and time in 'Asia/Kolkata' timezone
-        const indiaTimezoneDate = new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'Asia/Kolkata',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-        });
-        const indiaTimezoneTime = new Intl.DateTimeFormat('en-US', {
-            timeZone: 'Asia/Kolkata',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-        });
-
-        const currentDateFormatted = indiaTimezoneDate.format(new Date());
-        const currentTimeFormatted = indiaTimezoneTime.format(new Date());
-
-        // Determine presence based on last attendance
-        const lastAttendance = await Attendance.findOne({ rfid: bestMatch.rfid, subdomain }).sort({ createdAt: -1 });
-        const presence = lastAttendance ? !lastAttendance.presence : true;
-
-        // Create attendance record
-        const newAttendance = await Attendance.create({
-            name: bestMatch.name,
-            username: bestMatch.username,
-            rfid: bestMatch.rfid,
-            subdomain,
-            department: department._id,
-            departmentName: department.name,
-            photo: bestMatch.photo,
-            date: currentDateFormatted,
-            time: currentTimeFormatted,
-            presence,
-            worker: bestMatch._id
-        });
-
-        res.status(201).json({
-            message: presence ? 'Attendance marked as in' : 'Attendance marked as out',
-            attendance: newAttendance,
-            worker: {
-                _id: bestMatch._id,
-                name: bestMatch.name,
-                rfid: bestMatch.rfid,
-                photo: bestMatch.photo
-            }
-        });
-    } catch (error) {
-        console.error('Face recognition error:', error);
-        const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-        res.status(statusCode).json({ message: statusCode === 500 ? 'Server error' : error.message, error: error.message });
-    }
-};
-
-// Helper function to calculate Euclidean distance between two face descriptors
-function calculateEuclideanDistance(descriptor1, descriptor2) {
-    if (!descriptor1 || !descriptor2 || descriptor1.length !== descriptor2.length) {
-        return Infinity;
-    }
-
-    let sum = 0;
-    for (let i = 0; i < descriptor1.length; i++) {
-        const diff = descriptor1[i] - descriptor2[i];
-        sum += diff * diff;
-    }
-    return Math.sqrt(sum);
-}
-
-// @desc    Get attendance summary (percentage)
-// @route   POST /api/attendance/summary
-// @access  Private
-const getAttendanceSummary = async (req, res) => {
-    try {
-        const { subdomain } = req.body;
-
-        if (!subdomain || subdomain === 'main') {
-            res.status(401);
-            throw new Error('Company name is missing, login again');
-        }
-
-        // 1. Get total number of active workers
-        const totalWorkers = await Worker.countDocuments({
-            subdomain,
-            status: { $ne: 'Relieved' }
-        });
-
-        if (totalWorkers === 0) {
-            return res.status(200).json({
-                percentage: 0,
-                totalWorkers: 0,
-                presentWorkers: 0
-            });
-        }
-
-        // 2. Get today's date in India Timezone
-        const indiaTimezoneDate = new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'Asia/Kolkata',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-        });
-        const currentDateFormatted = indiaTimezoneDate.format(new Date());
-
-        // 3. Count unique workers who have marked attendance today
-        // distinct returns an array of unique values (in this case, worker IDs)
-        const presentWorkerIds = await Attendance.distinct('worker', {
-            subdomain,
-            date: currentDateFormatted,
-            presence: true // Only count those who have punched IN at least once
-        });
-
-        const presentWorkersCount = presentWorkerIds.length;
-
-        // 4. Calculate percentage
-        const percentage = Math.round((presentWorkersCount / totalWorkers) * 100);
 
         res.status(200).json({
-            percentage,
-            totalWorkers,
-            presentWorkers: presentWorkersCount
+            success: true,
+            lunchConfig,
+            overview
         });
-
     } catch (error) {
-        console.error('Error fetching attendance summary:', error);
+        console.error('Error fetching lunch attendance overview:', error);
         const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-        res.status(statusCode).json({ message: statusCode === 500 ? 'Server error' : error.message, error: error.message });
+        res.status(statusCode).json({ message: error.message });
     }
 };
 
@@ -673,5 +709,6 @@ module.exports = {
     getWorkerAttendance,
     getWorkerLastAttendance,
     recognizeFaceAndMarkAttendance,
-    getAttendanceSummary
+    getAttendanceSummary,
+    getLunchAttendanceOverview
 };

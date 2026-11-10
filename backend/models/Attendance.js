@@ -43,6 +43,36 @@ const attendanceSchema = mongoose.Schema({
         type: Boolean,
         required: [true, 'Presence is required'] // true for in, false for out
     },
+        punchType: {
+        type: String,
+        enum: ['REGULAR', 'LUNCH_OUT', 'LUNCH_IN'],
+        default: 'REGULAR'
+    },
+    source: {
+        type: String,
+        enum: ['MANUAL', 'SYSTEM/AUTOMATIC'],
+        default: 'MANUAL'
+    },
+    isLunchPunch: {
+        type: Boolean,
+        default: false
+    },
+    isMissingLunchReturn: {
+        type: Boolean,
+        default: false
+    },
+    lunchLateMinutes: {
+        type: Number,
+        default: 0
+    },
+    outSessionId: {
+        type: String,
+        default: null
+    },
+    outSessionName: {
+        type: String,
+        default: null
+    },
     isMissedOutPunch: {
         type: Boolean,
         default: false
@@ -58,5 +88,6 @@ const attendanceSchema = mongoose.Schema({
 
 attendanceSchema.index({ worker: 1, date: 1 });
 attendanceSchema.index({ subdomain: 1, date: 1 });
+attendanceSchema.index({ worker: 1, date: 1, punchType: 1, outSessionId: 1 }, { unique: true, partialFilterExpression: { punchType: 'LUNCH_OUT' } });
 
 module.exports = mongoose.model('Attendance', attendanceSchema);

@@ -205,6 +205,24 @@ export const getAttendanceSummary = async (attendanceData) => {
     }
 };
 
+
+export const getLunchAttendanceOverview = async (data) => {
+    const token = getAuthToken();
+
+    try {
+        const response = await api.post('/attendance/lunch-overview', data, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Failed to fetch lunch attendance overview:', error);
+        throw error.response?.data || new Error('Failed to fetch lunch attendance overview');
+    }
+};
+
 export default {
     putAttendance,
     putRfidAttendance,
@@ -212,5 +230,6 @@ export default {
     getWorkerAttendance,
     recognizeFaceAndMarkAttendance,
     getWorkerLastAttendance,
-    getAttendanceSummary
+    getAttendanceSummary,
+    getLunchAttendanceOverview
 };

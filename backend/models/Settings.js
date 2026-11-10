@@ -154,6 +154,70 @@ const settingsSchema = mongoose.Schema({
     }
   },
 
+    // Lunch Break Management Configuration
+  lunchBreakManagement: {
+    enabled: {
+      type: Boolean,
+      default: false
+    },
+    lunchOutTime: {
+      type: String,
+      default: '13:30'
+    },
+    returnDeadline: {
+      type: String,
+      default: '14:30'
+    },
+    gracePeriodMinutes: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    sessions: [{
+      id: {
+        type: String,
+        default: () => new mongoose.Types.ObjectId().toString()
+      },
+      name: {
+        type: String,
+        default: 'Lunch Break'
+      },
+      enabled: {
+        type: Boolean,
+        default: true
+      },
+      outTime: {
+        type: String,
+        default: '13:30'
+      },
+      returnDeadline: {
+        type: String,
+        default: '14:30'
+      },
+      gracePeriodMinutes: {
+        type: Number,
+        default: 0,
+        min: 0
+      }
+    }],
+    appliesTo: {
+      type: String,
+      enum: ['all', 'departments', 'shifts', 'employees'],
+      default: 'all'
+    },
+    applicableDepartments: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Department'
+    }],
+    applicableShifts: [{
+      type: String
+    }],
+    applicableEmployees: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Worker'
+    }]
+  },
+
   // Advanced Leave Deduction Settings
   advancedLeaveDeduction: {
     attendanceRuleEnabled: {

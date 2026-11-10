@@ -21,6 +21,38 @@ const AttendanceManagement = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isFaceAttendanceOpen, setIsFaceAttendanceOpen] = useState(false);
     const [attendanceData, setAttendanceData] = useState([]);
+    // Lunch Break Overview State
+    const [activeTab, setActiveTab] = useState('daily'); // 'daily' | 'lunch'
+    const [lunchDate, setLunchDate] = useState(() => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
+    const [lunchOverviewData, setLunchOverviewData] = useState([]);
+    const [lunchConfig, setLunchConfig] = useState(null);
+    const [isLunchLoading, setIsLunchLoading] = useState(false);
+
+    const fetchLunchOverview = useCallback(async (dateToFetch) => {
+        if (!subdomain || subdomain === 'main') return;
+        setIsLunchLoading(true);
+        try {
+            const data = await getLunchAttendanceOverview({
+                subdomain,
+                date: dateToFetch || lunchDate
+            });
+            if (data.success) {
+                setLunchOverviewData(data.overview || []);
+                setLunchConfig(data.lunchConfig || null);
+            }
+        } catch (err) {
+            console.error('Failed to fetch lunch overview:', err);
+        } finally {
+            setIsLunchLoading(false);
+        }
+    }, [subdomain, lunchDate]);
+
+    useEffect(() => {
+        if (activeTab === 'lunch') {
+            fetchLunchOverview(lunchDate);
+        }
+    }, [activeTab, lunchDate, fetchLunchOverview]);
+
     const [isLoading, setIsLoading] = useState(true);
     const [searchName, setSearchName] = useState('');
     const [filterDepartment, setFilterDepartment] = useState('');
@@ -738,7 +770,130 @@ const AttendanceManagement = () => {
                 </div>
             </BottomSheet>
 
-            {isLoading ? (
+            {/* View Mode Toggle: Daily Attendance vs Lunch Break Overview */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 bg-white p-2.5 rounded-2xl border border-slate-200/80 shadow-2xs">
+                <div className="flex items-center gap-1.5 p-1 bg-slate-100/80 rounded-xl">
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab('daily')}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'daily' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                    >
+                        Daily Attendance
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab('lunch')}
+                        className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'lunch' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                    >
+                        <FiCoffee className="h-3.5 w-3.5" />
+                        <span>Lunch Break Overview</span>
+                    </button>
+                </div>
+
+                {activeTab === 'lunch' && (
+                    <div className="flex items-center gap-2">
+                        <label className="text-xs font-bold text-slate-600">Date:</label>
+                        <input
+                            type="date"
+                            value={lunchDate}
+                            onChange={(e) => setLunchDate(e.target.value)}
+                            className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => fetchLunchOverview(lunchDate)}
+                            className="px-3 py-1.5 bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100 rounded-lg text-xs font-bold transition-colors"
+                        >
+                            Refresh
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {activeTab === 'lunch' ? (
+                <div className="space-y-4">
+                    {/* Lunch Config Banner */}
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs flex flex-wrap items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-teal-50 text-teal-600 rounded-xl">
+                                <FiCoffee className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-900">Lunch Break Policy</h3>
+                                <p className="text-xs text-slate-500">
+                                    Out Time: <span className="font-semibold text-slate-700">{lunchConfig?.lunchOutTime || '13:30'}</span> | Return Deadline: <span className="font-semibold text-slate-700">{lunchConfig?.returnDeadline || '14:30'}</span> | Grace Period: <span className="font-semibold text-slate-700">{lunchConfig?.gracePeriodMinutes || 0} mins</span>
+                                </p>
+                            </div>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${lunchConfig?.enabled ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
+                            {lunchConfig?.enabled ? 'Policy Active' : 'Policy Disabled'}
+                        </span>
+                    </div>
+
+                    {isLunchLoading ? (
+                        <div className="flex justify-center py-12">
+                            <Spinner size="md" variant="default" />
+                        </div>
+                    ) : lunchOverviewData.length === 0 ? (
+                        <div className="bg-white rounded-2xl border border-slate-200/80 p-8 text-center text-slate-500 text-xs font-medium">
+                            No lunch break activity recorded for {lunchDate}.
+                        </div>
+                    ) : (
+                        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-black text-slate-500 uppercase tracking-wider">
+                                        <th className="px-4 py-3">Employee</th>
+                                        <th className="px-4 py-3">RFID</th>
+                                        <th className="px-4 py-3">Department</th>
+                                        <th className="px-4 py-3 text-center">Lunch Out</th>
+                                        <th className="px-4 py-3 text-center">Expected Return</th>
+                                        <th className="px-4 py-3 text-center">Actual Return</th>
+                                        <th className="px-4 py-3 text-center">Late Minutes</th>
+                                        <th className="px-4 py-3 text-center">Attendance Status</th>
+                                        <th className="px-4 py-3 text-center">Deduction Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 text-xs">
+                                    {lunchOverviewData.map((row, idx) => (
+                                        <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                                            <td className="px-4 py-3 font-bold text-slate-800">{row.name}</td>
+                                            <td className="px-4 py-3 font-mono text-slate-500">{row.rfid}</td>
+                                            <td className="px-4 py-3 text-slate-600">{row.department}</td>
+                                            <td className="px-4 py-3 text-center">
+                                                <span className="font-semibold text-slate-700">{row.lunchOutTime}</span>
+                                                <span className="block text-[10px] text-teal-600 font-bold">{row.lunchOutSource}</span>
+                                            </td>
+                                            <td className="px-4 py-3 text-center font-semibold text-slate-600">{row.expectedReturnTime}</td>
+                                            <td className="px-4 py-3 text-center font-semibold text-slate-700">{row.actualReturnTime}</td>
+                                            <td className="px-4 py-3 text-center font-bold text-slate-700">
+                                                {row.lateMinutes > 0 ? (
+                                                    <span className="text-rose-600 font-bold">+{row.lateMinutes} mins</span>
+                                                ) : (
+                                                    <span className="text-emerald-600">0 mins</span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                                                    row.status === 'Returned On-Time' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                                    row.status === 'Late Return' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                                                    row.status === 'Missing Lunch Return' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                                    'bg-amber-50 text-amber-700 border-amber-200'
+                                                }`}>
+                                                    {row.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-center font-medium text-slate-600">
+                                                {row.deductionStatus}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            ) : isLoading ? (
                 <div className="flex justify-center py-8">
                     <Spinner size="md" variant="default" />
                 </div>
@@ -872,7 +1027,7 @@ const AttendanceManagement = () => {
                 }}
                 onAttendanceMarked={refreshLatestAttendance}
             />
-        </Fragment>
+                    </Fragment>
     );
 };
 

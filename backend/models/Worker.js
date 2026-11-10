@@ -196,6 +196,14 @@ const workerSchema = mongoose.Schema({
     default: '0'
   },
   passwordChangedAt: Date,
+  sessionInvalidatedAt: Date,
+  lastLunchOutDate: {
+    type: String,
+    default: null
+  },
+  processedOutSessions: [{
+    type: String
+  }],
   // Developer Expertise Fields
   skills: {
     type: [String],

@@ -331,7 +331,8 @@ const calculateWorkerProductivity = (productivityParameters) => {
     holidays = [],
     advancedLeaveDeduction = null,
     paidLeaveConfig = null,
-    isEmployeeDashboard = false
+    isEmployeeDashboard = false,
+    lunchBreakManagement = null
   } = options;
 
   const now = new Date();
@@ -800,7 +801,8 @@ const calculateWorkerProductivity = (productivityParameters) => {
             // Also calculate late arrival after lunch (from lunch end to actual punch time)
             // Cap at work end so arriving after shift doesn't add extra penalties beyond a full day
             const lateArrivalEndTime = Math.min(inPunch.time, workEnd);
-            const lateAfterLunchMinutes = lateArrivalEndTime - lunchEnd;
+            const effectiveFirstLunchDeadline = lunchEnd + lunchGraceMinutes;
+            const lateAfterLunchMinutes = lateArrivalEndTime - effectiveFirstLunchDeadline;
             if (lateAfterLunchMinutes > 0) {
               lateMinutes = lateAfterLunchMinutes;
             }
@@ -833,27 +835,49 @@ const calculateWorkerProductivity = (productivityParameters) => {
           // Check if this is actually a continuation of work
           // after a previous session, not a late arrival for the afternoon shift
 
-          // If there was a previous session that ended before lunch or during the work day,
+          // If there was a previous session that ended before lunch/break or during the work day,
           // then this session is a continuation, not a late arrival for the afternoon shift
           let isContinuation = false;
           if (pairIndex > 0) {
             const previousSession = allPairs[pairIndex - 1];
             // If the previous session was an orphaned OUT, it's not a continuation
             if (!previousSession.isOrphanedOut) {
-              // If the previous session ended during work hours (not during lunch)
-              if (previousSession.out.time < lunchStart || previousSession.out.time > lunchEnd) {
+              const prevOutId = previousSession.out.record?.outSessionId;
+              const isPrevSessionBreakOut = previousSession.out.record?.punchType === 'LUNCH_OUT' ||                                           previousSession.out.record?.isLunchPunch ||
+                                           configuredSessions.some(s => (prevOutId && s.id === prevOutId) || (previousSession.out.time >= timeToMinutes(s.outTime) - 5 && previousSession.out.time <= timeToMinutes(s.returnDeadline)));
+
+              if (!isPrevSessionBreakOut && (previousSession.out.time < lunchStart || previousSession.out.time > lunchEnd)) {
                 isContinuation = true;
               }
             }
           }
 
-          // Only apply late arrival penalty if this is not a continuation of work
-          if (!isContinuation && inPunch.time > lunchEnd) {
-            // For employees whose shift starts after lunch, this shouldn't apply
-            // Only for employees whose shift starts before lunch
+          // Check if recorded lunchLateMinutes is directly present on inPunch
+          if (!isContinuation && inPunch.record?.lunchLateMinutes !== undefined && inPunch.record.lunchLateMinutes > 0) {
+            lateMinutes = inPunch.record.lunchLateMinutes;
+          } else if (!isContinuation && configuredSessions.length > 0) {
+            const previousSession = pairIndex > 0 ? allPairs[pairIndex - 1] : null;
+            const prevOutId = previousSession?.out?.record?.outSessionId;
+            const matchedSession = configuredSessions.find(s =>              (prevOutId && s.id === prevOutId) ||
+              (previousSession && previousSession.out.time >= timeToMinutes(s.outTime) - 5 && previousSession.out.time <= timeToMinutes(s.returnDeadline))
+            );
+            if (matchedSession) {
+              const sessionDeadline = timeToMinutes(matchedSession.returnDeadline);
+              const sessionGrace = matchedSession.gracePeriodMinutes || 0;
+              const effectiveDeadline = sessionDeadline + sessionGrace;
+              if (inPunch.time > effectiveDeadline) {
+                lateMinutes = inPunch.time - effectiveDeadline;
+              }
+            } else {
+              const effectiveLunchDeadline = lunchEnd + lunchGraceMinutes;
+              if (inPunch.time > effectiveLunchDeadline && workStart < lunchStart) {
+                lateMinutes = inPunch.time - effectiveLunchDeadline;
+              }
+            }
+          } else if (!isContinuation && inPunch.time > (lunchEnd + lunchGraceMinutes)) {
+            // Only apply late arrival penalty if this is not a continuation of work
             if (workStart < lunchStart) {
-              // Late for afternoon shift
-              lateMinutes = inPunch.time - lunchEnd;
+              lateMinutes = inPunch.time - (lunchEnd + lunchGraceMinutes);
             }
           }
           // NEW: Also check for late arrival for morning shift in subsequent sessions
@@ -862,8 +886,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
             // Late for morning shift
             lateMinutes = inPunch.time - workStart;
           }
-          // If they punched in at or before lunch end, or if this is a continuation, 
-          // no late penalty (they're early, on time, or continuing work)
+          // If they punched in at or before lunch end, or if this is a continuation,          // no late penalty (they're early, on time, or continuing work)
 
           // Only add positive late minutes
           if (lateMinutes > 0) {
@@ -933,8 +956,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
             // Early departure from morning shift
             earlyMinutes = lunchStart - outPunch.time;
 
-            // CRITICAL FIX: If this is the last session of the day, 
-            // they didn't work the afternoon shift either.
+            // CRITICAL FIX: If this is the last session of the day,            // they didn't work the afternoon shift either.
             const isLastSession = pairIndex === allPairs.length - 1;
             if (isLastSession) {
               const unworkedAfternoonMinutes = workEnd - lunchEnd;
@@ -1057,10 +1079,15 @@ const calculateWorkerProductivity = (productivityParameters) => {
           // Gap skip removed â€” previously skipped when next session was auto-out,
           // but that caused the gap to go unpenalized.
         }
-        // If current session ends during lunch period, no inter-work permission is calculated
-        // as lunch time is not considered working time
-        else if (outPunch.time >= lunchStart && outPunch.time <= lunchEnd) {
-          // No inter-work permission penalty since they punched out during lunch
+        // If current session ends during lunch period or was an authorized break session, no inter-work permission is calculated
+        const currentOutSessionId = outPunch.record?.outSessionId;
+        const isCurrentSessionBreakOut = outPunch.record?.punchType === 'LUNCH_OUT' ||
+                                        outPunch.record?.isLunchPunch ||
+                                        (outPunch.time >= lunchStart && outPunch.time <= lunchEnd) ||
+                                        configuredSessions.some(s => (currentOutSessionId && s.id === currentOutSessionId) || (outPunch.time >= timeToMinutes(s.outTime) - 5 && outPunch.time <= timeToMinutes(s.returnDeadline)));
+
+        if (isCurrentSessionBreakOut) {
+          // No inter-work permission penalty since they punched out for an authorized break session
         } else {
           // Calculate inter-work permission time only if not during lunch
           // NEW: Ensure the gap only counts time WITHIN shift hours
@@ -1201,8 +1228,17 @@ const calculateWorkerProductivity = (productivityParameters) => {
     options.isLunchConsider = true;
   }
 
-  const lunchFrom = selectedBatch ? selectedBatch.lunchFrom : '12:00';
-  const lunchTo = selectedBatch ? selectedBatch.lunchTo : '13:00';
+  const isLunchManagementActive = lunchBreakManagement && lunchBreakManagement.enabled;
+  const lunchFrom = isLunchManagementActive && lunchBreakManagement.lunchOutTime
+    ? lunchBreakManagement.lunchOutTime
+    : (selectedBatch ? selectedBatch.lunchFrom : '12:00');
+  const lunchTo = isLunchManagementActive && lunchBreakManagement.returnDeadline
+    ? lunchBreakManagement.returnDeadline
+    : (selectedBatch ? selectedBatch.lunchTo : '13:00');
+  const lunchGraceMinutes = isLunchManagementActive ? (lunchBreakManagement.gracePeriodMinutes || 0) : 0;
+  const configuredSessions = (isLunchManagementActive && Array.isArray(lunchBreakManagement.sessions) && lunchBreakManagement.sessions.length > 0)
+    ? lunchBreakManagement.sessions.filter(s => s.enabled)
+    : [];
   const lunchStart = timeToMinutes(lunchFrom);
   const lunchEnd = timeToMinutes(lunchTo);
 

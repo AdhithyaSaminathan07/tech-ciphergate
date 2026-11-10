@@ -11,9 +11,9 @@ import Spinner from '../common/Spinner';
 import CustomTaskForm from './CustomTaskForm';
 import { readNotification } from '../../services/notificationService';
 import appContext from '../../context/AppContext';
-import { 
-  Camera, IdCard, ChevronDown, ChevronUp, Wallet, ArrowRight, Trophy, 
-  Medal, Award, AlertTriangle, Bell, ClipboardList, CheckSquare, 
+import {
+  Camera, IdCard, ChevronDown, ChevronUp, Wallet, ArrowRight, Trophy,
+  Medal, Award, AlertTriangle, Bell, ClipboardList, CheckSquare,
   ArrowUpCircle, ClipboardCheck, Calendar, Shield
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -54,9 +54,9 @@ const SectionHeader = ({ title, sub, action, actionLink }) => (
 const Dashboard = () => {
   const { subdomain } = useContext(appContext);
   const { user } = useAuth();
-  
+
   const navigate = useNavigate();
-  
+
   const [notifications, setNotifications] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [tasks, setTasks] = useState([]);
@@ -69,6 +69,22 @@ const Dashboard = () => {
   const [accessControl, setAccessControl] = useState({ rfidAttendance: true, faceAttendance: true });
   const [showDeductionBreakdown, setShowDeductionBreakdown] = useState(false);
   const [showUnauthorizedBreakdown, setShowUnauthorizedBreakdown] = useState(false);
+  const [lunchStatus, setLunchStatus] = useState({ isOnLunchBreak: false, lunchConfig: null });
+
+  const fetchWorkerLunchStatus = async () => {
+    try {
+      if (user && user.rfid && subdomain && subdomain !== 'main') {
+        const res = await api.post('/attendance/worker-last', { rfid: user.rfid, subdomain });
+        setLunchStatus({
+          isOnLunchBreak: res.data?.isOnLunchBreak || false,
+          lunchConfig: res.data?.lunchConfig || null
+        });
+      }
+    } catch (e) {
+      console.warn('Could not fetch worker lunch status:', e);
+    }
+  };
+
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [salaryData, setSalaryData] = useState({
     baseSalary: 0,
@@ -133,11 +149,11 @@ const Dashboard = () => {
       const now = new Date();
       const fromDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
       const toDate = new Date(now.getFullYear(), now.getMonth() + 1, 0).toLocaleDateString('en-CA');
-      
+
       const response = await api.get('/salary/top-teams-earnings', {
         params: { subdomain, fromDate, toDate }
       });
-      
+
       setTopTeams(response.data.topTeams || []);
     } catch (error) {
       console.error('Failed to fetch top teams:', error);
@@ -151,6 +167,7 @@ const Dashboard = () => {
         await Promise.all([
           fetchNotifications(),
           fetchAttendanceLocation(),
+          fetchWorkerLunchStatus(),
           fetchSalary(),
           fetchTopTeams(),
           (async () => {
@@ -177,8 +194,11 @@ const Dashboard = () => {
     if (user) loadDashboardData();
   }, [user, subdomain]);
 
-  const handleAttendanceMarked = () => fetchSalary();
-  
+  const handleAttendanceMarked = () => {
+    fetchWorkerLunchStatus();
+    fetchSalary();
+  };
+
   const handleTaskSubmit = (newTask) => {
     setTasks(prev => [newTask, ...prev]);
     toast.success('Task submitted successfully!');
@@ -217,13 +237,13 @@ const Dashboard = () => {
   return (
     <div className="bg-[#F8FAFC] min-h-screen px-3 py-1.5 md:px-6 md:py-3 lg:px-8 lg:py-4">
       <div className="max-w-[1600px] mx-auto flex flex-col gap-4 md:gap-8">
-        
+
         {/* Header / Greeting */}
         <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm flex items-center justify-between relative overflow-hidden">
           {/* Subtle background glow accents */}
           <div className="absolute right-0 top-0 w-32 h-32 bg-teal-500/5 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute left-1/3 bottom-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl pointer-events-none" />
-          
+
           <div className="flex flex-col gap-1.5 z-10">
             <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight leading-none">
@@ -241,7 +261,7 @@ const Dashboard = () => {
               Active Member of the <span className="text-teal-600 font-bold bg-teal-50/50 border border-teal-100/50 px-2 py-0.5 rounded-md uppercase tracking-wider text-[10px]">{user?.department || 'Ciphergate'}</span> department
             </p>
           </div>
-          
+
           {/* Calendar Date Widget */}
           <div className="hidden md:flex flex-col items-end text-right z-10 border-l border-slate-100 pl-6 shrink-0">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
@@ -253,6 +273,48 @@ const Dashboard = () => {
             </span>
           </div>
         </div>
+                {/* Lunch Break Banner when on lunch */}
+        {lunchStatus.isOnLunchBreak && (
+          <div className="mb-6 p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-3xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-sm">
+                <Clock size={20} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-amber-950">Currently on Lunch Break</h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                    Session Paused
+                  </span>
+                </div>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  Expected Return: <strong>{lunchStatus.lunchConfig?.returnDeadline || '2:30 PM'}</strong> (Grace: {lunchStatus.lunchConfig?.gracePeriodMinutes || 0} mins)
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {accessControl.rfidAttendance && (
+                <button
+                  type="button"
+                  onClick={() => setShowRFIDAttendance(true)}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
+                >
+                  Punch In (RFID)
+                </button>
+              )}
+              {accessControl.faceAttendance && (
+                <button
+                  type="button"
+                  onClick={() => setShowFaceAttendance(true)}
+                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors"
+                >
+                  Punch In (Face)
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* 1. Attendance Card */}
           <div className="bg-white rounded-3xl p-6 border border-slate-100/80 shadow-sm flex flex-col justify-between transition-all duration-300 hover:shadow-md">
@@ -316,7 +378,7 @@ const Dashboard = () => {
                     const bonus = Number(salaryData.totalBonusAmount) || 0;
                     const adjustment = Number(salaryData.projectAdjustment) || 0;
                     const additional = grossProject + bonus + adjustment;
-                    
+
                     if (additional > 0) {
                       return (
                         <div className="flex justify-between items-center text-slate-500">
@@ -331,7 +393,7 @@ const Dashboard = () => {
                     }
                     return null;
                   })()}
-                  <div 
+                  <div
                     onClick={() => {
                       if (calculatedTaskPenalties.taskPenalties.length > 0) {
                         setShowDeductionBreakdown(!showDeductionBreakdown);
@@ -393,7 +455,7 @@ const Dashboard = () => {
 
                   {salaryData.totalUnauthorizedPenalty > 0 && (
                     <>
-                      <div 
+                      <div
                         onClick={() => setShowUnauthorizedBreakdown(!showUnauthorizedBreakdown)}
                         className="flex justify-between items-center text-slate-500 cursor-pointer hover:bg-slate-50/85 p-0.5 rounded transition-all select-none"
                       >
@@ -454,7 +516,7 @@ const Dashboard = () => {
                   const finalBackend = Number(salaryData.finalSalary) || 0;
                   const taskPen = Number(calculatedTaskPenalties.totalTaskPenalty) || 0;
                   const displayFinalPayout = Math.max(0, finalBackend - taskPen);
-                  
+
                   // Estimate a gross for payout ratio: base + additional
                   const base = Number(salaryData.baseSalary) || 0;
                   const grossProject = Number(salaryData.report?.summary?.grossProjectSalary) || 0;
@@ -549,8 +611,8 @@ const Dashboard = () => {
                           </div>
                           {/* Relative progress bar to fill empty space and add visual polish */}
                           <div className="w-full bg-slate-200/50 h-1 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full ${barColors}`} 
+                            <div
+                              className={`h-full rounded-full ${barColors}`}
                               style={{ width: `${Math.max(5, (team.amount / maxVal) * 100)}%` }}
                             ></div>
                           </div>
@@ -577,10 +639,10 @@ const Dashboard = () => {
 
         {/* Bottom Sections: Grid Layout */}
         <div className="grid grid-cols-1 gap-6">
-          
+
           {/* Row 1: Wallet, Rankings, Fines, Notification */}
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            
+
             {/* My Wallet */}
             <MyWalletCard />
 

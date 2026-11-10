@@ -65,17 +65,22 @@ const protect = asyncHandler(async (req, res, next) => {
       }
     }
 
+    // Check if session was invalidated (e.g. automatic lunch logout) after token was issued
+    if (req.user.sessionInvalidatedAt) {
+      const invalidatedDate = new Date(req.user.sessionInvalidatedAt);
+      const invalidatedTimestamp = parseInt(invalidatedDate.getTime() / 1000, 10);
+      if (decoded.iat < invalidatedTimestamp) {
+        return res.status(401).json({ message: 'Session invalidated. Please log in again.' });
+      }
+    }
+
     // Check rules acceptance for workers
     if (req.user.role === 'worker') {
-      const isBypassRoute = req.originalUrl.includes('/api/rules/active') || 
-                            req.originalUrl.includes('/api/rules/accept') || 
-                            req.originalUrl.includes('/api/rules/status') || 
-                            req.originalUrl.includes('/api/auth/me');
+      const isBypassRoute = req.originalUrl.includes('/api/rules/active') ||                            req.originalUrl.includes('/api/rules/accept') ||                            req.originalUrl.includes('/api/rules/status') ||                            req.originalUrl.includes('/api/auth/me');
 
       if (!isBypassRoute) {
         const Settings = require('../models/Settings');
         const settings = await Settings.findOne({ subdomain: req.user.subdomain });
-        
         if (settings && settings.rulesConfiguration && settings.rulesConfiguration.forceAcceptance) {
           const currentVersion = settings.rulesConfiguration.currentVersion || '1.0';
           const acceptedVersion = req.user.acceptedRulesVersion || '0';

@@ -8,12 +8,14 @@ const {
   putRfidAttendance,
   getWorkerLastAttendance,
   recognizeFaceAndMarkAttendance,
-  getAttendanceSummary
+  getAttendanceSummary,
+  getLunchAttendanceOverview
 } = require('../controllers/attendanceController');
 
 const router = express.Router();
 
 router.post('/summary', protect, getAttendanceSummary);
+router.post('/lunch-overview', protect, getLunchAttendanceOverview);
 router.put('/', protect, putAttendance);
 router.post('/', protect, getAttendance);
 router.post('/paginated', protect, getPaginatedAttendance); // Add this new route
