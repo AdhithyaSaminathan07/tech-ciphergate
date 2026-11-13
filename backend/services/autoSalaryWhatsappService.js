@@ -564,6 +564,7 @@ const executeSalaryWhatsappDispatch = async (subdomain, targetPhoneNumbers = nul
           advancedLeaveDeduction: settings.advancedLeaveDeduction || null,
           includePermission: settings.includePermission || false,
           paidLeaveConfig: settings.paidLeaveConfig || null,
+          lunchBreakManagement: settings.lunchBreakManagement || null,
           unauthorizedAbsenceDates: unauthorizedDates,
           unauthorizedPermissions,
           employeeHistory: workerHistory

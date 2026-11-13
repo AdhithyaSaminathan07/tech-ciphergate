@@ -4,6 +4,7 @@ import AdminLayout from './components/layout/AdminLayout';
 
 // Public pages
 const Home = lazy(() => import('./pages/Home'));
+const InstalledApps = lazy(() => import('./pages/InstalledApps'));
 const AdminLogin = lazy(() => import('./pages/Admin/AdminLogin'));
 const AdminRegister = lazy(() => import('./pages/Admin/AdminRegister'));
 const WorkerLogin = lazy(() => import('./pages/Worker/WorkerLogin'));
@@ -174,6 +175,7 @@ function App() {
               <Routes>
                 {/* Public routes */}
                 <Route path="/" element={<Home />} />
+                <Route path="/installed-apps" element={<InstalledApps />} />
                 <Route path="/admin/login" element={<AdminLogin />} />
                 <Route path="/admin/register" element={<AdminRegister />} />
                 <Route path="/worker/login" element={<WorkerLogin />} />

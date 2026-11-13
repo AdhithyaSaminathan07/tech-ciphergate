@@ -27,7 +27,16 @@ export default defineConfig({
         VitePWA({
             registerType: 'autoUpdate',
             injectRegister: null,
-            includeAssets: ['favicon.ico', 'appicon.png', 'logo.png'],
+            includeAssets: [
+                'favicon.ico',
+                'favicon.png',
+                'favicon-32x32.png',
+                'favicon-16x16.png',
+                'appicon.png',
+                'logo.png',
+                'pwa-192x192.png',
+                'pwa-512x512.png'
+            ],
             manifestFilename: 'manifest.json',
             manifest: {
                 name: 'CipherGate',
@@ -40,37 +49,38 @@ export default defineConfig({
                 description: 'Professional Workforce Management and Performance Tracking System',
                 orientation: 'any',
                 scope: '/',
+                prefer_related_applications: false,
+                related_applications: [
+                    {
+                        platform: 'webapp',
+                        url: 'https://ciphergate.techvaseegrah.com/manifest.json'
+                    }
+                ],
                 categories: ['productivity', 'business'],
                 icons: [
                     {
-                        src: 'appicon.png',
+                        src: 'pwa-192x192.png',
                         sizes: '192x192',
                         type: 'image/png',
                         purpose: 'any'
                     },
                     {
-                        src: 'appicon.png',
+                        src: 'pwa-192x192.png',
                         sizes: '192x192',
                         type: 'image/png',
                         purpose: 'maskable'
                     },
                     {
-                        src: 'appicon.png',
+                        src: 'pwa-512x512.png',
                         sizes: '512x512',
                         type: 'image/png',
                         purpose: 'any'
                     },
                     {
-                        src: 'appicon.png',
+                        src: 'pwa-512x512.png',
                         sizes: '512x512',
                         type: 'image/png',
                         purpose: 'maskable'
-                    },
-                    {
-                        src: 'appicon.png',
-                        sizes: '144x144',
-                        type: 'image/png',
-                        purpose: 'any'
                     }
                 ],
                 shortcuts: [

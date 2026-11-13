@@ -262,8 +262,8 @@ const app = express();
       initAutoSalaryWhatsappScheduler();
 
       // Lunch Break Management Scheduler
-      const { initializeLunchBreakScheduler } = require('./schedulers/lunchBreakScheduler');
-      initializeLunchBreakScheduler();
+      const { startLunchBreakScheduler } = require('./schedulers/lunchBreakScheduler');
+      startLunchBreakScheduler();
 
     } else {
       console.log(

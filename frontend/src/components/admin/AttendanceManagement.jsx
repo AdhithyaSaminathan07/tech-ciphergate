@@ -4,8 +4,9 @@ import Modal from '../common/Modal';
 import Webcam from "react-webcam";
 import jsQR from "jsqr";
 import appContext from '../../context/AppContext';
+import SocketContext from '../../context/SocketContextNew';
 import { toast } from 'react-toastify';
-import { putAttendance, getAttendance, getPaginatedAttendance, getWorkerLastAttendance } from '../../services/attendanceService';
+import { putAttendance, getAttendance, getPaginatedAttendance, getWorkerLastAttendance, getLunchAttendanceOverview } from '../../services/attendanceService';
 import Table from '../common/Table';
 import Spinner from '../common/Spinner';
 import { Link } from 'react-router-dom';
@@ -13,9 +14,27 @@ import FaceAttendance from './FaceAttendance';
 import api from '../../services/api';
 import BottomSheet from '../common/BottomSheet';
 import { Filter, Search, RotateCcw, Plus, Camera, Download, AlertTriangle, ChevronDown, Hash, Building2 } from 'lucide-react';
+import { FiCoffee } from 'react-icons/fi';
 import CustomDatePicker from '../common/CustomDatePicker';
+import {
+    formatRecordDateIST,
+    getWorkerProfileId,
+    getBreakPunchLabel,
+    mergeAttendanceRecords,
+    createRefreshCoordinator,
+    processAttendanceByDay,
+    filterLunchOverviewRows,
+    buildAttendanceCsvContent
+} from '../../utils/attendanceHelpers';
+
+const DAILY_PAGE_SIZE = 2;
+const SOCKET_CONNECTED_FALLBACK_POLL_MS = 30000;
+const SOCKET_DISCONNECTED_POLL_MS = 15000;
 
 const AttendanceManagement = () => {
+    const { subdomain } = useContext(appContext);
+    const socketContext = useContext(SocketContext) || {};
+    const isSocketConnected = Boolean(socketContext.isConnected);
     const [worker, setWorker] = useState({ rfid: "" });
     const [qrText, setQrText] = useState("");
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -27,33 +46,11 @@ const AttendanceManagement = () => {
     const [lunchOverviewData, setLunchOverviewData] = useState([]);
     const [lunchConfig, setLunchConfig] = useState(null);
     const [isLunchLoading, setIsLunchLoading] = useState(false);
-
-    const fetchLunchOverview = useCallback(async (dateToFetch) => {
-        if (!subdomain || subdomain === 'main') return;
-        setIsLunchLoading(true);
-        try {
-            const data = await getLunchAttendanceOverview({
-                subdomain,
-                date: dateToFetch || lunchDate
-            });
-            if (data.success) {
-                setLunchOverviewData(data.overview || []);
-                setLunchConfig(data.lunchConfig || null);
-            }
-        } catch (err) {
-            console.error('Failed to fetch lunch overview:', err);
-        } finally {
-            setIsLunchLoading(false);
-        }
-    }, [subdomain, lunchDate]);
-
-    useEffect(() => {
-        if (activeTab === 'lunch') {
-            fetchLunchOverview(lunchDate);
-        }
-    }, [activeTab, lunchDate, fetchLunchOverview]);
+    const [lunchPage, setLunchPage] = useState(1);
+    const [lunchPagination, setLunchPagination] = useState({ currentPage: 1, totalPages: 1, totalRecords: 0, hasMore: false });
 
     const [isLoading, setIsLoading] = useState(true);
+    const [isDailyRefreshing, setIsDailyRefreshing] = useState(false);
     const [searchName, setSearchName] = useState('');
     const [filterDepartment, setFilterDepartment] = useState('');
     const [filterDate, setFilterDate] = useState('');
@@ -69,9 +66,86 @@ const AttendanceManagement = () => {
     const [hasMore, setHasMore] = useState(false);
     const [isFetchingMore, setIsFetchingMore] = useState(false);
 
-    const { subdomain } = useContext(appContext);
     const [confirmAction, setConfirmAction] = useState(null);
     const [accessControl, setAccessControl] = useState({ addAttendance: true, faceAttendance: true });
+
+    const isMountedRef = useRef(true);
+    const activeTabRef = useRef(activeTab);
+    const currentPageRef = useRef(currentPage);
+    const filterDateRef = useRef(filterDate);
+    const lunchDateRef = useRef(lunchDate);
+    const lunchPageRef = useRef(lunchPage);
+    const dailyCoordinatorRef = useRef(null);
+    const lunchCoordinatorRef = useRef(null);
+
+    useEffect(() => {
+        activeTabRef.current = activeTab;
+    }, [activeTab]);
+
+    useEffect(() => {
+        currentPageRef.current = currentPage;
+    }, [currentPage]);
+
+    useEffect(() => {
+        filterDateRef.current = filterDate;
+    }, [filterDate]);
+
+    useEffect(() => {
+        lunchDateRef.current = lunchDate;
+    }, [lunchDate]);
+
+    useEffect(() => {
+        lunchPageRef.current = lunchPage;
+    }, [lunchPage]);
+
+    const performLunchOverviewFetch = useCallback(async ({ dateToFetch, pageToFetch = 1, showSpinner = true } = {}) => {
+        if (!subdomain || subdomain === 'main') return;
+        if (showSpinner && isMountedRef.current) {
+            setIsLunchLoading(true);
+        }
+        try {
+            const effectiveDate = dateToFetch || lunchDateRef.current;
+            const effectivePage = pageToFetch || lunchPageRef.current || 1;
+            const data = await getLunchAttendanceOverview({
+                subdomain,
+                date: effectiveDate,
+                page: effectivePage,
+                limit: 25
+            });
+            if (isMountedRef.current && data.success) {
+                setLunchOverviewData(data.overview || []);
+                setLunchConfig(data.lunchConfig || null);
+                setLunchPage(data.pagination?.currentPage || effectivePage);
+                setLunchPagination(data.pagination || { currentPage: 1, totalPages: 1, totalRecords: (data.overview || []).length, hasMore: false });
+            }
+        } catch (err) {
+            console.error('Failed to fetch lunch overview:', err);
+        } finally {
+            if (showSpinner && isMountedRef.current) {
+                setIsLunchLoading(false);
+            }
+        }
+    }, [subdomain]);
+
+    const fetchLunchOverview = useCallback((dateToFetch, pageToFetch = 1, { showSpinner = true, debounce = false, skipIfBusy = false } = {}) => {
+        if (!subdomain || subdomain === 'main') return Promise.resolve();
+        if (lunchCoordinatorRef.current) {
+            return lunchCoordinatorRef.current.trigger({
+                dateToFetch,
+                pageToFetch,
+                showSpinner,
+                debounce,
+                skipIfBusy
+            });
+        }
+        return performLunchOverviewFetch({ dateToFetch, pageToFetch, showSpinner });
+    }, [subdomain, performLunchOverviewFetch]);
+
+    useEffect(() => {
+        if (activeTab === 'lunch') {
+            fetchLunchOverview(lunchDate, 1);
+        }
+    }, [activeTab, lunchDate, fetchLunchOverview]);
 
     const uniqueRfids = React.useMemo(() => {
         const rfids = attendanceData.map(record => record.rfid).filter(rfid => rfid && rfid.trim() !== '');
@@ -81,7 +155,16 @@ const AttendanceManagement = () => {
         return unique;
     }, [attendanceData]);
 
-    const fetchAttendanceData = async (page = 1, append = false) => {
+    const buildDailyQueryParams = useCallback((page, limit, selectedDate = filterDateRef.current) => {
+        const params = { subdomain, page, limit };
+        const trimmedDate = typeof selectedDate === 'string' ? selectedDate.trim() : '';
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmedDate)) {
+            params.date = trimmedDate;
+        }
+        return params;
+    }, [subdomain]);
+
+    const fetchAttendanceData = useCallback(async (page = 1, append = false, selectedDate = filterDateRef.current) => {
         if (!subdomain || subdomain === 'main') return;
 
         try {
@@ -91,27 +174,97 @@ const AttendanceManagement = () => {
                 setIsLoading(true);
             }
 
-            const data = await getPaginatedAttendance({ subdomain, page, limit: 2 });
+            const data = await getPaginatedAttendance(buildDailyQueryParams(page, DAILY_PAGE_SIZE, selectedDate));
             const rawData = Array.isArray(data.attendance) ? data.attendance : [];
 
+            if (!isMountedRef.current) return;
+
             if (append) {
-                // Append new data to existing data
-                setAttendanceData(prevData => [...prevData, ...rawData]);
+                setAttendanceData(prevData => mergeAttendanceRecords(prevData, rawData, { mode: 'append' }));
             } else {
-                // Replace existing data
-                setAttendanceData(rawData);
+                setAttendanceData(mergeAttendanceRecords([], rawData, { mode: 'replace' }));
             }
 
-            setHasMore(data.hasMore);
+            setHasMore(Boolean(data.hasMore));
             setCurrentPage(page);
         } catch (error) {
             console.error(error);
-            toast.error("Failed to fetch attendance data.");
+            if (isMountedRef.current) {
+                toast.error("Failed to fetch attendance data.");
+            }
         } finally {
-            setIsLoading(false);
-            setIsFetchingMore(false);
+            if (isMountedRef.current) {
+                setIsLoading(false);
+                setIsFetchingMore(false);
+            }
+        }
+    }, [subdomain, buildDailyQueryParams]);
+
+    // Refresh all loaded Daily Attendance pages (plus active filterDate) while preserving filters & pagination
+    const performDailyRefresh = useCallback(async ({ manual = false } = {}) => {
+        if (!subdomain || subdomain === 'main') return;
+
+        const pagesLoaded = Math.max(1, currentPageRef.current || 1);
+        const limitForLoadedPages = DAILY_PAGE_SIZE * pagesLoaded;
+        const data = await getPaginatedAttendance(
+            buildDailyQueryParams(1, limitForLoadedPages, filterDateRef.current)
+        );
+        const rawData = Array.isArray(data.attendance) ? data.attendance : [];
+
+        if (!isMountedRef.current) return;
+
+        setAttendanceData(mergeAttendanceRecords([], rawData, { mode: 'replace' }));
+        setHasMore(Boolean(data.hasMore));
+    }, [subdomain, buildDailyQueryParams]);
+
+    useEffect(() => {
+        isMountedRef.current = true;
+        dailyCoordinatorRef.current = createRefreshCoordinator(performDailyRefresh, {
+            debounceMs: 150,
+            onError: (err) => console.error("Failed to refresh latest attendance:", err)
+        });
+        lunchCoordinatorRef.current = createRefreshCoordinator(performLunchOverviewFetch, {
+            debounceMs: 150,
+            onError: (err) => console.error("Failed to refresh break overview:", err)
+        });
+
+        return () => {
+            isMountedRef.current = false;
+            dailyCoordinatorRef.current?.dispose();
+            lunchCoordinatorRef.current?.dispose();
+        };
+    }, [performDailyRefresh, performLunchOverviewFetch]);
+
+    // Function to load more data
+    const loadMoreAttendance = () => {
+        if (hasMore && !isFetchingMore && !isDailyRefreshing) {
+            fetchAttendanceData(currentPage + 1, true);
         }
     };
+
+    // Real-time / manual / fallback-polled refresh without overlapping requests or duplicate rows
+    const refreshLatestAttendance = useCallback(async ({ manual = false, debounce = false, skipIfBusy = false } = {}) => {
+        if (!subdomain || subdomain === 'main') return;
+        if (manual && isMountedRef.current) {
+            setIsDailyRefreshing(true);
+        }
+        try {
+            if (dailyCoordinatorRef.current) {
+                await dailyCoordinatorRef.current.trigger({ manual, debounce, skipIfBusy });
+            } else {
+                await performDailyRefresh({ manual });
+            }
+        } catch (error) {
+            console.error("Failed to refresh latest attendance:", error);
+            if (manual && isMountedRef.current) {
+                toast.error("Failed to refresh attendance data.");
+            }
+        } finally {
+            if (manual && isMountedRef.current) {
+                setIsDailyRefreshing(false);
+            }
+        }
+    }, [subdomain, performDailyRefresh]);
 
     // Load initial data
     useEffect(() => {
@@ -121,45 +274,87 @@ const AttendanceManagement = () => {
             // Fetch access control settings
             api.get(`/settings/${subdomain}`)
                 .then(res => {
-                    if (res.data?.attendanceAccessControl?.admin) {
+                    if (isMountedRef.current && res.data?.attendanceAccessControl?.admin) {
                         setAccessControl(res.data.attendanceAccessControl.admin);
                     }
                 })
                 .catch(err => console.error("Failed to fetch settings:", err));
         }
-    }, [subdomain]);
+    }, [subdomain, fetchAttendanceData]);
 
-    // Function to load more data
-    const loadMoreAttendance = () => {
-        if (hasMore && !isFetchingMore) {
-            fetchAttendanceData(currentPage + 1, true);
+    // When a specific YYYY-MM-DD filter date is chosen on Daily Attendance, ensure it is fetched cleanly
+    useEffect(() => {
+        if (!subdomain || subdomain === 'main' || activeTab !== 'daily') return;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(String(filterDate || '').trim())) {
+            refreshLatestAttendance({ debounce: true });
         }
-    };
+    }, [filterDate, activeTab, subdomain, refreshLatestAttendance]);
 
-    // Function to refresh the latest attendance records (for real-time updates)
-    const refreshLatestAttendance = useCallback(async () => {
-        if (!subdomain || subdomain === 'main') return;
+    // Refresh Daily Attendance when switching back from Break Overview
+    useEffect(() => {
+        if (activeTab === 'daily' && subdomain && subdomain !== 'main') {
+            refreshLatestAttendance({ skipIfBusy: true });
+        }
+    }, [activeTab, subdomain, refreshLatestAttendance]);
 
-        try {
-            const data = await getPaginatedAttendance({ subdomain, page: 1, limit: 2 });
-            const rawData = Array.isArray(data.attendance) ? data.attendance : [];
+    // Real-time Socket.IO event listener + safe periodic fallback polling with unmount cleanup
+    useEffect(() => {
+        if (!subdomain || subdomain === 'main') return undefined;
 
-            // Update only the first page of data to show latest records at the top
-            setAttendanceData(prevData => {
-                // Get existing data that's not part of the first page
-                const existingOtherPages = prevData.filter(record => {
-                    // This is a simplified approach - in a real implementation, you might want to track
-                    // which records belong to which date groups
-                    return !rawData.some(newRecord => newRecord._id === record._id);
+        const handleRealtimeUpdate = () => {
+            if (!isMountedRef.current) return;
+            if (activeTabRef.current === 'lunch') {
+                fetchLunchOverview(lunchDateRef.current, lunchPageRef.current || 1, {
+                    showSpinner: false,
+                    debounce: true
                 });
+            } else {
+                refreshLatestAttendance({ debounce: true });
+            }
+        };
 
-                // Combine new first page with existing other pages
-                return [...rawData, ...existingOtherPages];
-            });
-        } catch (error) {
-            console.error("Failed to refresh latest attendance:", error);
+        const runPeriodicSync = () => {
+            if (!isMountedRef.current || (typeof document !== 'undefined' && document.hidden)) {
+                return;
+            }
+            if (activeTabRef.current === 'lunch') {
+                fetchLunchOverview(lunchDateRef.current, lunchPageRef.current || 1, {
+                    showSpinner: false,
+                    skipIfBusy: true
+                });
+            } else {
+                refreshLatestAttendance({ skipIfBusy: true });
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (typeof document !== 'undefined' && !document.hidden) {
+                runPeriodicSync();
+            }
+        };
+
+        if (typeof window !== 'undefined') {
+            window.addEventListener('attendance-update', handleRealtimeUpdate);
         }
-    }, [subdomain]);
+        if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+        }
+
+        const pollIntervalMs = isSocketConnected
+            ? SOCKET_CONNECTED_FALLBACK_POLL_MS
+            : SOCKET_DISCONNECTED_POLL_MS;
+        const pollTimer = setInterval(runPeriodicSync, pollIntervalMs);
+
+        return () => {
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('attendance-update', handleRealtimeUpdate);
+            }
+            if (typeof document !== 'undefined') {
+                document.removeEventListener('visibilitychange', handleVisibilityChange);
+            }
+            clearInterval(pollTimer);
+        };
+    }, [subdomain, isSocketConnected, refreshLatestAttendance, fetchLunchOverview]);
 
     const handleSubmit = async e => {
         e.preventDefault();
@@ -294,171 +489,38 @@ const AttendanceManagement = () => {
     const filteredAttendance = attendanceData.filter(record => {
         const matchesName = !searchName || record?.name?.toLowerCase().includes(searchName.toLowerCase());
         const matchesDepartment = !filterDepartment || record?.departmentName?.toLowerCase().includes(filterDepartment.toLowerCase());
-        const matchesDate = !filterDate || (record.date && record.date.startsWith(filterDate));
+        const matchesDate = !filterDate || formatRecordDateIST(record.date).startsWith(filterDate);
         const matchesRfid = !filterRfid || record?.rfid?.toLowerCase().includes(filterRfid.toLowerCase());
         return matchesName && matchesDepartment && matchesDate && matchesRfid;
     });
 
     const processedAttendance = processAttendanceByDay(filteredAttendance);
 
-    function processAttendanceByDay(attendanceData) {
-        // Helper to parse "10:51:40 AM" to seconds from midnight
-        function parseTime12hToSeconds(timeStr) {
-            if (typeof timeStr !== 'string') return 0;
-            const [time, modifier] = timeStr.trim().split(' ');
-            if (!time) return 0;
-            let [hours, minutes, seconds] = time.split(':').map(Number);
-            hours = hours || 0;
-            minutes = minutes || 0;
-            seconds = seconds || 0;
-            if (modifier && modifier.toUpperCase() === 'PM' && hours !== 12) hours += 12;
-            else if (modifier && modifier.toUpperCase() === 'AM' && hours === 12) hours = 0;
-            return hours * 3600 + minutes * 60 + seconds;
-        }
+    const filteredLunchOverview = filterLunchOverviewRows(lunchOverviewData, {
+        searchName,
+        filterRfid,
+        filterDepartment,
+        filterDate,
+        fallbackDate: lunchDate
+    });
 
-        // Helper to parse "HH:mm:ss" duration to seconds
-        function parseDurationToSeconds(durationStr) {
-            if (typeof durationStr !== 'string') return 0;
-            const [hours, minutes, seconds] = durationStr.split(':').map(Number);
-            return (hours || 0) * 3600 + (minutes || 0) * 60 + (seconds || 0);
-        }
-
-        // Helper to format seconds to "HH:mm:ss"
-        function formatSecondsToDuration(totalSeconds) {
-            if (isNaN(totalSeconds) || totalSeconds < 0) return '00:00:00';
-            const hours = Math.floor(totalSeconds / 3600);
-            const minutes = Math.floor((totalSeconds % 3600) / 60);
-            const seconds = Math.floor(totalSeconds % 60);
-            return [hours, minutes, seconds].map(v => String(v).padStart(2, '0')).join(':');
-        }
-
-        // Step 1: Group all raw punches by employee and date, maintaining order
-        const punchesGroupedByDay = {};
-        attendanceData.forEach(record => {
-            const dateKey = new Date(record.date).toISOString().split('T')[0];
-            const employeeDateKey = `${record.rfid || 'Unknown'}_${dateKey}`;
-            if (!punchesGroupedByDay[employeeDateKey]) {
-                punchesGroupedByDay[employeeDateKey] = {
-                    ...record, // Copy some basic info
-                    date: dateKey,
-                    rawPunches: [], // Store all punches for this day/worker
-                    inTimes: [], // For display: list of in times
-                    outTimes: [], // For display: list of out times
-                    duration: '00:00:00',
-                    latestTimestamp: new Date(record.createdAt).getTime() // Keep track for sorting final list
-                };
-            }
-            punchesGroupedByDay[employeeDateKey].rawPunches.push(record);
-            punchesGroupedByDay[employeeDateKey].latestTimestamp = Math.max(
-                punchesGroupedByDay[employeeDateKey].latestTimestamp,
-                new Date(record.createdAt).getTime()
-            );
-        });
-
-        const processedDays = [];
-
-        for (const key in punchesGroupedByDay) {
-            const dayData = punchesGroupedByDay[key];
-            // Sort punches chronologically for the day
-            const sortedPunches = dayData.rawPunches.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-
-            let totalDurationSeconds = 0;
-            let lastInTimeSeconds = null; // To track the last "in" punch for pairing
-
-            dayData.inTimes = []; // Reset for accurate population below
-            dayData.outTimes = []; // Reset for accurate population below
-
-            for (let i = 0; i < sortedPunches.length; i++) {
-                const punch = sortedPunches[i];
-                const punchTimeSeconds = parseTime12hToSeconds(punch.time);
-
-                if (punch.presence) { // This is an IN punch
-                    lastInTimeSeconds = punchTimeSeconds;
-                    dayData.inTimes.push({ time: punch.time, isMissed: false }); // Always normal IN for display
-                } else { // This is an OUT punch
-                    let isProblematicOut = false;
-                    if (lastInTimeSeconds !== null) {
-                        // There was a preceding IN punch on this day
-                        if (punchTimeSeconds > lastInTimeSeconds) {
-                            totalDurationSeconds += (punchTimeSeconds - lastInTimeSeconds);
-                            lastInTimeSeconds = null; // Reset after a successful pair
-                        } else {
-                            // Out time is before or same as last in time on the same day (problematic)
-                            isProblematicOut = true;
-                        }
-                    } else {
-                        // Out punch without a preceding IN punch on this day (problematic)
-                        isProblematicOut = true;
-                    }
-
-                    // Prioritize backend flag if available, otherwise use heuristic
-                    dayData.outTimes.push({
-                        time: punch.time,
-                        isMissed: punch.isMissedOutPunch || isProblematicOut // Use backend flag or heuristic
-                    });
-                }
-            }
-
-            // If an IN punch was the last punch of the day, mark it as missed OUT (for display)
-            // This handles cases where an IN is followed by no OUT on the same day.
-            if (lastInTimeSeconds !== null) {
-                // Assume end of day for missed out punch visual.
-                // This is purely for display and doesn't create a new record in DB here.
-                dayData.outTimes.push({
-                    time: '-', // MODIFIED LINE: Changed 'FORGOTTEN OUT' to '-' or '' for empty default.
-                    isMissed: true // Mark as missed for display
-                });
-                // Also add the duration till a standard end of day for this specific visual placeholder
-                // You might need to refine totalDurationSeconds if you want to reflect this in the duration column
-                // For now, duration calculation below is only for matched pairs.
-            }
-
-            dayData.duration = formatSecondsToDuration(totalDurationSeconds);
-            processedDays.push(dayData);
-        }
-
-        // Sort the final list of processed days by latest activity
-        return processedDays.sort((a, b) => b.latestTimestamp - a.latestTimestamp);
-    }
-
-    // Function to download attendance data as CSV
+    // Function to download active-tab attendance data as CSV using active filters
     const downloadAttendanceCSV = () => {
-        if (processedAttendance.length === 0) {
+        if (activeTab === 'lunch') {
+            if (filteredLunchOverview.length === 0) {
+                toast.warning("No break overview data to download");
+                return;
+            }
+        } else if (processedAttendance.length === 0) {
             toast.warning("No attendance data to download");
             return;
         }
 
-        const headers = [
-            'Name',
-            'Employee ID (RFID)',
-            'Department',
-            'Date',
-            'In Times',
-            'Out Times',
-            'Duration'
-        ];
-
-        const csvRows = processedAttendance.map(record => [
-            record?.name || 'Unknown',
-            record?.rfid || 'Unknown',
-            record?.departmentName || 'N/A',
-            record.date || 'Unknown',
-            record.inTimes.map(inTime => inTime.time).join(' | '), // Extract time values
-            record.outTimes.map(outTime => outTime.time).join(' | '), // Extract time values
-            record.duration || '00:00:00'
-        ]);
-
-        let csvContent = headers.join(',') + '\n';
-        csvRows.forEach(row => {
-            const formattedRow = row.map(cell => {
-                if (cell === null || cell === undefined) return '';
-                const cellString = String(cell);
-                if (cellString.includes(',') || cellString.includes('"') || cellString.includes('\n')) {
-                    return `"${cellString.replace(/"/g, '""')}"`;
-                }
-                return cellString;
-            });
-            csvContent += formattedRow.join(',') + '\n';
+        const csvContent = buildAttendanceCsvContent({
+            activeTab,
+            processedAttendance,
+            filteredLunchOverview,
+            lunchDate
         });
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -466,13 +528,14 @@ const AttendanceManagement = () => {
         const link = document.createElement('a');
         link.setAttribute('href', url);
 
-        const today = new Date();
-        const formattedDate = today.toISOString().split('T')[0];
-        link.setAttribute('download', `Attendance_Report_${formattedDate}.csv`);
+        const formattedDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        const prefix = activeTab === 'lunch' ? 'Break_Overview' : 'Attendance_Report';
+        link.setAttribute('download', `${prefix}_${formattedDate}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url);
 
         toast.success("Attendance report downloaded successfully!");
     };
@@ -481,22 +544,29 @@ const AttendanceManagement = () => {
         {
             header: 'Name',
             accessor: 'name',
-            render: (record) => (
-                <div className="flex items-center">
-                    <img
-                        src={record?.photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(record?.name || 'U')}&background=0d9488&color=fff`}
-                        alt="Employee"
-                        className="w-8 h-8 rounded-full object-cover mr-2.5 shadow-sm border border-slate-150"
-                        onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(record?.name || 'U')}&background=0d9488&color=fff`;
-                        }}
-                    />
-                    <Link to={`/admin/attendance/${record.worker?._id}`} className="text-slate-800 font-semibold hover:text-teal-600 transition-colors">
-                        {record?.name || 'Unknown'}
-                    </Link>
-                </div>
-            )
+            render: (record) => {
+                const profileId = getWorkerProfileId(record);
+                return (
+                    <div className="flex items-center">
+                        <img
+                            src={record?.photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(record?.name || 'U')}&background=0d9488&color=fff`}
+                            alt="Employee"
+                            className="w-8 h-8 rounded-full object-cover mr-2.5 shadow-sm border border-slate-150"
+                            onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(record?.name || 'U')}&background=0d9488&color=fff`;
+                            }}
+                        />
+                        {profileId ? (
+                            <Link to={`/admin/attendance/${profileId}`} className="text-slate-800 font-semibold hover:text-teal-600 transition-colors">
+                                {record?.name || 'Unknown'}
+                            </Link>
+                        ) : (
+                            <span className="text-slate-800 font-semibold">{record?.name || 'Unknown'}</span>
+                        )}
+                    </div>
+                );
+            }
         },
         {
             header: 'Employee ID',
@@ -531,9 +601,21 @@ const AttendanceManagement = () => {
             render: (record) => (
                 <div className="flex flex-wrap justify-center gap-1">
                     {record.inTimes.map((inPunch, index) => (
-                        <span key={index} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
-                            {inPunch.time}
-                        </span>
+                        <div key={index} className="inline-flex flex-col items-center">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                {inPunch.time}
+                                {getBreakPunchLabel({ ...inPunch, presence: true }) === 'Break IN' && (
+                                    <span className="text-[10px] font-bold text-teal-700 bg-white/80 px-1 rounded">
+                                        Break IN
+                                    </span>
+                                )}
+                                {inPunch.lunchLateMinutes > 0 && (
+                                    <span className="text-[10px] font-bold text-rose-600">
+                                        +{inPunch.lunchLateMinutes}m
+                                    </span>
+                                )}
+                            </span>
+                        </div>
                     ))}
                 </div>
             )
@@ -546,13 +628,21 @@ const AttendanceManagement = () => {
                     {record.outTimes.map((outPunch, index) => (
                         <div key={index} className="inline-flex items-center justify-center">
                             {outPunch.time !== '-' ? (
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${outPunch.isMissed
+                                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${outPunch.isMissed
                                     ? 'bg-amber-50 text-amber-700 border-amber-100'
                                     : 'bg-rose-50 text-rose-700 border-rose-100'
                                     }`}>
                                     {outPunch.time}
-                                    {outPunch.isMissed && (
-                                        <AlertTriangle size={12} className="ml-1 text-amber-500" title="Missed Out Punch or Incomplete Pair" />
+                                    {getBreakPunchLabel({ ...outPunch, presence: false }) === 'Break OUT' && (
+                                        <span className="text-[10px] font-bold text-purple-700 bg-white/80 px-1 rounded">
+                                            Break OUT
+                                        </span>
+                                    )}
+                                    {outPunch.isMissingLunchReturn && (
+                                        <span className="text-[10px] font-bold text-rose-700">Missing Return</span>
+                                    )}
+                                    {outPunch.isMissed && !outPunch.isMissingLunchReturn && (
+                                        <AlertTriangle size={12} className="ml-0.5 text-amber-500" title="Missed Out Punch or Incomplete Pair" />
                                     )}
                                 </span>
                             ) : (
@@ -684,7 +774,12 @@ const AttendanceManagement = () => {
                         inputClassName="w-full h-10 text-sm border-slate-200 rounded-xl"
                         placeholder="Filter by date..."
                         value={filterDate}
-                        onChange={(val) => setFilterDate(val)}
+                        onChange={(val) => {
+                            setFilterDate(val);
+                            if (activeTab === 'lunch' && /^\d{4}-\d{2}-\d{2}$/.test(String(val || ''))) {
+                                setLunchDate(val);
+                            }
+                        }}
                     />
                 </div>
 
@@ -786,11 +881,11 @@ const AttendanceManagement = () => {
                         className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'lunch' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
                     >
                         <FiCoffee className="h-3.5 w-3.5" />
-                        <span>Lunch Break Overview</span>
+                        <span>Break Overview</span>
                     </button>
                 </div>
 
-                {activeTab === 'lunch' && (
+                {activeTab === 'lunch' ? (
                     <div className="flex items-center gap-2">
                         <label className="text-xs font-bold text-slate-600">Date:</label>
                         <input
@@ -801,10 +896,26 @@ const AttendanceManagement = () => {
                         />
                         <button
                             type="button"
-                            onClick={() => fetchLunchOverview(lunchDate)}
-                            className="px-3 py-1.5 bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100 rounded-lg text-xs font-bold transition-colors"
+                            disabled={isLunchLoading}
+                            onClick={() => fetchLunchOverview(lunchDate, lunchPage)}
+                            aria-label="Refresh break overview"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100 rounded-lg text-xs font-bold transition-colors disabled:opacity-60"
                         >
-                            Refresh
+                            <RotateCcw size={14} className={isLunchLoading ? 'animate-spin' : ''} />
+                            <span>{isLunchLoading ? 'Refreshing...' : 'Refresh'}</span>
+                        </button>
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            disabled={isDailyRefreshing}
+                            onClick={() => refreshLatestAttendance({ manual: true })}
+                            aria-label="Refresh attendance"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100 rounded-lg text-xs font-bold transition-colors disabled:opacity-60"
+                        >
+                            <RotateCcw size={14} className={isDailyRefreshing ? 'animate-spin' : ''} />
+                            <span>{isDailyRefreshing ? 'Refreshing...' : 'Refresh'}</span>
                         </button>
                     </div>
                 )}
@@ -813,83 +924,143 @@ const AttendanceManagement = () => {
             {activeTab === 'lunch' ? (
                 <div className="space-y-4">
                     {/* Lunch Config Banner */}
-                    <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs flex flex-wrap items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2.5 bg-teal-50 text-teal-600 rounded-xl">
-                                <FiCoffee className="h-5 w-5" />
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs flex flex-col gap-3">
+                        <div className="flex flex-wrap items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 bg-teal-50 text-teal-600 rounded-xl">
+                                    <FiCoffee className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-bold text-slate-900">Break Sessions Policy</h3>
+                                    <p className="text-xs text-slate-500">
+                                        {Array.isArray(lunchConfig?.sessions) && lunchConfig.sessions.length > 0
+                                            ? `${lunchConfig.sessions.filter(s => s.enabled !== false).length} active of ${lunchConfig.sessions.length} configured automatic break session(s)`
+                                            : `Out Time: ${lunchConfig?.lunchOutTime || '13:30'} | Return Deadline: ${lunchConfig?.returnDeadline || '14:30'} | Grace Period: ${lunchConfig?.gracePeriodMinutes || 0} mins`}
+                                    </p>
+                                </div>
                             </div>
-                            <div>
-                                <h3 className="text-sm font-bold text-slate-900">Lunch Break Policy</h3>
-                                <p className="text-xs text-slate-500">
-                                    Out Time: <span className="font-semibold text-slate-700">{lunchConfig?.lunchOutTime || '13:30'}</span> | Return Deadline: <span className="font-semibold text-slate-700">{lunchConfig?.returnDeadline || '14:30'}</span> | Grace Period: <span className="font-semibold text-slate-700">{lunchConfig?.gracePeriodMinutes || 0} mins</span>
-                                </p>
-                            </div>
+                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${lunchConfig?.enabled ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
+                                {lunchConfig?.enabled ? 'Policy Active' : 'Policy Disabled'}
+                            </span>
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${lunchConfig?.enabled ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
-                            {lunchConfig?.enabled ? 'Policy Active' : 'Policy Disabled'}
-                        </span>
                     </div>
 
                     {isLunchLoading ? (
                         <div className="flex justify-center py-12">
                             <Spinner size="md" variant="default" />
                         </div>
-                    ) : lunchOverviewData.length === 0 ? (
+                    ) : filteredLunchOverview.length === 0 ? (
                         <div className="bg-white rounded-2xl border border-slate-200/80 p-8 text-center text-slate-500 text-xs font-medium">
-                            No lunch break activity recorded for {lunchDate}.
+                            No break activity recorded for {lunchDate}.
                         </div>
                     ) : (
-                        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-black text-slate-500 uppercase tracking-wider">
-                                        <th className="px-4 py-3">Employee</th>
-                                        <th className="px-4 py-3">RFID</th>
-                                        <th className="px-4 py-3">Department</th>
-                                        <th className="px-4 py-3 text-center">Lunch Out</th>
-                                        <th className="px-4 py-3 text-center">Expected Return</th>
-                                        <th className="px-4 py-3 text-center">Actual Return</th>
-                                        <th className="px-4 py-3 text-center">Late Minutes</th>
-                                        <th className="px-4 py-3 text-center">Attendance Status</th>
-                                        <th className="px-4 py-3 text-center">Deduction Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 text-xs">
-                                    {lunchOverviewData.map((row, idx) => (
-                                        <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                                            <td className="px-4 py-3 font-bold text-slate-800">{row.name}</td>
-                                            <td className="px-4 py-3 font-mono text-slate-500">{row.rfid}</td>
-                                            <td className="px-4 py-3 text-slate-600">{row.department}</td>
-                                            <td className="px-4 py-3 text-center">
-                                                <span className="font-semibold text-slate-700">{row.lunchOutTime}</span>
-                                                <span className="block text-[10px] text-teal-600 font-bold">{row.lunchOutSource}</span>
-                                            </td>
-                                            <td className="px-4 py-3 text-center font-semibold text-slate-600">{row.expectedReturnTime}</td>
-                                            <td className="px-4 py-3 text-center font-semibold text-slate-700">{row.actualReturnTime}</td>
-                                            <td className="px-4 py-3 text-center font-bold text-slate-700">
-                                                {row.lateMinutes > 0 ? (
-                                                    <span className="text-rose-600 font-bold">+{row.lateMinutes} mins</span>
-                                                ) : (
-                                                    <span className="text-emerald-600">0 mins</span>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3 text-center">
-                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
-                                                    row.status === 'Returned On-Time' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                                    row.status === 'Late Return' ? 'bg-rose-50 text-rose-700 border-rose-200' :
-                                                    row.status === 'Missing Lunch Return' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                                                    'bg-amber-50 text-amber-700 border-amber-200'
-                                                }`}>
-                                                    {row.status}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3 text-center font-medium text-slate-600">
-                                                {row.deductionStatus}
-                                            </td>
+                        <div className="space-y-3">
+                            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-black text-slate-500 uppercase tracking-wider">
+                                            <th className="px-4 py-3">Employee</th>
+                                            <th className="px-4 py-3">RFID</th>
+                                            <th className="px-4 py-3">Department</th>
+                                            <th className="px-4 py-3 text-center">Break OUT</th>
+                                            <th className="px-4 py-3 text-center">Actual OUT Time</th>
+                                            <th className="px-4 py-3 text-center">Break IN</th>
+                                            <th className="px-4 py-3 text-center">Actual IN Time</th>
+                                            <th className="px-4 py-3 text-center">Late Minutes</th>
+                                            <th className="px-4 py-3 text-center">Missing Return Status</th>
+                                            <th className="px-4 py-3 text-center">Deduction Status</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 text-xs">
+                                        {filteredLunchOverview.map((row, idx) => {
+                                            const profileId = getWorkerProfileId(row);
+                                            const hasReturned = Boolean(row.actualReturnTime && row.actualReturnTime !== '-');
+                                            const isMissing = Boolean(row.isMissingLunchReturn || row.status === 'Missing Return' || row.status === 'Missing Lunch Return');
+                                            const displayStatus = isMissing ? 'Missing Return' : row.status;
+                                            return (
+                                                <tr key={`${row.workerId || row.rfid}_${row.sessionId || idx}_${idx}`} className="hover:bg-slate-50/50 transition-colors">
+                                                    <td className="px-4 py-3 font-bold text-slate-800">
+                                                        {profileId ? (
+                                                            <Link to={`/admin/attendance/${profileId}`} className="hover:text-teal-600 transition-colors">
+                                                                {row.name}
+                                                            </Link>
+                                                        ) : row.name}
+                                                    </td>
+                                                    <td className="px-4 py-3 font-mono text-slate-500">{row.rfid}</td>
+                                                    <td className="px-4 py-3 text-slate-600">{row.department}</td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                                            {row.breakOutLabel || 'Break OUT'}
+                                                        </span>
+                                                        <span className="block text-[10px] text-slate-500 mt-0.5 font-medium">{row.lunchOutSource}</span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        <span className="font-semibold text-slate-700">{row.lunchOutTime}</span>
+                                                        {row.expectedReturnTime && row.expectedReturnTime !== '-' && (
+                                                            <span className="block text-[10px] text-slate-400">Due: {row.expectedReturnTime}</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        {hasReturned ? (
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                                                                {row.breakInLabel || 'Break IN'}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-slate-400">—</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center font-semibold text-slate-700">{row.actualReturnTime || '-'}</td>
+                                                    <td className="px-4 py-3 text-center font-bold text-slate-700">
+                                                        {row.lateMinutes > 0 ? (
+                                                            <span className="text-rose-600 font-bold">+{row.lateMinutes} mins</span>
+                                                        ) : (
+                                                            <span className="text-emerald-600">0 mins</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                                                            displayStatus === 'Returned On-Time' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                                            displayStatus === 'Late Return' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                                                            isMissing ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                                            'bg-amber-50 text-amber-700 border-amber-200'
+                                                        }`}>
+                                                            {displayStatus}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center font-medium text-slate-600">
+                                                        {row.deductionStatus}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {lunchPagination.totalPages > 1 && (
+                                <div className="flex items-center justify-between px-4 py-2 bg-white rounded-xl border border-slate-200/80 text-xs">
+                                    <span className="text-slate-500">
+                                        Page {lunchPagination.currentPage} of {lunchPagination.totalPages} ({lunchPagination.totalRecords} records)
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            disabled={lunchPage <= 1}
+                                            onClick={() => fetchLunchOverview(lunchDate, lunchPage - 1)}
+                                            className="px-3 py-1 rounded-lg border border-slate-200 text-slate-600 font-semibold disabled:opacity-40 hover:bg-slate-50"
+                                        >
+                                            Previous
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={!lunchPagination.hasMore}
+                                            onClick={() => fetchLunchOverview(lunchDate, lunchPage + 1)}
+                                            className="px-3 py-1 rounded-lg border border-slate-200 text-slate-600 font-semibold disabled:opacity-40 hover:bg-slate-50"
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

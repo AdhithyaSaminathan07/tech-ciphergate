@@ -275,6 +275,235 @@ const getValidatedEmploymentDates = (worker, fromDate, toDate, options = {}) => 
   };
 };
 
+const parseMinutesFlexible = (timeStr) => {
+  if (!timeStr || typeof timeStr !== 'string') return 0;
+  const trimmed = timeStr.trim();
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(AM|PM))?$/i);
+  if (!match) return 0;
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const seconds = match[3] ? parseInt(match[3], 10) : 0;
+  const ampm = match[4];
+  if (ampm) {
+    if (ampm.toUpperCase() === 'PM' && hours < 12) hours += 12;
+    if (ampm.toUpperCase() === 'AM' && hours === 12) hours = 0;
+  }
+  return hours * 60 + minutes + seconds / 60;
+};
+
+const mergeTimeIntervals = (ranges = []) => {
+  const valid = ranges
+    .filter(r => r && typeof r.start === 'number' && typeof r.end === 'number' && r.end > r.start)
+    .map(r => ({ start: r.start, end: r.end }))
+    .sort((a, b) => a.start - b.start);
+  if (valid.length === 0) return [];
+  const merged = [valid[0]];
+  for (let idx = 1; idx < valid.length; idx++) {
+    const prev = merged[merged.length - 1];
+    const curr = valid[idx];
+    if (curr.start <= prev.end) {
+      prev.end = Math.max(prev.end, curr.end);
+    } else {
+      merged.push(curr);
+    }
+  }
+  return merged;
+};
+
+const getIntervalsOverlapMinutes = (rangeStart, rangeEnd, intervalsList = []) => {
+  if (rangeEnd <= rangeStart || !Array.isArray(intervalsList) || intervalsList.length === 0) return 0;
+  let overlap = 0;
+  for (const item of intervalsList) {
+    const s = Math.max(rangeStart, item.start);
+    const e = Math.min(rangeEnd, item.end);
+    if (e > s) overlap += (e - s);
+  }
+  return overlap;
+};
+
+const isLunchBreakApplicableToWorker = (worker, lunchConfig, session = null) => {
+  if (!lunchConfig || !lunchConfig.enabled) return false;
+  if (!worker) return true;
+  const hasSessionScope = Boolean(session && session.appliesTo && session.appliesTo !== 'inherit');
+  const scopeSource = hasSessionScope ? session : lunchConfig;
+  const mode = scopeSource.appliesTo || 'all';
+  if (mode === 'all') return true;
+  if (mode === 'departments') {
+    const deptId = worker.department?._id || worker.department;
+    if (!deptId) return false;
+    return (scopeSource.applicableDepartments || []).some(
+      d => d && d.toString() === deptId.toString()
+    );
+  }
+  if (mode === 'shifts') {
+    if (!worker.batch) return false;
+    return (scopeSource.applicableShifts || []).includes(worker.batch);
+  }
+  if (mode === 'employees') {
+    if (!worker._id) return false;
+    return (scopeSource.applicableEmployees || []).some(
+      e => e && e.toString() === worker._id.toString()
+    );
+  }
+  return false;
+};
+
+const resolveWorkerBreakWindows = ({
+  worker,
+  selectedBatch,
+  intervals = [],
+  lunchBreakManagement = null,
+  isLunchConsider = false,
+  explicitUnpaidLunch = false,
+  isFactoryWorkerToggle = false
+}) => {
+  const configuredSessions = (() => {
+    if (!lunchBreakManagement || !lunchBreakManagement.enabled) return [];
+    if (Array.isArray(lunchBreakManagement.sessions) && lunchBreakManagement.sessions.length > 0) {
+      return lunchBreakManagement.sessions
+        .filter(s => s && s.enabled !== false && isLunchBreakApplicableToWorker(worker, lunchBreakManagement, s))
+        .map((s, idx) => ({
+          ...s,
+          id: (typeof s.id === 'string' && s.id.trim()) || (s._id ? String(s._id) : `session_${idx + 1}`),
+          enabled: true,
+          outTime: s.outTime || lunchBreakManagement.lunchOutTime || '13:30',
+          returnDeadline: s.returnDeadline || lunchBreakManagement.returnDeadline || '14:30',
+          gracePeriodMinutes: Math.max(0, Number(s.gracePeriodMinutes ?? lunchBreakManagement.gracePeriodMinutes ?? 0))
+        }));
+    }
+    if (
+      isLunchBreakApplicableToWorker(worker, lunchBreakManagement) &&
+      lunchBreakManagement.lunchOutTime &&
+      lunchBreakManagement.returnDeadline
+    ) {
+      return [{
+        id: 'legacy_lunch_session',
+        name: 'Break Session 1',
+        enabled: true,
+        outTime: lunchBreakManagement.lunchOutTime,
+        returnDeadline: lunchBreakManagement.returnDeadline,
+        gracePeriodMinutes: Math.max(0, Number(lunchBreakManagement.gracePeriodMinutes ?? 0))
+      }];
+    }
+    return [];
+  })();
+  const isLunchManagementApplicable = configuredSessions.length > 0;
+
+  const batchLunchFrom = selectedBatch?.lunchFrom || null;
+  const batchLunchTo = selectedBatch?.lunchTo || null;
+  const batchLunchStart = batchLunchFrom ? parseMinutesFlexible(batchLunchFrom) : 0;
+  const batchLunchEnd = batchLunchTo ? parseMinutesFlexible(batchLunchTo) : 0;
+  const batchLunchDuration = batchLunchEnd > batchLunchStart ? (batchLunchEnd - batchLunchStart) : 0;
+
+  // Determine if a configured session supersedes the shift's legacy batch lunch window purely by schedule overlap or matching duration — never by break name
+  const isPrimaryBreakSession = (s) => {
+    const sStart = parseMinutesFlexible(s.outTime);
+    const sEnd = parseMinutesFlexible(s.returnDeadline);
+    const overlapsBatchLunch = batchLunchEnd > batchLunchStart &&
+      Math.min(batchLunchEnd, sEnd) > Math.max(batchLunchStart, sStart);
+    const matchesBatchDuration = batchLunchDuration > 0 &&
+      (sEnd - sStart) >= batchLunchDuration &&
+      s.isBreakConsider !== true &&
+      s.isPaid !== true;
+    return overlapsBatchLunch || matchesBatchDuration;
+  };
+
+  let lunchFrom;
+  let lunchTo;
+  let lunchGraceMinutes = 0;
+
+  if (isLunchManagementApplicable && configuredSessions.length === 1) {
+    lunchFrom = configuredSessions[0].outTime;
+    lunchTo = configuredSessions[0].returnDeadline;
+    lunchGraceMinutes = configuredSessions[0].gracePeriodMinutes || 0;
+  } else if (isLunchManagementApplicable && configuredSessions.length > 1) {
+    const primaryLunchSession = configuredSessions.find(isPrimaryBreakSession);
+    if (primaryLunchSession) {
+      lunchFrom = primaryLunchSession.outTime;
+      lunchTo = primaryLunchSession.returnDeadline;
+      lunchGraceMinutes = primaryLunchSession.gracePeriodMinutes || 0;
+    } else if (batchLunchFrom && batchLunchTo) {
+      lunchFrom = batchLunchFrom;
+      lunchTo = batchLunchTo;
+      lunchGraceMinutes = lunchBreakManagement.gracePeriodMinutes || 0;
+    } else {
+      lunchFrom = lunchBreakManagement.lunchOutTime || '12:00';
+      lunchTo = lunchBreakManagement.returnDeadline || '13:00';
+      lunchGraceMinutes = lunchBreakManagement.gracePeriodMinutes || 0;
+    }
+  } else {
+    lunchFrom = batchLunchFrom || '12:00';
+    lunchTo = batchLunchTo || '13:00';
+  }
+
+  const lunchStart = parseMinutesFlexible(lunchFrom);
+  const lunchEnd = parseMinutesFlexible(lunchTo);
+
+  const sessionsRepresentBatchLunch = isLunchManagementApplicable && configuredSessions.length > 0 && (
+    configuredSessions.length === 1 ||
+    configuredSessions.some(isPrimaryBreakSession)
+  );
+
+  const rawUnpaidLunchWindows = [];
+  if (!isLunchConsider && !isFactoryWorkerToggle && !sessionsRepresentBatchLunch && lunchEnd > lunchStart) {
+    rawUnpaidLunchWindows.push({ start: lunchStart, end: lunchEnd });
+  }
+
+  if (configuredSessions.length > 0 && !isFactoryWorkerToggle) {
+    const includeMultiSession = configuredSessions.length > 1 && (explicitUnpaidLunch || !batchLunchFrom);
+    configuredSessions.forEach(s => {
+      if (s.isBreakConsider === true || s.isPaid === true) {
+        return;
+      }
+      const isSessionExplicitlyUnpaid = s.isBreakConsider === false || s.isPaid === false;
+      const isSingleSessionUnpaid = configuredSessions.length === 1 && !isLunchConsider;
+      const isMultiSessionPrimaryUnpaid = configuredSessions.length > 1 && isPrimaryBreakSession(s) && !isLunchConsider;
+      if (isSessionExplicitlyUnpaid || isSingleSessionUnpaid || isMultiSessionPrimaryUnpaid || (!isLunchConsider && includeMultiSession)) {
+        const sStart = parseMinutesFlexible(s.outTime);
+        const sEnd = parseMinutesFlexible(s.returnDeadline);
+        if (sEnd > sStart) {
+          rawUnpaidLunchWindows.push({ start: sStart, end: sEnd });
+        }
+      }
+    });
+  }
+
+  const unpaidLunchWindows = mergeTimeIntervals(rawUnpaidLunchWindows);
+  const unpaidIntervalWindows = mergeTimeIntervals(
+    (Array.isArray(intervals) ? intervals : [])
+      .filter(interval => interval && !interval.isBreakConsider)
+      .map(interval => ({
+        start: parseMinutesFlexible(interval.from),
+        end: parseMinutesFlexible(interval.to)
+      }))
+  );
+  const allUnpaidBreakWindows = mergeTimeIntervals([
+    ...unpaidLunchWindows,
+    ...unpaidIntervalWindows
+  ]);
+  const allBreakWindows = mergeTimeIntervals([
+    { start: lunchStart, end: lunchEnd },
+    ...configuredSessions.map(s => ({
+      start: parseMinutesFlexible(s.outTime),
+      end: parseMinutesFlexible(s.returnDeadline)
+    }))
+  ]);
+
+  return {
+    isLunchManagementApplicable,
+    configuredSessions,
+    lunchFrom,
+    lunchTo,
+    lunchStart,
+    lunchEnd,
+    lunchGraceMinutes,
+    unpaidLunchWindows,
+    unpaidIntervalWindows,
+    allUnpaidBreakWindows,
+    allBreakWindows
+  };
+};
+
 /**
  * Multiple Employment Periods Helper
  * Evaluates whether a given date falls inside an employee's validated active employment period.
@@ -348,13 +577,23 @@ const calculateWorkerProductivity = (productivityParameters) => {
   let currentMonthPaidLeaveCount = 0;
   let lastMonthIdx = -1;
 
-  const timeToMinutes = (timeStr) => {
-    if (!timeStr) return 0;
-    const parts = timeStr.split(':').map(Number);
-    const hours = parts[0] || 0;
-    const minutes = parts[1] || 0;
-    const seconds = parts[2] || 0;
-    return hours * 60 + minutes + seconds / 60;
+  const timeToMinutes = parseMinutesFlexible;
+
+  const findMatchedBreakSession = (sessions, punchRecord, outTimeMinutes) => {
+    if (!Array.isArray(sessions) || sessions.length === 0) return null;
+    const outId = punchRecord?.outSessionId;
+    if (outId) {
+      const byId = sessions.find(s => s.id === outId);
+      if (byId) return byId;
+    }
+    if (typeof outTimeMinutes === 'number') {
+      return sessions.find(s => {
+        const sStart = timeToMinutes(s.outTime) - 5;
+        const sEnd = timeToMinutes(s.returnDeadline) + (Number(s.gracePeriodMinutes) || 0);
+        return outTimeMinutes >= sStart && outTimeMinutes <= sEnd;
+      }) || null;
+    }
+    return null;
   };
 
   const minutesToTime = (totalMinutes) => {
@@ -657,32 +896,38 @@ const calculateWorkerProductivity = (productivityParameters) => {
     finalWorkingInterval = rawWorkingInterval;
     let intervalDeductions = [];
 
-    if (!options.isLunchConsider && !selectedBatch?.isFactoryWorkerToggle) {
-      const lunchStart = timeToMinutes(lunchFrom);
-      const lunchEnd = timeToMinutes(lunchTo);
-      if (intervalStart < lunchEnd && intervalEnd > lunchStart) {
-        const lunchOverlap = Math.min(intervalEnd, lunchEnd) - Math.max(intervalStart, lunchStart);
-        finalWorkingInterval -= Math.max(0, lunchOverlap);
+    let accountedBreaks = [];
+    if (!selectedBatch?.isFactoryWorkerToggle && unpaidLunchWindows.length > 0) {
+      const lunchOverlap = getIntervalsOverlapMinutes(intervalStart, intervalEnd, unpaidLunchWindows);
+      if (lunchOverlap > 0) {
+        finalWorkingInterval -= lunchOverlap;
         intervalDeductions.push({
           type: 'Lunch',
           deductedMinutes: lunchOverlap,
           reason: 'Lunch break deduction'
         });
       }
+      accountedBreaks = [...unpaidLunchWindows];
     }
 
     intervals.forEach(interval => {
       if (!interval.isBreakConsider) {
         const breakStart = timeToMinutes(interval.from);
         const breakEnd = timeToMinutes(interval.to);
-        if (intervalStart < breakEnd && intervalEnd > breakStart) {
-          const breakOverlap = Math.min(intervalEnd, breakEnd) - Math.max(intervalStart, breakStart);
-          finalWorkingInterval -= Math.max(0, breakOverlap);
-          intervalDeductions.push({
-            type: `Break`,
-            deductedMinutes: breakOverlap,
-            reason: `Break interval ${interval.from} - ${interval.to}`
-          });
+        const effStart = Math.max(intervalStart, breakStart);
+        const effEnd = Math.min(intervalEnd, breakEnd);
+        if (effEnd > effStart) {
+          const alreadyDeducted = getIntervalsOverlapMinutes(effStart, effEnd, accountedBreaks);
+          const breakOverlap = Math.max(0, (effEnd - effStart) - alreadyDeducted);
+          if (breakOverlap > 0) {
+            finalWorkingInterval -= breakOverlap;
+            intervalDeductions.push({
+              type: `Break`,
+              deductedMinutes: breakOverlap,
+              reason: `Break interval ${interval.from} - ${interval.to}`
+            });
+            accountedBreaks = mergeTimeIntervals([...accountedBreaks, { start: breakStart, end: breakEnd }]);
+          }
         }
       }
     });
@@ -724,15 +969,9 @@ const calculateWorkerProductivity = (productivityParameters) => {
         // Calculate unworked time for the full work day
         let unworkedMinutes = workEnd - workStart;
 
-        // Exclude lunch time if applicable
-        if (!isLunchConsider) {
-          const lunchStart = timeToMinutes(lunchFrom);
-          const lunchEnd = timeToMinutes(lunchTo);
-          const lunchOverlapStart = Math.max(workStart, lunchStart);
-          const lunchOverlapEnd = Math.min(workEnd, lunchEnd);
-          if (lunchOverlapEnd > lunchOverlapStart) {
-            unworkedMinutes -= (lunchOverlapEnd - lunchOverlapStart);
-          }
+        // Exclude lunch/unpaid break intervals if applicable
+        if (!isLunchConsider && unpaidLunchWindows.length > 0) {
+          unworkedMinutes -= getIntervalsOverlapMinutes(workStart, workEnd, unpaidLunchWindows);
         }
 
         if (unworkedMinutes > 0) {
@@ -842,9 +1081,9 @@ const calculateWorkerProductivity = (productivityParameters) => {
             const previousSession = allPairs[pairIndex - 1];
             // If the previous session was an orphaned OUT, it's not a continuation
             if (!previousSession.isOrphanedOut) {
-              const prevOutId = previousSession.out.record?.outSessionId;
-              const isPrevSessionBreakOut = previousSession.out.record?.punchType === 'LUNCH_OUT' ||                                           previousSession.out.record?.isLunchPunch ||
-                                           configuredSessions.some(s => (prevOutId && s.id === prevOutId) || (previousSession.out.time >= timeToMinutes(s.outTime) - 5 && previousSession.out.time <= timeToMinutes(s.returnDeadline)));
+              const isPrevSessionBreakOut = previousSession.out.record?.punchType === 'LUNCH_OUT' ||
+                                           previousSession.out.record?.isLunchPunch ||
+                                           Boolean(findMatchedBreakSession(configuredSessions, previousSession.out.record, previousSession.out.time));
 
               if (!isPrevSessionBreakOut && (previousSession.out.time < lunchStart || previousSession.out.time > lunchEnd)) {
                 isContinuation = true;
@@ -857,10 +1096,9 @@ const calculateWorkerProductivity = (productivityParameters) => {
             lateMinutes = inPunch.record.lunchLateMinutes;
           } else if (!isContinuation && configuredSessions.length > 0) {
             const previousSession = pairIndex > 0 ? allPairs[pairIndex - 1] : null;
-            const prevOutId = previousSession?.out?.record?.outSessionId;
-            const matchedSession = configuredSessions.find(s =>              (prevOutId && s.id === prevOutId) ||
-              (previousSession && previousSession.out.time >= timeToMinutes(s.outTime) - 5 && previousSession.out.time <= timeToMinutes(s.returnDeadline))
-            );
+            const matchedSession = previousSession
+              ? findMatchedBreakSession(configuredSessions, previousSession.out.record, previousSession.out.time)
+              : findMatchedBreakSession(configuredSessions, inPunch.record, null);
             if (matchedSession) {
               const sessionDeadline = timeToMinutes(matchedSession.returnDeadline);
               const sessionGrace = matchedSession.gracePeriodMinutes || 0;
@@ -868,15 +1106,21 @@ const calculateWorkerProductivity = (productivityParameters) => {
               if (inPunch.time > effectiveDeadline) {
                 lateMinutes = inPunch.time - effectiveDeadline;
               }
-            } else {
+            } else if ((inPunch.record?.punchType === 'LUNCH_IN' || inPunch.record?.isLunchPunch) &&
+                       typeof inPunch.record?.lunchLateMinutes === 'number') {
+              lateMinutes = inPunch.record.lunchLateMinutes;
+            } else if (!previousSession || previousSession.out.time <= lunchEnd || configuredSessions.length <= 1) {
               const effectiveLunchDeadline = lunchEnd + lunchGraceMinutes;
               if (inPunch.time > effectiveLunchDeadline && workStart < lunchStart) {
                 lateMinutes = inPunch.time - effectiveLunchDeadline;
               }
             }
+          } else if (!isContinuation && (inPunch.record?.punchType === 'LUNCH_IN' || inPunch.record?.isLunchPunch) &&
+                     typeof inPunch.record?.lunchLateMinutes === 'number') {
+            lateMinutes = inPunch.record.lunchLateMinutes;
           } else if (!isContinuation && inPunch.time > (lunchEnd + lunchGraceMinutes)) {
-            // Only apply late arrival penalty if this is not a continuation of work
-            if (workStart < lunchStart) {
+            // Only apply late arrival penalty if this is not a continuation of work and not an unmatched post-lunch break
+            if (workStart < lunchStart && (!configuredSessions.length || configuredSessions.length <= 1)) {
               lateMinutes = inPunch.time - (lunchEnd + lunchGraceMinutes);
             }
           }
@@ -949,17 +1193,23 @@ const calculateWorkerProductivity = (productivityParameters) => {
         // If the first actual working session was during lunch, don't calculate early departure
         // because they didn't work the full afternoon shift
         if (!isFirstWorkingSessionDuringLunch) {
+          const subtractUnpaidBreakOverlap = (rangeStart, rangeEnd) => {
+            if (rangeEnd <= rangeStart) return 0;
+            const gross = rangeEnd - rangeStart;
+            if (isLunchConsider || unpaidLunchWindows.length === 0) return gross;
+            const overlap = getIntervalsOverlapMinutes(rangeStart, rangeEnd, unpaidLunchWindows);
+            return Math.max(0, gross - overlap);
+          };
+
           // Normal early departure calculation
-
-          // If employee punched out before lunch start
           if (outPunch.time < lunchStart) {
-            // Early departure from morning shift
-            earlyMinutes = lunchStart - outPunch.time;
+            // Early departure from morning shift (excluding any unpaid morning break overlap)
+            earlyMinutes = subtractUnpaidBreakOverlap(outPunch.time, lunchStart);
 
-            // CRITICAL FIX: If this is the last session of the day,            // they didn't work the afternoon shift either.
+            // CRITICAL FIX: If this is the last session of the day, they didn't work the afternoon shift either.
             const isLastSession = pairIndex === allPairs.length - 1;
             if (isLastSession) {
-              const unworkedAfternoonMinutes = workEnd - lunchEnd;
+              const unworkedAfternoonMinutes = subtractUnpaidBreakOverlap(lunchEnd, workEnd);
               if (unworkedAfternoonMinutes > 0) {
                 totalDelayMinutes += unworkedAfternoonMinutes;
                 delayDetails.push({
@@ -972,14 +1222,10 @@ const calculateWorkerProductivity = (productivityParameters) => {
           }
           // If employee punched out during lunch period
           else if (outPunch.time >= lunchStart && outPunch.time <= lunchEnd) {
-            // They punched out during lunch period
-            // No early departure penalty since they're still within the work day
-            // BUT if this is the last session of the day, we should treat it as unworked afternoon time
             const isLastSession = pairIndex === allPairs.length - 1;
             if (isLastSession) {
-              // Employee left during lunch and didn't return
-              // Deduct unworked time from lunch end to work end
-              const unworkedAfternoonMinutes = workEnd - lunchEnd;
+              // Employee left during lunch and didn't return: exclude any remaining unpaid breaks after lunchEnd
+              const unworkedAfternoonMinutes = subtractUnpaidBreakOverlap(lunchEnd, workEnd);
               if (unworkedAfternoonMinutes > 0) {
                 totalDelayMinutes += unworkedAfternoonMinutes;
                 delayDetails.push({
@@ -992,10 +1238,9 @@ const calculateWorkerProductivity = (productivityParameters) => {
           }
           // If employee punched out after lunch end but before work end
           else if (outPunch.time > lunchEnd && outPunch.time < workEnd) {
-            // Early departure from afternoon shift/full day
-            earlyMinutes = workEnd - outPunch.time;
+            // Early departure excluding any unpaid break windows (e.g., Tea Break 16:00-16:15) inside [outPunch.time, workEnd]
+            earlyMinutes = subtractUnpaidBreakOverlap(outPunch.time, workEnd);
           }
-          // If employee punched out after work end, no early departure penalty (overtime)
 
           // Only add positive early minutes
           if (earlyMinutes > 0) {
@@ -1024,9 +1269,10 @@ const calculateWorkerProductivity = (productivityParameters) => {
           }
 
           if (isLastActualWorkingSession) {
-            // Employee left during lunch and didn't return for subsequent sessions
-            // Deduct unworked time from lunch end to work end
-            const unworkedAfternoonMinutes = workEnd - lunchEnd;
+            const unpaidOverlap = (!isLunchConsider && unpaidLunchWindows.length > 0)
+              ? getIntervalsOverlapMinutes(lunchEnd, workEnd, unpaidLunchWindows)
+              : 0;
+            const unworkedAfternoonMinutes = Math.max(0, (workEnd - lunchEnd) - unpaidOverlap);
             if (unworkedAfternoonMinutes > 0) {
               totalDelayMinutes += unworkedAfternoonMinutes;
               delayDetails.push({
@@ -1080,34 +1326,23 @@ const calculateWorkerProductivity = (productivityParameters) => {
           // but that caused the gap to go unpenalized.
         }
         // If current session ends during lunch period or was an authorized break session, no inter-work permission is calculated
-        const currentOutSessionId = outPunch.record?.outSessionId;
         const isCurrentSessionBreakOut = outPunch.record?.punchType === 'LUNCH_OUT' ||
                                         outPunch.record?.isLunchPunch ||
                                         (outPunch.time >= lunchStart && outPunch.time <= lunchEnd) ||
-                                        configuredSessions.some(s => (currentOutSessionId && s.id === currentOutSessionId) || (outPunch.time >= timeToMinutes(s.outTime) - 5 && outPunch.time <= timeToMinutes(s.returnDeadline)));
+                                        Boolean(findMatchedBreakSession(configuredSessions, outPunch.record, outPunch.time));
 
         if (isCurrentSessionBreakOut) {
           // No inter-work permission penalty since they punched out for an authorized break session
         } else {
-          // Calculate inter-work permission time only if not during lunch
+          // Calculate inter-work permission time only if not during authorized break windows
           // NEW: Ensure the gap only counts time WITHIN shift hours
           const gapStart = Math.max(outPunch.time, workStart);
           const gapEnd = Math.min(nextSession.in.time, workEnd);
           let interPermissionMinutes = Math.max(0, gapEnd - gapStart);
 
-          // Handle lunch overlap if the gap spans across the lunch period
-          if (interPermissionMinutes > 0 && gapStart < lunchEnd && gapEnd > lunchStart) {
-            let timeBeforeLunch = 0;
-            if (gapStart < lunchStart) {
-              timeBeforeLunch = Math.min(lunchStart, gapEnd) - gapStart;
-            }
-
-            let timeAfterLunch = 0;
-            if (gapEnd > lunchEnd) {
-              timeAfterLunch = gapEnd - Math.max(lunchEnd, gapStart);
-            }
-
-            interPermissionMinutes = timeBeforeLunch + timeAfterLunch;
+          // Exclude overlap with any authorized lunch/break window
+          if (interPermissionMinutes > 0 && allBreakWindows.length > 0) {
+            interPermissionMinutes = Math.max(0, interPermissionMinutes - getIntervalsOverlapMinutes(gapStart, gapEnd, allBreakWindows));
           }
 
           // Strictly deduct ALL gaps between sessions (Active Time Only)
@@ -1147,13 +1382,9 @@ const calculateWorkerProductivity = (productivityParameters) => {
         // Calculate total work time excluding lunch
         let totalWorkTime = workEnd - workStart;
 
-        // Exclude lunch time if applicable
-        if (!isLunchConsider) {
-          const lunchOverlapStart = Math.max(workStart, lunchStart);
-          const lunchOverlapEnd = Math.min(workEnd, lunchEnd);
-          if (lunchOverlapEnd > lunchOverlapStart) {
-            totalWorkTime -= (lunchOverlapEnd - lunchOverlapStart);
-          }
+        // Exclude lunch/unpaid break time if applicable
+        if (!isLunchConsider && unpaidLunchWindows.length > 0) {
+          totalWorkTime -= getIntervalsOverlapMinutes(workStart, workEnd, unpaidLunchWindows);
         }
 
         unworkedMinutes = totalWorkTime;
@@ -1165,16 +1396,10 @@ const calculateWorkerProductivity = (productivityParameters) => {
         // NEW: Ensure penalty only counts time WITHIN shift hours
         let remainingShiftTime = workEnd - Math.max(inPunch.time, workStart);
 
-        // Adjust for lunch if the remaining time overlaps with lunch
+        // Adjust for lunch/unpaid breaks if the remaining time overlaps with them
         const effectivePunchIn = Math.max(inPunch.time, workStart);
-        if (!isLunchConsider && effectivePunchIn < lunchEnd && workEnd > lunchStart) {
-          // Calculate lunch overlap with the remaining shift time
-          const lunchOverlapStart = Math.max(effectivePunchIn, lunchStart);
-          const lunchOverlapEnd = Math.min(workEnd, lunchEnd);
-
-          if (lunchOverlapEnd > lunchOverlapStart) {
-            remainingShiftTime -= (lunchOverlapEnd - lunchOverlapStart);
-          }
+        if (!isLunchConsider && unpaidLunchWindows.length > 0) {
+          remainingShiftTime -= getIntervalsOverlapMinutes(effectivePunchIn, workEnd, unpaidLunchWindows);
         }
 
         // Ensure we don't have negative time
@@ -1228,41 +1453,37 @@ const calculateWorkerProductivity = (productivityParameters) => {
     options.isLunchConsider = true;
   }
 
-  const isLunchManagementActive = lunchBreakManagement && lunchBreakManagement.enabled;
-  const lunchFrom = isLunchManagementActive && lunchBreakManagement.lunchOutTime
-    ? lunchBreakManagement.lunchOutTime
-    : (selectedBatch ? selectedBatch.lunchFrom : '12:00');
-  const lunchTo = isLunchManagementActive && lunchBreakManagement.returnDeadline
-    ? lunchBreakManagement.returnDeadline
-    : (selectedBatch ? selectedBatch.lunchTo : '13:00');
-  const lunchGraceMinutes = isLunchManagementActive ? (lunchBreakManagement.gracePeriodMinutes || 0) : 0;
-  const configuredSessions = (isLunchManagementActive && Array.isArray(lunchBreakManagement.sessions) && lunchBreakManagement.sessions.length > 0)
-    ? lunchBreakManagement.sessions.filter(s => s.enabled)
-    : [];
-  const lunchStart = timeToMinutes(lunchFrom);
-  const lunchEnd = timeToMinutes(lunchTo);
+  const explicitUnpaidLunch = !isFactoryWorkerToggle && (
+    options.isLunchConsider === false ||
+    selectedBatch?.isLunchConsider === false
+  );
+
+  const {
+    configuredSessions,
+    lunchFrom,
+    lunchTo,
+    lunchStart,
+    lunchEnd,
+    lunchGraceMinutes,
+    unpaidLunchWindows,
+    allUnpaidBreakWindows,
+    allBreakWindows
+  } = resolveWorkerBreakWindows({
+    worker,
+    selectedBatch,
+    intervals,
+    lunchBreakManagement,
+    isLunchConsider: Boolean(options.isLunchConsider),
+    explicitUnpaidLunch,
+    isFactoryWorkerToggle
+  });
 
   let standardWorkingMinutes = workEnd - workStart;
 
   if (isFactoryWorkerToggle) {
     standardWorkingMinutes = requiredWorkingHours * 60;
-  } else {
-    if (!options.isLunchConsider) {
-      // Only subtract lunch time if it overlaps with the work period
-      const lunchOverlapStart = Math.max(workStart, lunchStart);
-      const lunchOverlapEnd = Math.min(workEnd, lunchEnd);
-      if (lunchOverlapEnd > lunchOverlapStart) {
-        standardWorkingMinutes -= (lunchOverlapEnd - lunchOverlapStart);
-      }
-    }
-
-    intervals.forEach(interval => {
-      if (!interval.isBreakConsider) {
-        const intervalStart = timeToMinutes(interval.from);
-        const intervalEnd = timeToMinutes(interval.to);
-        standardWorkingMinutes -= (intervalEnd - intervalStart);
-      }
-    });
+  } else if (allUnpaidBreakWindows.length > 0) {
+    standardWorkingMinutes -= getIntervalsOverlapMinutes(workStart, workEnd, allUnpaidBreakWindows);
   }
 
   const filteredData = attendanceData.filter(record => {
@@ -1521,14 +1742,13 @@ const calculateWorkerProductivity = (productivityParameters) => {
 
     // Process each IN-OUT pair
     pairs.forEach((pair, index) => {
-      // âœ… FIX 2: Ignore lunch-only sessions (both IN and OUT within lunch period)
-      // These sessions should not earn salary and should not incur delay
-      const isInsideLunch =
-        pair.in.time >= lunchStart &&
-        pair.out.time <= lunchEnd;
+      // Ignore break-only sessions (both IN and OUT completely within lunch or any configured break window)
+      const isInsideBreakWindow =
+        (pair.in.time >= lunchStart && pair.out.time <= lunchEnd) ||
+        allBreakWindows.some(w => w.end > w.start && pair.in.time >= w.start && pair.out.time <= w.end);
 
-      if (isInsideLunch) {
-        // Skip salary + skip delay for lunch-only sessions
+      if (isInsideBreakWindow) {
+        // Skip salary + skip delay for break-only sessions
         // Still add to detailed breakdown for visibility
         dayData.detailedBreakdown.intervals.push({
           intervalNumber: index + 1,
@@ -1536,7 +1756,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
           outTime: formatTime(pair.out.time),
           rawMinutes: 0,
           finalMinutes: 0,
-          deductions: [{ type: 'Lunch Session', deductedMinutes: 0, reason: 'Session during lunch break - no salary' }],
+          deductions: [{ type: 'Break Session', deductedMinutes: 0, reason: 'Session during break window - no salary' }],
           totalDeducted: 0
         });
         return; // skip this pair entirely
@@ -2736,24 +2956,9 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
   let perMinuteSalary = 0;
   let workStart = 0;
   let workEnd = 0;
-  let lunchStart = 0;
-  let lunchEnd = 0;
-  let isLunchConsider = false;
+  let unauthBreakWindows = [];
 
-  const timeToMinutes = (timeStr) => {
-    if (!timeStr) return 0;
-    let time = timeStr.trim();
-    const match = time.match(/^(\d+):(\d+)(?:\s*(AM|PM))?$/i);
-    if (!match) return 0;
-    let hours = parseInt(match[1]);
-    const minutes = parseInt(match[2]);
-    const ampm = match[3];
-    if (ampm) {
-      if (ampm.toUpperCase() === 'PM' && hours < 12) hours += 12;
-      if (ampm.toUpperCase() === 'AM' && hours === 12) hours = 0;
-    }
-    return hours * 60 + minutes;
-  };
+  const timeToMinutes = parseMinutesFlexible;
 
   if (enableUnauthorizedPermissionPenalty) {
     const selectedBatch = settings?.batches?.find(batch => batch.batchName === worker.batch);
@@ -2761,33 +2966,27 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
     const workEndTime = selectedBatch ? selectedBatch.to : '19:00';
     workStart = timeToMinutes(workStartTime);
     workEnd = timeToMinutes(workEndTime);
+
+    const isFactoryWorkerToggle = Boolean(selectedBatch?.isFactoryWorkerToggle);
+    const isLunchConsider = Boolean(selectedBatch ? selectedBatch.isLunchConsider : false);
+    const explicitUnpaidLunch = !isFactoryWorkerToggle && (!selectedBatch || selectedBatch.isLunchConsider === false);
+
+    const resolvedBreaks = resolveWorkerBreakWindows({
+      worker,
+      selectedBatch,
+      intervals: settings?.intervals || [],
+      lunchBreakManagement: settings?.lunchBreakManagement || null,
+      isLunchConsider,
+      explicitUnpaidLunch,
+      isFactoryWorkerToggle
+    });
+    unauthBreakWindows = resolvedBreaks.allUnpaidBreakWindows;
+
     let standardWorkingMinutes = workEnd - workStart;
-
-    isLunchConsider = selectedBatch ? selectedBatch.isLunchConsider : false;
-    if (!isLunchConsider) {
-      const lunchFrom = selectedBatch ? selectedBatch.lunchFrom : '12:00';
-      const lunchTo = selectedBatch ? selectedBatch.lunchTo : '13:00';
-      lunchStart = timeToMinutes(lunchFrom);
-      lunchEnd = timeToMinutes(lunchTo);
-      const lunchOverlapStart = Math.max(workStart, lunchStart);
-      const lunchOverlapEnd = Math.min(workEnd, lunchEnd);
-      if (lunchOverlapEnd > lunchOverlapStart) {
-        standardWorkingMinutes -= (lunchOverlapEnd - lunchOverlapStart);
-      }
-    }
-
-    if (settings?.intervals) {
-      settings.intervals.forEach(interval => {
-        if (!interval.isBreakConsider) {
-          const intervalStart = timeToMinutes(interval.from);
-          const intervalEnd = timeToMinutes(interval.to);
-          const intervalOverlapStart = Math.max(workStart, intervalStart);
-          const intervalOverlapEnd = Math.min(workEnd, intervalEnd);
-          if (intervalOverlapEnd > intervalOverlapStart) {
-            standardWorkingMinutes -= (intervalOverlapEnd - intervalOverlapStart);
-          }
-        }
-      });
+    if (isFactoryWorkerToggle) {
+      standardWorkingMinutes = (selectedBatch?.requiredWorkingHours || 8) * 60;
+    } else if (unauthBreakWindows.length > 0) {
+      standardWorkingMinutes -= getIntervalsOverlapMinutes(workStart, workEnd, unauthBreakWindows);
     }
 
     if (standardWorkingMinutes <= 0) standardWorkingMinutes = 540;
@@ -2911,28 +3110,9 @@ const calculateUnauthorizedAbsencePenalty = (worker, fromDate, toDate, allLeaves
         let permMinutes = permEnd - permStart;
 
         if (permMinutes > 0) {
-          // Adjust for lunch overlap
-          if (!isLunchConsider) {
-            const overlapStart = Math.max(permStart, lunchStart);
-            const overlapEnd = Math.min(permEnd, lunchEnd);
-            if (overlapEnd > overlapStart) {
-              permMinutes -= (overlapEnd - overlapStart);
-            }
-          }
-
-          // Adjust for other configured intervals (tea breaks)
-          if (settings?.intervals) {
-            settings.intervals.forEach(interval => {
-              if (!interval.isBreakConsider) {
-                const intervalStart = timeToMinutes(interval.from);
-                const intervalEnd = timeToMinutes(interval.to);
-                const overlapStart = Math.max(permStart, intervalStart);
-                const overlapEnd = Math.min(permEnd, intervalEnd);
-                if (overlapEnd > overlapStart) {
-                  permMinutes -= (overlapEnd - overlapStart);
-                }
-              }
-            });
+          // Adjust for all applicable unpaid break windows (lunch, multi-session breaks, intervals)
+          if (unauthBreakWindows.length > 0) {
+            permMinutes -= getIntervalsOverlapMinutes(permStart, permEnd, unauthBreakWindows);
           }
 
           permMinutes = Math.max(0, permMinutes);

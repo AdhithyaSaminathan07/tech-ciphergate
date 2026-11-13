@@ -26,9 +26,110 @@ const parseInvoiceDate = (dateStr) => {
   return isNaN(d.getTime()) ? new Date() : d;
 };
 
+// Safely execute Mongoose queries or plain mock promises with optional .select() / .lean()
+const execSelectLean = async (queryOrPromise, selectFields) => {
+  let q = queryOrPromise;
+  if (q && typeof q.select === 'function' && selectFields) {
+    q = q.select(selectFields);
+  }
+  if (q && typeof q.lean === 'function') {
+    q = q.lean();
+  }
+  return q;
+};
+
+const normalizeSubdomain = (value) => (value ? String(value).trim().toLowerCase() : '');
+
+// Resolve and require authenticated tenant subdomain from JWT user or API key context
+const resolveAuthTenant = (req, res) => {
+  const raw = req.user?.subdomain || req.apiKey?.subdomain;
+  const trimmed = raw ? String(raw).trim() : '';
+  const normalized = normalizeSubdomain(trimmed);
+  if (!normalized || normalized === 'main') {
+    res.status(401).json({
+      success: false,
+      message: 'Company name is missing, login again'
+    });
+    return null;
+  }
+  return trimmed;
+};
+
+// Collect all Admin and Worker IDs belonging to the authenticated tenant
+const getTenantUserIds = async (subdomain) => {
+  const [admins, workers] = await Promise.all([
+    execSelectLean(Admin.find({ subdomain }), '_id'),
+    execSelectLean(Worker.find({ subdomain }), '_id')
+  ]);
+  const ids = [];
+  for (const admin of admins || []) {
+    if (admin && admin._id) ids.push(admin._id);
+  }
+  for (const worker of workers || []) {
+    if (worker && worker._id) ids.push(worker._id);
+  }
+  return ids;
+};
+
+// Resolve owning tenant subdomain from creator record (Admin/Worker)
+const resolveCreatorSubdomain = async (createdBy, createdByModel) => {
+  const creatorId = createdBy?._id || createdBy;
+  if (!creatorId) return null;
+  if (createdByModel === 'Admin') {
+    const creator = await execSelectLean(Admin.findById(creatorId), 'subdomain');
+    return creator?.subdomain || null;
+  }
+  if (createdByModel === 'Worker') {
+    const creator = await execSelectLean(Worker.findById(creatorId), 'subdomain');
+    return creator?.subdomain || null;
+  }
+  return null;
+};
+
+// Fail-closed tenant verification for an invoice document
+const assertInvoiceTenantAccess = async (res, invoice, authSubdomain) => {
+  let invoiceSubdomain = await resolveCreatorSubdomain(invoice.createdBy, invoice.createdByModel);
+  if (!invoiceSubdomain && invoice.subdomain) {
+    invoiceSubdomain = invoice.subdomain;
+  }
+  if (!invoiceSubdomain || normalizeSubdomain(invoiceSubdomain) !== normalizeSubdomain(authSubdomain)) {
+    res.status(403).json({
+      success: false,
+      message: 'Access denied. Invoice belongs to another organization.'
+    });
+    return null;
+  }
+  return invoiceSubdomain;
+};
+
+// Fail-closed tenant verification for a DeleteHistory document
+const assertDeleteHistoryTenantAccess = async (res, record, authSubdomain) => {
+  let recordSubdomain = await resolveCreatorSubdomain(record.deletedById, record.deletedByRole);
+  if (!recordSubdomain && record.originalInvoiceData) {
+    recordSubdomain = await resolveCreatorSubdomain(
+      record.originalInvoiceData.createdBy,
+      record.originalInvoiceData.createdByModel
+    );
+  }
+  if (!recordSubdomain && record.originalInvoiceData?.subdomain) {
+    recordSubdomain = record.originalInvoiceData.subdomain;
+  }
+  if (!recordSubdomain || normalizeSubdomain(recordSubdomain) !== normalizeSubdomain(authSubdomain)) {
+    res.status(403).json({
+      success: false,
+      message: 'Access denied. Delete history belongs to another organization.'
+    });
+    return null;
+  }
+  return recordSubdomain;
+};
+
 // Create a new invoice
 const createInvoice = async (req, res) => {
   try {
+    const authSubdomain = resolveAuthTenant(req, res);
+    if (!authSubdomain) return;
+
     const {
       invoiceNo,
       invoiceDate,
@@ -131,6 +232,9 @@ const createInvoice = async (req, res) => {
 // Update an existing invoice
 const updateInvoice = async (req, res) => {
   try {
+    const authSubdomain = resolveAuthTenant(req, res);
+    if (!authSubdomain) return;
+
     const { id } = req.params;
     const updateData = req.body;
 
@@ -161,8 +265,12 @@ const updateInvoice = async (req, res) => {
     }
 
     // Check if user has permission to update this invoice
-    // Workers can update their own invoices, admins can update any invoice
-    const isInvoiceOwner = existingInvoice.createdBy.toString() === req.user._id.toString();
+    // Workers can update their own invoices, admins can update any invoice in their tenant
+    const isInvoiceOwner = Boolean(
+      existingInvoice.createdBy &&
+      req.user?._id &&
+      existingInvoice.createdBy.toString() === req.user._id.toString()
+    );
     const isAdmin = req.user.role === 'admin';
 
     if (!isInvoiceOwner && !isAdmin) {
@@ -172,23 +280,9 @@ const updateInvoice = async (req, res) => {
       });
     }
 
-    // Tenant isolation check
-    if (req.user && req.user.subdomain) {
-      let invoiceSubdomain = null;
-      if (existingInvoice.createdByModel === 'Admin') {
-        const creator = await Admin.findById(existingInvoice.createdBy).select('subdomain').lean();
-        invoiceSubdomain = creator?.subdomain;
-      } else if (existingInvoice.createdByModel === 'Worker') {
-        const creator = await Worker.findById(existingInvoice.createdBy).select('subdomain').lean();
-        invoiceSubdomain = creator?.subdomain;
-      }
-      if (invoiceSubdomain && invoiceSubdomain.toLowerCase() !== req.user.subdomain.toLowerCase()) {
-        return res.status(403).json({
-          success: false,
-          message: 'Access denied. Invoice belongs to another organization.'
-        });
-      }
-    }
+    // Fail-closed tenant isolation check
+    const invoiceTenant = await assertInvoiceTenantAccess(res, existingInvoice, authSubdomain);
+    if (!invoiceTenant) return;
 
     // Check if new invoiceNo is already used by another invoice
     if (updateData.invoiceNo && updateData.invoiceNo !== existingInvoice.invoiceNo) {
@@ -295,10 +389,17 @@ const updateInvoice = async (req, res) => {
 // Get all invoices for an admin or worker
 const getInvoicesByAdminOrWorker = async (req, res) => {
   try {
-    // Workers can only see their own invoices, admins can see all
-    const query = req.user.role === 'worker'
-      ? { createdBy: req.user._id }
-      : {};
+    const authSubdomain = resolveAuthTenant(req, res);
+    if (!authSubdomain) return;
+
+    // Workers can only see their own invoices; admins can see all invoices in their tenant
+    let query;
+    if (req.user.role === 'worker') {
+      query = { createdBy: req.user._id };
+    } else {
+      const tenantUserIds = await getTenantUserIds(authSubdomain);
+      query = { createdBy: { $in: tenantUserIds } };
+    }
 
     const invoices = await Invoice.find(query)
       .sort({ createdAt: -1 });
@@ -321,6 +422,9 @@ const getInvoicesByAdminOrWorker = async (req, res) => {
 // Get all invoices for an admin (maintained for backward compatibility)
 const getInvoicesByAdmin = async (req, res) => {
   try {
+    const authSubdomain = resolveAuthTenant(req, res);
+    if (!authSubdomain) return;
+
     const invoices = await Invoice.find({ createdBy: req.user._id })
       .sort({ createdAt: -1 });
 
@@ -342,8 +446,19 @@ const getInvoicesByAdmin = async (req, res) => {
 // Get all invoices (admin only)
 const getAllInvoices = async (req, res) => {
   try {
+    const authSubdomain = resolveAuthTenant(req, res);
+    if (!authSubdomain) return;
+
+    if (req.user && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only admins can view all organization invoices.'
+      });
+    }
+
+    const tenantUserIds = await getTenantUserIds(authSubdomain);
     const { filterType, startDate, endDate, gstFilter } = req.query;
-    let query = {};
+    let query = { createdBy: { $in: tenantUserIds } };
 
     const now = new Date();
 
@@ -418,6 +533,9 @@ const getInvoiceById = async (req, res) => {
     const { id } = req.params;
 
     // Validate ObjectId
+    const authSubdomain = resolveAuthTenant(req, res);
+    if (!authSubdomain) return;
+
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -446,8 +564,9 @@ const getInvoiceById = async (req, res) => {
     }
 
     // Check if user has permission to access this invoice
-    // Workers can access their own invoices, admins can access any invoice
-    const isInvoiceOwner = invoice.createdBy.toString() === req.user._id.toString();
+    // Workers can access their own invoices, admins can access any invoice in their tenant
+    const creatorId = invoice.createdBy?._id || invoice.createdBy;
+    const isInvoiceOwner = Boolean(creatorId && req.user?._id && creatorId.toString() === req.user._id.toString());
     const isAdmin = req.user.role === 'admin';
 
     if (!isInvoiceOwner && !isAdmin) {
@@ -456,6 +575,9 @@ const getInvoiceById = async (req, res) => {
         message: 'Access denied. You can only access your own invoices.'
       });
     }
+
+    const invoiceTenant = await assertInvoiceTenantAccess(res, invoice, authSubdomain);
+    if (!invoiceTenant) return;
 
     res.status(200).json({
       success: true,
@@ -478,6 +600,9 @@ const deleteInvoice = async (req, res) => {
     const { id } = req.params;
 
     // Validate ObjectId
+    const authSubdomain = resolveAuthTenant(req, res);
+    if (!authSubdomain) return;
+
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -495,8 +620,12 @@ const deleteInvoice = async (req, res) => {
     }
 
     // Check if user has permission to delete this invoice
-    // Workers can delete their own invoices, admins can delete any invoice
-    const isInvoiceOwner = invoice.createdBy.toString() === req.user._id.toString();
+    // Workers can delete their own invoices, admins can delete any invoice in their tenant
+    const isInvoiceOwner = Boolean(
+      invoice.createdBy &&
+      req.user?._id &&
+      invoice.createdBy.toString() === req.user._id.toString()
+    );
     const isAdmin = req.user.role === 'admin';
 
     if (!isInvoiceOwner && !isAdmin) {
@@ -505,6 +634,9 @@ const deleteInvoice = async (req, res) => {
         message: 'Access denied. You can only delete your own invoices.'
       });
     }
+
+    const invoiceTenant = await assertInvoiceTenantAccess(res, invoice, authSubdomain);
+    if (!invoiceTenant) return;
 
     // Calculate total amount for storing in delete history
     const subtotal = invoice.items.reduce((sum, item) =>
@@ -570,9 +702,21 @@ const deleteInvoice = async (req, res) => {
 // Update admin last viewed timestamp
 const updateAdminLastViewed = async (req, res) => {
   try {
-    // Update all invoices to set adminLastViewed to current time
+    const authSubdomain = resolveAuthTenant(req, res);
+    if (!authSubdomain) return;
+
+    if (req.user && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only admins can update admin view state.'
+      });
+    }
+
+    const tenantUserIds = await getTenantUserIds(authSubdomain);
+
+    // Update tenant invoices to set adminLastViewed to current time
     const result = await Invoice.updateMany(
-      {}, // Update all invoices
+      { createdBy: { $in: tenantUserIds } },
       { adminLastViewed: new Date() }
     );
 
@@ -594,23 +738,37 @@ const updateAdminLastViewed = async (req, res) => {
 // Get count of new invoices since admin last viewed
 const getNewInvoiceCount = async (req, res) => {
   try {
-    // Find the latest adminLastViewed timestamp
+    const authSubdomain = resolveAuthTenant(req, res);
+    if (!authSubdomain) return;
+
+    if (req.user && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only admins can view new invoice counts.'
+      });
+    }
+
+    const tenantUserIds = await getTenantUserIds(authSubdomain);
+
+    // Find the latest adminLastViewed timestamp within the authenticated tenant
     const latestViewed = await Invoice.findOne(
-      { adminLastViewed: { $ne: null } },
+      { createdBy: { $in: tenantUserIds }, adminLastViewed: { $ne: null } },
       { adminLastViewed: 1 }
     ).sort({ adminLastViewed: -1 });
 
     let newInvoiceCount = 0;
 
     if (latestViewed) {
-      // Count invoices created after the last viewed time
+      // Count tenant worker-created invoices created after the last viewed time
       newInvoiceCount = await Invoice.countDocuments({
+        createdBy: { $in: tenantUserIds },
         createdAt: { $gt: latestViewed.adminLastViewed },
-        source: 'worker' // Only count worker-created invoices
+        source: 'worker'
       });
     } else {
-      // If no invoices have been viewed yet, count all worker-created invoices
+      // If no tenant invoices have been viewed yet, count all tenant worker-created invoices
       newInvoiceCount = await Invoice.countDocuments({
+        createdBy: { $in: tenantUserIds },
         source: 'worker'
       });
     }
@@ -631,9 +789,12 @@ const getNewInvoiceCount = async (req, res) => {
 };
 
 // Add new controller functions for delete history
-// Get delete history for admin (all deleted invoices)
+// Get delete history for admin (all deleted invoices within tenant)
 const getDeleteHistoryForAdmin = async (req, res) => {
   try {
+    const authSubdomain = resolveAuthTenant(req, res);
+    if (!authSubdomain) return;
+
     // Only admins can access this
     if (req.user.role !== 'admin') {
       return res.status(403).json({
@@ -642,7 +803,8 @@ const getDeleteHistoryForAdmin = async (req, res) => {
       });
     }
 
-    const deleteHistory = await DeleteHistory.find()
+    const tenantUserIds = await getTenantUserIds(authSubdomain);
+    const deleteHistory = await DeleteHistory.find({ deletedById: { $in: tenantUserIds } })
       .sort({ deletedAt: -1 });
 
     res.status(200).json({
@@ -688,6 +850,9 @@ const getDeletedInvoiceById = async (req, res) => {
     const { id } = req.params;
 
     // Validate ObjectId
+    const authSubdomain = resolveAuthTenant(req, res);
+    if (!authSubdomain) return;
+
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -705,8 +870,12 @@ const getDeletedInvoiceById = async (req, res) => {
     }
 
     // Check if user has permission to access this delete history record
-    // Workers can access their own delete history, admins can access any delete history
-    const isRecordOwner = deleteHistoryRecord.deletedById.toString() === req.user._id.toString();
+    // Workers can access their own delete history, admins can access any delete history in their tenant
+    const isRecordOwner = Boolean(
+      deleteHistoryRecord.deletedById &&
+      req.user?._id &&
+      deleteHistoryRecord.deletedById.toString() === req.user._id.toString()
+    );
     const isAdmin = req.user.role === 'admin';
 
     if (!isRecordOwner && !isAdmin) {
@@ -715,6 +884,9 @@ const getDeletedInvoiceById = async (req, res) => {
         message: 'Access denied. You can only access your own delete history.'
       });
     }
+
+    const recordTenant = await assertDeleteHistoryTenantAccess(res, deleteHistoryRecord, authSubdomain);
+    if (!recordTenant) return;
 
     res.status(200).json({
       success: true,
@@ -734,6 +906,9 @@ const getDeletedInvoiceById = async (req, res) => {
 // Get the next available invoice number (auto-increment from highest TV* number)
 const getNextInvoiceNo = async (req, res) => {
   try {
+    const authSubdomain = resolveAuthTenant(req, res);
+    if (!authSubdomain) return;
+
     const existingInvoices = await Invoice.find({}, 'invoiceNo').lean();
 
     let maxNum = 0;
@@ -781,6 +956,9 @@ const getNextInvoiceNo = async (req, res) => {
 // Send Invoice PDF & Summary via WhatsApp API
 const sendInvoiceWhatsApp = async (req, res) => {
   try {
+    const authSubdomain = resolveAuthTenant(req, res);
+    if (!authSubdomain) return;
+
     const { id } = req.params;
     const { pdfBase64, recipientPhone } = req.body;
 
@@ -791,6 +969,23 @@ const sendInvoiceWhatsApp = async (req, res) => {
         message: 'Invoice not found'
       });
     }
+
+    const isInvoiceOwner = Boolean(
+      invoice.createdBy &&
+      req.user?._id &&
+      invoice.createdBy.toString() === req.user._id.toString()
+    );
+    const isAdmin = req.user?.role === 'admin';
+
+    if (!isInvoiceOwner && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only send your own invoices.'
+      });
+    }
+
+    const invoiceTenant = await assertInvoiceTenantAccess(res, invoice, authSubdomain);
+    if (!invoiceTenant) return;
 
     // Determine target phone number
     let phone = recipientPhone || invoice.customerContact || '';
@@ -849,13 +1044,13 @@ const sendInvoiceWhatsApp = async (req, res) => {
 
     let whatsappResult = {};
 
-    const correlationId = req.headers['x-correlation-id'] || req.body?.correlationId || ('wa_' + Date.now());
+    const correlationId = req.headers?.['x-correlation-id'] || req.body?.correlationId || ('wa_' + Date.now());
     const tBackendStart = Date.now();
 
     if (templateName) {
       // Send via Meta Approved WhatsApp Template (Required for 24h business-initiated messaging window)
       console.log(`[Invoice WhatsApp] [${correlationId}] Sending template '${templateName}' to customer phone...`);
-      const templateRes = await whatsappService.sendWhatsApp(req.user?.subdomain || 'tech-vaseegrah', phone, {
+      const templateRes = await whatsappService.sendWhatsApp(authSubdomain, phone, {
         type: 'template',
         templateName: templateName,
         languageCode: 'en',
@@ -917,14 +1112,39 @@ const sendInvoiceWhatsApp = async (req, res) => {
 // Renumber invoices sequentially based on sorting
 const renumberInvoices = async (req, res) => {
   try {
-    const { prefix = 'TV', startNumber = 1, padding = 6, sortBy = 'invoiceDate', sortOrder = 'asc', invoiceIds } = req.body;
-    
-    let query = {};
-    if (Array.isArray(invoiceIds) && invoiceIds.length > 0) {
-      query._id = { $in: invoiceIds };
+    const authSubdomain = resolveAuthTenant(req, res);
+    if (!authSubdomain) return;
+
+    if (req.user && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only admins can renumber invoices.'
+      });
     }
 
-    let invoices = await Invoice.find(query);
+    const tenantUserIds = await getTenantUserIds(authSubdomain);
+    const tenantUserIdStrings = new Set(tenantUserIds.map((uid) => uid.toString()));
+
+    const { prefix = 'TV', startNumber = 1, padding = 6, sortBy = 'invoiceDate', sortOrder = 'asc', invoiceIds } = req.body;
+
+    let invoices;
+    if (Array.isArray(invoiceIds) && invoiceIds.length > 0) {
+      invoices = await Invoice.find({ _id: { $in: invoiceIds } });
+      const hasForeignInvoice = (invoices || []).some((inv) => {
+        if (!inv.createdBy || !tenantUserIdStrings.has(inv.createdBy.toString())) {
+          return normalizeSubdomain(inv.subdomain) !== normalizeSubdomain(authSubdomain);
+        }
+        return false;
+      });
+      if (hasForeignInvoice) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. One or more invoices belong to another organization.'
+        });
+      }
+    } else {
+      invoices = await Invoice.find({ createdBy: { $in: tenantUserIds } });
+    }
 
     if (!invoices || invoices.length === 0) {
       return res.status(400).json({
@@ -990,6 +1210,9 @@ const renumberInvoices = async (req, res) => {
 // Preview Job Intake classification for an eligible, verified invoice
 const previewJobIntakeForInvoice = async (req, res) => {
   try {
+    const authSubdomain = resolveAuthTenant(req, res);
+    if (!authSubdomain) return;
+
     const { id } = req.params;
 
     const invoice = await Invoice.findById(id);
@@ -1000,21 +1223,22 @@ const previewJobIntakeForInvoice = async (req, res) => {
       });
     }
 
-    // Tenant resolution
-    let subdomain = null;
-    if (invoice.createdByModel === 'Admin') {
-      const creator = await Admin.findById(invoice.createdBy).select('subdomain').lean();
-      subdomain = creator?.subdomain;
-    } else if (invoice.createdByModel === 'Worker') {
-      const creator = await Worker.findById(invoice.createdBy).select('subdomain').lean();
-      subdomain = creator?.subdomain;
+    const isInvoiceOwner = Boolean(
+      invoice.createdBy &&
+      req.user?._id &&
+      invoice.createdBy.toString() === req.user._id.toString()
+    );
+    const isAdmin = req.user && (req.user.role === 'admin' || req.user.role === 'superadmin');
+
+    if (!isInvoiceOwner && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only preview job intake for your own invoices.'
+      });
     }
-    if (!subdomain && invoice.subdomain) {
-      subdomain = invoice.subdomain;
-    }
-    if (!subdomain && req.user?.subdomain) {
-      subdomain = req.user.subdomain;
-    }
+
+    const subdomain = await assertInvoiceTenantAccess(res, invoice, authSubdomain);
+    if (!subdomain) return;
 
     const departments = await Department.find({ subdomain }).lean();
     const workers = await Worker.find({ subdomain, status: 'Active' }).lean();
@@ -1162,6 +1386,9 @@ const previewJobIntakeForInvoice = async (req, res) => {
 // Trigger Job Intake manually from Invoice History for an eligible verified invoice
 const triggerJobIntakeForInvoice = async (req, res) => {
   try {
+    const authSubdomain = resolveAuthTenant(req, res);
+    if (!authSubdomain) return;
+
     const { id } = req.params;
 
     const invoice = await Invoice.findById(id);
@@ -1183,23 +1410,9 @@ const triggerJobIntakeForInvoice = async (req, res) => {
       });
     }
 
-    // Tenant isolation check
-    if (req.user && req.user.subdomain) {
-      let invoiceSubdomain = null;
-      if (invoice.createdByModel === 'Admin') {
-        const creator = await Admin.findById(invoice.createdBy).select('subdomain').lean();
-        invoiceSubdomain = creator?.subdomain;
-      } else if (invoice.createdByModel === 'Worker') {
-        const creator = await Worker.findById(invoice.createdBy).select('subdomain').lean();
-        invoiceSubdomain = creator?.subdomain;
-      }
-      if (invoiceSubdomain && invoiceSubdomain.toLowerCase() !== req.user.subdomain.toLowerCase()) {
-        return res.status(403).json({
-          success: false,
-          message: 'Access denied. Invoice belongs to another organization.'
-        });
-      }
-    }
+    // Fail-closed tenant isolation check
+    const invoiceTenant = await assertInvoiceTenantAccess(res, invoice, authSubdomain);
+    if (!invoiceTenant) return;
 
     // Eligibility check: Allow Job Intake only for invoices that have completed the existing authorized payment-verification process
     const hasPaymentProof = !!(

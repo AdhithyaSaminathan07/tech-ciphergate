@@ -1,5 +1,6 @@
 //src/services/api.js
 import axios from 'axios';
+import { getAuthFailureRedirectPath } from '../utils/authUtils';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
@@ -65,7 +66,7 @@ api.interceptors.response.use(
       if (isRefreshing) {
         return new Promise(function(resolve, reject) {
           failedQueue.push({ resolve, reject });
-        }).then(token => {
+        }).then(() => {
           return api(originalRequest);
         }).catch(err => {
           return Promise.reject(err);
@@ -91,14 +92,10 @@ api.interceptors.response.use(
         isRefreshing = false;
         processQueue(refreshError, null);
         
-        // Refresh failed, user is truly logged out
-        const currentPath = window.location.pathname;
-        if (!currentPath.startsWith('/worker/login') && !currentPath.startsWith('/admin/login')) {
-            if (currentPath.startsWith('/worker')) {
-                window.location.href = '/worker/login';
-            } else {
-                window.location.href = '/admin/login';
-            }
+        // Refresh failed, user is truly logged out; only redirect on protected routes
+        const redirectPath = getAuthFailureRedirectPath(window.location.pathname);
+        if (redirectPath) {
+          window.location.href = redirectPath;
         }
         return Promise.reject(refreshError);
       }

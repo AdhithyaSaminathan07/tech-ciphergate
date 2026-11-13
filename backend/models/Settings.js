@@ -180,7 +180,7 @@ const settingsSchema = mongoose.Schema({
       },
       name: {
         type: String,
-        default: 'Lunch Break'
+        default: 'Break Session'
       },
       enabled: {
         type: Boolean,
@@ -198,7 +198,23 @@ const settingsSchema = mongoose.Schema({
         type: Number,
         default: 0,
         min: 0
-      }
+      },
+      appliesTo: {
+        type: String,
+        enum: ['inherit', 'all', 'departments', 'shifts', 'employees'],
+        default: 'inherit'
+      },
+      applicableDepartments: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Department'
+      }],
+      applicableShifts: [{
+        type: String
+      }],
+      applicableEmployees: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Worker'
+      }]
     }],
     appliesTo: {
       type: String,

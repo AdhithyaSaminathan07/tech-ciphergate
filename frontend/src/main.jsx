@@ -9,6 +9,9 @@ import 'react-toastify/dist/ReactToastify.css'
 import './toastSetup.jsx'
 
 import { registerSW } from 'virtual:pwa-register'
+import { initPwaInstallListener } from './utils/pwaInstall'
+
+initPwaInstallListener()
 
 // Explicitly register the service worker for better reliability on various mobile devices
 const updateSW = registerSW({

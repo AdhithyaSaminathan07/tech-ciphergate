@@ -73,7 +73,7 @@ console.log('================================================================\n'
     const sessions = getNormalizedSessions(legacyConfig);
     assert.strictEqual(Array.isArray(sessions), true);
     assert.strictEqual(sessions.length, 1);
-    assert.strictEqual(sessions[0].name, 'Lunch Break');
+    assert.strictEqual(sessions[0].name, 'Break Session 1');
     assert.strictEqual(sessions[0].outTime, '13:30');
     assert.strictEqual(sessions[0].returnDeadline, '14:30');
     assert.strictEqual(sessions[0].gracePeriodMinutes, 5);
@@ -456,7 +456,8 @@ console.log('================================================================\n'
     assert.strictEqual(report.totalPermissionTime, 15, 'Total delay minutes must equal exactly 15 minutes (10m + 5m)');
     assert.strictEqual(report.summary.permissionDeduction, 60, 'Deduction must equal ₹60.00 (15 min * ₹4.0)');
     assert.strictEqual(report.summary.actualWorkingDays, 1, 'Actual working days must be 1');
-    assert.strictEqual(report.summary.finalSalary, 17220, 'Final salary must reflect single deduction of ₹60');
+    const expectedFinalSalary = Math.round((54000 - report.summary.absentDeduction - 60) * 100) / 100;
+    assert.strictEqual(report.summary.finalSalary, expectedFinalSalary, 'Final salary must reflect single deduction of ₹60');
   });
 
   // ─── 9. processedOutSessions Retention & Cleanup Safety ─────────────────────

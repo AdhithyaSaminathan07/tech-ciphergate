@@ -1,5 +1,5 @@
 const express = require('express');
-const { protect } = require('../middleware/authMiddleware');
+const { protect, adminOnly } = require('../middleware/authMiddleware');
 const {
   putAttendance,
   getAttendance,
@@ -14,11 +14,11 @@ const {
 
 const router = express.Router();
 
-router.post('/summary', protect, getAttendanceSummary);
-router.post('/lunch-overview', protect, getLunchAttendanceOverview);
+router.post('/summary', protect, adminOnly, getAttendanceSummary);
+router.post('/lunch-overview', protect, adminOnly, getLunchAttendanceOverview);
 router.put('/', protect, putAttendance);
-router.post('/', protect, getAttendance);
-router.post('/paginated', protect, getPaginatedAttendance); // Add this new route
+router.post('/', protect, adminOnly, getAttendance);
+router.post('/paginated', protect, adminOnly, getPaginatedAttendance); // Add this new route
 router.post('/rfid', protect, putRfidAttendance);
 router.post('/worker', protect, getWorkerAttendance);
 router.post('/worker-last', protect, getWorkerLastAttendance);

@@ -3,10 +3,71 @@ const Worker = require('../models/Worker');
 const Attendance = require('../models/Attendance'); // Added import
 const asyncHandler = require('express-async-handler');
 
+const resolveDepartmentTenant = (req, res, requestedSubdomain) => {
+  const rawAuth = req.user?.subdomain || req.apiKey?.subdomain;
+  const authSubdomain = rawAuth ? String(rawAuth).trim() : '';
+  const normalizedAuth = authSubdomain.toLowerCase();
+
+  if (!normalizedAuth || normalizedAuth === 'main') {
+    res.status(401);
+    throw new Error('Company name is missing, login again.');
+  }
+
+  if (
+    requestedSubdomain !== undefined &&
+    requestedSubdomain !== null &&
+    String(requestedSubdomain).trim() !== '' &&
+    String(requestedSubdomain).trim().toLowerCase() !== normalizedAuth
+  ) {
+    res.status(403);
+    throw new Error('Access denied. Cannot manage another company\'s departments.');
+  }
+
+  return authSubdomain;
+};
+
+const requireAdminUser = (req, res) => {
+  if (!req.user || req.user.role !== 'admin') {
+    res.status(403);
+    throw new Error('Access denied. Admin role required.');
+  }
+};
+
+const validateTenantWorkerRefs = async (res, subdomain, { projectLead, projectManager, assignedDevelopers }) => {
+  const candidateIds = [];
+  if (projectLead) candidateIds.push(projectLead);
+  if (projectManager) candidateIds.push(projectManager);
+  if (Array.isArray(assignedDevelopers)) {
+    for (const devId of assignedDevelopers) {
+      if (devId) candidateIds.push(devId);
+    }
+  }
+  const uniqueIds = [...new Set(candidateIds.map((id) => id.toString()))];
+  if (uniqueIds.length === 0) return;
+
+  let query = Worker.find({ _id: { $in: uniqueIds } });
+  if (query && typeof query.select === 'function') query = query.select('_id subdomain');
+  if (query && typeof query.lean === 'function') query = query.lean();
+  const matchedWorkers = await query;
+
+  const validSameTenantIds = new Set(
+    (matchedWorkers || [])
+      .filter((w) => w && w.subdomain && w.subdomain.toLowerCase() === subdomain.toLowerCase())
+      .map((w) => w._id.toString())
+  );
+
+  if (uniqueIds.some((idStr) => !validSameTenantIds.has(idStr))) {
+    res.status(403);
+    throw new Error('Access denied. One or more assigned workers do not belong to your organization.');
+  }
+};
+
 const createDepartment = asyncHandler(async (req, res) => {
+  requireAdminUser(req, res);
+
   const {
     name,
-    subdomain,
+    subdomain: requestedSubdomain,
     departmentType,
     description,
     projectStatus,
@@ -24,18 +85,21 @@ const createDepartment = asyncHandler(async (req, res) => {
     assignedDevelopers
   } = req.body;
 
+  const subdomain = resolveDepartmentTenant(req, res, requestedSubdomain);
+
   // Validate input
   if (!name || name.trim().length < 2) {
     res.status(400);
     throw new Error('Department name must be at least 2 characters long');
   }
 
-  if (!subdomain || subdomain == 'main') {
-    res.status(400);
-    throw new Error('Company name is missing, login again.');
-  }
-
   try {
+    await validateTenantWorkerRefs(res, subdomain, {
+      projectLead,
+      projectManager,
+      assignedDevelopers
+    });
+
     const existingDepartment = await Department.findOne({
       name: name.trim()
     });
@@ -74,9 +138,10 @@ const createDepartment = asyncHandler(async (req, res) => {
       { path: 'assignedDevelopers', select: 'name username photo' }
     ]);
 
-    // Get worker count
+    // Get worker count within tenant
     const workerCount = await Worker.countDocuments({
       department: department._id,
+      subdomain: department.subdomain,
       status: 'Active'
     });
 
@@ -104,11 +169,7 @@ const createDepartment = asyncHandler(async (req, res) => {
 });
 
 const getDepartments = asyncHandler(async (req, res) => {
-  const subdomain = req.body.subdomain || req.query.subdomain;
-  if (!subdomain || subdomain === 'main') {
-    res.status(400);
-    throw new Error('Subdomain is missing or invalid.');
-  }
+  const subdomain = resolveDepartmentTenant(req, res, req.body?.subdomain || req.query?.subdomain);
 
   try {
     const page = parseInt(req.query.page) || parseInt(req.body.page) || null;
@@ -203,6 +264,9 @@ const getDepartments = asyncHandler(async (req, res) => {
 
 
 const deleteDepartment = asyncHandler(async (req, res) => {
+  requireAdminUser(req, res);
+  const subdomain = resolveDepartmentTenant(req, res, req.body?.subdomain || req.query?.subdomain);
+
   const department = await Department.findById(req.params.id);
 
   if (!department) {
@@ -210,9 +274,15 @@ const deleteDepartment = asyncHandler(async (req, res) => {
     throw new Error('Department not found');
   }
 
-  // Check for associated active workers
+  if (!department.subdomain || department.subdomain.toLowerCase() !== subdomain.toLowerCase()) {
+    res.status(403);
+    throw new Error('Access denied. Department belongs to another organization.');
+  }
+
+  // Check for associated active workers within the same tenant
   const activeWorkerCount = await Worker.countDocuments({
     department: req.params.id,
+    subdomain: department.subdomain,
     status: 'Active'
   });
 
@@ -221,9 +291,9 @@ const deleteDepartment = asyncHandler(async (req, res) => {
     throw new Error(`Cannot delete department. ${activeWorkerCount} active workers are assigned.`);
   }
 
-  // Set department to null for any remaining non-active workers (Relieved or Deleted)
+  // Set department to null for any remaining non-active workers (Relieved or Deleted) within the same tenant
   await Worker.updateMany(
-    { department: req.params.id },
+    { department: req.params.id, subdomain: department.subdomain },
     { $set: { department: null } }
   );
 
@@ -235,9 +305,11 @@ const deleteDepartment = asyncHandler(async (req, res) => {
 });
 
 const updateDepartment = asyncHandler(async (req, res) => {
+  requireAdminUser(req, res);
   const { id } = req.params;
   const {
     name,
+    subdomain: requestedSubdomain,
     departmentType,
     description,
     projectStatus,
@@ -255,6 +327,8 @@ const updateDepartment = asyncHandler(async (req, res) => {
     assignedDevelopers
   } = req.body;
 
+  const subdomain = resolveDepartmentTenant(req, res, requestedSubdomain);
+
   // Validate input
   if (!name || name.trim().length < 2) {
     res.status(400);
@@ -262,6 +336,25 @@ const updateDepartment = asyncHandler(async (req, res) => {
   }
 
   try {
+    // Load department first and enforce tenant ownership before checking or mutating data
+    const department = await Department.findById(id);
+
+    if (!department) {
+      res.status(404);
+      throw new Error('Department not found');
+    }
+
+    if (!department.subdomain || department.subdomain.toLowerCase() !== subdomain.toLowerCase()) {
+      res.status(403);
+      throw new Error('Access denied. Department belongs to another organization.');
+    }
+
+    await validateTenantWorkerRefs(res, subdomain, {
+      projectLead,
+      projectManager,
+      assignedDevelopers
+    });
+
     // Check for existing department (case-insensitive)
     const existingDepartment = await Department.findOne({
       name: { $regex: `^${name.trim()}$`, $options: 'i' },
@@ -271,14 +364,6 @@ const updateDepartment = asyncHandler(async (req, res) => {
     if (existingDepartment) {
       res.status(400);
       throw new Error('A department with this name already exists');
-    }
-
-    // Find the department and update with exact case
-    const department = await Department.findById(id);
-
-    if (!department) {
-      res.status(404);
-      throw new Error('Department not found');
     }
 
     department.name = name.trim();
@@ -306,9 +391,10 @@ const updateDepartment = asyncHandler(async (req, res) => {
       { path: 'assignedDevelopers', select: 'name username photo' }
     ]);
 
-    // Get worker count
+    // Get worker count within tenant
     const workerCount = await Worker.countDocuments({
       department: department._id,
+      subdomain: department.subdomain,
       status: 'Active'
     });
 

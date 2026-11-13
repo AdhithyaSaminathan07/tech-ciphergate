@@ -6,7 +6,7 @@ import Button from '../common/Button';
 import Modal from '../common/Modal';
 import Spinner from '../common/Spinner';
 import { getWorkers, getWorkerById } from '../../services/workerService';
-import { putAttendance, getWorkerLastAttendance } from '../../services/attendanceService';
+import { recognizeFaceAndMarkAttendance } from '../../services/attendanceService';
 import { getCurrentPosition, isWorkerInAllowedLocation } from '../../services/geolocationService';
 import { AlertCircle, MapPin, Smile, UserCheck, CheckCircle2, ShieldAlert } from 'lucide-react';
 import api from '../../services/api';
@@ -443,19 +443,17 @@ const FaceAttendance = ({ subdomain, isOpen, onClose, workerMode = false, curren
               }
               
               setMatchedWorker(worker);
-              setScannerStatus('Face recognized! Verifying...');
+              setScannerStatus('Face recognized! Recording attendance...');
               
               try {
-                const lastAttendanceResponse = await getWorkerLastAttendance(worker.rfid, subdomain);
-                const nextAction = lastAttendanceResponse.presence ? 'Punch In' : 'Punch Out';
-                setAttendanceType(nextAction);
-                await handleDirectAttendance(worker, nextAction, subdomain);
+                await handleDirectAttendance(worker, detections.descriptor, subdomain);
               } catch (attendanceError) {
-                console.error('Error getting last attendance:', attendanceError);
-                if (attendanceError.response && attendanceError.response.status === 403) {
+                console.error('Error marking face attendance:', attendanceError);
+                const msg = attendanceError?.message || '';
+                if (attendanceError?.response?.status === 403 || /own face/i.test(msg)) {
                   setError('You can only mark attendance with your own face.');
                 } else {
-                  setError('Unable to determine attendance action. Please try again.');
+                  setError(msg || 'Unable to mark attendance. Please try again.');
                 }
                 setIsProcessing(false);
                 return;
@@ -479,47 +477,37 @@ const FaceAttendance = ({ subdomain, isOpen, onClose, workerMode = false, curren
     }
   };
 
-  // Handle direct attendance without confirmation
-  const handleDirectAttendance = async (worker, nextAction, subdomain) => {
-    if (!worker || !subdomain) return;
+  // Handle direct face recognition attendance through the dedicated face endpoint
+  const handleDirectAttendance = async (worker, faceDescriptor, subdomain) => {
+    if (!worker || !faceDescriptor || !subdomain) return;
 
     try {
-      // Pass the attendanceType (Punch In/Punch Out) to determine the presence state
-      // Ensuring consistency with RFID attendance logic:
-      // When attendanceType is 'Punch In', presence should be true
-      // When attendanceType is 'Punch Out', presence should be false
-      const presence = nextAction === 'Punch In';
-      console.log('Direct attendance - attendanceType:', nextAction, 'presence:', presence);
-      
-      // Send the presence value to backend, which will use it directly
-      const result = await putAttendance({ rfid: worker.rfid, subdomain, presence });
-      
-      // Check if the request was successful
+      const descriptorArray = Array.from(faceDescriptor);
+      const result = await recognizeFaceAndMarkAttendance(descriptorArray, subdomain);
+
       if (result.success === false) {
-        // Show the custom message as an info toast
         toast.info(result.message || 'Try punch in or punch out after 1 minute.');
         return;
       }
-      
-      // Show success message with current punch status
-      toast.success(`Attendance marked: ${nextAction}`);
-      
-      // Call the callback to notify the parent component
+
+      const resolvedAction = result.attendance?.presence ? 'Punch In' : 'Punch Out';
+      setAttendanceType(resolvedAction);
+      toast.success(`Attendance marked: ${resolvedAction}`);
+
       if (onAttendanceMarked) {
         onAttendanceMarked();
       }
-      
-      // Close the modal after successful attendance
+
       setTimeout(() => {
         onClose();
       }, 2000);
     } catch (attendanceError) {
       console.error('Attendance marking error:', attendanceError);
-      // Check if it's an authorization error
-      if (attendanceError.response && attendanceError.response.status === 403) {
+      const msg = attendanceError?.message || '';
+      if (attendanceError?.response?.status === 403 || /own face/i.test(msg)) {
         setError('You can only mark attendance with your own face.');
       } else {
-        setError('Failed to mark attendance. Please try again.');
+        setError(msg || 'Failed to mark attendance. Please try again.');
       }
     }
   };

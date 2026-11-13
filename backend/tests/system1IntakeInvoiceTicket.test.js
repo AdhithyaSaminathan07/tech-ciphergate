@@ -527,6 +527,7 @@ async function runAllTests() {
         status: 'Invoice',
         isPaid: false,
         createdBy: sampleAdmin._id,
+        createdByModel: 'Admin',
         externalOrderId: 'ORD-S1-001'
       });
 
@@ -536,6 +537,7 @@ async function runAllTests() {
       assert.strictEqual(intakeInvoice.status, 'Invoice');
 
       stubs.stub(Invoice, 'findById', async (id) => intakeInvoice);
+      stubs.stub(Admin, 'findById', () => mockQuery({ _id: sampleAdmin._id, subdomain: sampleAdmin.subdomain }));
 
       let savedInvoice = null;
       stubs.stub(intakeInvoice, 'save', async function() {
@@ -611,10 +613,13 @@ async function runAllTests() {
         items: [{ description: 'Security Audit', qty: 1, rate: 50000, total: 50000, gst: 18, isTotalOverridden: false }],
         status: 'Invoice',
         isPaid: false,
-        invoiceType: 'PROFORMA INVOICE'
+        invoiceType: 'PROFORMA INVOICE',
+        createdBy: sampleAdmin._id,
+        createdByModel: 'Admin'
       };
 
       stubs.stub(Invoice, 'findById', async () => testInvoice);
+      stubs.stub(Admin, 'findById', () => mockQuery({ _id: sampleAdmin._id, subdomain: sampleAdmin.subdomain }));
 
       let whatsappCallArgs = null;
       stubs.stub(whatsappService, 'sendWhatsApp', async (subdomain, phone, options) => {

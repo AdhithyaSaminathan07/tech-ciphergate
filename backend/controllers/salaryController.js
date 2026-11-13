@@ -1918,6 +1918,7 @@ const getBulkSalaryReport = asyncHandler(async (req, res) => {
           deptPenaltyMap,
           includePermission: settings?.includePermission || false,
           paidLeaveConfig: settings ? settings.paidLeaveConfig : null,
+          lunchBreakManagement: settings ? settings.lunchBreakManagement : null,
           unauthorizedAbsenceDates: unauthorizedDates,
           unauthorizedPermissions,
           employeeHistory: workerHistory

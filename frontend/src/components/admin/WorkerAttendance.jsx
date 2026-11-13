@@ -10,6 +10,7 @@ import TaskSpinner from '../common/Spinner';
 import { GrPowerReset } from "react-icons/gr";
 import { getWorkerById } from '../../services/workerService';
 import CustomDatePicker from '../common/CustomDatePicker';
+import { formatRecordDateIST, getBreakPunchLabel } from '../../utils/attendanceHelpers';
 
 const WorkerAttendance = () => {
     const { id } = useParams();
@@ -55,7 +56,7 @@ const WorkerAttendance = () => {
         if (fromDate || toDate) {
             filtered = filtered.filter(item => {
                 if (!item.date) return false;
-                const itemDate = item.date.split('T')[0];
+                const itemDate = formatRecordDateIST(item.date);
                 if (fromDate && toDate) return itemDate >= fromDate && itemDate <= toDate;
                 else if (fromDate) return itemDate >= fromDate;
                 else if (toDate) return itemDate <= toDate;
@@ -129,7 +130,7 @@ const WorkerAttendance = () => {
         {
             header: 'Date',
             accessor: 'date',
-            render: (record) => record.date ? record.date.split('T')[0] : 'Unknown'
+            render: (record) => record.date ? formatRecordDateIST(record.date) : 'Unknown'
         },
         {
             header: 'Time',
@@ -139,7 +140,37 @@ const WorkerAttendance = () => {
         {
             header: 'Presence',
             accessor: 'presence',
-            render: (record) => record.presence ? <p className="text-green-600">IN</p> : <p className="text-red-600">OUT</p>
+            render: (record) => record.presence ? <p className="text-green-600 font-semibold">IN</p> : <p className="text-red-600 font-semibold">OUT</p>
+        },
+        {
+            header: 'Punch Type',
+            accessor: 'punchType',
+            render: (record) => {
+                const label = getBreakPunchLabel(record);
+                const badgeClass = label === 'Break OUT'
+                    ? 'bg-purple-50 text-purple-700 border-purple-200'
+                    : label === 'Break IN'
+                        ? 'bg-teal-50 text-teal-700 border-teal-200'
+                        : 'bg-slate-100 text-slate-700 border-slate-200';
+                return (
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${badgeClass}`}>
+                        {label}
+                    </span>
+                );
+            }
+        },
+        {
+            header: 'Break Status / Late',
+            accessor: 'lunchLateMinutes',
+            render: (record) => {
+                if (record.isMissingLunchReturn) {
+                    return <span className="text-xs font-bold text-purple-700">Missing Return</span>;
+                }
+                if (record.lunchLateMinutes > 0) {
+                    return <span className="text-xs font-bold text-rose-600">+{record.lunchLateMinutes} mins late</span>;
+                }
+                return <span className="text-xs text-slate-400">—</span>;
+            }
         }
     ];
 

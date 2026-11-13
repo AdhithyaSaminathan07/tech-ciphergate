@@ -1,6 +1,10 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useRef } from 'react';
 import { toast } from 'react-toastify';
 import QRCode from 'qrcode';
+import {
+    validateLunchBreakManagementConfig,
+    parseBreakTimeToMinutes
+} from '../../utils/breakSessionValidation';
 import {
     FiSun,
     FiSunrise,
@@ -78,6 +82,7 @@ const Settings = () => {
     }, [user]);
 
     const [originalSettings, setOriginalSettings] = useState({});
+    const [explicitRescheduleSessionIds, setExplicitRescheduleSessionIds] = useState([]);
     const [upiQrPreviewUrl, setUpiQrPreviewUrl] = useState('');
 
     const [settings, setSettings] = useState({
@@ -220,6 +225,19 @@ const Settings = () => {
         }
     });
 
+    const settingsRef = useRef(settings);
+
+    useEffect(() => {
+        settingsRef.current = settings;
+    }, [settings]);
+
+    const applySettingsUpdate = (updater) => {
+        const nextSettings = updater(settingsRef.current);
+        settingsRef.current = nextSettings;
+        setSettings(nextSettings);
+        checkForChanges(nextSettings);
+    };
+
     const formatTimeTo12Hour = (time24) => {
         if (!time24) return '';
         const [hours, minutes] = time24.split(':');
@@ -227,6 +245,67 @@ const Settings = () => {
         const period = hour >= 12 ? 'PM' : 'AM';
         const hour12 = hour % 12 || 12;
         return `${hour12}:${minutes.padStart(2, '0')} ${period}`;
+    };
+
+    const parseTimeToMinutes = (time24) => {
+        return parseBreakTimeToMinutes(time24) ?? 0;
+    };
+
+    const normalizeLunchConfig = (loadedLunch = {}) => {
+        const hasSessions = Array.isArray(loadedLunch.sessions) && loadedLunch.sessions.length > 0;
+        const rawSessions = hasSessions
+            ? loadedLunch.sessions
+            : [{
+                id: 'default_lunch',
+                name: 'Lunch Break',
+                enabled: true,
+                outTime: loadedLunch.lunchOutTime || '13:30',
+                returnDeadline: loadedLunch.returnDeadline || '14:30',
+                gracePeriodMinutes: loadedLunch.gracePeriodMinutes ?? 0
+            }];
+
+        const usedIds = new Set();
+        const normalizedSessions = rawSessions.map((s, idx) => {
+            const outTime = hasSessions
+                ? (typeof s.outTime === 'string' ? s.outTime.trim() : '')
+                : (s.outTime || loadedLunch.lunchOutTime || '13:30');
+            const returnDeadline = hasSessions
+                ? (typeof s.returnDeadline === 'string' ? s.returnDeadline.trim() : '')
+                : (s.returnDeadline || loadedLunch.returnDeadline || '14:30');
+            const rawId = typeof s.id === 'string' ? s.id.trim() : (s.id ? String(s.id) : '');
+            const objectIdFallback = s._id ? String(s._id) : '';
+            const baseId = rawId || objectIdFallback || `session_${idx + 1}_${outTime.replace(/[^0-9]/g, '') || '0000'}`;
+            let uniqueId = baseId;
+            let suffix = idx + 1;
+            while (usedIds.has(uniqueId)) {
+                uniqueId = `${baseId}_${suffix++}`;
+            }
+            usedIds.add(uniqueId);
+
+            return {
+                ...s,
+                id: uniqueId,
+                name: s.name || `Break Session ${idx + 1}`,
+                enabled: s.enabled !== false,
+                outTime,
+                returnDeadline,
+                gracePeriodMinutes: Math.max(0, Number(s.gracePeriodMinutes ?? 0)),
+                appliesTo: s.appliesTo || 'inherit',
+                applicableDepartments: Array.isArray(s.applicableDepartments) ? s.applicableDepartments : [],
+                applicableShifts: Array.isArray(s.applicableShifts) ? s.applicableShifts : [],
+                applicableEmployees: Array.isArray(s.applicableEmployees) ? s.applicableEmployees : []
+            };
+        });
+
+        const primarySession = normalizedSessions.find(s => s.enabled !== false) || normalizedSessions[0];
+
+        return {
+            ...loadedLunch,
+            sessions: normalizedSessions,
+            lunchOutTime: primarySession?.outTime || loadedLunch.lunchOutTime || '13:30',
+            returnDeadline: primarySession?.returnDeadline || loadedLunch.returnDeadline || '14:30',
+            gracePeriodMinutes: primarySession?.gracePeriodMinutes ?? loadedLunch.gracePeriodMinutes ?? 0
+        };
     };
 
     const validateBatchNames = (batches) => {
@@ -284,24 +363,7 @@ const Settings = () => {
             };
 
             const loadedLunch = fetchedSettings.lunchBreakManagement || {};
-            const loadedSessions = (Array.isArray(loadedLunch.sessions) && loadedLunch.sessions.length > 0)
-                ? loadedLunch.sessions
-                : [{
-                    id: 'default_lunch',
-                    name: 'Lunch Break',
-                    enabled: true,
-                    outTime: loadedLunch.lunchOutTime || '13:30',
-                    returnDeadline: loadedLunch.returnDeadline || '14:30',
-                    gracePeriodMinutes: loadedLunch.gracePeriodMinutes ?? 0
-                }];
-
-            const normalizedLunch = {
-                ...loadedLunch,
-                sessions: loadedSessions,
-                lunchOutTime: loadedSessions[0]?.outTime || loadedLunch.lunchOutTime || '13:30',
-                returnDeadline: loadedSessions[0]?.returnDeadline || loadedLunch.returnDeadline || '14:30',
-                gracePeriodMinutes: loadedSessions[0]?.gracePeriodMinutes ?? loadedLunch.gracePeriodMinutes ?? 0
-            };
+            const normalizedLunch = normalizeLunchConfig(loadedLunch);
 
             const finalSettings = {
                 ...settings,
@@ -357,6 +419,7 @@ const Settings = () => {
                 }
             };
 
+            settingsRef.current = finalSettings;
             setSettings(finalSettings);
             setOriginalSettings(finalSettings);
 
@@ -449,82 +512,117 @@ const Settings = () => {
         checkForChanges(updatedSettings);
     };
 
-        const handleAddSession = () => {
-        const currentSessions = settings.lunchBreakManagement?.sessions || [];
-        const newSession = {
-            id: `session_${Date.now()}`,
-            name: currentSessions.length === 1 ? 'Tea Break' : `Break Session ${currentSessions.length + 1}`,
-            enabled: true,
-            outTime: '16:00',
-            returnDeadline: '16:15',
-            gracePeriodMinutes: 0
-        };
-        const updatedSessions = [...currentSessions, newSession];
-        const updatedLunch = {
-            ...(settings.lunchBreakManagement || {}),
-            sessions: updatedSessions
-        };
-        const updatedSettings = {
-            ...settings,
-            lunchBreakManagement: updatedLunch
-        };
-        setSettings(updatedSettings);
-        checkForChanges(updatedSettings);
+    const handleAddSession = () => {
+        applySettingsUpdate((prev) => {
+            const currentSessions = prev.lunchBreakManagement?.sessions || [];
+            const existingIds = new Set(currentSessions.map(s => s?.id).filter(Boolean));
+            let nextId = `session_${Date.now()}_${currentSessions.length + 1}_${Math.random().toString(36).slice(2, 6)}`;
+            while (existingIds.has(nextId)) {
+                nextId = `session_${Date.now()}_${currentSessions.length + 1}_${Math.random().toString(36).slice(2, 8)}`;
+            }
+            const newSession = {
+                id: nextId,
+                name: `Break Session ${currentSessions.length + 1}`,
+                enabled: true,
+                outTime: '16:00',
+                returnDeadline: '16:15',
+                gracePeriodMinutes: 0,
+                appliesTo: 'inherit',
+                applicableDepartments: [],
+                applicableShifts: [],
+                applicableEmployees: []
+            };
+            const updatedSessions = [...currentSessions, newSession];
+            const updatedLunch = {
+                ...(prev.lunchBreakManagement || {}),
+                sessions: updatedSessions
+            };
+            return {
+                ...prev,
+                lunchBreakManagement: updatedLunch
+            };
+        });
     };
 
     const handleSessionChange = (index, field, value) => {
-        const currentSessions = [...(settings.lunchBreakManagement?.sessions || [])];
-        if (!currentSessions[index]) return;
-        currentSessions[index] = {
-            ...currentSessions[index],
-            [field]: value
-        };
-        const updatedLunch = {
-            ...(settings.lunchBreakManagement || {}),
-            sessions: currentSessions,
-            lunchOutTime: currentSessions[0]?.outTime || settings.lunchBreakManagement?.lunchOutTime || '13:30',
-            returnDeadline: currentSessions[0]?.returnDeadline || settings.lunchBreakManagement?.returnDeadline || '14:30',
-            gracePeriodMinutes: currentSessions[0]?.gracePeriodMinutes ?? settings.lunchBreakManagement?.gracePeriodMinutes ?? 0
-        };
-        const updatedSettings = {
-            ...settings,
-            lunchBreakManagement: updatedLunch
-        };
-        setSettings(updatedSettings);
-        checkForChanges(updatedSettings);
+        applySettingsUpdate((prev) => {
+            const currentSessions = [...(prev.lunchBreakManagement?.sessions || [])];
+            if (!currentSessions[index]) return prev;
+            currentSessions[index] = {
+                ...currentSessions[index],
+                [field]: value
+            };
+            const primarySession = currentSessions.find(s => s.enabled !== false) || currentSessions[0];
+            const updatedLunch = {
+                ...(prev.lunchBreakManagement || {}),
+                sessions: currentSessions,
+                lunchOutTime: primarySession?.outTime ?? prev.lunchBreakManagement?.lunchOutTime ?? '13:30',
+                returnDeadline: primarySession?.returnDeadline ?? prev.lunchBreakManagement?.returnDeadline ?? '14:30',
+                gracePeriodMinutes: primarySession?.gracePeriodMinutes ?? prev.lunchBreakManagement?.gracePeriodMinutes ?? 0
+            };
+            return {
+                ...prev,
+                lunchBreakManagement: updatedLunch
+            };
+        });
+    };
+
+    const handleSessionScopeToggle = (index, field, rawVal) => {
+        applySettingsUpdate((prev) => {
+            const currentSessions = [...(prev.lunchBreakManagement?.sessions || [])];
+            if (!currentSessions[index]) return prev;
+            const valStr = rawVal?.toString();
+            const existing = Array.isArray(currentSessions[index][field]) ? currentSessions[index][field] : [];
+            const exists = existing.some(item => (item?._id || item)?.toString() === valStr);
+            const updatedList = exists
+                ? existing.filter(item => (item?._id || item)?.toString() !== valStr)
+                : [...existing.map(item => (item?._id || item)?.toString()), valStr];
+            currentSessions[index] = {
+                ...currentSessions[index],
+                [field]: updatedList
+            };
+            return {
+                ...prev,
+                lunchBreakManagement: {
+                    ...(prev.lunchBreakManagement || {}),
+                    sessions: currentSessions
+                }
+            };
+        });
     };
 
     const handleRemoveSession = (index) => {
-        const currentSessions = (settings.lunchBreakManagement?.sessions || []).filter((_, i) => i !== index);
-        if (currentSessions.length === 0) {
+        const latestSessions = settingsRef.current?.lunchBreakManagement?.sessions || [];
+        if (latestSessions.length <= 1) {
             toast.error('You must keep at least one session');
             return;
         }
-        const updatedLunch = {
-            ...(settings.lunchBreakManagement || {}),
-            sessions: currentSessions,
-            lunchOutTime: currentSessions[0]?.outTime || '13:30',
-            returnDeadline: currentSessions[0]?.returnDeadline || '14:30',
-            gracePeriodMinutes: currentSessions[0]?.gracePeriodMinutes ?? 0
-        };
-        const updatedSettings = {
-            ...settings,
-            lunchBreakManagement: updatedLunch
-        };
-        setSettings(updatedSettings);
-        checkForChanges(updatedSettings);
+        applySettingsUpdate((prev) => {
+            const currentSessions = (prev.lunchBreakManagement?.sessions || []).filter((_, i) => i !== index);
+            if (currentSessions.length === 0) return prev;
+            const primarySession = currentSessions.find(s => s.enabled !== false) || currentSessions[0];
+            const updatedLunch = {
+                ...(prev.lunchBreakManagement || {}),
+                sessions: currentSessions,
+                lunchOutTime: primarySession?.outTime ?? '13:30',
+                returnDeadline: primarySession?.returnDeadline ?? '14:30',
+                gracePeriodMinutes: primarySession?.gracePeriodMinutes ?? 0
+            };
+            return {
+                ...prev,
+                lunchBreakManagement: updatedLunch
+            };
+        });
     };
 
     const handleLunchBreakChange = (field, value) => {
-        const updatedSettings = {
-            ...settings,
+        applySettingsUpdate((prev) => ({
+            ...prev,
             lunchBreakManagement: {
-                ...(settings.lunchBreakManagement || {}),
+                ...(prev.lunchBreakManagement || {}),
                 [field]: value
             }
-        };
-        setSettings(updatedSettings);
-        checkForChanges(updatedSettings);
+        }));
     };
 
     const isDeptSelected = (deptId) => {
@@ -533,14 +631,27 @@ const Settings = () => {
         return selected.some(item => (item?._id || item)?.toString() === idStr);
     };
 
+    const toggleLunchScopeItem = (field, rawId) => {
+        const idStr = rawId?.toString();
+        if (!idStr) return;
+        applySettingsUpdate((prev) => {
+            const current = prev.lunchBreakManagement?.[field] || [];
+            const exists = current.some(item => (item?._id || item)?.toString() === idStr);
+            const updated = exists
+                ? current.filter(item => (item?._id || item)?.toString() !== idStr)
+                : [...current.map(item => (item?._id || item)?.toString()), idStr];
+            return {
+                ...prev,
+                lunchBreakManagement: {
+                    ...(prev.lunchBreakManagement || {}),
+                    [field]: updated
+                }
+            };
+        });
+    };
+
     const handleToggleDepartment = (deptId) => {
-        const current = settings.lunchBreakManagement?.applicableDepartments || [];
-        const idStr = deptId.toString();
-        const exists = current.some(item => (item?._id || item)?.toString() === idStr);
-        const updated = exists
-            ? current.filter(item => (item?._id || item)?.toString() !== idStr)
-            : [...current.map(item => (item?._id || item)?.toString()), idStr];
-        handleLunchBreakChange('applicableDepartments', updated);
+        toggleLunchScopeItem('applicableDepartments', deptId);
     };
 
     const handleSelectAllDepartments = () => {
@@ -558,16 +669,11 @@ const Settings = () => {
     };
 
     const handleToggleShift = (batchName) => {
-        const current = settings.lunchBreakManagement?.applicableShifts || [];
-        const exists = current.includes(batchName);
-        const updated = exists
-            ? current.filter(s => s !== batchName)
-            : [...current, batchName];
-        handleLunchBreakChange('applicableShifts', updated);
+        toggleLunchScopeItem('applicableShifts', batchName);
     };
 
     const handleSelectAllShifts = () => {
-        const allBatchNames = (settings.batches || []).map(b => b.batchName).filter(Boolean);
+        const allBatchNames = (settingsRef.current?.batches || []).map(b => b.batchName).filter(Boolean);
         handleLunchBreakChange('applicableShifts', allBatchNames);
     };
 
@@ -582,13 +688,7 @@ const Settings = () => {
     };
 
     const handleToggleEmployee = (workerId) => {
-        const current = settings.lunchBreakManagement?.applicableEmployees || [];
-        const idStr = workerId.toString();
-        const exists = current.some(item => (item?._id || item)?.toString() === idStr);
-        const updated = exists
-            ? current.filter(item => (item?._id || item)?.toString() !== idStr)
-            : [...current.map(item => (item?._id || item)?.toString()), idStr];
-        handleLunchBreakChange('applicableEmployees', updated);
+        toggleLunchScopeItem('applicableEmployees', workerId);
     };
 
     const handleSelectAllEmployees = () => {
@@ -850,54 +950,39 @@ const Settings = () => {
     };
 
     const handleSaveSettings = async () => {
-        if (!validateBatchNames(settings.batches)) {
+        const currentSettings = settingsRef.current || settings;
+        if (!validateBatchNames(currentSettings.batches)) {
             toast.error('Batch names must be unique. Please check for duplicate batch names.');
             return;
         }
-        if (!validateIntervalNames(settings.intervals)) {
+        if (!validateIntervalNames(currentSettings.intervals)) {
             toast.error('Interval names must be unique. Please check for duplicate interval names.');
             return;
         }
-        if (settings.lunchBreakManagement?.enabled) {
-            const sessions = settings.lunchBreakManagement?.sessions || [];
-            if (sessions.length === 0) {
-                toast.error('Please configure at least one automatic OUT session');
+        if (currentSettings.lunchBreakManagement?.enabled) {
+            const lunchValidationError = validateLunchBreakManagementConfig(
+                currentSettings.lunchBreakManagement,
+                { workers: availableWorkers }
+            );
+            if (lunchValidationError) {
+                toast.error(lunchValidationError);
                 return;
             }
-            for (let i = 0; i < sessions.length; i++) {
-                const s = sessions[i];
-                if (!s.name || !s.name.trim()) {
-                    toast.error(`Session #${i + 1} requires a valid session name`);
-                    return;
-                }
-                if (!s.outTime) {
-                    toast.error(`Session "${s.name}" requires an automatic OUT time`);
-                    return;
-                }
-                if (!s.returnDeadline) {
-                    toast.error(`Session "${s.name}" requires a return deadline`);
-                    return;
-                }
-                if ((s.gracePeriodMinutes ?? 0) < 0) {
-                    toast.error(`Session "${s.name}" grace period cannot be negative`);
-                    return;
-                }
-            }
-            const appliesTo = settings.lunchBreakManagement.appliesTo || 'all';
+            const appliesTo = currentSettings.lunchBreakManagement.appliesTo || 'all';
             if (appliesTo === 'departments') {
-                const depts = settings.lunchBreakManagement.applicableDepartments || [];
+                const depts = currentSettings.lunchBreakManagement.applicableDepartments || [];
                 if (depts.length === 0) {
                     toast.error('Please select at least one department under Lunch Break Management policy scope');
                     return;
                 }
             } else if (appliesTo === 'shifts') {
-                const shifts = settings.lunchBreakManagement.applicableShifts || [];
+                const shifts = currentSettings.lunchBreakManagement.applicableShifts || [];
                 if (shifts.length === 0) {
                     toast.error('Please select at least one work batch/shift under Lunch Break Management policy scope');
                     return;
                 }
             } else if (appliesTo === 'employees') {
-                const employees = settings.lunchBreakManagement.applicableEmployees || [];
+                const employees = currentSettings.lunchBreakManagement.applicableEmployees || [];
                 if (employees.length === 0) {
                     toast.error('Please select at least one employee under Lunch Break Management policy scope');
                     return;
@@ -907,37 +992,54 @@ const Settings = () => {
         setSaving(true);
         try {
             const token = getAuthToken();
-            const hasBountyChanges = JSON.stringify(settings.bugBountyConfig) !== JSON.stringify(originalSettings.bugBountyConfig);
+            const hasBountyChanges = JSON.stringify(currentSettings.bugBountyConfig) !== JSON.stringify(originalSettings.bugBountyConfig);
             const updatedBountyConfig = {
-                ...settings.bugBountyConfig,
-                enabled: settings.bugBountyConfig?.popupFrequency !== 'disabled',
-                lastUpdated: hasBountyChanges ? new Date().toISOString() : (settings.bugBountyConfig?.lastUpdated || new Date().toISOString())
+                ...currentSettings.bugBountyConfig,
+                enabled: currentSettings.bugBountyConfig?.popupFrequency !== 'disabled',
+                lastUpdated: hasBountyChanges ? new Date().toISOString() : (currentSettings.bugBountyConfig?.lastUpdated || new Date().toISOString())
             };
-            const targetSubdomain = (subdomain && subdomain !== 'main' && subdomain !== 'undefined')                ? subdomain                : (user?.subdomain || localStorage.getItem('subdomain') || 'tech-vaseegrah');
+            const targetSubdomain = (subdomain && subdomain !== 'main' && subdomain !== 'undefined')
+                ? subdomain
+                : (user?.subdomain || localStorage.getItem('subdomain') || 'tech-vaseegrah');
 
+            const normalizedLunchToSave = normalizeLunchConfig(currentSettings.lunchBreakManagement);
             const payload = {
-                ...settings,
-                bugBountyConfig: updatedBountyConfig
+                ...currentSettings,
+                lunchBreakManagement: normalizedLunchToSave,
+                bugBountyConfig: updatedBountyConfig,
+                ...(explicitRescheduleSessionIds.length > 0 ? { explicitRescheduleSessionIds } : {})
             };
-            await api.put(`/settings/${targetSubdomain}`, payload, {
+            const response = await api.put(`/settings/${targetSubdomain}`, payload, {
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 }
             });
-            setSettings(payload);
-            setOriginalSettings(payload);
+            const savedData = response?.data || payload;
+            const syncedSettings = {
+                ...payload,
+                ...savedData,
+                lunchBreakManagement: normalizeLunchConfig(savedData.lunchBreakManagement || normalizedLunchToSave),
+                aiConfig: payload.aiConfig
+            };
+            delete syncedSettings.explicitRescheduleSessionIds;
+            settingsRef.current = syncedSettings;
+            setSettings(syncedSettings);
+            setOriginalSettings(syncedSettings);
+            setExplicitRescheduleSessionIds([]);
             setHasChanges(false);
             toast.success('Settings updated successfully');
         } catch (error) {
-            toast.error('Failed to save settings');
+            toast.error(error?.response?.data?.message || 'Failed to save settings');
         } finally {
             setSaving(false);
         }
     };
 
     const handleReset = () => {
-        setSettings({ ...originalSettings });
+        const resetCopy = { ...originalSettings };
+        settingsRef.current = resetCopy;
+        setSettings(resetCopy);
         setHasChanges(false);
     };
 
@@ -1760,7 +1862,7 @@ const Settings = () => {
                                                     <div className="flex items-center gap-3">
                                                         <div className="flex items-center gap-1.5">
                                                             <span className="text-[10px] font-semibold text-slate-500">
-                                                                {session.enabled ? 'Active' : 'Paused'}
+                                                                {session.enabled !== false ? 'Active' : 'Paused'}
                                                             </span>
                                                             <CustomToggle
                                                                 checked={session.enabled !== false}
@@ -1788,12 +1890,12 @@ const Settings = () => {
                                                         </label>
                                                         <input
                                                             type="time"
-                                                            value={session.outTime || '13:30'}
+                                                            value={session.outTime ?? ''}
                                                             onChange={(e) => handleSessionChange(sIdx, 'outTime', e.target.value)}
                                                             className="w-full px-2.5 py-1.5 bg-slate-50/50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
                                                         />
                                                         <p className="text-[10px] text-slate-500 mt-1 font-medium">
-                                                            {formatTimeTo12Hour(session.outTime || '13:30')} (IST)
+                                                            {session.outTime ? `${formatTimeTo12Hour(session.outTime)} (IST)` : 'Not set'}
                                                         </p>
                                                     </div>
 
@@ -1803,12 +1905,12 @@ const Settings = () => {
                                                         </label>
                                                         <input
                                                             type="time"
-                                                            value={session.returnDeadline || '14:30'}
+                                                            value={session.returnDeadline ?? ''}
                                                             onChange={(e) => handleSessionChange(sIdx, 'returnDeadline', e.target.value)}
                                                             className="w-full px-2.5 py-1.5 bg-slate-50/50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
                                                         />
                                                         <p className="text-[10px] text-slate-500 mt-1 font-medium">
-                                                            {formatTimeTo12Hour(session.returnDeadline || '14:30')} (IST)
+                                                            {session.returnDeadline ? `${formatTimeTo12Hour(session.returnDeadline)} (IST)` : 'Not set'}
                                                         </p>
                                                     </div>
 
@@ -1820,7 +1922,7 @@ const Settings = () => {
                                                             type="number"
                                                             min="0"
                                                             value={session.gracePeriodMinutes ?? 0}
-                                                            onChange={(e) => handleSessionChange(sIdx, 'gracePeriodMinutes', parseInt(e.target.value) || 0)}
+                                                            onChange={(e) => handleSessionChange(sIdx, 'gracePeriodMinutes', Math.max(0, parseInt(e.target.value, 10) || 0))}
                                                             className="w-full px-2.5 py-1.5 bg-slate-50/50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
                                                         />
                                                         <p className="text-[10px] text-slate-500 mt-1 font-medium">
@@ -1828,6 +1930,131 @@ const Settings = () => {
                                                         </p>
                                                     </div>
                                                 </div>
+
+                                                {/* Per-Session Scope Override */}
+                                                <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2.5">
+                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                                        <label className="text-[11px] font-bold text-slate-700">
+                                                            Applicable Scope
+                                                        </label>
+                                                        <select
+                                                            value={session.appliesTo || 'inherit'}
+                                                            onChange={(e) => handleSessionChange(sIdx, 'appliesTo', e.target.value)}
+                                                            className="w-full sm:w-64 px-2.5 py-1.5 bg-slate-50/50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#006666]/20 focus:border-[#006666]"
+                                                        >
+                                                            <option value="inherit">Inherit Module Policy Scope</option>
+                                                            <option value="all">All Active Employees</option>
+                                                            <option value="departments">Selected Departments</option>
+                                                            <option value="shifts">Selected Shifts / Batches</option>
+                                                            <option value="employees">Selected Employees</option>
+                                                        </select>
+                                                    </div>
+
+                                                    {session.appliesTo === 'departments' && (
+                                                        <div className="flex flex-wrap gap-1.5 pt-1">
+                                                            {availableDepartments.map((dept) => {
+                                                                const selected = (session.applicableDepartments || []).some(
+                                                                    (d) => (d?._id || d)?.toString() === dept._id.toString()
+                                                                );
+                                                                return (
+                                                                    <button
+                                                                        key={dept._id}
+                                                                        type="button"
+                                                                        onClick={() => handleSessionScopeToggle(sIdx, 'applicableDepartments', dept._id)}
+                                                                        className={`px-2 py-1 rounded-md text-[11px] font-semibold border transition-colors ${
+                                                                            selected
+                                                                                ? 'bg-[#006666]/10 border-[#006666] text-[#006666]'
+                                                                                : 'bg-slate-50 border-slate-200 text-slate-600'
+                                                                        }`}
+                                                                    >
+                                                                        {dept.name}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+
+                                                    {session.appliesTo === 'shifts' && (
+                                                        <div className="flex flex-wrap gap-1.5 pt-1">
+                                                            {(settings.batches || []).map((batch) => {
+                                                                const selected = (session.applicableShifts || []).includes(batch.batchName);
+                                                                return (
+                                                                    <button
+                                                                        key={batch.batchName}
+                                                                        type="button"
+                                                                        onClick={() => handleSessionScopeToggle(sIdx, 'applicableShifts', batch.batchName)}
+                                                                        className={`px-2 py-1 rounded-md text-[11px] font-semibold border transition-colors ${
+                                                                            selected
+                                                                                ? 'bg-[#006666]/10 border-[#006666] text-[#006666]'
+                                                                                : 'bg-slate-50 border-slate-200 text-slate-600'
+                                                                        }`}
+                                                                    >
+                                                                        {batch.batchName}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+
+                                                    {session.appliesTo === 'employees' && (
+                                                        <div className="flex flex-wrap gap-1.5 pt-1 max-h-28 overflow-y-auto">
+                                                            {availableWorkers.map((w) => {
+                                                                const selected = (session.applicableEmployees || []).some(
+                                                                    (emp) => (emp?._id || emp)?.toString() === w._id.toString()
+                                                                );
+                                                                return (
+                                                                    <button
+                                                                        key={w._id}
+                                                                        type="button"
+                                                                        onClick={() => handleSessionScopeToggle(sIdx, 'applicableEmployees', w._id)}
+                                                                        className={`px-2 py-1 rounded-md text-[11px] font-semibold border transition-colors ${
+                                                                            selected
+                                                                                ? 'bg-[#006666]/10 border-[#006666] text-[#006666]'
+                                                                                : 'bg-slate-50 border-slate-200 text-slate-600'
+                                                                        }`}
+                                                                    >
+                                                                        {w.name}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {(() => {
+                                                    const origSession = (originalSettings?.lunchBreakManagement?.sessions || []).find(
+                                                        (os) => os.id && session.id && os.id === session.id
+                                                    );
+                                                    const scheduleChanged = Boolean(origSession && (
+                                                        origSession.outTime !== session.outTime ||
+                                                        origSession.returnDeadline !== session.returnDeadline
+                                                    ));
+                                                    if (!scheduleChanged) return null;
+                                                    const isChecked = explicitRescheduleSessionIds.includes(session.id);
+                                                    return (
+                                                        <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg flex flex-col gap-1.5">
+                                                            <p className="text-[11px] text-amber-800 font-medium">
+                                                                Schedule time changed (session ID <code className="font-mono">{session.id}</code> preserved). Unprocessed employees will execute at the new time; employees who already received an automatic OUT for this session today will never be duplicated (add a new break session if another break occurrence is needed today).
+                                                            </p>
+                                                            <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-amber-900 cursor-pointer">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={isChecked}
+                                                                    onChange={(e) => {
+                                                                        const checked = e.target.checked;
+                                                                        setExplicitRescheduleSessionIds((prev) =>
+                                                                            checked
+                                                                                ? [...new Set([...prev, session.id])]
+                                                                                : prev.filter((id) => id !== session.id)
+                                                                        );
+                                                                    }}
+                                                                    className="rounded border-amber-400 text-[#006666] focus:ring-[#006666]"
+                                                                />
+                                                                <span>Explicitly allow same-day retry for unprocessed/aborted locks (never duplicates existing OUTs)</span>
+                                                            </label>
+                                                        </div>
+                                                    );
+                                                })()}
                                             </div>
                                         ))}
                                     </div>
