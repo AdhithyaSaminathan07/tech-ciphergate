@@ -70,7 +70,7 @@ const auditAttendanceIndexes = async (db, logger = console) => {
       logger.warn(msg);
     }
     if (!result.hasMultiSessionIndex) {
-      const msg = 'Required partial unique index { worker: 1, date: 1, punchType: 1, outSessionId: 1 } with partialFilterExpression { punchType: "LUNCH_OUT" } is missing on "attendances".';
+      const msg = 'Required partial unique index { worker: 1, date: 1, punchType: 1, outSessionId: 1 } with partialFilterExpression { punchType: "LUNCH_OUT", outSessionId: { $type: "string" } } is missing on "attendances".';
       result.warnings.push(msg);
       logger.warn(msg);
     }
@@ -79,7 +79,7 @@ const auditAttendanceIndexes = async (db, logger = console) => {
       logger.warn(`  db.attendances.dropIndex("${legacy.name}")`);
     }
     if (!result.hasMultiSessionIndex) {
-      logger.warn('  db.attendances.createIndex({ worker: 1, date: 1, punchType: 1, outSessionId: 1 }, { unique: true, partialFilterExpression: { punchType: "LUNCH_OUT" } })');
+      logger.warn('  db.attendances.createIndex({ worker: 1, date: 1, punchType: 1, outSessionId: 1 }, { unique: true, partialFilterExpression: { punchType: "LUNCH_OUT", outSessionId: { $type: "string" } } })');
     }
     logger.warn('========================================================================');
   }
@@ -105,18 +105,14 @@ const connectDB = async () => {
     }
     
     const conn = await mongoose.connect(mongoUri, {
-      // Remove deprecated options
-      // Add modern connection options
-      serverSelectionTimeoutMS: 10000, // Increase timeout
+      autoIndex: process.env.NODE_ENV !== 'production', // Explicitly disable automatic index creation/synchronization in production
+      serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
       retryWrites: true,
       writeConcern: {
         w: 'majority'
       },
-      // Add connection pool options
-      maxPoolSize: 10,
-      serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000,
+      maxPoolSize: 10
     });
     
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);

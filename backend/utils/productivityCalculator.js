@@ -1092,8 +1092,8 @@ const calculateWorkerProductivity = (productivityParameters) => {
           }
 
           // Check if recorded lunchLateMinutes is directly present on inPunch
-          if (!isContinuation && inPunch.record?.lunchLateMinutes !== undefined && inPunch.record.lunchLateMinutes > 0) {
-            lateMinutes = inPunch.record.lunchLateMinutes;
+          if (!isContinuation && typeof inPunch.record?.lunchLateMinutes === 'number') {
+            lateMinutes = Math.max(0, inPunch.record.lunchLateMinutes);
           } else if (!isContinuation && configuredSessions.length > 0) {
             const previousSession = pairIndex > 0 ? allPairs[pairIndex - 1] : null;
             const matchedSession = previousSession
@@ -1108,7 +1108,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
               }
             } else if ((inPunch.record?.punchType === 'LUNCH_IN' || inPunch.record?.isLunchPunch) &&
                        typeof inPunch.record?.lunchLateMinutes === 'number') {
-              lateMinutes = inPunch.record.lunchLateMinutes;
+              lateMinutes = Math.max(0, inPunch.record.lunchLateMinutes);
             } else if (!previousSession || previousSession.out.time <= lunchEnd || configuredSessions.length <= 1) {
               const effectiveLunchDeadline = lunchEnd + lunchGraceMinutes;
               if (inPunch.time > effectiveLunchDeadline && workStart < lunchStart) {
@@ -1117,7 +1117,7 @@ const calculateWorkerProductivity = (productivityParameters) => {
             }
           } else if (!isContinuation && (inPunch.record?.punchType === 'LUNCH_IN' || inPunch.record?.isLunchPunch) &&
                      typeof inPunch.record?.lunchLateMinutes === 'number') {
-            lateMinutes = inPunch.record.lunchLateMinutes;
+            lateMinutes = Math.max(0, inPunch.record.lunchLateMinutes);
           } else if (!isContinuation && inPunch.time > (lunchEnd + lunchGraceMinutes)) {
             // Only apply late arrival penalty if this is not a continuation of work and not an unmatched post-lunch break
             if (workStart < lunchStart && (!configuredSessions.length || configuredSessions.length <= 1)) {

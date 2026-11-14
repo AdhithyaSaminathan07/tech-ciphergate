@@ -65,6 +65,7 @@ const matchSessionForOutPunch = (outPunch, lunchConfig, normalizedSessions = nul
   if (sessions.length > 0 && outId && outId !== 'legacy_lunch_session') {
     const byId = sessions.find(s => s.id === outId);
     if (byId) return byId;
+    return null;
   }
 
   const outMins = parsePunchTimeToMinutes(outPunch?.time);
@@ -261,7 +262,8 @@ const getNormalizedSessions = (lunchConfig) => {
         appliesTo: s.appliesTo || 'inherit',
         applicableDepartments: Array.isArray(s.applicableDepartments) ? s.applicableDepartments : [],
         applicableShifts: Array.isArray(s.applicableShifts) ? s.applicableShifts : [],
-        applicableEmployees: Array.isArray(s.applicableEmployees) ? s.applicableEmployees : []
+        applicableEmployees: Array.isArray(s.applicableEmployees) ? s.applicableEmployees : [],
+        applicableWorkingDays: Array.isArray(s.applicableWorkingDays) ? s.applicableWorkingDays : []
       };
     });
   }
@@ -277,23 +279,71 @@ const getNormalizedSessions = (lunchConfig) => {
       appliesTo: 'inherit',
       applicableDepartments: [],
       applicableShifts: [],
-      applicableEmployees: []
+      applicableEmployees: [],
+      applicableWorkingDays: Array.isArray(lunchConfig.applicableWorkingDays) ? lunchConfig.applicableWorkingDays : []
     }];
   }
   return [];
 };
 
 /**
- * Check if today is a non-working day for a worker (Sunday, Holiday, or Approved Leave)
+ * Check if the given date is an applicable working day for a session or tenant module config
+ * Default: Monday - Saturday are working days; Sunday is non-working.
  */
-const isNonWorkingDay = async (worker, dateStr, dateObj) => {
-  // Check Sunday in IST (explicitly anchored in Asia/Kolkata regardless of OS timezone)
+const isSessionWorkingDay = (session = null, lunchConfig = null, dateStr = '', dateObj = null) => {
   const istReferenceDate = dateObj instanceof Date && !isNaN(dateObj.getTime())
     ? dateObj
-    : new Date(`${dateStr}T12:00:00.000+05:30`);
-  const istDay = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', weekday: 'short' }).format(istReferenceDate);
-  if (istDay === 'Sun') {
-    return true;
+    : (dateStr ? new Date(`${dateStr}T12:00:00.000+05:30`) : new Date());
+
+  const shortDay = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', weekday: 'short' }).format(istReferenceDate); // 'Mon', 'Tue', etc.
+  const longDay = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', weekday: 'long' }).format(istReferenceDate); // 'Monday', 'Tuesday', etc.
+  const istDateString = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(istReferenceDate);
+  const dayIndex = new Date(`${istDateString}T12:00:00.000Z`).getUTCDay(); // 0 = Sun, 1 = Mon, ...
+
+  const sessionDays = Array.isArray(session?.applicableWorkingDays) && session.applicableWorkingDays.length > 0
+    ? session.applicableWorkingDays
+    : null;
+  const configDays = Array.isArray(lunchConfig?.applicableWorkingDays) && lunchConfig.applicableWorkingDays.length > 0
+    ? lunchConfig.applicableWorkingDays
+    : null;
+
+  const targetDays = sessionDays || configDays;
+
+  if (targetDays && targetDays.length > 0) {
+    return targetDays.some(d => {
+      if (typeof d === 'number') return d === dayIndex;
+      if (typeof d === 'string') {
+        const trimmed = d.trim().toLowerCase();
+        return trimmed === shortDay.toLowerCase() ||
+               trimmed === longDay.toLowerCase() ||
+               trimmed === String(dayIndex);
+      }
+      return false;
+    });
+  }
+
+  // Default: Monday through Saturday are working days; Sunday is non-working
+  return shortDay !== 'Sun';
+};
+
+/**
+ * Check if today is a non-working day for a worker (Sunday, Holiday, Approved Leave, or Non-Applicable Working Day)
+ */
+const isNonWorkingDay = async (worker, dateStr, dateObj, session = null, lunchConfig = null) => {
+  // Check applicable working days for session/config
+  if (session || lunchConfig) {
+    if (!isSessionWorkingDay(session, lunchConfig, dateStr, dateObj)) {
+      return true;
+    }
+  } else {
+    // Check Sunday in IST (explicitly anchored in Asia/Kolkata regardless of OS timezone)
+    const istReferenceDate = dateObj instanceof Date && !isNaN(dateObj.getTime())
+      ? dateObj
+      : new Date(`${dateStr}T12:00:00.000+05:30`);
+    const istDay = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', weekday: 'short' }).format(istReferenceDate);
+    if (istDay === 'Sun') {
+      return true;
+    }
   }
 
   // Explicitly anchor holiday/leave day bounds to Asia/Kolkata calendar date
@@ -495,7 +545,8 @@ const processWorkerLunchOut = async (worker, sessionArg, lunchConfigArg, nowDate
       isLunchPunch: true,
       outSessionId: sessionId,
       outSessionName: null,
-      worker: worker._id
+      worker: worker._id,
+      createdAt: nowDate
     });
   } catch (createErr) {
     if (createErr.code === 11000) {
@@ -561,12 +612,11 @@ const processWorkerLunchOut = async (worker, sessionArg, lunchConfigArg, nowDate
     const { getIO } = require('../utils/socket');
     const io = getIO();
     if (io) {
-      // Direct message to the specific worker
+      // Direct message to the specific worker (sanitized generic break info; zero internal session ID or name)
       io.to(worker._id.toString()).emit('force-logout', {
         reason: 'Break Started. Attendance paused automatically.',
         punchType: 'LUNCH_OUT',
         breakLabel: 'Break OUT',
-        sessionId: sessionId,
         timestamp: timeStr12
       });
 
@@ -625,8 +675,11 @@ const checkAndExecuteLunchBreak = async (nowDate = new Date()) => {
       const sessions = allSessions.filter(s => s.enabled);
 
       const sessionWindows = sessions.map((s) => {
-        const sOut = timeToMinutes(s.outTime || '13:30');
-        const sDeadline = timeToMinutes(s.returnDeadline || '14:30');
+        if (!s.outTime || !s.returnDeadline) {
+          return { sessionId: s.id, outTime: s.outTime, returnDeadline: s.returnDeadline, state: 'INVALID_TIMES' };
+        }
+        const sOut = timeToMinutes(s.outTime);
+        const sDeadline = timeToMinutes(s.returnDeadline);
         const sCutoff = sDeadline + Number(s.gracePeriodMinutes || 0);
         const state = currentMinutes < sOut
           ? 'PENDING_WINDOW'
@@ -643,8 +696,11 @@ const checkAndExecuteLunchBreak = async (nowDate = new Date()) => {
       if (allSessions.length === 0) continue;
 
       for (const session of allSessions) {
-        const outMinutes = timeToMinutes(session.outTime || '13:30');
-        const deadlineMinutes = timeToMinutes(session.returnDeadline || '14:30');
+        if (!session.outTime || !session.returnDeadline) {
+          continue;
+        }
+        const outMinutes = timeToMinutes(session.outTime);
+        const deadlineMinutes = timeToMinutes(session.returnDeadline);
         const gracePeriod = Number(session.gracePeriodMinutes || 0);
         const cutoffMinutes = deadlineMinutes + gracePeriod;
 
@@ -694,7 +750,7 @@ const checkAndExecuteLunchBreak = async (nowDate = new Date()) => {
                 continue;
               }
 
-              const nonWorking = await isNonWorkingDay(worker, dateStr, nowDate);
+              const nonWorking = await isNonWorkingDay(worker, dateStr, nowDate, session, lunchBreakManagement);
               if (nonWorking) {
                 results.NON_WORKING_DAY++;
                 logSchedulerEvent('info', 'WorkerResult', {
@@ -878,6 +934,7 @@ module.exports = {
   checkAndExecuteLunchBreak,
   processWorkerLunchOut,
   isWorkerApplicable,
+  isSessionWorkingDay,
   isNonWorkingDay,
   timeToMinutes,
   parsePunchTimeToMinutes,

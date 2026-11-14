@@ -20,7 +20,8 @@ const normalizeLunchBreakManagement = (lunchConfig) => {
     sessions,
     lunchOutTime: primarySession?.outTime || normalizedObj.lunchOutTime || '13:30',
     returnDeadline: primarySession?.returnDeadline || normalizedObj.returnDeadline || '14:30',
-    gracePeriodMinutes: primarySession?.gracePeriodMinutes ?? normalizedObj.gracePeriodMinutes ?? 0
+    gracePeriodMinutes: primarySession?.gracePeriodMinutes ?? normalizedObj.gracePeriodMinutes ?? 0,
+    applicableWorkingDays: Array.isArray(normalizedObj.applicableWorkingDays) ? normalizedObj.applicableWorkingDays : []
   };
 };
 

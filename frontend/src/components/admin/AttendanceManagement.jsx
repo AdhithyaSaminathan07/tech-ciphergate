@@ -44,7 +44,6 @@ const AttendanceManagement = () => {
     const [activeTab, setActiveTab] = useState('daily'); // 'daily' | 'lunch'
     const [lunchDate, setLunchDate] = useState(() => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
     const [lunchOverviewData, setLunchOverviewData] = useState([]);
-    const [lunchConfig, setLunchConfig] = useState(null);
     const [isLunchLoading, setIsLunchLoading] = useState(false);
     const [lunchPage, setLunchPage] = useState(1);
     const [lunchPagination, setLunchPagination] = useState({ currentPage: 1, totalPages: 1, totalRecords: 0, hasMore: false });
@@ -114,7 +113,6 @@ const AttendanceManagement = () => {
             });
             if (isMountedRef.current && data.success) {
                 setLunchOverviewData(data.overview || []);
-                setLunchConfig(data.lunchConfig || null);
                 setLunchPage(data.pagination?.currentPage || effectivePage);
                 setLunchPagination(data.pagination || { currentPage: 1, totalPages: 1, totalRecords: (data.overview || []).length, hasMore: false });
             }
@@ -865,23 +863,31 @@ const AttendanceManagement = () => {
                 </div>
             </BottomSheet>
 
-            {/* View Mode Toggle: Daily Attendance vs Lunch Break Overview */}
+            {/* View Mode Toggle: Daily Attendance vs Automatic OUT Overview */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 bg-white p-2.5 rounded-2xl border border-slate-200/80 shadow-2xs">
                 <div className="flex items-center gap-1.5 p-1 bg-slate-100/80 rounded-xl">
                     <button
                         type="button"
                         onClick={() => setActiveTab('daily')}
-                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'daily' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#087F70] focus-visible:ring-offset-1 border border-transparent ${
+                            activeTab === 'daily'
+                                ? 'bg-[#DDF7F0] text-[#087F70] shadow-sm'
+                                : 'bg-transparent text-[#475569] hover:bg-slate-200/60 hover:text-slate-900'
+                        }`}
                     >
                         Daily Attendance
                     </button>
                     <button
                         type="button"
                         onClick={() => setActiveTab('lunch')}
-                        className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'lunch' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                        className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#087F70] focus-visible:ring-offset-1 border border-transparent ${
+                            activeTab === 'lunch'
+                                ? 'bg-[#DDF7F0] text-[#087F70] shadow-sm'
+                                : 'bg-transparent text-[#475569] hover:bg-slate-200/60 hover:text-slate-900'
+                        }`}
                     >
                         <FiCoffee className="h-3.5 w-3.5" />
-                        <span>Break Overview</span>
+                        <span>Automatic OUT Overview</span>
                     </button>
                 </div>
 
@@ -898,7 +904,7 @@ const AttendanceManagement = () => {
                             type="button"
                             disabled={isLunchLoading}
                             onClick={() => fetchLunchOverview(lunchDate, lunchPage)}
-                            aria-label="Refresh break overview"
+                            aria-label="Refresh Automatic OUT overview"
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100 rounded-lg text-xs font-bold transition-colors disabled:opacity-60"
                         >
                             <RotateCcw size={14} className={isLunchLoading ? 'animate-spin' : ''} />
@@ -923,35 +929,13 @@ const AttendanceManagement = () => {
 
             {activeTab === 'lunch' ? (
                 <div className="space-y-4">
-                    {/* Lunch Config Banner */}
-                    <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs flex flex-col gap-3">
-                        <div className="flex flex-wrap items-center justify-between gap-4">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2.5 bg-teal-50 text-teal-600 rounded-xl">
-                                    <FiCoffee className="h-5 w-5" />
-                                </div>
-                                <div>
-                                    <h3 className="text-sm font-bold text-slate-900">Break Sessions Policy</h3>
-                                    <p className="text-xs text-slate-500">
-                                        {Array.isArray(lunchConfig?.sessions) && lunchConfig.sessions.length > 0
-                                            ? `${lunchConfig.sessions.filter(s => s.enabled !== false).length} active of ${lunchConfig.sessions.length} configured automatic break session(s)`
-                                            : `Out Time: ${lunchConfig?.lunchOutTime || '13:30'} | Return Deadline: ${lunchConfig?.returnDeadline || '14:30'} | Grace Period: ${lunchConfig?.gracePeriodMinutes || 0} mins`}
-                                    </p>
-                                </div>
-                            </div>
-                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${lunchConfig?.enabled ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
-                                {lunchConfig?.enabled ? 'Policy Active' : 'Policy Disabled'}
-                            </span>
-                        </div>
-                    </div>
-
                     {isLunchLoading ? (
                         <div className="flex justify-center py-12">
                             <Spinner size="md" variant="default" />
                         </div>
                     ) : filteredLunchOverview.length === 0 ? (
                         <div className="bg-white rounded-2xl border border-slate-200/80 p-8 text-center text-slate-500 text-xs font-medium">
-                            No break activity recorded for {lunchDate}.
+                            No Automatic OUT activity recorded for {lunchDate}.
                         </div>
                     ) : (
                         <div className="space-y-3">
@@ -960,15 +944,11 @@ const AttendanceManagement = () => {
                                     <thead>
                                         <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-black text-slate-500 uppercase tracking-wider">
                                             <th className="px-4 py-3">Employee</th>
-                                            <th className="px-4 py-3">RFID</th>
-                                            <th className="px-4 py-3">Department</th>
-                                            <th className="px-4 py-3 text-center">Break OUT</th>
-                                            <th className="px-4 py-3 text-center">Actual OUT Time</th>
-                                            <th className="px-4 py-3 text-center">Break IN</th>
-                                            <th className="px-4 py-3 text-center">Actual IN Time</th>
-                                            <th className="px-4 py-3 text-center">Late Minutes</th>
+                                            <th className="px-4 py-3 text-center">Date</th>
+                                            <th className="px-4 py-3 text-center">OUT Time</th>
+                                            <th className="px-4 py-3 text-center">IN Time</th>
+                                            <th className="px-4 py-3 text-center">Late Return Status</th>
                                             <th className="px-4 py-3 text-center">Missing Return Status</th>
-                                            <th className="px-4 py-3 text-center">Deduction Status</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 text-xs">
@@ -976,7 +956,11 @@ const AttendanceManagement = () => {
                                             const profileId = getWorkerProfileId(row);
                                             const hasReturned = Boolean(row.actualReturnTime && row.actualReturnTime !== '-');
                                             const isMissing = Boolean(row.isMissingLunchReturn || row.status === 'Missing Return' || row.status === 'Missing Lunch Return');
-                                            const displayStatus = isMissing ? 'Missing Return' : row.status;
+                                            const displayStatus = isMissing
+                                                ? 'Missing Return'
+                                                : hasReturned
+                                                    ? (row.lateMinutes > 0 ? 'Returned Late' : 'Returned On-Time')
+                                                    : 'Currently OUT';
                                             return (
                                                 <tr key={`${row.workerId || row.rfid}_${row.sessionId || idx}_${idx}`} className="hover:bg-slate-50/50 transition-colors">
                                                     <td className="px-4 py-3 font-bold text-slate-800">
@@ -985,50 +969,34 @@ const AttendanceManagement = () => {
                                                                 {row.name}
                                                             </Link>
                                                         ) : row.name}
-                                                    </td>
-                                                    <td className="px-4 py-3 font-mono text-slate-500">{row.rfid}</td>
-                                                    <td className="px-4 py-3 text-slate-600">{row.department}</td>
-                                                    <td className="px-4 py-3 text-center">
-                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
-                                                            {row.breakOutLabel || 'Break OUT'}
+                                                        <span className="block text-[10px] font-normal text-slate-400 mt-0.5">
+                                                            {row.department || 'Unassigned'} • RFID: {row.rfid || 'N/A'}
                                                         </span>
-                                                        <span className="block text-[10px] text-slate-500 mt-0.5 font-medium">{row.lunchOutSource}</span>
                                                     </td>
-                                                    <td className="px-4 py-3 text-center">
-                                                        <span className="font-semibold text-slate-700">{row.lunchOutTime}</span>
-                                                        {row.expectedReturnTime && row.expectedReturnTime !== '-' && (
-                                                            <span className="block text-[10px] text-slate-400">Due: {row.expectedReturnTime}</span>
-                                                        )}
+                                                    <td className="px-4 py-3 text-center font-medium text-slate-600">
+                                                        {row.date || lunchDate}
                                                     </td>
-                                                    <td className="px-4 py-3 text-center">
-                                                        {hasReturned ? (
-                                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
-                                                                {row.breakInLabel || 'Break IN'}
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-slate-400">—</span>
-                                                        )}
+                                                    <td className="px-4 py-3 text-center font-semibold text-slate-700">
+                                                        {row.lunchOutTime || '-'}
                                                     </td>
-                                                    <td className="px-4 py-3 text-center font-semibold text-slate-700">{row.actualReturnTime || '-'}</td>
-                                                    <td className="px-4 py-3 text-center font-bold text-slate-700">
+                                                    <td className="px-4 py-3 text-center font-semibold text-slate-700">
+                                                        {row.actualReturnTime || '-'}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center font-bold">
                                                         {row.lateMinutes > 0 ? (
-                                                            <span className="text-rose-600 font-bold">+{row.lateMinutes} mins</span>
+                                                            <span className="text-rose-600">+{row.lateMinutes} mins late</span>
                                                         ) : (
-                                                            <span className="text-emerald-600">0 mins</span>
+                                                            <span className="text-emerald-600">On-Time</span>
                                                         )}
                                                     </td>
                                                     <td className="px-4 py-3 text-center">
                                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
-                                                            displayStatus === 'Returned On-Time' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                                            displayStatus === 'Late Return' ? 'bg-rose-50 text-rose-700 border-rose-200' :
                                                             isMissing ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                                            hasReturned ? (row.lateMinutes > 0 ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200') :
                                                             'bg-amber-50 text-amber-700 border-amber-200'
                                                         }`}>
                                                             {displayStatus}
                                                         </span>
-                                                    </td>
-                                                    <td className="px-4 py-3 text-center font-medium text-slate-600">
-                                                        {row.deductionStatus}
                                                     </td>
                                                 </tr>
                                             );

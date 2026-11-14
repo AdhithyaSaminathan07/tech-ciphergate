@@ -88,6 +88,6 @@ const attendanceSchema = mongoose.Schema({
 
 attendanceSchema.index({ worker: 1, date: 1 });
 attendanceSchema.index({ subdomain: 1, date: 1 });
-attendanceSchema.index({ worker: 1, date: 1, punchType: 1, outSessionId: 1 }, { unique: true, partialFilterExpression: { punchType: 'LUNCH_OUT' } });
+attendanceSchema.index({ worker: 1, date: 1, punchType: 1, outSessionId: 1 }, { unique: true, partialFilterExpression: { punchType: 'LUNCH_OUT', outSessionId: { $type: 'string' } } });
 
 module.exports = mongoose.model('Attendance', attendanceSchema);

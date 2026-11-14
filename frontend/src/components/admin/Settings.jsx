@@ -293,7 +293,8 @@ const Settings = () => {
                 appliesTo: s.appliesTo || 'inherit',
                 applicableDepartments: Array.isArray(s.applicableDepartments) ? s.applicableDepartments : [],
                 applicableShifts: Array.isArray(s.applicableShifts) ? s.applicableShifts : [],
-                applicableEmployees: Array.isArray(s.applicableEmployees) ? s.applicableEmployees : []
+                applicableEmployees: Array.isArray(s.applicableEmployees) ? s.applicableEmployees : [],
+                applicableWorkingDays: Array.isArray(s.applicableWorkingDays) ? s.applicableWorkingDays : []
             };
         });
 
@@ -304,7 +305,8 @@ const Settings = () => {
             sessions: normalizedSessions,
             lunchOutTime: primarySession?.outTime || loadedLunch.lunchOutTime || '13:30',
             returnDeadline: primarySession?.returnDeadline || loadedLunch.returnDeadline || '14:30',
-            gracePeriodMinutes: primarySession?.gracePeriodMinutes ?? loadedLunch.gracePeriodMinutes ?? 0
+            gracePeriodMinutes: primarySession?.gracePeriodMinutes ?? loadedLunch.gracePeriodMinutes ?? 0,
+            applicableWorkingDays: Array.isArray(loadedLunch.applicableWorkingDays) ? loadedLunch.applicableWorkingDays : []
         };
     };
 
@@ -530,7 +532,8 @@ const Settings = () => {
                 appliesTo: 'inherit',
                 applicableDepartments: [],
                 applicableShifts: [],
-                applicableEmployees: []
+                applicableEmployees: [],
+                applicableWorkingDays: []
             };
             const updatedSessions = [...currentSessions, newSession];
             const updatedLunch = {
@@ -580,6 +583,32 @@ const Settings = () => {
             currentSessions[index] = {
                 ...currentSessions[index],
                 [field]: updatedList
+            };
+            return {
+                ...prev,
+                lunchBreakManagement: {
+                    ...(prev.lunchBreakManagement || {}),
+                    sessions: currentSessions
+                }
+            };
+        });
+    };
+
+    const handleSessionWorkingDayToggle = (index, day) => {
+        applySettingsUpdate((prev) => {
+            const currentSessions = [...(prev.lunchBreakManagement?.sessions || [])];
+            if (!currentSessions[index]) return prev;
+            const existing = Array.isArray(currentSessions[index].applicableWorkingDays)
+                ? currentSessions[index].applicableWorkingDays
+                : [];
+            const dayNormalized = String(day).trim();
+            const exists = existing.includes(dayNormalized);
+            const updated = exists
+                ? existing.filter(d => d !== dayNormalized)
+                : [...existing, dayNormalized];
+            currentSessions[index] = {
+                ...currentSessions[index],
+                applicableWorkingDays: updated
             };
             return {
                 ...prev,
@@ -972,19 +1001,19 @@ const Settings = () => {
             if (appliesTo === 'departments') {
                 const depts = currentSettings.lunchBreakManagement.applicableDepartments || [];
                 if (depts.length === 0) {
-                    toast.error('Please select at least one department under Lunch Break Management policy scope');
+                    toast.error('Please select at least one department under Automatic OUT policy scope');
                     return;
                 }
             } else if (appliesTo === 'shifts') {
                 const shifts = currentSettings.lunchBreakManagement.applicableShifts || [];
                 if (shifts.length === 0) {
-                    toast.error('Please select at least one work batch/shift under Lunch Break Management policy scope');
+                    toast.error('Please select at least one work batch/shift under Automatic OUT policy scope');
                     return;
                 }
             } else if (appliesTo === 'employees') {
                 const employees = currentSettings.lunchBreakManagement.applicableEmployees || [];
                 if (employees.length === 0) {
-                    toast.error('Please select at least one employee under Lunch Break Management policy scope');
+                    toast.error('Please select at least one employee under Automatic OUT policy scope');
                     return;
                 }
             }
@@ -1179,7 +1208,7 @@ const Settings = () => {
         { id: 'profile', label: 'Profile', icon: FiUser },
         { id: 'paymentDetails', label: 'Invoice Payment & Dynamic UPI QR', icon: FiCreditCard },
         { id: 'meal', label: 'Meal Service', icon: FiSunrise },
-        { id: 'lunchBreak', label: 'Lunch Break Module', icon: FiCoffee },
+        { id: 'lunchBreak', label: 'Automatic OUT', icon: FiCoffee },
         { id: 'batches', label: 'Work Batches', icon: FiClock },
         { id: 'intervals', label: 'Break Intervals', icon: FiSliders },
         { id: 'location', label: 'Location & GPS', icon: FiMapPin },
@@ -1783,16 +1812,16 @@ const Settings = () => {
                             </div>
                         </section>
 
-                        {/* SECTION: LUNCH BREAK MANAGEMENT MODULE */}
+                        {/* SECTION: AUTOMATIC OUT MODULE */}
                         <section id="section-lunchBreak" className="scroll-mt-36 lg:scroll-mt-36">
                             <div className="mb-4 sm:mb-5 pb-3 border-b border-slate-100 flex items-center justify-between">
                                 <div>
                                     <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
                                         <FiCoffee className="text-[#006666] h-4.5 w-4.5 sm:h-5 sm:w-5" />
-                                        Lunch Break Management Module
+                                        Automatic OUT
                                     </h2>
                                     <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
-                                        Configure automatic lunch-out timing, return deadlines, grace periods, and late return salary policies
+                                        Configure automatic OUT timing, return deadlines, grace periods, and late return salary policies
                                     </p>
                                 </div>
                                 <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${settings.lunchBreakManagement?.enabled ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
@@ -1805,10 +1834,10 @@ const Settings = () => {
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-50/80 rounded-xl border border-slate-100">
                                     <div>
                                         <label className="text-xs sm:text-sm font-bold text-slate-900 block">
-                                            Enable Automated Lunch Break Management
+                                            Enable Automatic OUT
                                         </label>
                                         <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
-                                            When enabled, employees will be automatically punched out and logged out at the configured lunch out time.
+                                            When enabled, employees will be automatically punched out and logged out at the configured Automatic OUT time.
                                         </p>
                                     </div>
                                     <CustomToggle
@@ -2021,6 +2050,39 @@ const Settings = () => {
                                                     )}
                                                 </div>
 
+                                                {/* Applicable Working Days */}
+                                                <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2">
+                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                                                        <label className="text-[11px] font-bold text-slate-700">
+                                                            Applicable Working Days
+                                                        </label>
+                                                        <span className="text-[10px] text-slate-500 font-medium">
+                                                            {(session.applicableWorkingDays || []).length === 0
+                                                                ? 'Mon - Sat (All standard working days)'
+                                                                : `${(session.applicableWorkingDays || []).length} day(s) selected`}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                                        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => {
+                                                            const isSelected = (session.applicableWorkingDays || []).includes(day);
+                                                            return (
+                                                                <button
+                                                                    key={day}
+                                                                    type="button"
+                                                                    onClick={() => handleSessionWorkingDayToggle(sIdx, day)}
+                                                                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors ${
+                                                                        isSelected
+                                                                            ? 'bg-[#006666]/10 border-[#006666] text-[#006666]'
+                                                                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                                                                    }`}
+                                                                >
+                                                                    {day}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+
                                                 {(() => {
                                                     const origSession = (originalSettings?.lunchBreakManagement?.sessions || []).find(
                                                         (os) => os.id && session.id && os.id === session.id
@@ -2068,7 +2130,7 @@ const Settings = () => {
                                                 Applies To Policy Scope
                                             </label>
                                             <p className="text-[11px] text-slate-500 mt-0.5">
-                                                Select whether this lunch schedule applies company-wide or is restricted to targeted cohorts.
+                                                Select whether this Automatic OUT schedule applies company-wide or is restricted to targeted cohorts.
                                             </p>
                                         </div>
                                         <select
@@ -2088,7 +2150,7 @@ const Settings = () => {
                                         <div className="p-3 bg-emerald-50/70 rounded-lg border border-emerald-200/80 flex items-center gap-2">
                                             <FiCheckCircle className="h-4 w-4 text-emerald-600 shrink-0" />
                                             <span className="text-xs font-medium text-emerald-800">
-                                                <strong>Company-wide Policy Active:</strong> All active employees under this organization follow the lunch schedule and automatic logout rules.
+                                                <strong>Company-wide Policy Active:</strong> All active employees under this organization follow the Automatic OUT schedule and automatic logout rules.
                                             </span>
                                         </div>
                                     )}
@@ -2332,49 +2394,6 @@ const Settings = () => {
                                             )}
                                         </div>
                                     )}
-                                </div>
-
-                                {/* Information banner */}
-                                <div className="p-3.5 bg-teal-50/60 rounded-xl border border-teal-100 flex items-start gap-2.5">
-                                    <FiInfo className="text-[#006666] h-4 w-4 mt-0.5 flex-shrink-0" />
-                                    <div className="text-[11px] text-teal-900 leading-relaxed font-medium">
-                                        <strong>Salary & Attendance Integration:</strong> At lunch out time, an attendance event with source <code>SYSTEM/AUTOMATIC</code> pauses work time and automatically logs out the employee. Upon return, the employee punches back in. Returning after the deadline plus grace period automatically calculates excess minutes and applies the standard Ciphergate late-coming deduction rate. Missing returns are flagged for admin review.
-                                    </div>
-                                </div>
-
-                                {/* Dedicated In-Section Save Lunch Settings */}
-                                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-100">
-                                    <div className="text-[11px]">
-                                        {hasChanges ? (
-                                            <span className="text-amber-700 font-semibold flex items-center gap-1.5">
-                                                <FiAlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                                                Unsaved changes detected. Click Save Lunch Settings below or Update at top.
-                                            </span>
-                                        ) : (
-                                            <span className="text-slate-500 font-medium flex items-center gap-1.5">
-                                                <FiCheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                                                Lunch settings are synchronized with the server.
-                                            </span>
-                                        )}
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={handleSaveSettings}
-                                        disabled={saving || !hasChanges}
-                                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#006666] hover:bg-[#004d4d] text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md shadow-[#006666]/15 active:scale-95"
-                                    >
-                                        {saving ? (
-                                            <>
-                                                <Spinner size="sm" color="white" />
-                                                <span>Saving Lunch Settings...</span>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <FiSave className="h-3.5 w-3.5" />
-                                                <span>Save Lunch Settings</span>
-                                            </>
-                                        )}
-                                    </button>
                                 </div>
                             </div>
                         </section>

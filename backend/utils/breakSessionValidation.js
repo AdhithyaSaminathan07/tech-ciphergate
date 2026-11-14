@@ -294,7 +294,7 @@ const validateLunchBreakManagementConfig = (lunchConfig, options = {}) => {
   const { workers = [] } = options;
   const rawSessions = extractRawValidationSessions(lunchConfig);
   if (rawSessions.length === 0) {
-    return 'Please configure at least one automatic OUT session when Lunch Break Management is enabled.';
+    return 'Please configure at least one automatic OUT session when Automatic OUT is enabled.';
   }
 
   const enabledWindows = [];

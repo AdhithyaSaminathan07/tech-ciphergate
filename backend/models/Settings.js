@@ -214,7 +214,13 @@ const settingsSchema = mongoose.Schema({
       applicableEmployees: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Worker'
+      }],
+      applicableWorkingDays: [{
+        type: String
       }]
+    }],
+    applicableWorkingDays: [{
+      type: String
     }],
     appliesTo: {
       type: String,

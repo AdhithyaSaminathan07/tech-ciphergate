@@ -205,10 +205,23 @@ const formatAttendanceDateIST = (rawDate, indiaTimezoneDate, fallbackDateFormatt
     }
 };
 
+// Security guard: Only trusted test environments may supply simulated dates;
+// in production environments, wall-clock time is strictly enforced.
+const isSimulatedRequest = (req) => {
+    return process.env.NODE_ENV === 'test' && Boolean(req && (req.simulatedDate || req.body?.simulatedDate));
+};
+
+const resolveRequestTimestamp = (req) => {
+    if (isSimulatedRequest(req)) {
+        return new Date(req.simulatedDate || req.body.simulatedDate);
+    }
+    return new Date();
+};
+
 // Cooldown guard: allows immediate valid return IN right after an automatic/break LUNCH_OUT,
 // while keeping the standard 60-second cooldown for unrelated manual/RFID/face punches.
-const checkPunchCooldown = async ({ rfid, subdomain, intendedPresence }) => {
-    const oneMinuteAgo = new Date(Date.now() - 60000);
+const checkPunchCooldown = async ({ rfid, subdomain, intendedPresence, nowDate = new Date() }) => {
+    const oneMinuteAgo = new Date(nowDate.getTime() - 60000);
     const recentAttendance = await Attendance.findOne({
         rfid,
         subdomain,
@@ -329,8 +342,9 @@ const putAttendance = async (req, res) => {
         }
 
         const { indiaTimezoneDate, indiaTimezoneTime } = getIndiaTimezoneFormatters();
-        const currentDateFormatted = indiaTimezoneDate.format(new Date());
-        const currentTimeFormatted = indiaTimezoneTime.format(new Date());
+        const requestDate = resolveRequestTimestamp(req);
+        const currentDateFormatted = indiaTimezoneDate.format(requestDate);
+        const currentTimeFormatted = indiaTimezoneTime.format(requestDate);
 
         const newPresence = await resolveNextPresenceWithDayRollover({
             rfid,
@@ -345,7 +359,8 @@ const putAttendance = async (req, res) => {
         const cooldown = await checkPunchCooldown({
             rfid,
             subdomain,
-            intendedPresence: newPresence
+            intendedPresence: newPresence,
+            nowDate: requestDate
         });
         if (cooldown.blocked) {
             return res.status(200).json({
@@ -361,7 +376,8 @@ const putAttendance = async (req, res) => {
             subdomain,
             newPresence,
             currentDateFormatted,
-            worker._id
+            worker._id,
+            requestDate
         );
 
         const newAttendance = await Attendance.create({
@@ -376,6 +392,7 @@ const putAttendance = async (req, res) => {
             time: currentTimeFormatted,
             presence: newPresence,
             worker: worker._id,
+            ...(isSimulatedRequest(req) ? { createdAt: requestDate } : {}),
             punchType: lunchDetails.punchType,
             isLunchPunch: lunchDetails.isLunchPunch,
             lunchLateMinutes: lunchDetails.lunchLateMinutes,
@@ -468,8 +485,9 @@ const putRfidAttendance = async (req, res) => {
         }
 
         const { indiaTimezoneDate, indiaTimezoneTime } = getIndiaTimezoneFormatters();
-        const currentDateFormatted = indiaTimezoneDate.format(new Date());
-        const currentTimeFormatted = indiaTimezoneTime.format(new Date());
+        const requestDate = resolveRequestTimestamp(req);
+        const currentDateFormatted = indiaTimezoneDate.format(requestDate);
+        const currentTimeFormatted = indiaTimezoneTime.format(requestDate);
 
         const presence = await resolveNextPresenceWithDayRollover({
             rfid,
@@ -484,7 +502,8 @@ const putRfidAttendance = async (req, res) => {
         const cooldown = await checkPunchCooldown({
             rfid,
             subdomain,
-            intendedPresence: presence
+            intendedPresence: presence,
+            nowDate: requestDate
         });
         if (cooldown.blocked) {
             return res.status(200).json({
@@ -498,7 +517,8 @@ const putRfidAttendance = async (req, res) => {
             subdomain,
             presence,
             currentDateFormatted,
-            worker._id
+            worker._id,
+            requestDate
         );
 
         const newAttendance = await Attendance.create({
@@ -513,6 +533,7 @@ const putRfidAttendance = async (req, res) => {
             time: currentTimeFormatted,
             presence,
             worker: worker._id,
+            ...(isSimulatedRequest(req) ? { createdAt: requestDate } : {}),
             punchType: lunchDetails.punchType,
             isLunchPunch: lunchDetails.isLunchPunch,
             lunchLateMinutes: lunchDetails.lunchLateMinutes,
@@ -807,8 +828,9 @@ const recognizeFaceAndMarkAttendance = async (req, res) => {
 
         // Get the current date and time in 'Asia/Kolkata' timezone
         const { indiaTimezoneDate, indiaTimezoneTime } = getIndiaTimezoneFormatters();
-        const currentDateFormatted = indiaTimezoneDate.format(new Date());
-        const currentTimeFormatted = indiaTimezoneTime.format(new Date());
+        const requestDate = resolveRequestTimestamp(req);
+        const currentDateFormatted = indiaTimezoneDate.format(requestDate);
+        const currentTimeFormatted = indiaTimezoneTime.format(requestDate);
 
         // Determine presence cleanly with cross-day open-IN rollover
         const presence = await resolveNextPresenceWithDayRollover({
@@ -826,7 +848,8 @@ const recognizeFaceAndMarkAttendance = async (req, res) => {
             subdomain,
             presence,
             currentDateFormatted,
-            bestMatch._id
+            bestMatch._id,
+            requestDate
         );
 
         // Create attendance record
@@ -842,6 +865,7 @@ const recognizeFaceAndMarkAttendance = async (req, res) => {
             time: currentTimeFormatted,
             presence,
             worker: bestMatch._id,
+            ...(isSimulatedRequest(req) ? { createdAt: requestDate } : {}),
             punchType: lunchDetails.punchType,
             isLunchPunch: lunchDetails.isLunchPunch,
             lunchLateMinutes: lunchDetails.lunchLateMinutes,
@@ -1152,5 +1176,6 @@ module.exports = {
     recognizeFaceAndMarkAttendance,
     getAttendanceSummary,
     getLunchAttendanceOverview,
-    resolveLunchReturnDetails
+    resolveLunchReturnDetails,
+    resolveRequestTimestamp
 };
